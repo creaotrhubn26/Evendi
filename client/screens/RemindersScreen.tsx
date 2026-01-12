@@ -11,6 +11,7 @@ import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/dat
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
@@ -187,7 +188,7 @@ export default function RemindersScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      <ScrollView
+      <KeyboardAwareScrollViewCompat
         contentContainerStyle={[
           styles.content,
           { paddingTop: headerHeight + Spacing.lg, paddingBottom: tabBarHeight + Spacing.xl },
@@ -298,6 +299,7 @@ export default function RemindersScreen() {
               <View style={styles.inputGroup}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Tittel</ThemedText>
                 <TextInput
+                  testID="input-reminder-title"
                   style={[
                     styles.textInput,
                     { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
@@ -312,6 +314,7 @@ export default function RemindersScreen() {
               <View style={styles.inputGroup}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Beskrivelse (valgfritt)</ThemedText>
                 <TextInput
+                  testID="input-reminder-description"
                   style={[
                     styles.textInput,
                     styles.textArea,
@@ -418,6 +421,7 @@ export default function RemindersScreen() {
 
               <View style={styles.formButtons}>
                 <Pressable
+                  testID="button-cancel-reminder"
                   style={[styles.cancelButton, { borderColor: theme.border }]}
                   onPress={resetForm}
                 >
@@ -436,6 +440,7 @@ export default function RemindersScreen() {
         ) : (
           <Animated.View entering={FadeInDown.duration(300).delay(200)}>
             <Pressable
+              testID="button-add-reminder"
               style={[styles.addButton, { backgroundColor: theme.backgroundDefault, borderColor: Colors.dark.accent }]}
               onPress={() => {
                 setShowForm(true);
@@ -504,7 +509,7 @@ export default function RemindersScreen() {
             </ThemedText>
           </Animated.View>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollViewCompat>
     </View>
   );
 }

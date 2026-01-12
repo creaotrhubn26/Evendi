@@ -13,6 +13,7 @@ import BudgetScenariosScreen from "@/screens/BudgetScenariosScreen";
 import TraditionsScreen from "@/screens/TraditionsScreen";
 import ChecklistScreen from "@/screens/ChecklistScreen";
 import WeatherScreen from "@/screens/WeatherScreen";
+import RemindersScreen from "@/screens/RemindersScreen";
 import VendorRegistrationScreen from "@/screens/VendorRegistrationScreen";
 import AdminVendorsScreen from "@/screens/AdminVendorsScreen";
 import DeliveryAccessScreen from "@/screens/DeliveryAccessScreen";
@@ -35,6 +36,7 @@ export type PlanningStackParamList = {
   Traditions: undefined;
   Checklist: undefined;
   Weather: undefined;
+  Reminders: undefined;
   VendorRegistration: undefined;
   AdminVendors: undefined;
   DeliveryAccess: undefined;
@@ -111,6 +113,11 @@ export default function PlanningStackNavigator() {
         name="Weather"
         component={WeatherScreen}
         options={{ title: "Værvarsel" }}
+      />
+      <Stack.Screen
+        name="Reminders"
+        component={RemindersScreen}
+        options={{ title: "Påminnelser" }}
       />
       <Stack.Screen
         name="VendorRegistration"

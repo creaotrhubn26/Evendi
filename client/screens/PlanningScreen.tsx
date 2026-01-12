@@ -213,6 +213,7 @@ export default function PlanningScreen() {
       <Animated.View entering={FadeInDown.delay(150).duration(400)}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickScroll} contentContainerStyle={styles.quickScrollContent}>
           <QuickButton icon="check-square" label="Sjekkliste" theme={theme} onPress={() => navigation.navigate("Checklist")} />
+          <QuickButton icon="bell" label="Påminnelser" color="#FFB74D" theme={theme} onPress={() => navigation.navigate("Reminders")} />
           <QuickButton icon="cloud" label="Vær" color="#64B5F6" theme={theme} onPress={() => navigation.navigate("Weather")} />
           <QuickButton icon="heart" label="Pust" color="#81C784" theme={theme} onPress={() => navigation.navigate("StressTracker")} />
           <QuickButton icon="book-open" label="Tradisjoner" color="#BA68C8" theme={theme} onPress={() => navigation.navigate("Traditions")} />
