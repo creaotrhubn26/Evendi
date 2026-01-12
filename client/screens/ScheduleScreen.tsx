@@ -20,7 +20,9 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  runOnJS,
 } from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -41,6 +43,99 @@ const ICON_OPTIONS: ScheduleEvent["icon"][] = [
   "star",
 ];
 
+const SWIPE_THRESHOLD = -80;
+const ACTION_WIDTH = 140;
+
+interface SwipeableEventItemProps {
+  event: ScheduleEvent;
+  index: number;
+  theme: any;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+function SwipeableEventItem({ event, index, theme, onEdit, onDelete }: SwipeableEventItemProps) {
+  const translateX = useSharedValue(0);
+  const isOpen = useSharedValue(false);
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .onUpdate((e) => {
+      if (isOpen.value) {
+        translateX.value = Math.max(-ACTION_WIDTH, Math.min(0, e.translationX - ACTION_WIDTH));
+      } else {
+        translateX.value = Math.max(-ACTION_WIDTH, Math.min(0, e.translationX));
+      }
+    })
+    .onEnd((e) => {
+      if (translateX.value < SWIPE_THRESHOLD) {
+        translateX.value = withSpring(-ACTION_WIDTH, { damping: 20 });
+        isOpen.value = true;
+      } else {
+        translateX.value = withSpring(0, { damping: 20 });
+        isOpen.value = false;
+      }
+    });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const handleEdit = () => {
+    translateX.value = withSpring(0, { damping: 20 });
+    isOpen.value = false;
+    onEdit();
+  };
+
+  const handleDelete = () => {
+    translateX.value = withSpring(0, { damping: 20 });
+    isOpen.value = false;
+    onDelete();
+  };
+
+  return (
+    <Animated.View entering={FadeInRight.delay(index * 100).duration(300)}>
+      <View style={styles.swipeContainer}>
+        <View style={styles.actionsContainer}>
+          <Pressable
+            style={[styles.actionButton, styles.editButton]}
+            onPress={handleEdit}
+          >
+            <Feather name="edit-2" size={18} color="#FFF" />
+            <ThemedText style={styles.actionText}>Endre</ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.actionButton, styles.deleteButton]}
+            onPress={handleDelete}
+          >
+            <Feather name="trash-2" size={18} color="#FFF" />
+            <ThemedText style={styles.actionText}>Slett</ThemedText>
+          </Pressable>
+        </View>
+        <GestureDetector gesture={panGesture}>
+          <Animated.View
+            style={[
+              styles.eventItem,
+              { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+              animatedStyle,
+            ]}
+          >
+            <View style={styles.timeContainer}>
+              <ThemedText style={[styles.eventTime, { color: Colors.dark.accent }]}>
+                {event.time}
+              </ThemedText>
+            </View>
+            <View style={[styles.eventIcon, { backgroundColor: theme.backgroundSecondary }]}>
+              <Feather name={event.icon} size={18} color={Colors.dark.accent} />
+            </View>
+            <ThemedText style={styles.eventTitle}>{event.title}</ThemedText>
+          </Animated.View>
+        </GestureDetector>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function ScheduleScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -52,6 +147,7 @@ export default function ScheduleScreen() {
   const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<ScheduleEvent | null>(null);
   const [newTime, setNewTime] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [selectedIcon, setSelectedIcon] = useState<ScheduleEvent["icon"]>("heart");
@@ -90,24 +186,44 @@ export default function ScheduleScreen() {
       return;
     }
 
-    const newEvent: ScheduleEvent = {
-      id: generateId(),
-      time: newTime.trim(),
-      title: newTitle.trim(),
-      icon: selectedIcon,
-    };
-
-    const updatedEvents = [...events, newEvent].sort((a, b) =>
-      a.time.localeCompare(b.time)
-    );
+    let updatedEvents: ScheduleEvent[];
+    
+    if (editingEvent) {
+      updatedEvents = events.map((e) =>
+        e.id === editingEvent.id
+          ? { ...e, time: newTime.trim(), title: newTitle.trim(), icon: selectedIcon }
+          : e
+      ).sort((a, b) => a.time.localeCompare(b.time));
+    } else {
+      const newEvent: ScheduleEvent = {
+        id: generateId(),
+        time: newTime.trim(),
+        title: newTitle.trim(),
+        icon: selectedIcon,
+      };
+      updatedEvents = [...events, newEvent].sort((a, b) =>
+        a.time.localeCompare(b.time)
+      );
+    }
+    
     setEvents(updatedEvents);
     await saveSchedule(updatedEvents);
 
     setNewTime("");
     setNewTitle("");
     setSelectedIcon("heart");
+    setEditingEvent(null);
     setShowForm(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleEditEvent = (event: ScheduleEvent) => {
+    setEditingEvent(event);
+    setNewTime(event.time);
+    setNewTitle(event.title);
+    setSelectedIcon(event.icon);
+    setShowForm(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleDeleteEvent = async (id: string) => {
@@ -281,41 +397,18 @@ export default function ScheduleScreen() {
         </View>
       ) : (
         <View style={styles.timeline}>
+          <ThemedText style={[styles.swipeHint, { color: theme.textMuted }]}>
+            Sveip til venstre for å endre eller slette
+          </ThemedText>
           {events.map((event, index) => (
-            <Animated.View
+            <SwipeableEventItem
               key={event.id}
-              entering={FadeInRight.delay(index * 100).duration(300)}
-            >
-              <Pressable
-                onLongPress={() => handleDeleteEvent(event.id)}
-                style={({ pressed }) => [
-                  styles.eventItem,
-                  { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
-                  pressed && { opacity: 0.9 },
-                ]}
-              >
-                <View style={styles.timeContainer}>
-                  <ThemedText
-                    style={[styles.eventTime, { color: Colors.dark.accent }]}
-                  >
-                    {event.time}
-                  </ThemedText>
-                </View>
-                <View
-                  style={[
-                    styles.eventIcon,
-                    { backgroundColor: theme.backgroundSecondary },
-                  ]}
-                >
-                  <Feather
-                    name={event.icon}
-                    size={18}
-                    color={Colors.dark.accent}
-                  />
-                </View>
-                <ThemedText style={styles.eventTitle}>{event.title}</ThemedText>
-              </Pressable>
-            </Animated.View>
+              event={event}
+              index={index}
+              theme={theme}
+              onEdit={() => handleEditEvent(event)}
+              onDelete={() => handleDeleteEvent(event.id)}
+            />
           ))}
         </View>
       )}
@@ -329,7 +422,7 @@ export default function ScheduleScreen() {
           ]}
         >
           <ThemedText type="h3" style={styles.formTitle}>
-            Legg til hendelse
+            {editingEvent ? "Endre hendelse" : "Legg til hendelse"}
           </ThemedText>
 
           <View style={styles.inputRow}>
@@ -394,7 +487,13 @@ export default function ScheduleScreen() {
 
           <View style={styles.formButtons}>
             <Pressable
-              onPress={() => setShowForm(false)}
+              onPress={() => {
+                setShowForm(false);
+                setEditingEvent(null);
+                setNewTime("");
+                setNewTitle("");
+                setSelectedIcon("heart");
+              }}
               style={[styles.cancelButton, { borderColor: theme.border }]}
             >
               <ThemedText style={{ color: theme.textSecondary }}>
@@ -402,7 +501,7 @@ export default function ScheduleScreen() {
               </ThemedText>
             </Pressable>
             <Button onPress={handleAddEvent} style={styles.saveButton}>
-              Lagre
+              {editingEvent ? "Oppdater" : "Lagre"}
             </Button>
           </View>
         </Animated.View>
@@ -461,6 +560,40 @@ const styles = StyleSheet.create({
   timeline: {
     gap: Spacing.md,
     marginBottom: Spacing.xl,
+  },
+  swipeHint: {
+    fontSize: 12,
+    textAlign: "center",
+    marginBottom: Spacing.sm,
+  },
+  swipeContainer: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: BorderRadius.md,
+  },
+  actionsContainer: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    flexDirection: "row",
+  },
+  actionButton: {
+    width: 70,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 4,
+  },
+  editButton: {
+    backgroundColor: Colors.dark.accent,
+  },
+  deleteButton: {
+    backgroundColor: "#DC3545",
+  },
+  actionText: {
+    color: "#FFF",
+    fontSize: 11,
+    fontWeight: "500",
   },
   eventItem: {
     flexDirection: "row",
