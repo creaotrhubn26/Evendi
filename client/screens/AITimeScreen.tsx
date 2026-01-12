@@ -12,7 +12,7 @@ import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getSchedule, getPhotoShots } from "@/lib/storage";
-import { AITimeSlot } from "@/lib/types";
+import { AITimeSlot, ScheduleEvent } from "@/lib/types";
 
 const PHOTO_TIME_ESTIMATES: Record<string, number> = {
   ceremony: 45,
@@ -48,6 +48,19 @@ export default function AITimeScreen() {
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
 
+  const categorizeScheduleEvent = (event: ScheduleEvent): string | null => {
+    const title = event.title.toLowerCase();
+    if (event.icon === "camera" || title.includes("foto") || title.includes("bilde")) {
+      if (title.includes("gruppe") || title.includes("familie")) return "group";
+      if (title.includes("portrett") || title.includes("brudepar")) return "portraits";
+      if (title.includes("detalj") || title.includes("ring")) return "details";
+      if (title.includes("seremoni") || title.includes("vielse")) return "ceremony";
+      if (title.includes("fest") || title.includes("dans") || title.includes("kake")) return "reception";
+      return "portraits";
+    }
+    return null;
+  };
+
   const calculateTimes = useCallback(async () => {
     setCalculating(true);
     
@@ -67,6 +80,13 @@ export default function AITimeScreen() {
     photoShots.forEach((shot) => {
       if (!shot.completed) {
         photoCounts[shot.category] = (photoCounts[shot.category] || 0) + 1;
+      }
+    });
+
+    schedule.forEach((event) => {
+      const category = categorizeScheduleEvent(event);
+      if (category) {
+        photoCounts[category] = (photoCounts[category] || 0) + 1;
       }
     });
 
@@ -145,7 +165,7 @@ export default function AITimeScreen() {
           </View>
           <ThemedText type="h2" style={styles.title}>AI Tidsberegner</ThemedText>
           <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Foreslåtte tidsrammer basert på din kjøreplan og shot list.
+            Foreslåtte tidsrammer basert på fotoplanen og foto-hendelser i kjøreplanen.
           </ThemedText>
         </View>
       </Animated.View>
@@ -188,7 +208,7 @@ export default function AITimeScreen() {
                   ]}
                 >
                   <View style={[styles.slotIcon, { backgroundColor: theme.backgroundSecondary }]}>
-                    <Feather name={slot.icon} size={20} color={Colors.dark.accent} />
+                    <Feather name={slot.icon as keyof typeof Feather.glyphMap} size={20} color={Colors.dark.accent} />
                   </View>
                   <View style={styles.slotInfo}>
                     <ThemedText style={styles.slotTitle}>{slot.title}</ThemedText>
@@ -210,10 +230,10 @@ export default function AITimeScreen() {
             <View style={styles.emptyState}>
               <Feather name="camera-off" size={48} color={theme.textMuted} />
               <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-                Ingen bilder i fotoplanen
+                Ingen bilder funnet
               </ThemedText>
               <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
-                Legg til bilder i fotoplanen for å få AI-beregninger
+                Legg til bilder i fotoplanen eller foto-hendelser i kjøreplanen
               </ThemedText>
             </View>
           ) : null}
