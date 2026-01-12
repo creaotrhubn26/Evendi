@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { db } from "./db";
 import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, coupleVendorContracts, notifications, activityLogs, weddingTables, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses } from "@shared/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import crypto from "crypto";
 
 function generateAccessCode(): string {
@@ -4402,6 +4402,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error responding to review:", error);
       res.status(500).json({ error: "Kunne ikke lagre svar" });
+    }
+  });
+
+  // Vendor: Get contracts for review reminders
+  app.get("/api/vendor/contracts", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const contracts = await db.select({
+        id: coupleVendorContracts.id,
+        coupleId: coupleVendorContracts.coupleId,
+        status: coupleVendorContracts.status,
+        completedAt: coupleVendorContracts.completedAt,
+        reviewReminderSentAt: coupleVendorContracts.reviewReminderSentAt,
+        coupleName: coupleProfiles.displayName,
+      })
+        .from(coupleVendorContracts)
+        .innerJoin(coupleProfiles, eq(coupleVendorContracts.coupleId, coupleProfiles.id))
+        .where(eq(coupleVendorContracts.vendorId, vendorId))
+        .orderBy(desc(coupleVendorContracts.createdAt));
+
+      // Check which contracts have reviews
+      const contractIds = contracts.map(c => c.id);
+      const reviews = contractIds.length > 0 
+        ? await db.select({ contractId: vendorReviews.contractId })
+            .from(vendorReviews)
+            .where(inArray(vendorReviews.contractId, contractIds))
+        : [];
+
+      const reviewedContractIds = new Set(reviews.map(r => r.contractId));
+
+      const contractsWithReviewStatus = contracts.map(c => ({
+        ...c,
+        hasReview: reviewedContractIds.has(c.id),
+      }));
+
+      res.json(contractsWithReviewStatus);
+    } catch (error) {
+      console.error("Error fetching vendor contracts:", error);
+      res.status(500).json({ error: "Kunne ikke hente avtaler" });
     }
   });
 

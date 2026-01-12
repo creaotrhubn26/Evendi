@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -78,7 +78,7 @@ interface Inspiration {
   category: InspirationCategory | null;
 }
 
-type TabType = "deliveries" | "inspirations" | "messages" | "products" | "offers";
+type TabType = "deliveries" | "inspirations" | "messages" | "products" | "offers" | "reviews";
 
 interface Conversation {
   id: string;
@@ -127,6 +127,29 @@ interface VendorOffer {
   createdAt: string;
   couple: { id: string; displayName: string; email: string } | null;
   items: VendorOfferItem[];
+}
+
+interface VendorReceivedReview {
+  id: string;
+  contractId: string;
+  rating: number;
+  title: string | null;
+  body: string | null;
+  isAnonymous: boolean;
+  isApproved: boolean;
+  createdAt: string;
+  coupleName: string;
+  response: { id: string; body: string; createdAt: string } | null;
+}
+
+interface VendorContract {
+  id: string;
+  coupleId: string;
+  status: string;
+  completedAt: string | null;
+  reviewReminderSentAt: string | null;
+  coupleName: string;
+  hasReview: boolean;
 }
 
 interface Props {
@@ -231,6 +254,68 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     enabled: !!session?.sessionToken,
   });
 
+  const { data: reviewsResponse, isLoading: reviewsLoading, refetch: refetchReviews } = useQuery<{ reviews: VendorReceivedReview[]; stats: { total: number; approved: number; average: number } }>({
+    queryKey: ["/api/vendor/reviews"],
+    queryFn: async () => {
+      if (!session?.sessionToken) return { reviews: [], stats: { total: 0, approved: 0, average: 0 } };
+      const response = await fetch(new URL("/api/vendor/reviews", getApiUrl()).toString(), {
+        headers: {
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+      });
+      if (!response.ok) throw new Error("Kunne ikke hente anmeldelser");
+      return response.json();
+    },
+    enabled: !!session?.sessionToken,
+  });
+
+  const reviewsData = reviewsResponse?.reviews || [];
+
+  const { data: contractsData = [], refetch: refetchContracts } = useQuery<VendorContract[]>({
+    queryKey: ["/api/vendor/contracts"],
+    queryFn: async () => {
+      if (!session?.sessionToken) return [];
+      const response = await fetch(new URL("/api/vendor/contracts", getApiUrl()).toString(), {
+        headers: {
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+      });
+      if (!response.ok) throw new Error("Kunne ikke hente kontrakter");
+      return response.json();
+    },
+    enabled: !!session?.sessionToken,
+  });
+
+  const completedWithoutReview = contractsData.filter(c => c.status === "completed" && !c.hasReview);
+
+  const sendReminderMutation = useMutation({
+    mutationFn: async (contractId: string) => {
+      if (!session?.sessionToken) throw new Error("Ikke autentisert");
+      const response = await fetch(
+        new URL(`/api/vendor/contracts/${contractId}/review-reminder`, getApiUrl()).toString(),
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+        }
+      );
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Kunne ikke sende påminnelse");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Sendt!", "Påminnelse om anmeldelse er sendt til brudeparet.");
+      refetchContracts();
+    },
+    onError: (error: any) => {
+      Alert.alert("Feil", error.message || "Kunne ikke sende påminnelse");
+    },
+  });
+
   const totalUnread = conversationsData.reduce((sum, c) => sum + (c.vendorUnreadCount || 0), 0);
 
   const handleRefresh = useCallback(async () => {
@@ -243,11 +328,13 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       await refetchProducts();
     } else if (activeTab === "offers") {
       await refetchOffers();
+    } else if (activeTab === "reviews") {
+      await Promise.all([refetchReviews(), refetchContracts()]);
     } else {
       await refetchConversations();
     }
     setIsRefreshing(false);
-  }, [activeTab, refetchDeliveries, refetchInspirations, refetchConversations, refetchProducts, refetchOffers]);
+  }, [activeTab, refetchDeliveries, refetchInspirations, refetchConversations, refetchProducts, refetchOffers, refetchReviews, refetchContracts]);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -433,6 +520,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     activeTab === "inspirations" ? inspirationsLoading : 
     activeTab === "products" ? productsLoading :
     activeTab === "offers" ? offersLoading :
+    activeTab === "reviews" ? reviewsLoading :
     conversationsLoading;
 
   const formatPrice = (priceInOre: number) => {
@@ -685,9 +773,28 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             Meldinger
           </ThemedText>
         </Pressable>
+        <Pressable
+          onPress={() => setActiveTab("reviews")}
+          style={[
+            styles.tab,
+            activeTab === "reviews" && { borderBottomColor: Colors.dark.accent, borderBottomWidth: 2 }
+          ]}
+        >
+          <View style={styles.tabWithBadge}>
+            <Feather name="star" size={16} color={activeTab === "reviews" ? Colors.dark.accent : theme.textMuted} />
+            {reviewsData.length > 0 ? (
+              <View style={[styles.tabBadge, { backgroundColor: Colors.dark.accent }]}>
+                <ThemedText style={styles.tabBadgeText}>{reviewsData.length}</ThemedText>
+              </View>
+            ) : null}
+          </View>
+          <ThemedText style={[styles.tabText, { color: activeTab === "reviews" ? Colors.dark.accent : theme.textMuted }]}>
+            Anmeldelser
+          </ThemedText>
+        </Pressable>
       </ScrollView>
 
-      {activeTab !== "messages" ? (
+      {activeTab !== "messages" && activeTab !== "reviews" ? (
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -832,7 +939,132 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             </View>
           )}
         />
-      ) : (
+      ) : activeTab === "reviews" ? (
+        <FlatList
+          data={reviewsData}
+          renderItem={({ item, index }) => (
+            <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
+              <View style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardTitleRow}>
+                    <ThemedText style={styles.cardTitle}>{item.coupleName}</ThemedText>
+                    <View style={styles.reviewRatingRow}>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Feather
+                          key={star}
+                          name="star"
+                          size={14}
+                          color={star <= item.rating ? Colors.dark.accent : theme.border}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                  {!item.isApproved ? (
+                    <View style={[styles.statusBadge, { backgroundColor: "#FF9800" + "30" }]}>
+                      <ThemedText style={[styles.statusText, { color: "#FF9800" }]}>
+                        Under godkjenning
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                </View>
+                {item.title ? (
+                  <ThemedText style={[styles.reviewTitle, { color: theme.text }]}>{item.title}</ThemedText>
+                ) : null}
+                {item.body ? (
+                  <ThemedText style={[styles.reviewBody, { color: theme.textSecondary }]} numberOfLines={4}>
+                    {item.body}
+                  </ThemedText>
+                ) : null}
+                {item.response ? (
+                  <View style={[styles.responseContainer, { backgroundColor: theme.backgroundRoot }]}>
+                    <ThemedText style={[styles.responseLabel, { color: Colors.dark.accent }]}>Ditt svar:</ThemedText>
+                    <ThemedText style={[styles.responseBody, { color: theme.textSecondary }]}>{item.response.body}</ThemedText>
+                  </View>
+                ) : null}
+                <ThemedText style={[styles.createdAt, { color: theme.textMuted }]}>
+                  {formatDate(item.createdAt)}
+                </ThemedText>
+              </View>
+            </Animated.View>
+          )}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{
+            paddingHorizontal: Spacing.lg,
+            paddingBottom: insets.bottom + Spacing.xl,
+          }}
+          ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={Colors.dark.accent}
+            />
+          }
+          ListHeaderComponent={() => completedWithoutReview.length > 0 ? (
+            <View style={styles.reminderSection}>
+              <ThemedText style={[styles.reminderTitle, { color: theme.text }]}>
+                Venter på anmeldelse
+              </ThemedText>
+              <ThemedText style={[styles.reminderSubtitle, { color: theme.textSecondary }]}>
+                Send påminnelse til brudepar om å anmelde deg
+              </ThemedText>
+              {completedWithoutReview.map((contract) => {
+                const canSend = !contract.reviewReminderSentAt || 
+                  (Date.now() - new Date(contract.reviewReminderSentAt).getTime()) > 14 * 24 * 60 * 60 * 1000;
+                return (
+                  <View key={contract.id} style={[styles.reminderCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+                    <View style={styles.reminderCardInfo}>
+                      <ThemedText style={styles.reminderCoupleName}>{contract.coupleName}</ThemedText>
+                      {contract.reviewReminderSentAt ? (
+                        <ThemedText style={[styles.reminderSentText, { color: theme.textMuted }]}>
+                          Påminnelse sendt {formatDate(contract.reviewReminderSentAt)}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                    <Pressable
+                      style={[
+                        styles.reminderBtn,
+                        { backgroundColor: canSend ? Colors.dark.accent : theme.backgroundSecondary }
+                      ]}
+                      onPress={() => {
+                        if (canSend) {
+                          sendReminderMutation.mutate(contract.id);
+                        } else {
+                          Alert.alert("Vent litt", "Du kan kun sende påminnelse én gang per 14 dager.");
+                        }
+                      }}
+                      disabled={sendReminderMutation.isPending}
+                    >
+                      <Feather 
+                        name="send" 
+                        size={14} 
+                        color={canSend ? "#1A1A1A" : theme.textMuted} 
+                      />
+                      <ThemedText style={[
+                        styles.reminderBtnText, 
+                        { color: canSend ? "#1A1A1A" : theme.textMuted }
+                      ]}>
+                        Send
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyContainer}>
+              <Feather name="star" size={48} color={theme.textMuted} />
+              <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
+                Ingen anmeldelser ennå
+              </ThemedText>
+              <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
+                Når par anmelder dine tjenester, vil de vises her
+              </ThemedText>
+            </View>
+          )}
+        />
+      ) : activeTab === "messages" ? (
         <FlatList
           data={conversationsData}
           renderItem={renderConversationItem}
@@ -861,7 +1093,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             </View>
           )}
         />
-      )}
+      ) : null}
     </View>
   );
 }
@@ -1090,5 +1322,76 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     fontStyle: "italic",
+  },
+  reviewRatingRow: {
+    flexDirection: "row",
+    gap: 2,
+  },
+  reviewTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginTop: Spacing.sm,
+  },
+  reviewBody: {
+    fontSize: 14,
+    marginTop: Spacing.xs,
+    lineHeight: 20,
+  },
+  responseContainer: {
+    marginTop: Spacing.md,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  responseLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  responseBody: {
+    fontSize: 13,
+  },
+  reminderSection: {
+    marginBottom: Spacing.xl,
+  },
+  reminderTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: Spacing.xs,
+  },
+  reminderSubtitle: {
+    fontSize: 13,
+    marginBottom: Spacing.md,
+  },
+  reminderCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+  },
+  reminderCardInfo: {
+    flex: 1,
+  },
+  reminderCoupleName: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  reminderSentText: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  reminderBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    gap: Spacing.xs,
+  },
+  reminderBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
