@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   StyleSheet,
   View,
@@ -21,6 +21,18 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 
+interface BrregEntity {
+  organizationNumber: string;
+  name: string;
+  organizationForm: string | null;
+  address: {
+    street: string | null;
+    postalCode: string | null;
+    city: string | null;
+    municipality: string | null;
+  } | null;
+}
+
 interface VendorCategory {
   id: string;
   name: string;
@@ -38,6 +50,7 @@ export default function VendorRegistrationScreen() {
     password: "",
     confirmPassword: "",
     businessName: "",
+    organizationNumber: "",
     categoryId: "",
     description: "",
     location: "",
@@ -48,6 +61,61 @@ export default function VendorRegistrationScreen() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [brregResults, setBrregResults] = useState<BrregEntity[]>([]);
+  const [showBrregDropdown, setShowBrregDropdown] = useState(false);
+  const [isSearchingBrreg, setIsSearchingBrreg] = useState(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const searchBrreg = useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setBrregResults([]);
+      setShowBrregDropdown(false);
+      return;
+    }
+
+    setIsSearchingBrreg(true);
+    try {
+      const url = new URL("/api/brreg/search", getApiUrl());
+      url.searchParams.set("q", query);
+      const response = await fetch(url.toString());
+      const data = await response.json();
+      setBrregResults(data.entities || []);
+      setShowBrregDropdown(data.entities?.length > 0);
+    } catch (error) {
+      console.error("Brreg search error:", error);
+      setBrregResults([]);
+    } finally {
+      setIsSearchingBrreg(false);
+    }
+  }, []);
+
+  const handleBusinessNameChange = useCallback((value: string) => {
+    setFormData((prev) => ({ ...prev, businessName: value }));
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      searchBrreg(value);
+    }, 300);
+  }, [searchBrreg]);
+
+  const selectBrregEntity = useCallback((entity: BrregEntity) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const location = entity.address
+      ? [entity.address.city, entity.address.municipality].filter(Boolean).join(", ")
+      : "";
+
+    setFormData((prev) => ({
+      ...prev,
+      businessName: entity.name,
+      organizationNumber: entity.organizationNumber,
+      location: location || prev.location,
+    }));
+    setBrregResults([]);
+    setShowBrregDropdown(false);
+  }, []);
 
   const { data: categories = [], isLoading: categoriesLoading } = useQuery<VendorCategory[]>({
     queryKey: ["/api/vendor-categories"],
@@ -56,7 +124,10 @@ export default function VendorRegistrationScreen() {
   const registerMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const { confirmPassword, ...submitData } = data;
-      return apiRequest("POST", "/api/vendors/register", submitData);
+      return apiRequest("POST", "/api/vendors/register", {
+        ...submitData,
+        organizationNumber: submitData.organizationNumber || undefined,
+      });
     },
     onSuccess: () => {
       setSubmitted(true);
@@ -191,16 +262,63 @@ export default function VendorRegistrationScreen() {
       <View style={styles.section}>
         <ThemedText style={styles.sectionTitle}>Bedriftsinformasjon</ThemedText>
 
-        <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-          <Feather name="briefcase" size={18} color={theme.textMuted} />
-          <TextInput
-            style={[styles.input, { color: theme.text }]}
-            placeholder="Bedriftsnavn *"
-            placeholderTextColor={theme.textMuted}
-            value={formData.businessName}
-            onChangeText={(v) => updateField("businessName", v)}
-          />
+        <View style={styles.businessNameContainer}>
+          <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+            <Feather name="briefcase" size={18} color={theme.textMuted} />
+            <TextInput
+              style={[styles.input, { color: theme.text }]}
+              placeholder="Bedriftsnavn *"
+              placeholderTextColor={theme.textMuted}
+              value={formData.businessName}
+              onChangeText={handleBusinessNameChange}
+              onFocus={() => {
+                if (brregResults.length > 0) setShowBrregDropdown(true);
+              }}
+            />
+            {isSearchingBrreg ? (
+              <ActivityIndicator size="small" color={Colors.dark.accent} />
+            ) : null}
+          </View>
+
+          {showBrregDropdown && brregResults.length > 0 ? (
+            <View style={[styles.brregDropdown, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+              {brregResults.map((entity) => (
+                <Pressable
+                  key={entity.organizationNumber}
+                  style={[styles.brregItem, { borderBottomColor: theme.border }]}
+                  onPress={() => selectBrregEntity(entity)}
+                >
+                  <View style={styles.brregItemMain}>
+                    <ThemedText style={styles.brregItemName}>{entity.name}</ThemedText>
+                    <ThemedText style={[styles.brregItemOrg, { color: theme.textMuted }]}>
+                      Org.nr: {entity.organizationNumber}
+                    </ThemedText>
+                  </View>
+                  {entity.address?.city ? (
+                    <ThemedText style={[styles.brregItemLocation, { color: theme.textSecondary }]}>
+                      {entity.address.city}
+                    </ThemedText>
+                  ) : null}
+                </Pressable>
+              ))}
+              <Pressable
+                style={styles.brregCloseBtn}
+                onPress={() => setShowBrregDropdown(false)}
+              >
+                <ThemedText style={[styles.brregCloseText, { color: theme.textMuted }]}>Lukk</ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
+
+        {formData.organizationNumber ? (
+          <View style={[styles.orgNumberBadge, { backgroundColor: Colors.dark.accent + "20", borderColor: Colors.dark.accent }]}>
+            <Feather name="check-circle" size={14} color={Colors.dark.accent} />
+            <ThemedText style={[styles.orgNumberText, { color: Colors.dark.accent }]}>
+              Org.nr: {formData.organizationNumber}
+            </ThemedText>
+          </View>
+        ) : null}
 
         <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Velg kategori *</ThemedText>
         {categoriesLoading ? (
@@ -445,5 +563,64 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: "center",
     lineHeight: 20,
+  },
+  businessNameContainer: {
+    position: "relative",
+    zIndex: 10,
+  },
+  brregDropdown: {
+    position: "absolute",
+    top: 54,
+    left: 0,
+    right: 0,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    maxHeight: 250,
+    overflow: "hidden",
+  },
+  brregItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  brregItemMain: {
+    flex: 1,
+  },
+  brregItemName: {
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  brregItemOrg: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  brregItemLocation: {
+    fontSize: 13,
+    marginLeft: Spacing.sm,
+  },
+  brregCloseBtn: {
+    paddingVertical: Spacing.sm,
+    alignItems: "center",
+  },
+  brregCloseText: {
+    fontSize: 13,
+  },
+  orgNumberBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+    marginBottom: Spacing.md,
+    gap: Spacing.xs,
+  },
+  orgNumberText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
 });

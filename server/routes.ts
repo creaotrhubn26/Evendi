@@ -169,6 +169,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   seedCategories().catch(console.error);
   seedInspirationCategories().catch(console.error);
 
+  // Brreg.no business search endpoint
+  app.get("/api/brreg/search", async (req: Request, res: Response) => {
+    try {
+      const { q } = req.query;
+      if (!q || typeof q !== "string" || q.length < 2) {
+        return res.json({ entities: [] });
+      }
+
+      const brregUrl = `https://data.brreg.no/enhetsregisteret/api/enheter?navn=${encodeURIComponent(q)}&size=10`;
+      const response = await fetch(brregUrl, {
+        headers: {
+          "Accept": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        console.error("Brreg API error:", response.status);
+        return res.json({ entities: [] });
+      }
+
+      const data = await response.json();
+      const entities = data._embedded?.enheter || [];
+
+      const formattedEntities = entities.map((entity: any) => ({
+        organizationNumber: entity.organisasjonsnummer,
+        name: entity.navn,
+        organizationForm: entity.organisasjonsform?.beskrivelse,
+        address: entity.forretningsadresse ? {
+          street: entity.forretningsadresse.adresse?.join(", "),
+          postalCode: entity.forretningsadresse.postnummer,
+          city: entity.forretningsadresse.poststed,
+          municipality: entity.forretningsadresse.kommune,
+        } : null,
+      }));
+
+      res.json({ entities: formattedEntities });
+    } catch (error) {
+      console.error("Error searching brreg:", error);
+      res.json({ entities: [] });
+    }
+  });
+
   app.get("/api/vendor-categories", async (_req: Request, res: Response) => {
     try {
       const categories = await db.select().from(vendorCategories);
@@ -202,6 +244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email,
         password: hashedPassword,
         businessName: profileData.businessName,
+        organizationNumber: profileData.organizationNumber || null,
         categoryId: profileData.categoryId,
         description: profileData.description || null,
         location: profileData.location || null,
