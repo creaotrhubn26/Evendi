@@ -6,7 +6,6 @@ import {
   TextInput,
   Pressable,
   Alert,
-  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -26,7 +25,6 @@ import { GuestsStackParamList } from "@/navigation/GuestsStackNavigator";
 import { getGuests, saveGuests, generateId } from "@/lib/storage";
 import { Guest, GUEST_CATEGORIES } from "@/lib/types";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
-import emptyGuestsImage from "../../assets/images/empty-guests.png";
 
 type NavigationProp = NativeStackNavigationProp<GuestsStackParamList>;
 
@@ -518,11 +516,9 @@ export default function GuestsScreen() {
 
   const ListEmpty = () => (
     <View style={styles.emptyState}>
-      <Image
-        source={emptyGuestsImage}
-        style={styles.emptyImage}
-        resizeMode="contain"
-      />
+      <View style={[styles.emptyIcon, { backgroundColor: theme.backgroundSecondary }]}>
+        <Feather name="users" size={48} color={theme.textMuted} />
+      </View>
       <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
         Ingen gjester lagt til
       </ThemedText>
@@ -812,11 +808,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing["5xl"],
   },
-  emptyImage: {
-    width: 150,
-    height: 150,
+  emptyIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: Spacing.xl,
-    opacity: 0.8,
   },
   emptyText: {
     fontSize: 16,
