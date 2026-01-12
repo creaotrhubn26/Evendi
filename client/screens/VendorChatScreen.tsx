@@ -306,22 +306,24 @@ export default function VendorChatScreen({ route, navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      <View style={[styles.lastActiveBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <View style={[styles.activeIndicator, { backgroundColor: isActive ? "#4CAF50" : theme.textMuted }]} />
-        <ThemedText style={[styles.lastActiveText, { color: isActive ? "#4CAF50" : theme.textMuted }]}>
-          {lastActiveText}
-        </ThemedText>
-      </View>
       <FlatList
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{
-          paddingTop: headerHeight + Spacing.xl + Spacing.md,
+          paddingTop: headerHeight + Spacing.md,
           paddingHorizontal: Spacing.md,
           paddingBottom: Spacing.md,
         }}
+        ListHeaderComponent={
+          <View style={[styles.lastActiveBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+            <View style={[styles.activeIndicator, { backgroundColor: isActive ? "#4CAF50" : theme.textMuted }]} />
+            <ThemedText style={[styles.lastActiveText, { color: isActive ? "#4CAF50" : theme.textMuted }]}>
+              {lastActiveText}
+            </ThemedText>
+          </View>
+        }
         inverted={false}
         onContentSizeChange={() => {
           if (messages.length > 0) {
@@ -423,17 +425,12 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   lastActiveBar: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: Spacing.xs,
-    paddingTop: Spacing.xs + 100,
-    borderBottomWidth: 1,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.sm,
     gap: 6,
   },
   activeIndicator: {
