@@ -1,11 +1,8 @@
 import React from "react";
 import { View, StyleSheet, Image } from "react-native";
 
-import { ThemedText } from "@/components/ThemedText";
-import { Spacing, Colors } from "@/constants/theme";
-
 interface HeaderTitleProps {
-  title: string;
+  title?: string;
 }
 
 export function HeaderTitle({ title }: HeaderTitleProps) {
@@ -24,10 +21,11 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "center",
+    paddingVertical: 8,
   },
   logo: {
-    width: 120,
-    height: 36,
+    width: 180,
+    height: 48,
   },
 });
