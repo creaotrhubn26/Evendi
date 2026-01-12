@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -79,6 +79,29 @@ export type VendorCategory = typeof vendorCategories.$inferSelect;
 export type InsertVendor = z.infer<typeof insertVendorSchema>;
 export type Vendor = typeof vendors.$inferSelect;
 export type VendorRegistration = z.infer<typeof vendorRegistrationSchema>;
+
+export const vendorFeatures = pgTable("vendor_features", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  featureKey: text("feature_key").notNull(),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const vendorInspirationCategories = pgTable("vendor_inspiration_categories", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  categoryId: varchar("category_id").notNull().references(() => inspirationCategories.id),
+  assignedAt: timestamp("assigned_at").defaultNow(),
+});
+
+export type VendorFeature = typeof vendorFeatures.$inferSelect;
+export type VendorInspirationCategory = typeof vendorInspirationCategories.$inferSelect;
 
 export const deliveries = pgTable("deliveries", {
   id: varchar("id")
@@ -160,6 +183,16 @@ export const inspirations = pgTable("inspirations", {
   title: text("title").notNull(),
   description: text("description"),
   coverImageUrl: text("cover_image_url"),
+  priceSummary: text("price_summary"),
+  priceMin: integer("price_min"),
+  priceMax: integer("price_max"),
+  currency: text("currency").default("NOK"),
+  websiteUrl: text("website_url"),
+  inquiryEmail: text("inquiry_email"),
+  inquiryPhone: text("inquiry_phone"),
+  ctaLabel: text("cta_label"),
+  ctaUrl: text("cta_url"),
+  allowInquiryForm: boolean("allow_inquiry_form").default(false),
   status: text("status").notNull().default("pending"),
   rejectionReason: text("rejection_reason"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -200,11 +233,45 @@ export const createInspirationSchema = z.object({
   title: z.string().min(2, "Tittel må være minst 2 tegn"),
   description: z.string().optional(),
   coverImageUrl: z.string().url("Ugyldig URL").optional().or(z.literal("")),
+  priceSummary: z.string().optional(),
+  priceMin: z.number().min(0).optional(),
+  priceMax: z.number().min(0).optional(),
+  currency: z.string().default("NOK"),
+  websiteUrl: z.string().url("Ugyldig URL").optional().or(z.literal("")),
+  inquiryEmail: z.string().email("Ugyldig e-post").optional().or(z.literal("")),
+  inquiryPhone: z.string().optional(),
+  ctaLabel: z.string().optional(),
+  ctaUrl: z.string().url("Ugyldig URL").optional().or(z.literal("")),
+  allowInquiryForm: z.boolean().default(false),
   media: z.array(z.object({
     type: z.enum(["image", "video"]),
     url: z.string().url("Ugyldig URL"),
     caption: z.string().optional(),
   })).min(1, "Legg til minst ett bilde eller video"),
+});
+
+export const inspirationInquiries = pgTable("inspiration_inquiries", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  inspirationId: varchar("inspiration_id").notNull().references(() => inspirations.id),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  message: text("message").notNull(),
+  weddingDate: text("wedding_date"),
+  status: text("status").notNull().default("new"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const createInquirySchema = z.object({
+  inspirationId: z.string(),
+  name: z.string().min(2, "Navn må være minst 2 tegn"),
+  email: z.string().email("Ugyldig e-postadresse"),
+  phone: z.string().optional(),
+  message: z.string().min(10, "Melding må være minst 10 tegn"),
+  weddingDate: z.string().optional(),
 });
 
 export type InsertInspirationCategory = z.infer<typeof insertInspirationCategorySchema>;
@@ -214,3 +281,5 @@ export type Inspiration = typeof inspirations.$inferSelect;
 export type InsertInspirationMedia = z.infer<typeof insertInspirationMediaSchema>;
 export type InspirationMedia = typeof inspirationMedia.$inferSelect;
 export type CreateInspiration = z.infer<typeof createInspirationSchema>;
+export type InspirationInquiry = typeof inspirationInquiries.$inferSelect;
+export type CreateInquiry = z.infer<typeof createInquirySchema>;

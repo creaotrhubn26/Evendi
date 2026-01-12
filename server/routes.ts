@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { db } from "./db";
-import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema } from "@shared/schema";
+import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import crypto from "crypto";
 
@@ -568,12 +568,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { media, ...inspirationData } = validation.data;
 
+      const assignments = await db.select().from(vendorInspirationCategories).where(eq(vendorInspirationCategories.vendorId, vendorId));
+      if (assignments.length > 0) {
+        const allowedCategoryIds = assignments.map(a => a.categoryId);
+        if (!allowedCategoryIds.includes(inspirationData.categoryId)) {
+          return res.status(403).json({ error: "Du har ikke tilgang til denne kategorien" });
+        }
+      }
+
       const [newInspiration] = await db.insert(inspirations).values({
         vendorId,
         categoryId: inspirationData.categoryId,
         title: inspirationData.title,
         description: inspirationData.description || null,
         coverImageUrl: inspirationData.coverImageUrl || (media.length > 0 ? media[0].url : null),
+        priceSummary: inspirationData.priceSummary || null,
+        priceMin: inspirationData.priceMin || null,
+        priceMax: inspirationData.priceMax || null,
+        currency: inspirationData.currency || "NOK",
+        websiteUrl: inspirationData.websiteUrl || null,
+        inquiryEmail: inspirationData.inquiryEmail || null,
+        inquiryPhone: inspirationData.inquiryPhone || null,
+        ctaLabel: inspirationData.ctaLabel || null,
+        ctaUrl: inspirationData.ctaUrl || null,
+        allowInquiryForm: inspirationData.allowInquiryForm || false,
       }).returning();
 
       await Promise.all(
@@ -663,6 +681,217 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error rejecting inspiration:", error);
       res.status(500).json({ error: "Kunne ikke avvise inspirasjon" });
+    }
+  });
+
+  app.get("/api/admin/vendors/:id/features", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+
+    try {
+      const { id } = req.params;
+      const features = await db.select().from(vendorFeatures).where(eq(vendorFeatures.vendorId, id));
+      res.json(features);
+    } catch (error) {
+      console.error("Error fetching vendor features:", error);
+      res.status(500).json({ error: "Kunne ikke hente funksjoner" });
+    }
+  });
+
+  app.put("/api/admin/vendors/:id/features", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+
+    try {
+      const { id } = req.params;
+      const { features } = req.body as { features: { featureKey: string; isEnabled: boolean }[] };
+
+      for (const feature of features) {
+        const existing = await db.select().from(vendorFeatures)
+          .where(and(eq(vendorFeatures.vendorId, id), eq(vendorFeatures.featureKey, feature.featureKey)));
+
+        if (existing.length > 0) {
+          await db.update(vendorFeatures)
+            .set({ isEnabled: feature.isEnabled, updatedAt: new Date() })
+            .where(and(eq(vendorFeatures.vendorId, id), eq(vendorFeatures.featureKey, feature.featureKey)));
+        } else {
+          await db.insert(vendorFeatures).values({
+            vendorId: id,
+            featureKey: feature.featureKey,
+            isEnabled: feature.isEnabled,
+          });
+        }
+      }
+
+      res.json({ message: "Funksjoner oppdatert" });
+    } catch (error) {
+      console.error("Error updating vendor features:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere funksjoner" });
+    }
+  });
+
+  app.get("/api/admin/vendors/:id/inspiration-categories", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+
+    try {
+      const { id } = req.params;
+      const assignments = await db.select().from(vendorInspirationCategories).where(eq(vendorInspirationCategories.vendorId, id));
+      res.json(assignments.map(a => a.categoryId));
+    } catch (error) {
+      console.error("Error fetching vendor categories:", error);
+      res.status(500).json({ error: "Kunne ikke hente kategorier" });
+    }
+  });
+
+  app.put("/api/admin/vendors/:id/inspiration-categories", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+
+    try {
+      const { id } = req.params;
+      const { categoryIds } = req.body as { categoryIds: string[] };
+
+      await db.delete(vendorInspirationCategories).where(eq(vendorInspirationCategories.vendorId, id));
+
+      if (categoryIds.length > 0) {
+        await db.insert(vendorInspirationCategories).values(
+          categoryIds.map(categoryId => ({
+            vendorId: id,
+            categoryId,
+          }))
+        );
+      }
+
+      res.json({ message: "Kategorier oppdatert" });
+    } catch (error) {
+      console.error("Error updating vendor categories:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere kategorier" });
+    }
+  });
+
+  app.get("/api/vendor/allowed-categories", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const assignments = await db.select().from(vendorInspirationCategories).where(eq(vendorInspirationCategories.vendorId, vendorId));
+      
+      if (assignments.length === 0) {
+        const allCategories = await db.select().from(inspirationCategories);
+        res.json(allCategories);
+      } else {
+        const categoryIds = assignments.map(a => a.categoryId);
+        const allowedCategories = await db.select().from(inspirationCategories);
+        res.json(allowedCategories.filter(c => categoryIds.includes(c.id)));
+      }
+    } catch (error) {
+      console.error("Error fetching allowed categories:", error);
+      res.status(500).json({ error: "Kunne ikke hente kategorier" });
+    }
+  });
+
+  app.get("/api/vendor/features", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const features = await db.select().from(vendorFeatures).where(eq(vendorFeatures.vendorId, vendorId));
+      
+      const featureMap: Record<string, boolean> = {
+        deliveries: true,
+        inspirations: true,
+      };
+
+      for (const f of features) {
+        featureMap[f.featureKey] = f.isEnabled;
+      }
+
+      res.json(featureMap);
+    } catch (error) {
+      console.error("Error fetching vendor features:", error);
+      res.status(500).json({ error: "Kunne ikke hente funksjoner" });
+    }
+  });
+
+  app.post("/api/inspirations/:id/inquiry", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const validation = createInquirySchema.safeParse({ ...req.body, inspirationId: id });
+      
+      if (!validation.success) {
+        return res.status(400).json({
+          error: "Ugyldig data",
+          details: validation.error.errors,
+        });
+      }
+
+      const [inspiration] = await db.select().from(inspirations).where(eq(inspirations.id, id));
+      if (!inspiration || inspiration.status !== "approved") {
+        return res.status(404).json({ error: "Inspirasjon ikke funnet" });
+      }
+
+      if (!inspiration.allowInquiryForm) {
+        return res.status(400).json({ error: "Forespørsler er ikke aktivert for denne inspirasjonen" });
+      }
+
+      const { inspirationId, ...inquiryData } = validation.data;
+
+      await db.insert(inspirationInquiries).values({
+        inspirationId: id,
+        vendorId: inspiration.vendorId,
+        name: inquiryData.name,
+        email: inquiryData.email,
+        phone: inquiryData.phone || null,
+        message: inquiryData.message,
+        weddingDate: inquiryData.weddingDate || null,
+      });
+
+      res.status(201).json({ message: "Forespørsel sendt!" });
+    } catch (error) {
+      console.error("Error creating inquiry:", error);
+      res.status(500).json({ error: "Kunne ikke sende forespørsel" });
+    }
+  });
+
+  app.get("/api/vendor/inquiries", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const inquiries = await db.select().from(inspirationInquiries).where(eq(inspirationInquiries.vendorId, vendorId));
+      
+      const inquiriesWithDetails = await Promise.all(
+        inquiries.map(async (inq) => {
+          const [insp] = await db.select({ title: inspirations.title }).from(inspirations).where(eq(inspirations.id, inq.inspirationId));
+          return { ...inq, inspirationTitle: insp?.title };
+        })
+      );
+
+      res.json(inquiriesWithDetails);
+    } catch (error) {
+      console.error("Error fetching inquiries:", error);
+      res.status(500).json({ error: "Kunne ikke hente forespørsler" });
+    }
+  });
+
+  app.patch("/api/vendor/inquiries/:id/status", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const [inquiry] = await db.select().from(inspirationInquiries).where(eq(inspirationInquiries.id, id));
+      if (!inquiry || inquiry.vendorId !== vendorId) {
+        return res.status(404).json({ error: "Forespørsel ikke funnet" });
+      }
+
+      await db.update(inspirationInquiries)
+        .set({ status })
+        .where(eq(inspirationInquiries.id, id));
+
+      res.json({ message: "Status oppdatert" });
+    } catch (error) {
+      console.error("Error updating inquiry status:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere status" });
     }
   });
 
