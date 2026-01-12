@@ -50,7 +50,11 @@ export default function AITimeScreen() {
 
   const categorizeScheduleEvent = (event: ScheduleEvent): string | null => {
     const title = event.title.toLowerCase();
-    if (event.icon === "camera" || title.includes("foto") || title.includes("bilde")) {
+    const isPhotoOrVideo = event.icon === "camera" || 
+      title.includes("foto") || title.includes("bilde") ||
+      title.includes("video") || title.includes("film") || title.includes("opptak");
+    
+    if (isPhotoOrVideo) {
       if (title.includes("gruppe") || title.includes("familie")) return "group";
       if (title.includes("portrett") || title.includes("brudepar")) return "portraits";
       if (title.includes("detalj") || title.includes("ring")) return "details";
