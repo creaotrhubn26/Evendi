@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -6,9 +6,10 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHeaderHeight } from "@react-navigation/elements";
+import { useHeaderHeight, HeaderButton } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
@@ -35,7 +36,7 @@ interface Message {
 
 type Props = NativeStackScreenProps<any, "VendorChat">;
 
-export default function VendorChatScreen({ route }: Props) {
+export default function VendorChatScreen({ route, navigation }: Props) {
   const { conversationId } = route.params as { conversationId: string; coupleName: string };
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -45,6 +46,77 @@ export default function VendorChatScreen({ route }: Props) {
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
+
+  const deleteMessageMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      const response = await fetch(new URL(`/api/vendor/messages/${messageId}`, getApiUrl()).toString(), {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      if (!response.ok) throw new Error("Failed to delete message");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vendor/conversations", conversationId, "messages"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+  });
+
+  const deleteConversationMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(new URL(`/api/vendor/conversations/${conversationId}`, getApiUrl()).toString(), {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      if (!response.ok) throw new Error("Failed to delete conversation");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vendor/conversations"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      navigation.goBack();
+    },
+  });
+
+  const handleDeleteMessage = (messageId: string) => {
+    Alert.alert(
+      "Slett melding",
+      "Er du sikker på at du vil slette denne meldingen? Dette kan ikke angres.",
+      [
+        { text: "Avbryt", style: "cancel" },
+        {
+          text: "Slett",
+          style: "destructive",
+          onPress: () => deleteMessageMutation.mutate(messageId),
+        },
+      ]
+    );
+  };
+
+  const handleDeleteConversation = () => {
+    Alert.alert(
+      "Slett samtale",
+      "Er du sikker på at du vil slette hele samtalen og alle meldinger? Dette kan ikke angres (GDPR).",
+      [
+        { text: "Avbryt", style: "cancel" },
+        {
+          text: "Slett alt",
+          style: "destructive",
+          onPress: () => deleteConversationMutation.mutate(),
+        },
+      ]
+    );
+  };
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <HeaderButton onPress={handleDeleteConversation}>
+          <Feather name="trash-2" size={20} color={theme.textSecondary} />
+        </HeaderButton>
+      ),
+    });
+  }, [navigation, sessionToken, theme]);
 
   useEffect(() => {
     loadSession();
@@ -131,7 +203,12 @@ export default function VendorChatScreen({ route }: Props) {
           </View>
         ) : null}
         <View style={[styles.messageRow, isFromMe && styles.messageRowMine]}>
-          <View
+          <Pressable
+            onLongPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              handleDeleteMessage(item.id);
+            }}
+            delayLongPress={500}
             style={[
               styles.messageBubble,
               isFromMe
@@ -155,7 +232,7 @@ export default function VendorChatScreen({ route }: Props) {
             >
               {formatTime(item.createdAt)}
             </ThemedText>
-          </View>
+          </Pressable>
         </View>
       </Animated.View>
     );

@@ -321,6 +321,10 @@ export const conversations = pgTable("conversations", {
   coupleUnreadCount: integer("couple_unread_count").default(0),
   vendorUnreadCount: integer("vendor_unread_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
+  deletedByCouple: boolean("deleted_by_couple").default(false),
+  deletedByVendor: boolean("deleted_by_vendor").default(false),
+  coupleDeletedAt: timestamp("couple_deleted_at"),
+  vendorDeletedAt: timestamp("vendor_deleted_at"),
 });
 
 export const messages = pgTable("messages", {
@@ -333,6 +337,10 @@ export const messages = pgTable("messages", {
   body: text("body").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   readAt: timestamp("read_at"),
+  deletedByCouple: boolean("deleted_by_couple").default(false),
+  deletedByVendor: boolean("deleted_by_vendor").default(false),
+  coupleDeletedAt: timestamp("couple_deleted_at"),
+  vendorDeletedAt: timestamp("vendor_deleted_at"),
 });
 
 export const insertCoupleProfileSchema = createInsertSchema(coupleProfiles).omit({

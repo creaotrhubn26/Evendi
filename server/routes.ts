@@ -1053,7 +1053,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const convos = await db.select().from(conversations)
-        .where(eq(conversations.coupleId, coupleId))
+        .where(and(
+          eq(conversations.coupleId, coupleId),
+          eq(conversations.deletedByCouple, false)
+        ))
         .orderBy(desc(conversations.lastMessageAt));
 
       // Enrich with vendor and inspiration info
@@ -1091,7 +1094,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const convos = await db.select().from(conversations)
-        .where(eq(conversations.vendorId, vendorId))
+        .where(and(
+          eq(conversations.vendorId, vendorId),
+          eq(conversations.deletedByVendor, false)
+        ))
         .orderBy(desc(conversations.lastMessageAt));
 
       const enriched = await Promise.all(convos.map(async (conv) => {
@@ -1134,7 +1140,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const msgs = await db.select().from(messages)
-        .where(eq(messages.conversationId, id))
+        .where(and(
+          eq(messages.conversationId, id),
+          eq(messages.deletedByCouple, false)
+        ))
         .orderBy(messages.createdAt);
 
       // Mark as read
@@ -1163,7 +1172,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const msgs = await db.select().from(messages)
-        .where(eq(messages.conversationId, id))
+        .where(and(
+          eq(messages.conversationId, id),
+          eq(messages.deletedByVendor, false)
+        ))
         .orderBy(messages.createdAt);
 
       // Mark as read
@@ -1291,6 +1303,124 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error sending vendor message:", error);
       res.status(500).json({ error: "Kunne ikke sende melding" });
+    }
+  });
+
+  // GDPR: Delete a single message (couple)
+  app.delete("/api/couples/messages/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+
+      // Verify message belongs to a conversation the couple owns
+      const [msg] = await db.select().from(messages).where(eq(messages.id, id));
+      if (!msg) {
+        return res.status(404).json({ error: "Melding ikke funnet" });
+      }
+
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, msg.conversationId));
+      if (!conv || conv.coupleId !== coupleId) {
+        return res.status(403).json({ error: "Ingen tilgang til denne meldingen" });
+      }
+
+      // Soft delete for couple
+      await db.update(messages)
+        .set({ deletedByCouple: true, coupleDeletedAt: new Date() })
+        .where(eq(messages.id, id));
+
+      res.json({ success: true, message: "Melding slettet" });
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      res.status(500).json({ error: "Kunne ikke slette melding" });
+    }
+  });
+
+  // GDPR: Delete entire conversation (couple)
+  app.delete("/api/couples/conversations/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, id));
+      if (!conv || conv.coupleId !== coupleId) {
+        return res.status(404).json({ error: "Samtale ikke funnet" });
+      }
+
+      // Soft delete conversation for couple
+      await db.update(conversations)
+        .set({ deletedByCouple: true, coupleDeletedAt: new Date() })
+        .where(eq(conversations.id, id));
+
+      // Soft delete all messages in conversation for couple
+      await db.update(messages)
+        .set({ deletedByCouple: true, coupleDeletedAt: new Date() })
+        .where(eq(messages.conversationId, id));
+
+      res.json({ success: true, message: "Samtale og meldinger slettet" });
+    } catch (error) {
+      console.error("Error deleting conversation:", error);
+      res.status(500).json({ error: "Kunne ikke slette samtale" });
+    }
+  });
+
+  // GDPR: Delete a single message (vendor)
+  app.delete("/api/vendor/messages/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+
+      const [msg] = await db.select().from(messages).where(eq(messages.id, id));
+      if (!msg) {
+        return res.status(404).json({ error: "Melding ikke funnet" });
+      }
+
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, msg.conversationId));
+      if (!conv || conv.vendorId !== vendorId) {
+        return res.status(403).json({ error: "Ingen tilgang til denne meldingen" });
+      }
+
+      await db.update(messages)
+        .set({ deletedByVendor: true, vendorDeletedAt: new Date() })
+        .where(eq(messages.id, id));
+
+      res.json({ success: true, message: "Melding slettet" });
+    } catch (error) {
+      console.error("Error deleting vendor message:", error);
+      res.status(500).json({ error: "Kunne ikke slette melding" });
+    }
+  });
+
+  // GDPR: Delete entire conversation (vendor)
+  app.delete("/api/vendor/conversations/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, id));
+      if (!conv || conv.vendorId !== vendorId) {
+        return res.status(404).json({ error: "Samtale ikke funnet" });
+      }
+
+      await db.update(conversations)
+        .set({ deletedByVendor: true, vendorDeletedAt: new Date() })
+        .where(eq(conversations.id, id));
+
+      await db.update(messages)
+        .set({ deletedByVendor: true, vendorDeletedAt: new Date() })
+        .where(eq(messages.conversationId, id));
+
+      res.json({ success: true, message: "Samtale og meldinger slettet" });
+    } catch (error) {
+      console.error("Error deleting vendor conversation:", error);
+      res.status(500).json({ error: "Kunne ikke slette samtale" });
     }
   });
 
