@@ -31,6 +31,8 @@ export interface Speech {
   role: string;
   time: string;
   order: number;
+  durationMinutes?: number;
+  notes?: string;
 }
 
 export interface ImportantPerson {

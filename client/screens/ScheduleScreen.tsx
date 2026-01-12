@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, {
@@ -25,8 +26,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { getSchedule, saveSchedule, generateId, getWeddingDetails } from "@/lib/storage";
-import { ScheduleEvent } from "@/lib/types";
+import { getSchedule, saveSchedule, generateId, getWeddingDetails, getSpeeches } from "@/lib/storage";
+import { ScheduleEvent, Speech } from "@/lib/types";
 import emptyScheduleImage from "../../assets/images/empty-schedule.png";
 
 const ICON_OPTIONS: ScheduleEvent["icon"][] = [
@@ -44,22 +45,27 @@ export default function ScheduleScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
+  const navigation = useNavigation<any>();
   const { theme } = useTheme();
 
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
+  const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [newTime, setNewTime] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [selectedIcon, setSelectedIcon] = useState<ScheduleEvent["icon"]>("heart");
   const [weddingDate, setWeddingDate] = useState("");
+  const [showSpeeches, setShowSpeeches] = useState(true);
 
   const loadData = useCallback(async () => {
-    const [data, wedding] = await Promise.all([
+    const [data, wedding, speechData] = await Promise.all([
       getSchedule(),
       getWeddingDetails(),
+      getSpeeches(),
     ]);
     setEvents(data);
+    setSpeeches(speechData);
     if (wedding) {
       const date = new Date(wedding.weddingDate);
       setWeddingDate(
@@ -153,6 +159,91 @@ export default function ScheduleScreen() {
         >
           {weddingDate}
         </ThemedText>
+      ) : null}
+
+      {/* Speech Section */}
+      <Pressable
+        onPress={() => {
+          setShowSpeeches(!showSpeeches);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }}
+        style={[
+          styles.speechHeader,
+          { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+        ]}
+      >
+        <View style={[styles.speechIconContainer, { backgroundColor: Colors.dark.accent + "20" }]}>
+          <Feather name="mic" size={18} color={Colors.dark.accent} />
+        </View>
+        <View style={styles.speechHeaderContent}>
+          <ThemedText style={styles.speechTitle}>Taleliste</ThemedText>
+          <ThemedText style={[styles.speechCount, { color: theme.textSecondary }]}>
+            {speeches.length} taler - {speeches.reduce((sum, s) => sum + (s.durationMinutes || 5), 0)} min totalt
+          </ThemedText>
+        </View>
+        <Feather
+          name={showSpeeches ? "chevron-up" : "chevron-down"}
+          size={20}
+          color={theme.textSecondary}
+        />
+      </Pressable>
+
+      {showSpeeches && speeches.length > 0 ? (
+        <Animated.View entering={FadeInDown.duration(200)} style={styles.speechList}>
+          {speeches.slice(0, 3).map((speech, index) => (
+            <View
+              key={speech.id}
+              style={[
+                styles.speechItem,
+                { backgroundColor: theme.backgroundSecondary, borderColor: theme.border },
+              ]}
+            >
+              <ThemedText style={[styles.speechOrder, { color: Colors.dark.accent }]}>
+                {speech.order}
+              </ThemedText>
+              <View style={styles.speechInfo}>
+                <ThemedText style={styles.speechName}>{speech.speakerName}</ThemedText>
+                <ThemedText style={[styles.speechRole, { color: theme.textMuted }]}>
+                  {speech.role}
+                </ThemedText>
+              </View>
+              <ThemedText style={[styles.speechDuration, { color: theme.textSecondary }]}>
+                {speech.durationMinutes || 5} min
+              </ThemedText>
+            </View>
+          ))}
+          {speeches.length > 3 ? (
+            <Pressable
+              onPress={() => navigation.navigate("SpeechList")}
+              style={styles.viewAllButton}
+            >
+              <ThemedText style={[styles.viewAllText, { color: Colors.dark.accent }]}>
+                Se alle {speeches.length} taler
+              </ThemedText>
+              <Feather name="arrow-right" size={16} color={Colors.dark.accent} />
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => navigation.navigate("SpeechList")}
+              style={styles.viewAllButton}
+            >
+              <ThemedText style={[styles.viewAllText, { color: Colors.dark.accent }]}>
+                Rediger taleliste
+              </ThemedText>
+              <Feather name="edit-2" size={14} color={Colors.dark.accent} />
+            </Pressable>
+          )}
+        </Animated.View>
+      ) : showSpeeches && speeches.length === 0 ? (
+        <Pressable
+          onPress={() => navigation.navigate("SpeechList")}
+          style={[styles.addSpeechButton, { borderColor: Colors.dark.accent }]}
+        >
+          <Feather name="plus" size={16} color={Colors.dark.accent} />
+          <ThemedText style={[styles.addSpeechText, { color: Colors.dark.accent }]}>
+            Legg til taler
+          </ThemedText>
+        </Pressable>
       ) : null}
 
       {events.length === 0 ? (
@@ -447,6 +538,90 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     marginLeft: Spacing.sm,
+    fontWeight: "500",
+  },
+  speechHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  speechIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: Spacing.md,
+  },
+  speechHeaderContent: {
+    flex: 1,
+  },
+  speechTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  speechCount: {
+    fontSize: 13,
+  },
+  speechList: {
+    marginBottom: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  speechItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+  },
+  speechOrder: {
+    fontSize: 14,
+    fontWeight: "700",
+    width: 24,
+    textAlign: "center",
+  },
+  speechInfo: {
+    flex: 1,
+    marginLeft: Spacing.sm,
+  },
+  speechName: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  speechRole: {
+    fontSize: 12,
+  },
+  speechDuration: {
+    fontSize: 13,
+  },
+  viewAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  addSpeechButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    marginBottom: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  addSpeechText: {
+    fontSize: 14,
     fontWeight: "500",
   },
 });
