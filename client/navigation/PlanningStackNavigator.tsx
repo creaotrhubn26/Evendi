@@ -21,6 +21,8 @@ import MessagesScreen from "@/screens/MessagesScreen";
 import CoupleLoginScreen from "@/screens/CoupleLoginScreen";
 import ChatScreen from "@/screens/ChatScreen";
 import CoupleOffersScreen from "@/screens/CoupleOffersScreen";
+import CoordinatorSharingScreen from "@/screens/CoordinatorSharingScreen";
+import SpeechListScreen from "@/screens/SpeechListScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -45,6 +47,8 @@ export type PlanningStackParamList = {
   CoupleLogin: undefined;
   Chat: { conversationId: string; vendorName: string };
   CoupleOffers: undefined;
+  CoordinatorSharing: undefined;
+  SpeechList: undefined;
 };
 
 const Stack = createNativeStackNavigator<PlanningStackParamList>();
@@ -155,6 +159,16 @@ export default function PlanningStackNavigator() {
         name="CoupleOffers"
         component={CoupleOffersScreen}
         options={{ title: "Tilbud" }}
+      />
+      <Stack.Screen
+        name="CoordinatorSharing"
+        component={CoordinatorSharingScreen}
+        options={{ title: "Del med koordinatorer" }}
+      />
+      <Stack.Screen
+        name="SpeechList"
+        component={SpeechListScreen}
+        options={{ title: "Talerliste" }}
       />
     </Stack.Navigator>
   );

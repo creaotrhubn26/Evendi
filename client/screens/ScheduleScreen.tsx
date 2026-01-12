@@ -246,6 +246,21 @@ export default function ScheduleScreen() {
         </Pressable>
       ) : null}
 
+      {/* Share with Coordinator Button */}
+      <Pressable
+        onPress={() => navigation.navigate("CoordinatorSharing")}
+        style={[styles.shareButton, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+      >
+        <Feather name="share-2" size={18} color={Colors.dark.accent} />
+        <View style={styles.shareButtonContent}>
+          <ThemedText style={styles.shareButtonTitle}>Del med toastmaster</ThemedText>
+          <ThemedText style={[styles.shareButtonSubtitle, { color: theme.textMuted }]}>
+            Gi koordinatorer tilgang til taler og program
+          </ThemedText>
+        </View>
+        <Feather name="chevron-right" size={18} color={theme.textMuted} />
+      </Pressable>
+
       {events.length === 0 ? (
         <View style={styles.emptyState}>
           <Image
@@ -623,5 +638,25 @@ const styles = StyleSheet.create({
   addSpeechText: {
     fontSize: 14,
     fontWeight: "500",
+  },
+  shareButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.lg,
+    gap: Spacing.md,
+  },
+  shareButtonContent: {
+    flex: 1,
+  },
+  shareButtonTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  shareButtonSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
   },
 });
