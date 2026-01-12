@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { db } from "./db";
-import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, coupleVendorContracts, notifications, activityLogs, weddingTables, tableGuestAssignments } from "@shared/schema";
+import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, coupleVendorContracts, notifications, activityLogs, weddingTables, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import crypto from "crypto";
 
@@ -4044,6 +4044,663 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching activity log:", error);
       res.status(500).json({ error: "Kunne ikke hente aktivitetslogg" });
+    }
+  });
+
+  // ==================== REVIEWS & FEEDBACK ====================
+
+  // Get couple's completed contracts that can be reviewed
+  app.get("/api/couple/reviewable-contracts", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const contracts = await db.select({
+        id: coupleVendorContracts.id,
+        vendorId: coupleVendorContracts.vendorId,
+        vendorRole: coupleVendorContracts.vendorRole,
+        completedAt: coupleVendorContracts.completedAt,
+        businessName: vendors.businessName,
+        imageUrl: vendors.imageUrl,
+      })
+        .from(coupleVendorContracts)
+        .innerJoin(vendors, eq(coupleVendorContracts.vendorId, vendors.id))
+        .where(and(
+          eq(coupleVendorContracts.coupleId, coupleId),
+          eq(coupleVendorContracts.status, "completed")
+        ));
+
+      // Check which ones already have reviews
+      const existingReviews = await db.select({ contractId: vendorReviews.contractId })
+        .from(vendorReviews)
+        .where(eq(vendorReviews.coupleId, coupleId));
+      
+      const reviewedContractIds = new Set(existingReviews.map(r => r.contractId));
+
+      const result = contracts.map(c => ({
+        ...c,
+        hasReview: reviewedContractIds.has(c.id),
+      }));
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching reviewable contracts:", error);
+      res.status(500).json({ error: "Kunne ikke hente avsluttede avtaler" });
+    }
+  });
+
+  // Submit a review for a vendor
+  app.post("/api/couple/reviews", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { contractId, rating, title, body, isAnonymous } = req.body;
+
+      if (!contractId || !rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ error: "Ugyldig anmeldelse" });
+      }
+
+      // Verify contract belongs to couple and is completed
+      const [contract] = await db.select()
+        .from(coupleVendorContracts)
+        .where(and(
+          eq(coupleVendorContracts.id, contractId),
+          eq(coupleVendorContracts.coupleId, coupleId),
+          eq(coupleVendorContracts.status, "completed")
+        ));
+
+      if (!contract) {
+        return res.status(404).json({ error: "Fant ikke fullført avtale" });
+      }
+
+      // Check if already reviewed
+      const [existing] = await db.select()
+        .from(vendorReviews)
+        .where(eq(vendorReviews.contractId, contractId));
+
+      if (existing) {
+        return res.status(400).json({ error: "Du har allerede gitt en anmeldelse" });
+      }
+
+      // Create review with 14-day edit window
+      const editableUntil = new Date();
+      editableUntil.setDate(editableUntil.getDate() + 14);
+
+      const [review] = await db.insert(vendorReviews).values({
+        contractId,
+        coupleId,
+        vendorId: contract.vendorId,
+        rating,
+        title: title || null,
+        body: body || null,
+        isAnonymous: isAnonymous || false,
+        editableUntil,
+      }).returning();
+
+      // Notify vendor about new review
+      await db.insert(notifications).values({
+        recipientType: "vendor",
+        recipientId: contract.vendorId,
+        type: "new_review",
+        title: "Ny anmeldelse",
+        body: `Du har mottatt en ${rating}-stjerners anmeldelse`,
+        data: JSON.stringify({ reviewId: review.id }),
+      });
+
+      res.json(review);
+    } catch (error) {
+      console.error("Error submitting review:", error);
+      res.status(500).json({ error: "Kunne ikke lagre anmeldelse" });
+    }
+  });
+
+  // Update a review (within 14 days)
+  app.patch("/api/couple/reviews/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      const { rating, title, body, isAnonymous } = req.body;
+
+      const [existing] = await db.select()
+        .from(vendorReviews)
+        .where(and(
+          eq(vendorReviews.id, id),
+          eq(vendorReviews.coupleId, coupleId)
+        ));
+
+      if (!existing) {
+        return res.status(404).json({ error: "Fant ikke anmeldelse" });
+      }
+
+      if (existing.editableUntil && new Date() > new Date(existing.editableUntil)) {
+        return res.status(400).json({ error: "Redigeringsperioden har utløpt" });
+      }
+
+      const [updated] = await db.update(vendorReviews)
+        .set({
+          rating: rating ?? existing.rating,
+          title: title ?? existing.title,
+          body: body ?? existing.body,
+          isAnonymous: isAnonymous ?? existing.isAnonymous,
+          isApproved: false, // Reset approval on edit
+          updatedAt: new Date(),
+        })
+        .where(eq(vendorReviews.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating review:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere anmeldelse" });
+    }
+  });
+
+  // Get couple's own reviews
+  app.get("/api/couple/reviews", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const reviews = await db.select({
+        id: vendorReviews.id,
+        contractId: vendorReviews.contractId,
+        vendorId: vendorReviews.vendorId,
+        rating: vendorReviews.rating,
+        title: vendorReviews.title,
+        body: vendorReviews.body,
+        isAnonymous: vendorReviews.isAnonymous,
+        isApproved: vendorReviews.isApproved,
+        editableUntil: vendorReviews.editableUntil,
+        createdAt: vendorReviews.createdAt,
+        businessName: vendors.businessName,
+      })
+        .from(vendorReviews)
+        .innerJoin(vendors, eq(vendorReviews.vendorId, vendors.id))
+        .where(eq(vendorReviews.coupleId, coupleId))
+        .orderBy(desc(vendorReviews.createdAt));
+
+      res.json(reviews);
+    } catch (error) {
+      console.error("Error fetching couple reviews:", error);
+      res.status(500).json({ error: "Kunne ikke hente anmeldelser" });
+    }
+  });
+
+  // Get public reviews for a vendor (approved only)
+  app.get("/api/vendors/:vendorId/reviews", async (req: Request, res: Response) => {
+    try {
+      const { vendorId } = req.params;
+
+      const reviews = await db.select({
+        id: vendorReviews.id,
+        rating: vendorReviews.rating,
+        title: vendorReviews.title,
+        body: vendorReviews.body,
+        isAnonymous: vendorReviews.isAnonymous,
+        createdAt: vendorReviews.createdAt,
+        coupleName: coupleProfiles.displayName,
+      })
+        .from(vendorReviews)
+        .innerJoin(coupleProfiles, eq(vendorReviews.coupleId, coupleProfiles.id))
+        .where(and(
+          eq(vendorReviews.vendorId, vendorId),
+          eq(vendorReviews.isApproved, true)
+        ))
+        .orderBy(desc(vendorReviews.createdAt));
+
+      // Get vendor's Google review link
+      const [vendor] = await db.select({ googleReviewUrl: vendors.googleReviewUrl })
+        .from(vendors)
+        .where(eq(vendors.id, vendorId));
+
+      // Get aggregate stats
+      const [stats] = await db.select({
+        count: sql<number>`count(*)::int`,
+        average: sql<number>`round(avg(${vendorReviews.rating})::numeric, 1)`,
+      })
+        .from(vendorReviews)
+        .where(and(
+          eq(vendorReviews.vendorId, vendorId),
+          eq(vendorReviews.isApproved, true)
+        ));
+
+      // Get responses
+      const responses = await db.select()
+        .from(vendorReviewResponses)
+        .innerJoin(vendorReviews, eq(vendorReviewResponses.reviewId, vendorReviews.id))
+        .where(eq(vendorReviews.vendorId, vendorId));
+
+      const responseMap = new Map(responses.map(r => [r.vendor_review_responses.reviewId, r.vendor_review_responses]));
+
+      const reviewsWithResponses = reviews.map(r => ({
+        ...r,
+        coupleName: r.isAnonymous ? "Anonym" : r.coupleName,
+        vendorResponse: responseMap.get(r.id) || null,
+      }));
+
+      res.json({
+        reviews: reviewsWithResponses,
+        googleReviewUrl: vendor?.googleReviewUrl || null,
+        stats: {
+          count: stats?.count || 0,
+          average: stats?.average || 0,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching vendor reviews:", error);
+      res.status(500).json({ error: "Kunne ikke hente anmeldelser" });
+    }
+  });
+
+  // Vendor: Get reviews received
+  app.get("/api/vendor/reviews", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const reviews = await db.select({
+        id: vendorReviews.id,
+        contractId: vendorReviews.contractId,
+        rating: vendorReviews.rating,
+        title: vendorReviews.title,
+        body: vendorReviews.body,
+        isAnonymous: vendorReviews.isAnonymous,
+        isApproved: vendorReviews.isApproved,
+        createdAt: vendorReviews.createdAt,
+        coupleName: coupleProfiles.displayName,
+      })
+        .from(vendorReviews)
+        .innerJoin(coupleProfiles, eq(vendorReviews.coupleId, coupleProfiles.id))
+        .where(eq(vendorReviews.vendorId, vendorId))
+        .orderBy(desc(vendorReviews.createdAt));
+
+      // Get responses
+      const responses = await db.select()
+        .from(vendorReviewResponses)
+        .where(eq(vendorReviewResponses.vendorId, vendorId));
+
+      const responseMap = new Map(responses.map(r => [r.reviewId, r]));
+
+      const reviewsWithResponses = reviews.map(r => ({
+        ...r,
+        coupleName: r.isAnonymous ? "Anonym" : r.coupleName,
+        response: responseMap.get(r.id) || null,
+      }));
+
+      // Get aggregate stats
+      const [stats] = await db.select({
+        total: sql<number>`count(*)::int`,
+        approved: sql<number>`count(*) filter (where ${vendorReviews.isApproved})::int`,
+        average: sql<number>`round(avg(${vendorReviews.rating})::numeric, 1)`,
+      })
+        .from(vendorReviews)
+        .where(eq(vendorReviews.vendorId, vendorId));
+
+      res.json({
+        reviews: reviewsWithResponses,
+        stats: {
+          total: stats?.total || 0,
+          approved: stats?.approved || 0,
+          average: stats?.average || 0,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching vendor reviews:", error);
+      res.status(500).json({ error: "Kunne ikke hente anmeldelser" });
+    }
+  });
+
+  // Vendor: Respond to a review
+  app.post("/api/vendor/reviews/:reviewId/response", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { reviewId } = req.params;
+      const { body } = req.body;
+
+      if (!body || body.trim().length === 0) {
+        return res.status(400).json({ error: "Svar kan ikke være tomt" });
+      }
+
+      // Verify review belongs to vendor
+      const [review] = await db.select()
+        .from(vendorReviews)
+        .where(and(
+          eq(vendorReviews.id, reviewId),
+          eq(vendorReviews.vendorId, vendorId)
+        ));
+
+      if (!review) {
+        return res.status(404).json({ error: "Fant ikke anmeldelse" });
+      }
+
+      // Check for existing response
+      const [existing] = await db.select()
+        .from(vendorReviewResponses)
+        .where(eq(vendorReviewResponses.reviewId, reviewId));
+
+      if (existing) {
+        // Update existing
+        const [updated] = await db.update(vendorReviewResponses)
+          .set({ body, updatedAt: new Date() })
+          .where(eq(vendorReviewResponses.reviewId, reviewId))
+          .returning();
+        res.json(updated);
+      } else {
+        // Create new
+        const [response] = await db.insert(vendorReviewResponses).values({
+          reviewId,
+          vendorId,
+          body,
+        }).returning();
+        res.json(response);
+      }
+    } catch (error) {
+      console.error("Error responding to review:", error);
+      res.status(500).json({ error: "Kunne ikke lagre svar" });
+    }
+  });
+
+  // Vendor: Send review reminder to couple
+  app.post("/api/vendor/contracts/:contractId/review-reminder", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { contractId } = req.params;
+
+      // Verify contract belongs to vendor and is completed
+      const [contract] = await db.select()
+        .from(coupleVendorContracts)
+        .where(and(
+          eq(coupleVendorContracts.id, contractId),
+          eq(coupleVendorContracts.vendorId, vendorId),
+          eq(coupleVendorContracts.status, "completed")
+        ));
+
+      if (!contract) {
+        return res.status(404).json({ error: "Fant ikke fullført avtale" });
+      }
+
+      // Check if reminder already sent (limit to one per 14 days)
+      if (contract.reviewReminderSentAt) {
+        const daysSinceReminder = Math.floor(
+          (Date.now() - new Date(contract.reviewReminderSentAt).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        if (daysSinceReminder < 14) {
+          return res.status(400).json({ 
+            error: `Du kan sende ny påminnelse om ${14 - daysSinceReminder} dager` 
+          });
+        }
+      }
+
+      // Check if already reviewed
+      const [existingReview] = await db.select()
+        .from(vendorReviews)
+        .where(eq(vendorReviews.contractId, contractId));
+
+      if (existingReview) {
+        return res.status(400).json({ error: "Brudeparet har allerede gitt anmeldelse" });
+      }
+
+      // Get vendor name
+      const [vendor] = await db.select({ businessName: vendors.businessName })
+        .from(vendors)
+        .where(eq(vendors.id, vendorId));
+
+      // Send notification to couple
+      await db.insert(notifications).values({
+        recipientType: "couple",
+        recipientId: contract.coupleId,
+        type: "review_reminder",
+        title: "Gi en anmeldelse",
+        body: `${vendor?.businessName} ønsker gjerne din tilbakemelding på tjenesten`,
+        data: JSON.stringify({ contractId, vendorId }),
+      });
+
+      // Update reminder sent timestamp
+      await db.update(coupleVendorContracts)
+        .set({ reviewReminderSentAt: new Date() })
+        .where(eq(coupleVendorContracts.id, contractId));
+
+      res.json({ success: true, message: "Påminnelse sendt" });
+    } catch (error) {
+      console.error("Error sending review reminder:", error);
+      res.status(500).json({ error: "Kunne ikke sende påminnelse" });
+    }
+  });
+
+  // Vendor: Update Google review URL
+  app.patch("/api/vendor/google-review-url", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { googleReviewUrl } = req.body;
+
+      // Validate URL if provided
+      if (googleReviewUrl && !googleReviewUrl.includes("google.com")) {
+        return res.status(400).json({ error: "Ugyldig Google-lenke" });
+      }
+
+      await db.update(vendors)
+        .set({ googleReviewUrl: googleReviewUrl || null, updatedAt: new Date() })
+        .where(eq(vendors.id, vendorId));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating Google review URL:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere lenke" });
+    }
+  });
+
+  // ==================== APP FEEDBACK ====================
+
+  // Submit feedback to Wedflow (couple)
+  app.post("/api/couple/feedback", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { category, subject, message } = req.body;
+
+      if (!category || !subject || !message) {
+        return res.status(400).json({ error: "Alle felt må fylles ut" });
+      }
+
+      const [feedback] = await db.insert(appFeedback).values({
+        submitterType: "couple",
+        submitterId: coupleId,
+        category,
+        subject,
+        message,
+      }).returning();
+
+      res.json(feedback);
+    } catch (error) {
+      console.error("Error submitting couple feedback:", error);
+      res.status(500).json({ error: "Kunne ikke sende tilbakemelding" });
+    }
+  });
+
+  // Submit feedback to Wedflow (vendor)
+  app.post("/api/vendor/feedback", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { category, subject, message } = req.body;
+
+      if (!category || !subject || !message) {
+        return res.status(400).json({ error: "Alle felt må fylles ut" });
+      }
+
+      const [feedback] = await db.insert(appFeedback).values({
+        submitterType: "vendor",
+        submitterId: vendorId,
+        category,
+        subject,
+        message,
+      }).returning();
+
+      res.json(feedback);
+    } catch (error) {
+      console.error("Error submitting vendor feedback:", error);
+      res.status(500).json({ error: "Kunne ikke sende tilbakemelding" });
+    }
+  });
+
+  // Admin: Get all feedback (protected by admin secret)
+  app.get("/api/admin/feedback", async (req: Request, res: Response) => {
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
+
+    try {
+      const feedback = await db.select()
+        .from(appFeedback)
+        .orderBy(desc(appFeedback.createdAt));
+
+      res.json(feedback);
+    } catch (error) {
+      console.error("Error fetching feedback:", error);
+      res.status(500).json({ error: "Kunne ikke hente tilbakemeldinger" });
+    }
+  });
+
+  // Admin: Update feedback status
+  app.patch("/api/admin/feedback/:id", async (req: Request, res: Response) => {
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
+
+    try {
+      const { id } = req.params;
+      const { status, adminNotes } = req.body;
+
+      const [updated] = await db.update(appFeedback)
+        .set({ status, adminNotes, updatedAt: new Date() })
+        .where(eq(appFeedback.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating feedback:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere tilbakemelding" });
+    }
+  });
+
+  // Admin: Approve/reject vendor review
+  app.patch("/api/admin/reviews/:id", async (req: Request, res: Response) => {
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
+
+    try {
+      const { id } = req.params;
+      const { isApproved } = req.body;
+
+      const [updated] = await db.update(vendorReviews)
+        .set({
+          isApproved,
+          approvedAt: isApproved ? new Date() : null,
+          approvedBy: isApproved ? "admin" : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(vendorReviews.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating review approval:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere godkjenning" });
+    }
+  });
+
+  // Admin: Get pending reviews for moderation
+  app.get("/api/admin/reviews/pending", async (req: Request, res: Response) => {
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
+
+    try {
+      const reviews = await db.select({
+        id: vendorReviews.id,
+        rating: vendorReviews.rating,
+        title: vendorReviews.title,
+        body: vendorReviews.body,
+        isAnonymous: vendorReviews.isAnonymous,
+        createdAt: vendorReviews.createdAt,
+        coupleName: coupleProfiles.displayName,
+        businessName: vendors.businessName,
+      })
+        .from(vendorReviews)
+        .innerJoin(coupleProfiles, eq(vendorReviews.coupleId, coupleProfiles.id))
+        .innerJoin(vendors, eq(vendorReviews.vendorId, vendors.id))
+        .where(eq(vendorReviews.isApproved, false))
+        .orderBy(vendorReviews.createdAt);
+
+      res.json(reviews);
+    } catch (error) {
+      console.error("Error fetching pending reviews:", error);
+      res.status(500).json({ error: "Kunne ikke hente ventende anmeldelser" });
+    }
+  });
+
+  // Vendor: Mark contract as completed
+  app.patch("/api/vendor/contracts/:id/complete", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+
+      const [contract] = await db.select()
+        .from(coupleVendorContracts)
+        .where(and(
+          eq(coupleVendorContracts.id, id),
+          eq(coupleVendorContracts.vendorId, vendorId)
+        ));
+
+      if (!contract) {
+        return res.status(404).json({ error: "Fant ikke avtale" });
+      }
+
+      const [updated] = await db.update(coupleVendorContracts)
+        .set({
+          status: "completed",
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(coupleVendorContracts.id, id))
+        .returning();
+
+      // Notify couple
+      const [vendor] = await db.select({ businessName: vendors.businessName })
+        .from(vendors)
+        .where(eq(vendors.id, vendorId));
+
+      await db.insert(notifications).values({
+        recipientType: "couple",
+        recipientId: contract.coupleId,
+        type: "contract_completed",
+        title: "Avtale fullført",
+        body: `${vendor?.businessName} har markert avtalen som fullført. Gi gjerne en anmeldelse!`,
+        data: JSON.stringify({ contractId: id, vendorId }),
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error completing contract:", error);
+      res.status(500).json({ error: "Kunne ikke fullføre avtale" });
     }
   });
 
