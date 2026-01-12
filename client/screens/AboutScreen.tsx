@@ -50,9 +50,6 @@ export default function AboutScreen() {
             style={styles.logoImage}
             resizeMode="contain"
           />
-          <ThemedText style={[styles.tagline, { color: theme.textSecondary }]}>
-            by Norwedfilm
-          </ThemedText>
           <ThemedText style={[styles.version, { color: theme.textMuted }]}>
             Versjon 1.0.0
           </ThemedText>
@@ -179,10 +176,6 @@ const styles = StyleSheet.create({
     width: 280,
     height: 100,
     marginBottom: Spacing.sm,
-  },
-  tagline: {
-    fontSize: 16,
-    marginTop: Spacing.xs,
   },
   version: {
     fontSize: 14,
