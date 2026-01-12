@@ -43,11 +43,6 @@ export default function PlanningStackNavigator() {
         component={PlanningScreen}
         options={{
           headerTitle: () => <HeaderTitle />,
-          headerTransparent: false,
-          headerStyle: {
-            backgroundColor: "#F5F0E8",
-          },
-          headerShadowVisible: false,
         }}
       />
       <Stack.Screen
