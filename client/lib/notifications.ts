@@ -4,7 +4,8 @@ import { Platform } from "react-native";
 import { getWeddingDetails } from "./storage";
 
 const NOTIFICATION_SETTINGS_KEY = "@wedflow/notification_settings";
-const SCHEDULED_NOTIFICATIONS_KEY = "@wedflow/scheduled_notifications";
+const COUNTDOWN_NOTIFICATIONS_KEY = "@wedflow/countdown_notifications";
+const CHECKLIST_NOTIFICATIONS_KEY = "@wedflow/checklist_notifications";
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -25,6 +26,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
     priority: Notifications.AndroidNotificationPriority.HIGH,
   }),
 });
@@ -66,13 +69,45 @@ export async function saveNotificationSettings(settings: NotificationSettings): 
 
 export async function cancelAllScheduledNotifications(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
-  await AsyncStorage.removeItem(SCHEDULED_NOTIFICATIONS_KEY);
+  await AsyncStorage.multiRemove([COUNTDOWN_NOTIFICATIONS_KEY, CHECKLIST_NOTIFICATIONS_KEY]);
+}
+
+export async function cancelCountdownNotifications(): Promise<void> {
+  try {
+    const storedIds = await AsyncStorage.getItem(COUNTDOWN_NOTIFICATIONS_KEY);
+    if (storedIds) {
+      const ids: string[] = JSON.parse(storedIds);
+      await Promise.all(ids.map((id) => Notifications.cancelScheduledNotificationAsync(id)));
+    }
+    await AsyncStorage.removeItem(COUNTDOWN_NOTIFICATIONS_KEY);
+  } catch {}
+}
+
+export async function cancelAllChecklistReminders(): Promise<void> {
+  try {
+    const storedIds = await AsyncStorage.getItem(CHECKLIST_NOTIFICATIONS_KEY);
+    if (storedIds) {
+      const ids: string[] = JSON.parse(storedIds);
+      await Promise.all(ids.map((id) => Notifications.cancelScheduledNotificationAsync(id)));
+    }
+    await AsyncStorage.removeItem(CHECKLIST_NOTIFICATIONS_KEY);
+  } catch {}
 }
 
 export async function scheduleAllNotifications(settings: NotificationSettings): Promise<void> {
   if (!settings.enabled) return;
 
-  await cancelAllScheduledNotifications();
+  await scheduleCountdownNotifications(settings);
+
+  if (!settings.checklistReminders) {
+    await cancelAllChecklistReminders();
+  }
+}
+
+async function scheduleCountdownNotifications(settings: NotificationSettings): Promise<void> {
+  await cancelCountdownNotifications();
+
+  if (!settings.weddingCountdown) return;
 
   const wedding = await getWeddingDetails();
   if (!wedding?.weddingDate) return;
@@ -80,46 +115,44 @@ export async function scheduleAllNotifications(settings: NotificationSettings): 
   const weddingDate = new Date(wedding.weddingDate);
   const scheduledIds: string[] = [];
 
-  if (settings.weddingCountdown) {
-    for (const daysBefore of settings.daysBefore) {
-      const notificationDate = new Date(weddingDate);
-      notificationDate.setDate(notificationDate.getDate() - daysBefore);
-      notificationDate.setHours(9, 0, 0, 0);
+  for (const daysBefore of settings.daysBefore) {
+    const notificationDate = new Date(weddingDate);
+    notificationDate.setDate(notificationDate.getDate() - daysBefore);
+    notificationDate.setHours(9, 0, 0, 0);
 
-      if (notificationDate > new Date()) {
-        const title = daysBefore === 1 
-          ? "Bryllupet er i morgen!" 
-          : daysBefore === 0 
-            ? "Gratulerer med dagen!" 
-            : `${daysBefore} dager til bryllupet!`;
+    if (notificationDate > new Date()) {
+      const title = daysBefore === 1 
+        ? "Bryllupet er i morgen!" 
+        : daysBefore === 0 
+          ? "Gratulerer med dagen!" 
+          : `${daysBefore} dager til bryllupet!`;
 
-        const body = daysBefore === 1
-          ? "Siste sjekk av alle detaljer. Vi gleder oss med dere!"
-          : daysBefore === 0
-            ? "I dag er den store dagen. Nyt hvert øyeblikk!"
-            : `Ikke glem å sjekke gjøremålslisten din.`;
+      const body = daysBefore === 1
+        ? "Siste sjekk av alle detaljer. Vi gleder oss med dere!"
+        : daysBefore === 0
+          ? "I dag er den store dagen. Nyt hvert øyeblikk!"
+          : `Ikke glem å sjekke gjøremålslisten din.`;
 
-        try {
-          const id = await Notifications.scheduleNotificationAsync({
-            content: {
-              title,
-              body,
-              data: { type: "countdown", daysBefore },
-            },
-            trigger: {
-              type: Notifications.SchedulableTriggerInputTypes.DATE,
-              date: notificationDate,
-            },
-          });
-          scheduledIds.push(id);
-        } catch (error) {
-          console.log("Failed to schedule notification:", error);
-        }
+      try {
+        const id = await Notifications.scheduleNotificationAsync({
+          content: {
+            title,
+            body,
+            data: { type: "countdown", daysBefore },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: notificationDate,
+          },
+        });
+        scheduledIds.push(id);
+      } catch (error) {
+        console.log("Failed to schedule notification:", error);
       }
     }
   }
 
-  await AsyncStorage.setItem(SCHEDULED_NOTIFICATIONS_KEY, JSON.stringify(scheduledIds));
+  await AsyncStorage.setItem(COUNTDOWN_NOTIFICATIONS_KEY, JSON.stringify(scheduledIds));
 }
 
 export async function scheduleChecklistReminder(
@@ -147,10 +180,28 @@ export async function scheduleChecklistReminder(
         date: reminderDate,
       },
     });
+
+    const storedIds = await AsyncStorage.getItem(CHECKLIST_NOTIFICATIONS_KEY);
+    const existingIds: string[] = storedIds ? JSON.parse(storedIds) : [];
+    existingIds.push(id);
+    await AsyncStorage.setItem(CHECKLIST_NOTIFICATIONS_KEY, JSON.stringify(existingIds));
+
     return id;
   } catch {
     return null;
   }
+}
+
+export async function cancelChecklistReminder(notificationId: string): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(notificationId);
+    const storedIds = await AsyncStorage.getItem(CHECKLIST_NOTIFICATIONS_KEY);
+    if (storedIds) {
+      const ids: string[] = JSON.parse(storedIds);
+      const filteredIds = ids.filter((id) => id !== notificationId);
+      await AsyncStorage.setItem(CHECKLIST_NOTIFICATIONS_KEY, JSON.stringify(filteredIds));
+    }
+  } catch {}
 }
 
 export async function getScheduledNotifications(): Promise<Notifications.NotificationRequest[]> {
