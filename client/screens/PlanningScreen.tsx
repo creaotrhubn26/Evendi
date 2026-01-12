@@ -245,6 +245,8 @@ export default function PlanningScreen() {
         <ThemedText style={styles.sectionTitle}>Team</ThemedText>
         <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault }]}>
           <ActionItem icon="users" label="Viktige personer" subtitle="Forlovere, toastmaster" theme={theme} onPress={() => navigation.navigate("ImportantPeople")} />
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <ActionItem icon="gift" label="Hent leveranse" subtitle="Bilder/video fra fotograf" theme={theme} onPress={() => navigation.navigate("DeliveryAccess")} />
         </View>
       </Animated.View>
 

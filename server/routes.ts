@@ -1,9 +1,37 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { db } from "./db";
-import { vendors, vendorCategories, vendorRegistrationSchema } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
 import crypto from "crypto";
+
+function generateAccessCode(): string {
+  return crypto.randomBytes(8).toString("hex").toUpperCase();
+}
+
+function generateSessionToken(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+interface VendorSession {
+  vendorId: string;
+  createdAt: Date;
+  expiresAt: Date;
+}
+
+const VENDOR_SESSIONS: Map<string, VendorSession> = new Map();
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
+function cleanExpiredSessions() {
+  const now = new Date();
+  for (const [token, session] of VENDOR_SESSIONS.entries()) {
+    if (session.expiresAt < now) {
+      VENDOR_SESSIONS.delete(token);
+    }
+  }
+}
+
+setInterval(cleanExpiredSessions, 60 * 60 * 1000);
 
 const YR_CACHE: Map<string, { data: any; expires: Date }> = new Map();
 
@@ -182,12 +210,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Ugyldig e-post eller passord" });
       }
 
+      const sessionToken = generateSessionToken();
+      const now = new Date();
+      VENDOR_SESSIONS.set(sessionToken, {
+        vendorId: vendor.id,
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + SESSION_DURATION_MS),
+      });
+
       const { password: _, ...vendorWithoutPassword } = vendor;
-      res.json({ vendor: vendorWithoutPassword });
+      res.json({ vendor: vendorWithoutPassword, sessionToken });
     } catch (error) {
       console.error("Error logging in vendor:", error);
       res.status(500).json({ error: "Kunne ikke logge inn" });
     }
+  });
+
+  app.post("/api/vendors/logout", async (req: Request, res: Response) => {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "");
+      VENDOR_SESSIONS.delete(token);
+    }
+    res.json({ message: "Logget ut" });
   });
 
   app.get("/api/vendors", async (req: Request, res: Response) => {
@@ -296,6 +341,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error rejecting vendor:", error);
       res.status(500).json({ error: "Kunne ikke avvise leverandør" });
+    }
+  });
+
+  const checkVendorAuth = async (req: Request, res: Response): Promise<string | null> => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({ error: "Ikke autorisert" });
+      return null;
+    }
+    const token = authHeader.replace("Bearer ", "");
+    const session = VENDOR_SESSIONS.get(token);
+    
+    if (!session) {
+      res.status(401).json({ error: "Økt utløpt. Vennligst logg inn på nytt." });
+      return null;
+    }
+
+    if (session.expiresAt < new Date()) {
+      VENDOR_SESSIONS.delete(token);
+      res.status(401).json({ error: "Økt utløpt. Vennligst logg inn på nytt." });
+      return null;
+    }
+
+    const [vendor] = await db.select().from(vendors).where(eq(vendors.id, session.vendorId));
+    if (!vendor || vendor.status !== "approved") {
+      res.status(401).json({ error: "Ikke autorisert" });
+      return null;
+    }
+    return session.vendorId;
+  };
+
+  app.get("/api/vendor/deliveries", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const vendorDeliveries = await db.select().from(deliveries).where(eq(deliveries.vendorId, vendorId));
+      
+      const deliveriesWithItems = await Promise.all(
+        vendorDeliveries.map(async (delivery) => {
+          const items = await db.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, delivery.id));
+          return { ...delivery, items };
+        })
+      );
+
+      res.json(deliveriesWithItems);
+    } catch (error) {
+      console.error("Error fetching deliveries:", error);
+      res.status(500).json({ error: "Kunne ikke hente leveranser" });
+    }
+  });
+
+  app.post("/api/vendor/deliveries", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const validation = createDeliverySchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          error: "Ugyldig data", 
+          details: validation.error.errors 
+        });
+      }
+
+      const { items, ...deliveryData } = validation.data;
+      const accessCode = generateAccessCode();
+
+      const [newDelivery] = await db.insert(deliveries).values({
+        vendorId,
+        coupleName: deliveryData.coupleName,
+        coupleEmail: deliveryData.coupleEmail || null,
+        title: deliveryData.title,
+        description: deliveryData.description || null,
+        weddingDate: deliveryData.weddingDate || null,
+        accessCode,
+      }).returning();
+
+      await Promise.all(
+        items.map((item, index) =>
+          db.insert(deliveryItems).values({
+            deliveryId: newDelivery.id,
+            type: item.type,
+            label: item.label,
+            url: item.url,
+            description: item.description || null,
+            sortOrder: index,
+          })
+        )
+      );
+
+      const createdItems = await db.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, newDelivery.id));
+
+      res.status(201).json({ 
+        delivery: { ...newDelivery, items: createdItems },
+        message: `Leveranse opprettet! Tilgangskode: ${accessCode}` 
+      });
+    } catch (error) {
+      console.error("Error creating delivery:", error);
+      res.status(500).json({ error: "Kunne ikke opprette leveranse" });
+    }
+  });
+
+  app.get("/api/deliveries/:accessCode", async (req: Request, res: Response) => {
+    try {
+      const { accessCode } = req.params;
+      
+      const [delivery] = await db.select().from(deliveries).where(eq(deliveries.accessCode, accessCode.toUpperCase()));
+      if (!delivery || delivery.status !== "active") {
+        return res.status(404).json({ error: "Leveranse ikke funnet" });
+      }
+
+      const [vendor] = await db.select({
+        businessName: vendors.businessName,
+        categoryId: vendors.categoryId,
+      }).from(vendors).where(eq(vendors.id, delivery.vendorId));
+
+      const items = await db.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, delivery.id));
+
+      res.json({ 
+        delivery: { ...delivery, items },
+        vendor 
+      });
+    } catch (error) {
+      console.error("Error fetching delivery:", error);
+      res.status(500).json({ error: "Kunne ikke hente leveranse" });
     }
   });
 

@@ -5,6 +5,10 @@ import ProfileScreen from "@/screens/ProfileScreen";
 import PhotoPlanScreen from "@/screens/PhotoPlanScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
 import AdminVendorsScreen from "@/screens/AdminVendorsScreen";
+import VendorLoginScreen from "@/screens/VendorLoginScreen";
+import VendorDashboardScreen from "@/screens/VendorDashboardScreen";
+import DeliveryCreateScreen from "@/screens/DeliveryCreateScreen";
+import VendorRegistrationScreen from "@/screens/VendorRegistrationScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
 export type ProfileStackParamList = {
@@ -12,6 +16,10 @@ export type ProfileStackParamList = {
   PhotoPlan: undefined;
   Settings: undefined;
   AdminVendors: undefined;
+  VendorLogin: undefined;
+  VendorDashboard: undefined;
+  DeliveryCreate: undefined;
+  VendorRegistration: undefined;
 };
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -47,6 +55,34 @@ export default function ProfileStackNavigator() {
         component={AdminVendorsScreen}
         options={{
           title: "Admin: Leverandører",
+        }}
+      />
+      <Stack.Screen
+        name="VendorLogin"
+        component={VendorLoginScreen}
+        options={{
+          title: "Leverandørportal",
+        }}
+      />
+      <Stack.Screen
+        name="VendorDashboard"
+        component={VendorDashboardScreen}
+        options={{
+          title: "Mine leveranser",
+        }}
+      />
+      <Stack.Screen
+        name="DeliveryCreate"
+        component={DeliveryCreateScreen}
+        options={{
+          title: "Ny leveranse",
+        }}
+      />
+      <Stack.Screen
+        name="VendorRegistration"
+        component={VendorRegistrationScreen}
+        options={{
+          title: "Bli leverandør",
         }}
       />
     </Stack.Navigator>

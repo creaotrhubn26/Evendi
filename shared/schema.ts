@@ -79,3 +79,65 @@ export type VendorCategory = typeof vendorCategories.$inferSelect;
 export type InsertVendor = z.infer<typeof insertVendorSchema>;
 export type Vendor = typeof vendors.$inferSelect;
 export type VendorRegistration = z.infer<typeof vendorRegistrationSchema>;
+
+export const deliveries = pgTable("deliveries", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  coupleName: text("couple_name").notNull(),
+  coupleEmail: text("couple_email"),
+  accessCode: text("access_code").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description"),
+  weddingDate: text("wedding_date"),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const deliveryItems = pgTable("delivery_items", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  deliveryId: varchar("delivery_id").notNull().references(() => deliveries.id),
+  type: text("type").notNull(),
+  label: text("label").notNull(),
+  url: text("url").notNull(),
+  description: text("description"),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDeliverySchema = createInsertSchema(deliveries).omit({
+  id: true,
+  accessCode: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertDeliveryItemSchema = createInsertSchema(deliveryItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const createDeliverySchema = z.object({
+  coupleName: z.string().min(2, "Navn må være minst 2 tegn"),
+  coupleEmail: z.string().email("Ugyldig e-postadresse").optional().or(z.literal("")),
+  title: z.string().min(2, "Tittel må være minst 2 tegn"),
+  description: z.string().optional(),
+  weddingDate: z.string().optional(),
+  items: z.array(z.object({
+    type: z.enum(["gallery", "video", "website", "download", "other"]),
+    label: z.string().min(1, "Etikett er påkrevd"),
+    url: z.string().url("Ugyldig URL"),
+    description: z.string().optional(),
+  })).min(1, "Legg til minst én leveranse"),
+});
+
+export type InsertDelivery = z.infer<typeof insertDeliverySchema>;
+export type Delivery = typeof deliveries.$inferSelect;
+export type InsertDeliveryItem = z.infer<typeof insertDeliveryItemSchema>;
+export type DeliveryItem = typeof deliveryItems.$inferSelect;
+export type CreateDelivery = z.infer<typeof createDeliverySchema>;

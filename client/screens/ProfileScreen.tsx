@@ -283,6 +283,12 @@ export default function ProfileScreen() {
             onPress={() => Alert.alert("Del", "Delefunksjon kommer snart!")}
           />
           <MenuItem
+            icon="briefcase"
+            label="Leverandørportal"
+            theme={theme}
+            onPress={() => navigation.navigate("VendorLogin")}
+          />
+          <MenuItem
             icon="shield"
             label="Admin: Leverandører"
             theme={theme}

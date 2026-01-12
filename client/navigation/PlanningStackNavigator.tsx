@@ -15,6 +15,7 @@ import ChecklistScreen from "@/screens/ChecklistScreen";
 import WeatherScreen from "@/screens/WeatherScreen";
 import VendorRegistrationScreen from "@/screens/VendorRegistrationScreen";
 import AdminVendorsScreen from "@/screens/AdminVendorsScreen";
+import DeliveryAccessScreen from "@/screens/DeliveryAccessScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -33,6 +34,7 @@ export type PlanningStackParamList = {
   Weather: undefined;
   VendorRegistration: undefined;
   AdminVendors: undefined;
+  DeliveryAccess: undefined;
 };
 
 const Stack = createNativeStackNavigator<PlanningStackParamList>();
@@ -113,6 +115,11 @@ export default function PlanningStackNavigator() {
         name="AdminVendors"
         component={AdminVendorsScreen}
         options={{ title: "Administrer leverandører" }}
+      />
+      <Stack.Screen
+        name="DeliveryAccess"
+        component={DeliveryAccessScreen}
+        options={{ title: "Hent leveranse" }}
       />
     </Stack.Navigator>
   );
