@@ -734,3 +734,79 @@ export const activityLogs = pgTable("activity_logs", {
 });
 
 export type ActivityLog = typeof activityLogs.$inferSelect;
+
+// Wedding Tables - Table seating with categories and labels
+export const weddingTables = pgTable("wedding_tables", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
+  tableNumber: integer("table_number").notNull(),
+  name: text("name").notNull(), // "Bord 1", "Hovedbord", etc.
+  category: text("category"), // "bride_family", "groom_family", "friends", "colleagues", "reserved", "main"
+  label: text("label"), // Custom label like "Brudens familie", "Brudgommens venner", etc.
+  seats: integer("seats").notNull().default(8),
+  isReserved: boolean("is_reserved").notNull().default(false),
+  notes: text("notes"), // Private notes for couple
+  vendorNotes: text("vendor_notes"), // Notes visible to venue/decorators
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWeddingTableSchema = createInsertSchema(weddingTables).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type WeddingTable = typeof weddingTables.$inferSelect;
+export type InsertWeddingTable = z.infer<typeof insertWeddingTableSchema>;
+
+// Table Guest Assignments - Which guest is at which table
+export const tableGuestAssignments = pgTable("table_guest_assignments", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
+  tableId: varchar("table_id").notNull().references(() => weddingTables.id),
+  guestId: varchar("guest_id").notNull(),
+  seatNumber: integer("seat_number"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type TableGuestAssignment = typeof tableGuestAssignments.$inferSelect;
+
+// Table Seating Invitations - Share table seating with venue/decorators
+export const tableSeatingInvitations = pgTable("table_seating_invitations", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
+  recipientName: text("recipient_name").notNull(), // "Lokalet AS", "Dekoratør Hansen"
+  recipientType: text("recipient_type").notNull(), // "venue", "decorator", "planner", "other"
+  email: text("email"),
+  phone: text("phone"),
+  accessToken: text("access_token").notNull().unique(),
+  accessCode: text("access_code").notNull(), // 6-digit code for easy entry
+  canSeeGuestNames: boolean("can_see_guest_names").notNull().default(true),
+  canSeeNotes: boolean("can_see_notes").notNull().default(false), // Whether they can see vendor_notes
+  expiresAt: timestamp("expires_at"),
+  status: text("status").notNull().default("active"), // "active", "revoked"
+  lastAccessedAt: timestamp("last_accessed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTableSeatingInvitationSchema = createInsertSchema(tableSeatingInvitations).omit({
+  id: true,
+  accessToken: true,
+  accessCode: true,
+  status: true,
+  lastAccessedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type TableSeatingInvitation = typeof tableSeatingInvitations.$inferSelect;
+export type InsertTableSeatingInvitation = z.infer<typeof insertTableSeatingInvitationSchema>;
