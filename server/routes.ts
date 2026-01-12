@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { db } from "./db";
-import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders } from "@shared/schema";
+import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import crypto from "crypto";
 
@@ -2568,6 +2568,316 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting vendor:", error);
       res.status(500).json({ error: "Kunne ikke slette leverandør" });
+    }
+  });
+
+  // ==========================================
+  // Coordinator Access Endpoints
+  // ==========================================
+
+  // Get couple's coordinator invitations
+  app.get("/api/couple/coordinators", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const invitations = await db.select()
+        .from(coordinatorInvitations)
+        .where(eq(coordinatorInvitations.coupleId, coupleId))
+        .orderBy(desc(coordinatorInvitations.createdAt));
+      
+      res.json(invitations);
+    } catch (error) {
+      console.error("Error fetching coordinators:", error);
+      res.status(500).json({ error: "Kunne ikke hente koordinatorer" });
+    }
+  });
+
+  // Create coordinator invitation
+  app.post("/api/couple/coordinators", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { name, email, roleLabel, canViewSpeeches, canViewSchedule, expiresAt } = req.body;
+      
+      // Generate unique access token and code
+      const accessToken = crypto.randomBytes(32).toString('hex');
+      const accessCode = Math.random().toString().slice(2, 8); // 6-digit code
+      
+      const [invitation] = await db.insert(coordinatorInvitations)
+        .values({
+          coupleId,
+          name,
+          email: email || null,
+          roleLabel: roleLabel || "Toastmaster",
+          accessToken,
+          accessCode,
+          canViewSpeeches: canViewSpeeches !== false,
+          canViewSchedule: canViewSchedule !== false,
+          expiresAt: expiresAt ? new Date(expiresAt) : null,
+        })
+        .returning();
+      
+      res.status(201).json(invitation);
+    } catch (error) {
+      console.error("Error creating coordinator invitation:", error);
+      res.status(500).json({ error: "Kunne ikke opprette invitasjon" });
+    }
+  });
+
+  // Update coordinator invitation
+  app.patch("/api/couple/coordinators/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      const { name, roleLabel, canViewSpeeches, canViewSchedule, status } = req.body;
+      
+      const [updated] = await db.update(coordinatorInvitations)
+        .set({
+          name,
+          roleLabel,
+          canViewSpeeches,
+          canViewSchedule,
+          status,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(coordinatorInvitations.id, id),
+          eq(coordinatorInvitations.coupleId, coupleId)
+        ))
+        .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Invitasjon ikke funnet" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating coordinator:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere invitasjon" });
+    }
+  });
+
+  // Delete coordinator invitation
+  app.delete("/api/couple/coordinators/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      
+      await db.delete(coordinatorInvitations)
+        .where(and(
+          eq(coordinatorInvitations.id, id),
+          eq(coordinatorInvitations.coupleId, coupleId)
+        ));
+      
+      res.json({ message: "Invitasjon slettet" });
+    } catch (error) {
+      console.error("Error deleting coordinator:", error);
+      res.status(500).json({ error: "Kunne ikke slette invitasjon" });
+    }
+  });
+
+  // Coordinator access - validate token and get data
+  app.get("/api/coordinator/access/:token", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      
+      const [invitation] = await db.select()
+        .from(coordinatorInvitations)
+        .where(and(
+          eq(coordinatorInvitations.accessToken, token),
+          eq(coordinatorInvitations.status, "active")
+        ));
+      
+      if (!invitation) {
+        return res.status(404).json({ error: "Ugyldig eller utløpt tilgang" });
+      }
+      
+      // Check expiry
+      if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
+        await db.update(coordinatorInvitations)
+          .set({ status: "expired" })
+          .where(eq(coordinatorInvitations.id, invitation.id));
+        return res.status(403).json({ error: "Tilgangen har utløpt" });
+      }
+      
+      // Update last accessed
+      await db.update(coordinatorInvitations)
+        .set({ lastAccessedAt: new Date() })
+        .where(eq(coordinatorInvitations.id, invitation.id));
+      
+      // Get couple info
+      const [couple] = await db.select({
+        displayName: coupleProfiles.displayName,
+        weddingDate: coupleProfiles.weddingDate,
+      }).from(coupleProfiles).where(eq(coupleProfiles.id, invitation.coupleId));
+      
+      // Get speeches if allowed
+      let speechList: any[] = [];
+      if (invitation.canViewSpeeches) {
+        speechList = await db.select()
+          .from(speeches)
+          .where(eq(speeches.coupleId, invitation.coupleId))
+          .orderBy(speeches.sortOrder);
+      }
+      
+      // Get schedule events if allowed
+      let scheduleList: any[] = [];
+      if (invitation.canViewSchedule) {
+        scheduleList = await db.select()
+          .from(scheduleEvents)
+          .where(eq(scheduleEvents.coupleId, invitation.coupleId))
+          .orderBy(scheduleEvents.time);
+      }
+      
+      res.json({
+        invitation: {
+          id: invitation.id,
+          name: invitation.name,
+          roleLabel: invitation.roleLabel,
+          canViewSpeeches: invitation.canViewSpeeches,
+          canViewSchedule: invitation.canViewSchedule,
+        },
+        couple,
+        speeches: speechList,
+        schedule: scheduleList,
+      });
+    } catch (error) {
+      console.error("Error accessing coordinator view:", error);
+      res.status(500).json({ error: "Kunne ikke hente data" });
+    }
+  });
+
+  // Coordinator access by code
+  app.post("/api/coordinator/access-by-code", async (req: Request, res: Response) => {
+    try {
+      const { code } = req.body;
+      
+      const [invitation] = await db.select()
+        .from(coordinatorInvitations)
+        .where(and(
+          eq(coordinatorInvitations.accessCode, code),
+          eq(coordinatorInvitations.status, "active")
+        ));
+      
+      if (!invitation) {
+        return res.status(404).json({ error: "Ugyldig kode" });
+      }
+      
+      // Return the token for redirect
+      res.json({ token: invitation.accessToken });
+    } catch (error) {
+      console.error("Error validating access code:", error);
+      res.status(500).json({ error: "Kunne ikke validere kode" });
+    }
+  });
+
+  // ==========================================
+  // Schedule Events Endpoints (Server-side storage)
+  // ==========================================
+
+  // Get couple's schedule events
+  app.get("/api/couple/schedule-events", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const events = await db.select()
+        .from(scheduleEvents)
+        .where(eq(scheduleEvents.coupleId, coupleId))
+        .orderBy(scheduleEvents.time);
+      
+      res.json(events);
+    } catch (error) {
+      console.error("Error fetching schedule events:", error);
+      res.status(500).json({ error: "Kunne ikke hente program" });
+    }
+  });
+
+  // Create schedule event
+  app.post("/api/couple/schedule-events", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { time, title, icon, notes, sortOrder } = req.body;
+      
+      const [event] = await db.insert(scheduleEvents)
+        .values({
+          coupleId,
+          time,
+          title,
+          icon: icon || "star",
+          notes,
+          sortOrder: sortOrder || 0,
+        })
+        .returning();
+      
+      res.status(201).json(event);
+    } catch (error) {
+      console.error("Error creating schedule event:", error);
+      res.status(500).json({ error: "Kunne ikke opprette hendelse" });
+    }
+  });
+
+  // Update schedule event
+  app.patch("/api/couple/schedule-events/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      const { time, title, icon, notes, sortOrder } = req.body;
+      
+      const [updated] = await db.update(scheduleEvents)
+        .set({
+          time,
+          title,
+          icon,
+          notes,
+          sortOrder,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(scheduleEvents.id, id),
+          eq(scheduleEvents.coupleId, coupleId)
+        ))
+        .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Hendelse ikke funnet" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating schedule event:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere hendelse" });
+    }
+  });
+
+  // Delete schedule event
+  app.delete("/api/couple/schedule-events/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      
+      await db.delete(scheduleEvents)
+        .where(and(
+          eq(scheduleEvents.id, id),
+          eq(scheduleEvents.coupleId, coupleId)
+        ));
+      
+      res.json({ message: "Hendelse slettet" });
+    } catch (error) {
+      console.error("Error deleting schedule event:", error);
+      res.status(500).json({ error: "Kunne ikke slette hendelse" });
     }
   });
 
