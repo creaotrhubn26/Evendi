@@ -66,6 +66,73 @@ export default function VendorRegistrationScreen() {
   const [isSearchingBrreg, setIsSearchingBrreg] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateField = useCallback((field: string, value: string): string => {
+    switch (field) {
+      case "email":
+        if (!value) return "E-postadresse er påkrevd";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Ugyldig e-postadresse";
+        return "";
+      case "password":
+        if (!value) return "Passord er påkrevd";
+        if (value.length < 8) return "Passord må være minst 8 tegn";
+        return "";
+      case "confirmPassword":
+        if (!value) return "Bekreft passord er påkrevd";
+        if (value !== formData.password) return "Passordene stemmer ikke overens";
+        return "";
+      case "businessName":
+        if (!value) return "Bedriftsnavn er påkrevd";
+        if (value.length < 2) return "Bedriftsnavn må være minst 2 tegn";
+        return "";
+      case "categoryId":
+        if (!value) return "Velg en kategori";
+        return "";
+      case "phone":
+        if (value && !/^[+]?[\d\s-]{8,}$/.test(value)) return "Ugyldig telefonnummer";
+        return "";
+      case "website":
+        if (value && !/^(https?:\/\/)?[\w.-]+\.[a-z]{2,}/.test(value)) return "Ugyldig nettadresse";
+        return "";
+      default:
+        return "";
+    }
+  }, [formData.password]);
+
+  const handleBlur = useCallback((field: string) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    const error = validateField(field, formData[field as keyof typeof formData]);
+    setErrors((prev) => ({ ...prev, [field]: error }));
+  }, [formData, validateField]);
+
+  const validateAllFields = useCallback(() => {
+    const newErrors: Record<string, string> = {};
+    const requiredFields = ["email", "password", "confirmPassword", "businessName", "categoryId"];
+    
+    requiredFields.forEach((field) => {
+      const error = validateField(field, formData[field as keyof typeof formData]);
+      if (error) newErrors[field] = error;
+    });
+
+    ["phone", "website"].forEach((field) => {
+      const error = validateField(field, formData[field as keyof typeof formData]);
+      if (error) newErrors[field] = error;
+    });
+
+    setErrors(newErrors);
+    setTouched(Object.keys(formData).reduce((acc, key) => ({ ...acc, [key]: true }), {}));
+    return Object.keys(newErrors).length === 0;
+  }, [formData, validateField]);
+
+  const getFieldStyle = useCallback((field: string) => {
+    if (touched[field] && errors[field]) {
+      return { borderColor: "#DC3545" };
+    }
+    return {};
+  }, [touched, errors]);
+
   const searchBrreg = useCallback(async (query: string) => {
     if (query.length < 2) {
       setBrregResults([]);
@@ -139,18 +206,8 @@ export default function VendorRegistrationScreen() {
   });
 
   const handleSubmit = () => {
-    if (!formData.email || !formData.password || !formData.businessName || !formData.categoryId) {
-      Alert.alert("Mangler informasjon", "Fyll ut alle påkrevde felt.");
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      Alert.alert("Feil", "Passordene stemmer ikke overens.");
-      return;
-    }
-
-    if (formData.password.length < 8) {
-      Alert.alert("Feil", "Passord må være minst 8 tegn.");
+    if (!validateAllFields()) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
 
@@ -218,44 +275,62 @@ export default function VendorRegistrationScreen() {
       <View style={styles.section}>
         <ThemedText style={styles.sectionTitle}>Kontoinformasjon</ThemedText>
 
-        <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-          <Feather name="mail" size={18} color={theme.textMuted} />
-          <TextInput
-            style={[styles.input, { color: theme.text }]}
-            placeholder="E-postadresse *"
-            placeholderTextColor={theme.textMuted}
-            value={formData.email}
-            onChangeText={(v) => updateField("email", v)}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
+        <View>
+          <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("email")]}>
+            <Feather name="mail" size={18} color={touched.email && errors.email ? "#DC3545" : theme.textMuted} />
+            <TextInput
+              style={[styles.input, { color: theme.text }]}
+              placeholder="E-postadresse *"
+              placeholderTextColor={theme.textMuted}
+              value={formData.email}
+              onChangeText={(v) => updateField("email", v)}
+              onBlur={() => handleBlur("email")}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
+          {touched.email && errors.email ? (
+            <ThemedText style={styles.errorText}>{errors.email}</ThemedText>
+          ) : null}
         </View>
 
-        <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-          <Feather name="lock" size={18} color={theme.textMuted} />
-          <TextInput
-            style={[styles.input, { color: theme.text }]}
-            placeholder="Passord (min. 8 tegn) *"
-            placeholderTextColor={theme.textMuted}
-            value={formData.password}
-            onChangeText={(v) => updateField("password", v)}
-            secureTextEntry={!showPassword}
-          />
-          <Pressable onPress={() => setShowPassword(!showPassword)}>
-            <Feather name={showPassword ? "eye-off" : "eye"} size={18} color={theme.textMuted} />
-          </Pressable>
+        <View>
+          <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("password")]}>
+            <Feather name="lock" size={18} color={touched.password && errors.password ? "#DC3545" : theme.textMuted} />
+            <TextInput
+              style={[styles.input, { color: theme.text }]}
+              placeholder="Passord (min. 8 tegn) *"
+              placeholderTextColor={theme.textMuted}
+              value={formData.password}
+              onChangeText={(v) => updateField("password", v)}
+              onBlur={() => handleBlur("password")}
+              secureTextEntry={!showPassword}
+            />
+            <Pressable onPress={() => setShowPassword(!showPassword)}>
+              <Feather name={showPassword ? "eye-off" : "eye"} size={18} color={theme.textMuted} />
+            </Pressable>
+          </View>
+          {touched.password && errors.password ? (
+            <ThemedText style={styles.errorText}>{errors.password}</ThemedText>
+          ) : null}
         </View>
 
-        <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-          <Feather name="lock" size={18} color={theme.textMuted} />
-          <TextInput
-            style={[styles.input, { color: theme.text }]}
-            placeholder="Bekreft passord *"
-            placeholderTextColor={theme.textMuted}
-            value={formData.confirmPassword}
-            onChangeText={(v) => updateField("confirmPassword", v)}
-            secureTextEntry={!showPassword}
-          />
+        <View>
+          <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("confirmPassword")]}>
+            <Feather name="lock" size={18} color={touched.confirmPassword && errors.confirmPassword ? "#DC3545" : theme.textMuted} />
+            <TextInput
+              style={[styles.input, { color: theme.text }]}
+              placeholder="Bekreft passord *"
+              placeholderTextColor={theme.textMuted}
+              value={formData.confirmPassword}
+              onChangeText={(v) => updateField("confirmPassword", v)}
+              onBlur={() => handleBlur("confirmPassword")}
+              secureTextEntry={!showPassword}
+            />
+          </View>
+          {touched.confirmPassword && errors.confirmPassword ? (
+            <ThemedText style={styles.errorText}>{errors.confirmPassword}</ThemedText>
+          ) : null}
         </View>
       </View>
 
@@ -622,5 +697,12 @@ const styles = StyleSheet.create({
   orgNumberText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#DC3545",
+    marginTop: 4,
+    marginBottom: Spacing.sm,
+    marginLeft: Spacing.sm,
   },
 });

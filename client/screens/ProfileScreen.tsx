@@ -40,6 +40,36 @@ export default function ProfileScreen() {
   const [editCoupleNames, setEditCoupleNames] = useState("");
   const [editWeddingDate, setEditWeddingDate] = useState("");
   const [editVenue, setEditVenue] = useState("");
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateField = useCallback((field: string, value: string): string => {
+    switch (field) {
+      case "coupleNames":
+        if (!value.trim()) return "Navn er påkrevd";
+        if (value.trim().length < 3) return "Navn må være minst 3 tegn";
+        return "";
+      case "weddingDate":
+        if (!value.trim()) return "Dato er påkrevd";
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return "Bruk format ÅÅÅÅ-MM-DD";
+        return "";
+      default:
+        return "";
+    }
+  }, []);
+
+  const handleBlur = useCallback((field: string, value: string) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    const error = validateField(field, value);
+    setErrors((prev) => ({ ...prev, [field]: error }));
+  }, [validateField]);
+
+  const getFieldStyle = useCallback((field: string) => {
+    if (touched[field] && errors[field]) {
+      return { borderColor: "#DC3545" };
+    }
+    return {};
+  }, [touched, errors]);
 
   const loadData = useCallback(async () => {
     const data = await getWeddingDetails();
@@ -129,34 +159,48 @@ export default function ProfileScreen() {
 
           {editing ? (
             <View style={styles.editForm}>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.backgroundSecondary,
-                    color: theme.text,
-                    borderColor: theme.border,
-                  },
-                ]}
-                placeholder="Navn (f.eks. Emma & Erik)"
-                placeholderTextColor={theme.textMuted}
-                value={editCoupleNames}
-                onChangeText={setEditCoupleNames}
-              />
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.backgroundSecondary,
-                    color: theme.text,
-                    borderColor: theme.border,
-                  },
-                ]}
-                placeholder="Dato (ÅÅÅÅ-MM-DD)"
-                placeholderTextColor={theme.textMuted}
-                value={editWeddingDate}
-                onChangeText={setEditWeddingDate}
-              />
+              <View>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.backgroundSecondary,
+                      color: theme.text,
+                      borderColor: theme.border,
+                    },
+                    getFieldStyle("coupleNames"),
+                  ]}
+                  placeholder="Navn (f.eks. Emma & Erik)"
+                  placeholderTextColor={theme.textMuted}
+                  value={editCoupleNames}
+                  onChangeText={setEditCoupleNames}
+                  onBlur={() => handleBlur("coupleNames", editCoupleNames)}
+                />
+                {touched.coupleNames && errors.coupleNames ? (
+                  <ThemedText style={styles.errorText}>{errors.coupleNames}</ThemedText>
+                ) : null}
+              </View>
+              <View>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.backgroundSecondary,
+                      color: theme.text,
+                      borderColor: theme.border,
+                    },
+                    getFieldStyle("weddingDate"),
+                  ]}
+                  placeholder="Dato (ÅÅÅÅ-MM-DD)"
+                  placeholderTextColor={theme.textMuted}
+                  value={editWeddingDate}
+                  onChangeText={setEditWeddingDate}
+                  onBlur={() => handleBlur("weddingDate", editWeddingDate)}
+                />
+                {touched.weddingDate && errors.weddingDate ? (
+                  <ThemedText style={styles.errorText}>{errors.weddingDate}</ThemedText>
+                ) : null}
+              </View>
               <TextInput
                 style={[
                   styles.input,
@@ -473,5 +517,12 @@ const styles = StyleSheet.create({
   menuLabel: {
     flex: 1,
     fontSize: 16,
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#DC3545",
+    marginTop: -8,
+    marginBottom: Spacing.sm,
+    marginLeft: Spacing.sm,
   },
 });

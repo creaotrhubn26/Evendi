@@ -21,6 +21,49 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getBudgetItems, saveBudgetItems, getTotalBudget, saveTotalBudget, generateId } from "@/lib/storage";
 import { BudgetItem } from "@/lib/types";
 
+const useFieldValidation = () => {
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateField = useCallback((field: string, value: string): string => {
+    switch (field) {
+      case "newName":
+        if (!value.trim()) return "Navn er påkrevd";
+        return "";
+      case "newCost":
+        if (!value.trim()) return "Beløp er påkrevd";
+        if (!/^\d+$/.test(value.trim())) return "Bruk kun tall";
+        return "";
+      case "budgetInput":
+        if (!value.trim()) return "Budsjett er påkrevd";
+        if (!/^\d+$/.test(value.trim())) return "Bruk kun tall";
+        return "";
+      default:
+        return "";
+    }
+  }, []);
+
+  const handleBlur = useCallback((field: string, value: string) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    const error = validateField(field, value);
+    setErrors((prev) => ({ ...prev, [field]: error }));
+  }, [validateField]);
+
+  const getFieldStyle = useCallback((field: string) => {
+    if (touched[field] && errors[field]) {
+      return { borderColor: "#DC3545" };
+    }
+    return {};
+  }, [touched, errors]);
+
+  const resetValidation = useCallback(() => {
+    setTouched({});
+    setErrors({});
+  }, []);
+
+  return { touched, errors, handleBlur, getFieldStyle, resetValidation };
+};
+
 const CATEGORIES = [
   { id: "venue", name: "Lokale", icon: "home", color: "#E57373" },
   { id: "catering", name: "Catering", icon: "coffee", color: "#81C784" },
@@ -48,6 +91,7 @@ export default function BudgetScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { touched, errors, handleBlur, getFieldStyle, resetValidation } = useFieldValidation();
 
   const [items, setItems] = useState<BudgetItem[]>([]);
   const [totalBudget, setTotalBudget] = useState(300000);
@@ -298,22 +342,34 @@ export default function BudgetScreen() {
         >
           <ThemedText type="h3" style={styles.formTitle}>Legg til utgift</ThemedText>
 
-          <TextInput
-            style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
-            placeholder="Navn"
-            placeholderTextColor={theme.textMuted}
-            value={newName}
-            onChangeText={setNewName}
-          />
+          <View>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("newName")]}
+              placeholder="Navn"
+              placeholderTextColor={theme.textMuted}
+              value={newName}
+              onChangeText={setNewName}
+              onBlur={() => handleBlur("newName", newName)}
+            />
+            {touched.newName && errors.newName ? (
+              <ThemedText style={styles.errorText}>{errors.newName}</ThemedText>
+            ) : null}
+          </View>
 
-          <TextInput
-            style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
-            placeholder="Beløp (kr)"
-            placeholderTextColor={theme.textMuted}
-            value={newCost}
-            onChangeText={setNewCost}
-            keyboardType="numeric"
-          />
+          <View>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("newCost")]}
+              placeholder="Beløp (kr)"
+              placeholderTextColor={theme.textMuted}
+              value={newCost}
+              onChangeText={setNewCost}
+              onBlur={() => handleBlur("newCost", newCost)}
+              keyboardType="numeric"
+            />
+            {touched.newCost && errors.newCost ? (
+              <ThemedText style={styles.errorText}>{errors.newCost}</ThemedText>
+            ) : null}
+          </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryPicker}>
             {CATEGORIES.map((cat) => (
@@ -431,4 +487,11 @@ const styles = StyleSheet.create({
   saveButton: { flex: 1 },
   addButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", padding: Spacing.lg, borderRadius: BorderRadius.md, borderWidth: 1, borderStyle: "dashed" },
   addButtonText: { marginLeft: Spacing.sm, fontWeight: "500" },
+  errorText: {
+    fontSize: 12,
+    color: "#DC3545",
+    marginTop: -8,
+    marginBottom: Spacing.sm,
+    marginLeft: Spacing.sm,
+  },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   View,
@@ -41,6 +41,35 @@ export default function VendorLoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateField = useCallback((field: string, value: string): string => {
+    switch (field) {
+      case "email":
+        if (!value) return "E-post er påkrevd";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Ugyldig e-postadresse";
+        return "";
+      case "password":
+        if (!value) return "Passord er påkrevd";
+        return "";
+      default:
+        return "";
+    }
+  }, []);
+
+  const handleBlur = useCallback((field: string, value: string) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    const error = validateField(field, value);
+    setErrors((prev) => ({ ...prev, [field]: error }));
+  }, [validateField]);
+
+  const getFieldStyle = useCallback((field: string) => {
+    if (touched[field] && errors[field]) {
+      return { borderColor: "#DC3545" };
+    }
+    return {};
+  }, [touched, errors]);
 
   useEffect(() => {
     checkExistingSession();
@@ -112,34 +141,46 @@ export default function VendorLoginScreen({ navigation }: Props) {
         </ThemedText>
 
         <View style={styles.form}>
-          <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <Feather name="mail" size={18} color={theme.textMuted} />
-            <TextInput
-              style={[styles.input, { color: theme.text }]}
-              placeholder="E-post"
-              placeholderTextColor={theme.textMuted}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-            />
+          <View>
+            <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("email")]}>
+              <Feather name="mail" size={18} color={touched.email && errors.email ? "#DC3545" : theme.textMuted} />
+              <TextInput
+                style={[styles.input, { color: theme.text }]}
+                placeholder="E-post"
+                placeholderTextColor={theme.textMuted}
+                value={email}
+                onChangeText={setEmail}
+                onBlur={() => handleBlur("email", email)}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+              />
+            </View>
+            {touched.email && errors.email ? (
+              <ThemedText style={styles.errorText}>{errors.email}</ThemedText>
+            ) : null}
           </View>
 
-          <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <Feather name="lock" size={18} color={theme.textMuted} />
-            <TextInput
-              style={[styles.input, { color: theme.text }]}
-              placeholder="Passord"
-              placeholderTextColor={theme.textMuted}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-            />
-            <Pressable onPress={() => setShowPassword(!showPassword)}>
-              <Feather name={showPassword ? "eye-off" : "eye"} size={18} color={theme.textMuted} />
-            </Pressable>
+          <View>
+            <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("password")]}>
+              <Feather name="lock" size={18} color={touched.password && errors.password ? "#DC3545" : theme.textMuted} />
+              <TextInput
+                style={[styles.input, { color: theme.text }]}
+                placeholder="Passord"
+                placeholderTextColor={theme.textMuted}
+                value={password}
+                onChangeText={setPassword}
+                onBlur={() => handleBlur("password", password)}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+              />
+              <Pressable onPress={() => setShowPassword(!showPassword)}>
+                <Feather name={showPassword ? "eye-off" : "eye"} size={18} color={theme.textMuted} />
+              </Pressable>
+            </View>
+            {touched.password && errors.password ? (
+              <ThemedText style={styles.errorText}>{errors.password}</ThemedText>
+            ) : null}
           </View>
 
           <Pressable
@@ -231,5 +272,12 @@ const styles = StyleSheet.create({
   registerLinkText: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#DC3545",
+    marginTop: 4,
+    marginBottom: Spacing.sm,
+    marginLeft: Spacing.sm,
   },
 });

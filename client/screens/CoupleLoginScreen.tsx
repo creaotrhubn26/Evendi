@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   StyleSheet,
   View,
@@ -40,6 +40,36 @@ export default function CoupleLoginScreen({ navigation }: Props) {
 
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateField = useCallback((field: string, value: string): string => {
+    switch (field) {
+      case "email":
+        if (!value) return "E-post er påkrevd";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Ugyldig e-postadresse";
+        return "";
+      case "displayName":
+        if (!value) return "Navn er påkrevd";
+        if (value.length < 2) return "Navn må være minst 2 tegn";
+        return "";
+      default:
+        return "";
+    }
+  }, []);
+
+  const handleBlur = useCallback((field: string, value: string) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    const error = validateField(field, value);
+    setErrors((prev) => ({ ...prev, [field]: error }));
+  }, [validateField]);
+
+  const getFieldStyle = useCallback((field: string) => {
+    if (touched[field] && errors[field]) {
+      return { borderColor: "#DC3545" };
+    }
+    return {};
+  }, [touched, errors]);
 
   const loginMutation = useMutation({
     mutationFn: async () => {
@@ -96,29 +126,41 @@ export default function CoupleLoginScreen({ navigation }: Props) {
         </ThemedText>
 
         <View style={styles.form}>
-          <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <Feather name="user" size={18} color={theme.textMuted} />
-            <TextInput
-              style={[styles.input, { color: theme.text }]}
-              placeholder="Ditt navn"
-              placeholderTextColor={theme.textMuted}
-              value={displayName}
-              onChangeText={setDisplayName}
-              autoCapitalize="words"
-            />
+          <View>
+            <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("displayName")]}>
+              <Feather name="user" size={18} color={touched.displayName && errors.displayName ? "#DC3545" : theme.textMuted} />
+              <TextInput
+                style={[styles.input, { color: theme.text }]}
+                placeholder="Ditt navn"
+                placeholderTextColor={theme.textMuted}
+                value={displayName}
+                onChangeText={setDisplayName}
+                onBlur={() => handleBlur("displayName", displayName)}
+                autoCapitalize="words"
+              />
+            </View>
+            {touched.displayName && errors.displayName ? (
+              <ThemedText style={styles.errorText}>{errors.displayName}</ThemedText>
+            ) : null}
           </View>
 
-          <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <Feather name="mail" size={18} color={theme.textMuted} />
-            <TextInput
-              style={[styles.input, { color: theme.text }]}
-              placeholder="E-postadresse"
-              placeholderTextColor={theme.textMuted}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
+          <View>
+            <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("email")]}>
+              <Feather name="mail" size={18} color={touched.email && errors.email ? "#DC3545" : theme.textMuted} />
+              <TextInput
+                style={[styles.input, { color: theme.text }]}
+                placeholder="E-postadresse"
+                placeholderTextColor={theme.textMuted}
+                value={email}
+                onChangeText={setEmail}
+                onBlur={() => handleBlur("email", email)}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+            {touched.email && errors.email ? (
+              <ThemedText style={styles.errorText}>{errors.email}</ThemedText>
+            ) : null}
           </View>
 
           <Pressable
@@ -200,5 +242,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: Spacing.xl,
     lineHeight: 20,
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#DC3545",
+    marginTop: 4,
+    marginBottom: Spacing.sm,
+    marginLeft: Spacing.sm,
   },
 });
