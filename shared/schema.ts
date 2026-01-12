@@ -624,6 +624,8 @@ export const coordinatorInvitations = pgTable("coordinator_invitations", {
   accessCode: text("access_code"), // Optional 6-digit code for easy access
   canViewSpeeches: boolean("can_view_speeches").default(true),
   canViewSchedule: boolean("can_view_schedule").default(true),
+  canEditSpeeches: boolean("can_edit_speeches").default(false), // Edit permission for speeches
+  canEditSchedule: boolean("can_edit_schedule").default(false), // Edit permission for schedule
   status: text("status").notNull().default("active"), // active, revoked, expired
   expiresAt: timestamp("expires_at"),
   lastAccessedAt: timestamp("last_accessed_at"),
@@ -647,9 +649,88 @@ export const createCoordinatorInvitationSchema = z.object({
   roleLabel: z.string().default("Toastmaster"),
   canViewSpeeches: z.boolean().default(true),
   canViewSchedule: z.boolean().default(true),
+  canEditSpeeches: z.boolean().default(false),
+  canEditSchedule: z.boolean().default(false),
   expiresAt: z.string().optional(),
 });
 
 export type CoordinatorInvitation = typeof coordinatorInvitations.$inferSelect;
 export type InsertCoordinatorInvitation = z.infer<typeof insertCoordinatorInvitationSchema>;
 export type CreateCoordinatorInvitation = z.infer<typeof createCoordinatorInvitationSchema>;
+
+// Couple-Vendor Contracts - Tracks active agreements for notifications
+export const coupleVendorContracts = pgTable("couple_vendor_contracts", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  offerId: varchar("offer_id").references(() => vendorOffers.id), // Link to accepted offer
+  status: text("status").notNull().default("active"), // active, completed, cancelled
+  vendorRole: text("vendor_role"), // "photographer", "videographer", "caterer", etc.
+  notifyOnScheduleChanges: boolean("notify_on_schedule_changes").default(true),
+  notifyOnSpeechChanges: boolean("notify_on_speech_changes").default(true),
+  canViewSchedule: boolean("can_view_schedule").default(true),
+  canViewSpeeches: boolean("can_view_speeches").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCoupleVendorContractSchema = createInsertSchema(coupleVendorContracts).omit({
+  id: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type CoupleVendorContract = typeof coupleVendorContracts.$inferSelect;
+export type InsertCoupleVendorContract = z.infer<typeof insertCoupleVendorContractSchema>;
+
+// Notifications - In-app notifications for couples and vendors
+export const notifications = pgTable("notifications", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  recipientType: text("recipient_type").notNull(), // "couple", "vendor", "coordinator"
+  recipientId: varchar("recipient_id").notNull(), // coupleId, vendorId, or coordinatorInvitationId
+  type: text("type").notNull(), // "schedule_changed", "speech_changed", "vendor_update", "offer_accepted", etc.
+  title: text("title").notNull(),
+  body: text("body"),
+  payload: text("payload"), // JSON string with additional data
+  relatedEntityType: text("related_entity_type"), // "schedule_event", "speech", "offer", etc.
+  relatedEntityId: varchar("related_entity_id"),
+  actorType: text("actor_type"), // "couple", "vendor", "coordinator"
+  actorId: varchar("actor_id"),
+  actorName: text("actor_name"),
+  readAt: timestamp("read_at"),
+  sentVia: text("sent_via").default("in_app"), // "in_app", "push", "email"
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  readAt: true,
+  createdAt: true,
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+// Activity Log - Audit trail for schedule/speech changes
+export const activityLogs = pgTable("activity_logs", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
+  actorType: text("actor_type").notNull(), // "couple", "coordinator"
+  actorId: varchar("actor_id").notNull(), // coupleId or coordinatorInvitationId
+  actorName: text("actor_name"),
+  action: text("action").notNull(), // "created", "updated", "deleted"
+  entityType: text("entity_type").notNull(), // "schedule_event", "speech"
+  entityId: varchar("entity_id").notNull(),
+  previousValue: text("previous_value"), // JSON snapshot
+  newValue: text("new_value"), // JSON snapshot
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type ActivityLog = typeof activityLogs.$inferSelect;

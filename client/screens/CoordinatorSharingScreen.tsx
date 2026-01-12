@@ -38,6 +38,8 @@ interface CoordinatorInvitation {
   accessCode: string | null;
   canViewSpeeches: boolean;
   canViewSchedule: boolean;
+  canEditSpeeches: boolean;
+  canEditSchedule: boolean;
   status: string;
   lastAccessedAt: string | null;
   createdAt: string;
@@ -54,6 +56,8 @@ export default function CoordinatorSharingScreen() {
   const [newRole, setNewRole] = useState("Toastmaster");
   const [canViewSpeeches, setCanViewSpeeches] = useState(true);
   const [canViewSchedule, setCanViewSchedule] = useState(true);
+  const [canEditSpeeches, setCanEditSpeeches] = useState(false);
+  const [canEditSchedule, setCanEditSchedule] = useState(false);
 
   const { data: coordinators = [], isLoading, isRefetching, refetch } = useQuery<CoordinatorInvitation[]>({
     queryKey: ["/api/couple/coordinators"],
@@ -70,7 +74,7 @@ export default function CoordinatorSharingScreen() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; roleLabel: string; canViewSpeeches: boolean; canViewSchedule: boolean }) => {
+    mutationFn: async (data: { name: string; roleLabel: string; canViewSpeeches: boolean; canViewSchedule: boolean; canEditSpeeches: boolean; canEditSchedule: boolean }) => {
       const sessionData = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
       if (!sessionData) throw new Error("Ikke innlogget");
       const session = JSON.parse(sessionData);
@@ -93,6 +97,8 @@ export default function CoordinatorSharingScreen() {
       setShowModal(false);
       setNewName("");
       setNewRole("Toastmaster");
+      setCanEditSpeeches(false);
+      setCanEditSchedule(false);
     },
   });
 
@@ -126,6 +132,8 @@ export default function CoordinatorSharingScreen() {
       roleLabel: newRole.trim() || "Toastmaster",
       canViewSpeeches,
       canViewSchedule,
+      canEditSpeeches,
+      canEditSchedule,
     });
   };
 
@@ -213,7 +221,7 @@ export default function CoordinatorSharingScreen() {
                 color={item.canViewSpeeches ? "#4CAF50" : theme.textMuted}
               />
               <ThemedText style={[styles.permissionText, { color: item.canViewSpeeches ? theme.text : theme.textMuted }]}>
-                Taler
+                Se taler
               </ThemedText>
             </View>
             <View style={styles.permission}>
@@ -223,10 +231,30 @@ export default function CoordinatorSharingScreen() {
                 color={item.canViewSchedule ? "#4CAF50" : theme.textMuted}
               />
               <ThemedText style={[styles.permissionText, { color: item.canViewSchedule ? theme.text : theme.textMuted }]}>
-                Program
+                Se program
               </ThemedText>
             </View>
           </View>
+          {(item.canEditSpeeches || item.canEditSchedule) ? (
+            <View style={[styles.permissionsRow, { borderTopColor: theme.border, paddingTop: 0, marginTop: -Spacing.xs }]}>
+              {item.canEditSpeeches ? (
+                <View style={styles.permission}>
+                  <Feather name="edit-3" size={14} color={Colors.dark.accent} />
+                  <ThemedText style={[styles.permissionText, { color: Colors.dark.accent }]}>
+                    Rediger taler
+                  </ThemedText>
+                </View>
+              ) : null}
+              {item.canEditSchedule ? (
+                <View style={styles.permission}>
+                  <Feather name="edit-3" size={14} color={Colors.dark.accent} />
+                  <ThemedText style={[styles.permissionText, { color: Colors.dark.accent }]}>
+                    Rediger program
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
           {item.accessCode ? (
             <View style={styles.codeSection}>
@@ -388,6 +416,52 @@ export default function CoordinatorSharingScreen() {
                 <Switch
                   value={canViewSchedule}
                   onValueChange={setCanViewSchedule}
+                  trackColor={{ false: theme.border, true: Colors.dark.accent }}
+                  thumbColor="#fff"
+                />
+              </View>
+
+              <ThemedText style={[styles.sectionLabel, { color: theme.textMuted }]}>
+                Redigeringstilgang
+              </ThemedText>
+
+              <View style={[styles.toggleRow, { borderBottomColor: theme.border }]}>
+                <View style={styles.toggleInfo}>
+                  <Feather name="edit-3" size={18} color={Colors.dark.accent} />
+                  <View>
+                    <ThemedText style={styles.toggleLabel}>Kan redigere taler</ThemedText>
+                    <ThemedText style={[styles.toggleHint, { color: theme.textMuted }]}>
+                      Kan legge til, endre og fjerne taler
+                    </ThemedText>
+                  </View>
+                </View>
+                <Switch
+                  value={canEditSpeeches}
+                  onValueChange={(value) => {
+                    setCanEditSpeeches(value);
+                    if (value) setCanViewSpeeches(true);
+                  }}
+                  trackColor={{ false: theme.border, true: Colors.dark.accent }}
+                  thumbColor="#fff"
+                />
+              </View>
+
+              <View style={[styles.toggleRow, { borderBottomColor: theme.border }]}>
+                <View style={styles.toggleInfo}>
+                  <Feather name="edit-3" size={18} color={Colors.dark.accent} />
+                  <View>
+                    <ThemedText style={styles.toggleLabel}>Kan redigere program</ThemedText>
+                    <ThemedText style={[styles.toggleHint, { color: theme.textMuted }]}>
+                      Kan endre kjøreplanen for dagen
+                    </ThemedText>
+                  </View>
+                </View>
+                <Switch
+                  value={canEditSchedule}
+                  onValueChange={(value) => {
+                    setCanEditSchedule(value);
+                    if (value) setCanViewSchedule(true);
+                  }}
                   trackColor={{ false: theme.border, true: Colors.dark.accent }}
                   thumbColor="#fff"
                 />
@@ -637,6 +711,17 @@ const styles = StyleSheet.create({
   },
   toggleLabel: {
     fontSize: 15,
+  },
+  toggleHint: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: Spacing.sm,
   },
   modalActions: {
     flexDirection: "row",

@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { db } from "./db";
-import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations } from "@shared/schema";
+import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, coupleVendorContracts, notifications, activityLogs } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import crypto from "crypto";
 
@@ -1580,6 +1580,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
           scheduledTime: validatedData.scheduledTime,
         })
         .returning();
+      
+      // Notify vendors if couple is authenticated
+      if (coupleId) {
+        const [couple] = await db.select({ displayName: coupleProfiles.displayName })
+          .from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+        
+        // Use inline notification since helper is defined later
+        const contracts = await db.select({
+          vendorId: coupleVendorContracts.vendorId,
+          notifyOnSpeechChanges: coupleVendorContracts.notifyOnSpeechChanges,
+        })
+          .from(coupleVendorContracts)
+          .where(and(
+            eq(coupleVendorContracts.coupleId, coupleId),
+            eq(coupleVendorContracts.status, "active")
+          ));
+        
+        for (const contract of contracts) {
+          if (contract.notifyOnSpeechChanges) {
+            await db.insert(notifications).values({
+              recipientType: "vendor",
+              recipientId: contract.vendorId,
+              type: "speech_changed",
+              title: "Talelisteendring",
+              body: `${couple?.displayName || 'Brudeparet'} har lagt til en ny tale av "${validatedData.speakerName}".`,
+              actorType: "couple",
+              actorId: coupleId,
+              actorName: couple?.displayName || 'Brudeparet',
+            });
+          }
+        }
+      }
+      
       res.status(201).json(newSpeech);
     } catch (error) {
       console.error("Error creating speech:", error);
@@ -1589,6 +1622,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/speeches/:id", async (req: Request, res: Response) => {
     try {
+      const coupleId = await checkCoupleAuth(req, res);
       const { id } = req.params;
       const { speakerName, role, durationMinutes, sortOrder, notes, scheduledTime } = req.body;
 
@@ -1609,6 +1643,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Tale ikke funnet" });
       }
 
+      // Notify vendors if couple is authenticated
+      if (coupleId && updated.coupleId) {
+        const [couple] = await db.select({ displayName: coupleProfiles.displayName })
+          .from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+        
+        const contracts = await db.select({
+          vendorId: coupleVendorContracts.vendorId,
+          notifyOnSpeechChanges: coupleVendorContracts.notifyOnSpeechChanges,
+        })
+          .from(coupleVendorContracts)
+          .where(and(
+            eq(coupleVendorContracts.coupleId, coupleId),
+            eq(coupleVendorContracts.status, "active")
+          ));
+        
+        for (const contract of contracts) {
+          if (contract.notifyOnSpeechChanges) {
+            await db.insert(notifications).values({
+              recipientType: "vendor",
+              recipientId: contract.vendorId,
+              type: "speech_changed",
+              title: "Talelisteendring",
+              body: `${couple?.displayName || 'Brudeparet'} har endret talen av "${updated.speakerName}".`,
+              actorType: "couple",
+              actorId: coupleId,
+              actorName: couple?.displayName || 'Brudeparet',
+            });
+          }
+        }
+      }
+
       res.json(updated);
     } catch (error) {
       console.error("Error updating speech:", error);
@@ -1618,13 +1683,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/speeches/:id", async (req: Request, res: Response) => {
     try {
+      const coupleId = await checkCoupleAuth(req, res);
       const { id } = req.params;
+      
+      // Get speech info before deleting for notification
+      const [speechToDelete] = await db.select()
+        .from(speeches)
+        .where(eq(speeches.id, id));
+      
       const [deleted] = await db.delete(speeches)
         .where(eq(speeches.id, id))
         .returning();
 
       if (!deleted) {
         return res.status(404).json({ error: "Tale ikke funnet" });
+      }
+
+      // Notify vendors if couple is authenticated
+      if (coupleId && speechToDelete?.coupleId) {
+        const [couple] = await db.select({ displayName: coupleProfiles.displayName })
+          .from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+        
+        const contracts = await db.select({
+          vendorId: coupleVendorContracts.vendorId,
+          notifyOnSpeechChanges: coupleVendorContracts.notifyOnSpeechChanges,
+        })
+          .from(coupleVendorContracts)
+          .where(and(
+            eq(coupleVendorContracts.coupleId, coupleId),
+            eq(coupleVendorContracts.status, "active")
+          ));
+        
+        for (const contract of contracts) {
+          if (contract.notifyOnSpeechChanges) {
+            await db.insert(notifications).values({
+              recipientType: "vendor",
+              recipientId: contract.vendorId,
+              type: "speech_changed",
+              title: "Talelisteendring",
+              body: `${couple?.displayName || 'Brudeparet'} har fjernet talen av "${speechToDelete.speakerName}".`,
+              actorType: "couple",
+              actorId: coupleId,
+              actorName: couple?.displayName || 'Brudeparet',
+            });
+          }
+        }
       }
 
       res.json({ success: true });
@@ -2742,6 +2845,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           roleLabel: invitation.roleLabel,
           canViewSpeeches: invitation.canViewSpeeches,
           canViewSchedule: invitation.canViewSchedule,
+          canEditSpeeches: invitation.canEditSpeeches,
+          canEditSchedule: invitation.canEditSchedule,
         },
         couple,
         speeches: speechList,
@@ -2799,6 +2904,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Helper to notify vendors about changes (defined early for use in couple endpoints)
+  async function notifyVendorsOfChangeInternal(coupleId: string, changeType: 'schedule' | 'speech', actorName: string, description: string) {
+    try {
+      const contracts = await db.select({
+        vendorId: coupleVendorContracts.vendorId,
+        notifyOnScheduleChanges: coupleVendorContracts.notifyOnScheduleChanges,
+        notifyOnSpeechChanges: coupleVendorContracts.notifyOnSpeechChanges,
+      })
+        .from(coupleVendorContracts)
+        .where(and(
+          eq(coupleVendorContracts.coupleId, coupleId),
+          eq(coupleVendorContracts.status, "active")
+        ));
+      
+      const [couple] = await db.select({
+        displayName: coupleProfiles.displayName,
+      }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+      
+      for (const contract of contracts) {
+        const shouldNotify = changeType === 'schedule' 
+          ? contract.notifyOnScheduleChanges 
+          : contract.notifyOnSpeechChanges;
+        
+        if (shouldNotify) {
+          await db.insert(notifications).values({
+            recipientType: "vendor",
+            recipientId: contract.vendorId,
+            type: changeType === 'schedule' ? "schedule_changed" : "speech_changed",
+            title: changeType === 'schedule' ? "Programendring" : "Talelisteendring",
+            body: `${actorName} har endret ${changeType === 'schedule' ? 'bryllupsprogrammet' : 'talelisten'} for ${couple?.displayName || 'brudeparet'}. ${description}`,
+            actorType: "couple",
+            actorId: coupleId,
+            actorName: actorName,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error notifying vendors:", error);
+    }
+  }
+
   // Create schedule event
   app.post("/api/couple/schedule-events", async (req: Request, res: Response) => {
     const coupleId = await checkCoupleAuth(req, res);
@@ -2817,6 +2963,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sortOrder: sortOrder || 0,
         })
         .returning();
+      
+      // Get couple display name for notification
+      const [couple] = await db.select({ displayName: coupleProfiles.displayName })
+        .from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+      
+      // Notify vendors
+      await notifyVendorsOfChangeInternal(coupleId, 'schedule', couple?.displayName || 'Brudeparet', `"${title}" ble lagt til kl. ${time}.`);
       
       res.status(201).json(event);
     } catch (error) {
@@ -2853,6 +3006,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Hendelse ikke funnet" });
       }
       
+      // Get couple display name for notification
+      const [couple] = await db.select({ displayName: coupleProfiles.displayName })
+        .from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+      
+      // Notify vendors
+      await notifyVendorsOfChangeInternal(coupleId, 'schedule', couple?.displayName || 'Brudeparet', `"${title}" ble endret.`);
+      
       res.json(updated);
     } catch (error) {
       console.error("Error updating schedule event:", error);
@@ -2868,16 +3028,743 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       
+      // Get event info for notification before deleting
+      const [event] = await db.select()
+        .from(scheduleEvents)
+        .where(and(
+          eq(scheduleEvents.id, id),
+          eq(scheduleEvents.coupleId, coupleId)
+        ));
+      
       await db.delete(scheduleEvents)
         .where(and(
           eq(scheduleEvents.id, id),
           eq(scheduleEvents.coupleId, coupleId)
         ));
       
+      // Notify vendors
+      if (event) {
+        const [couple] = await db.select({ displayName: coupleProfiles.displayName })
+          .from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+        await notifyVendorsOfChangeInternal(coupleId, 'schedule', couple?.displayName || 'Brudeparet', `"${event.title}" ble fjernet.`);
+      }
+      
       res.json({ message: "Hendelse slettet" });
     } catch (error) {
       console.error("Error deleting schedule event:", error);
       res.status(500).json({ error: "Kunne ikke slette hendelse" });
+    }
+  });
+
+  // ==========================================
+  // Coordinator Editing Endpoints
+  // ==========================================
+
+  // Helper to validate coordinator token and permissions
+  async function validateCoordinatorAccess(token: string, requiredPermission?: 'editSchedule' | 'editSpeeches') {
+    const [invitation] = await db.select()
+      .from(coordinatorInvitations)
+      .where(and(
+        eq(coordinatorInvitations.accessToken, token),
+        eq(coordinatorInvitations.status, "active")
+      ));
+    
+    if (!invitation) return null;
+    
+    // Check expiry
+    if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
+      return null;
+    }
+    
+    // Check required permission
+    if (requiredPermission === 'editSchedule' && !invitation.canEditSchedule) {
+      return null;
+    }
+    if (requiredPermission === 'editSpeeches' && !invitation.canEditSpeeches) {
+      return null;
+    }
+    
+    return invitation;
+  }
+
+  // Helper to notify vendors about changes
+  async function notifyVendorsOfChange(coupleId: string, changeType: 'schedule' | 'speech', actorName: string, description: string) {
+    try {
+      // Find all active contracts for this couple
+      const contracts = await db.select({
+        vendorId: coupleVendorContracts.vendorId,
+        notifyOnScheduleChanges: coupleVendorContracts.notifyOnScheduleChanges,
+        notifyOnSpeechChanges: coupleVendorContracts.notifyOnSpeechChanges,
+      })
+        .from(coupleVendorContracts)
+        .where(and(
+          eq(coupleVendorContracts.coupleId, coupleId),
+          eq(coupleVendorContracts.status, "active")
+        ));
+      
+      // Get couple info for notification
+      const [couple] = await db.select({
+        displayName: coupleProfiles.displayName,
+      }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+      
+      // Create notifications for relevant vendors
+      for (const contract of contracts) {
+        const shouldNotify = changeType === 'schedule' 
+          ? contract.notifyOnScheduleChanges 
+          : contract.notifyOnSpeechChanges;
+        
+        if (shouldNotify) {
+          await db.insert(notifications).values({
+            recipientType: "vendor",
+            recipientId: contract.vendorId,
+            type: changeType === 'schedule' ? "schedule_changed" : "speech_changed",
+            title: changeType === 'schedule' ? "Programendring" : "Talelisteendring",
+            body: `${actorName} har endret ${changeType === 'schedule' ? 'bryllupsprogrammet' : 'talelisten'} for ${couple?.displayName || 'brudeparet'}. ${description}`,
+            actorType: "couple",
+            actorId: coupleId,
+            actorName: actorName,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error notifying vendors:", error);
+    }
+  }
+
+  // Coordinator: Update schedule event
+  app.patch("/api/coordinator/:token/schedule-events/:id", async (req: Request, res: Response) => {
+    try {
+      const { token, id } = req.params;
+      const invitation = await validateCoordinatorAccess(token, 'editSchedule');
+      
+      if (!invitation) {
+        return res.status(403).json({ error: "Ingen tilgang til å redigere programmet" });
+      }
+      
+      const { time, title, icon, notes } = req.body;
+      
+      // Get previous value for activity log
+      const [previousEvent] = await db.select()
+        .from(scheduleEvents)
+        .where(and(
+          eq(scheduleEvents.id, id),
+          eq(scheduleEvents.coupleId, invitation.coupleId)
+        ));
+      
+      if (!previousEvent) {
+        return res.status(404).json({ error: "Hendelse ikke funnet" });
+      }
+      
+      const [updated] = await db.update(scheduleEvents)
+        .set({
+          time,
+          title,
+          icon,
+          notes,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(scheduleEvents.id, id),
+          eq(scheduleEvents.coupleId, invitation.coupleId)
+        ))
+        .returning();
+      
+      // Log activity
+      await db.insert(activityLogs).values({
+        coupleId: invitation.coupleId,
+        actorType: "coordinator",
+        actorId: invitation.id,
+        actorName: invitation.name,
+        action: "updated",
+        entityType: "schedule_event",
+        entityId: id,
+        previousValue: JSON.stringify(previousEvent),
+        newValue: JSON.stringify(updated),
+      });
+      
+      // Notify vendors
+      await notifyVendorsOfChange(
+        invitation.coupleId,
+        'schedule',
+        invitation.name,
+        `"${title}" ble endret.`
+      );
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating schedule event:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere hendelse" });
+    }
+  });
+
+  // Coordinator: Create schedule event
+  app.post("/api/coordinator/:token/schedule-events", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const invitation = await validateCoordinatorAccess(token, 'editSchedule');
+      
+      if (!invitation) {
+        return res.status(403).json({ error: "Ingen tilgang til å redigere programmet" });
+      }
+      
+      const { time, title, icon, notes, sortOrder } = req.body;
+      
+      const [event] = await db.insert(scheduleEvents)
+        .values({
+          coupleId: invitation.coupleId,
+          time,
+          title,
+          icon: icon || "star",
+          notes,
+          sortOrder: sortOrder || 0,
+        })
+        .returning();
+      
+      // Log activity
+      await db.insert(activityLogs).values({
+        coupleId: invitation.coupleId,
+        actorType: "coordinator",
+        actorId: invitation.id,
+        actorName: invitation.name,
+        action: "created",
+        entityType: "schedule_event",
+        entityId: event.id,
+        newValue: JSON.stringify(event),
+      });
+      
+      // Notify vendors
+      await notifyVendorsOfChange(
+        invitation.coupleId,
+        'schedule',
+        invitation.name,
+        `"${title}" ble lagt til kl. ${time}.`
+      );
+      
+      res.status(201).json(event);
+    } catch (error) {
+      console.error("Error creating schedule event:", error);
+      res.status(500).json({ error: "Kunne ikke opprette hendelse" });
+    }
+  });
+
+  // Coordinator: Delete schedule event
+  app.delete("/api/coordinator/:token/schedule-events/:id", async (req: Request, res: Response) => {
+    try {
+      const { token, id } = req.params;
+      const invitation = await validateCoordinatorAccess(token, 'editSchedule');
+      
+      if (!invitation) {
+        return res.status(403).json({ error: "Ingen tilgang til å redigere programmet" });
+      }
+      
+      // Get event for logging
+      const [event] = await db.select()
+        .from(scheduleEvents)
+        .where(and(
+          eq(scheduleEvents.id, id),
+          eq(scheduleEvents.coupleId, invitation.coupleId)
+        ));
+      
+      if (!event) {
+        return res.status(404).json({ error: "Hendelse ikke funnet" });
+      }
+      
+      await db.delete(scheduleEvents)
+        .where(and(
+          eq(scheduleEvents.id, id),
+          eq(scheduleEvents.coupleId, invitation.coupleId)
+        ));
+      
+      // Log activity
+      await db.insert(activityLogs).values({
+        coupleId: invitation.coupleId,
+        actorType: "coordinator",
+        actorId: invitation.id,
+        actorName: invitation.name,
+        action: "deleted",
+        entityType: "schedule_event",
+        entityId: id,
+        previousValue: JSON.stringify(event),
+      });
+      
+      // Notify vendors
+      await notifyVendorsOfChange(
+        invitation.coupleId,
+        'schedule',
+        invitation.name,
+        `"${event.title}" ble fjernet.`
+      );
+      
+      res.json({ message: "Hendelse slettet" });
+    } catch (error) {
+      console.error("Error deleting schedule event:", error);
+      res.status(500).json({ error: "Kunne ikke slette hendelse" });
+    }
+  });
+
+  // Coordinator: Update speech
+  app.patch("/api/coordinator/:token/speeches/:id", async (req: Request, res: Response) => {
+    try {
+      const { token, id } = req.params;
+      const invitation = await validateCoordinatorAccess(token, 'editSpeeches');
+      
+      if (!invitation) {
+        return res.status(403).json({ error: "Ingen tilgang til å redigere talelisten" });
+      }
+      
+      const { speakerName, role, durationMinutes, notes, sortOrder, scheduledTime } = req.body;
+      
+      // Get previous value
+      const [previousSpeech] = await db.select()
+        .from(speeches)
+        .where(and(
+          eq(speeches.id, id),
+          eq(speeches.coupleId, invitation.coupleId)
+        ));
+      
+      if (!previousSpeech) {
+        return res.status(404).json({ error: "Tale ikke funnet" });
+      }
+      
+      const [updated] = await db.update(speeches)
+        .set({
+          speakerName,
+          role,
+          durationMinutes,
+          notes,
+          sortOrder,
+          scheduledTime,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(speeches.id, id),
+          eq(speeches.coupleId, invitation.coupleId)
+        ))
+        .returning();
+      
+      // Log activity
+      await db.insert(activityLogs).values({
+        coupleId: invitation.coupleId,
+        actorType: "coordinator",
+        actorId: invitation.id,
+        actorName: invitation.name,
+        action: "updated",
+        entityType: "speech",
+        entityId: id,
+        previousValue: JSON.stringify(previousSpeech),
+        newValue: JSON.stringify(updated),
+      });
+      
+      // Notify vendors
+      await notifyVendorsOfChange(
+        invitation.coupleId,
+        'speech',
+        invitation.name,
+        `Tale av "${speakerName}" ble endret.`
+      );
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating speech:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere tale" });
+    }
+  });
+
+  // Coordinator: Create speech
+  app.post("/api/coordinator/:token/speeches", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const invitation = await validateCoordinatorAccess(token, 'editSpeeches');
+      
+      if (!invitation) {
+        return res.status(403).json({ error: "Ingen tilgang til å redigere talelisten" });
+      }
+      
+      const { speakerName, role, durationMinutes, notes, sortOrder, scheduledTime } = req.body;
+      
+      const [speech] = await db.insert(speeches)
+        .values({
+          coupleId: invitation.coupleId,
+          speakerName,
+          role,
+          durationMinutes: durationMinutes || 5,
+          notes,
+          sortOrder: sortOrder || 0,
+          scheduledTime,
+        })
+        .returning();
+      
+      // Log activity
+      await db.insert(activityLogs).values({
+        coupleId: invitation.coupleId,
+        actorType: "coordinator",
+        actorId: invitation.id,
+        actorName: invitation.name,
+        action: "created",
+        entityType: "speech",
+        entityId: speech.id,
+        newValue: JSON.stringify(speech),
+      });
+      
+      // Notify vendors
+      await notifyVendorsOfChange(
+        invitation.coupleId,
+        'speech',
+        invitation.name,
+        `Tale av "${speakerName}" ble lagt til.`
+      );
+      
+      res.status(201).json(speech);
+    } catch (error) {
+      console.error("Error creating speech:", error);
+      res.status(500).json({ error: "Kunne ikke opprette tale" });
+    }
+  });
+
+  // Coordinator: Delete speech
+  app.delete("/api/coordinator/:token/speeches/:id", async (req: Request, res: Response) => {
+    try {
+      const { token, id } = req.params;
+      const invitation = await validateCoordinatorAccess(token, 'editSpeeches');
+      
+      if (!invitation) {
+        return res.status(403).json({ error: "Ingen tilgang til å redigere talelisten" });
+      }
+      
+      // Get speech for logging
+      const [speech] = await db.select()
+        .from(speeches)
+        .where(and(
+          eq(speeches.id, id),
+          eq(speeches.coupleId, invitation.coupleId)
+        ));
+      
+      if (!speech) {
+        return res.status(404).json({ error: "Tale ikke funnet" });
+      }
+      
+      await db.delete(speeches)
+        .where(and(
+          eq(speeches.id, id),
+          eq(speeches.coupleId, invitation.coupleId)
+        ));
+      
+      // Log activity
+      await db.insert(activityLogs).values({
+        coupleId: invitation.coupleId,
+        actorType: "coordinator",
+        actorId: invitation.id,
+        actorName: invitation.name,
+        action: "deleted",
+        entityType: "speech",
+        entityId: id,
+        previousValue: JSON.stringify(speech),
+      });
+      
+      // Notify vendors
+      await notifyVendorsOfChange(
+        invitation.coupleId,
+        'speech',
+        invitation.name,
+        `Tale av "${speech.speakerName}" ble fjernet.`
+      );
+      
+      res.json({ message: "Tale slettet" });
+    } catch (error) {
+      console.error("Error deleting speech:", error);
+      res.status(500).json({ error: "Kunne ikke slette tale" });
+    }
+  });
+
+  // ==========================================
+  // Vendor Contract Endpoints
+  // ==========================================
+
+  // Get couple's vendor contracts
+  app.get("/api/couple/vendor-contracts", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const contracts = await db.select({
+        id: coupleVendorContracts.id,
+        vendorId: coupleVendorContracts.vendorId,
+        vendorRole: coupleVendorContracts.vendorRole,
+        status: coupleVendorContracts.status,
+        notifyOnScheduleChanges: coupleVendorContracts.notifyOnScheduleChanges,
+        notifyOnSpeechChanges: coupleVendorContracts.notifyOnSpeechChanges,
+        canViewSchedule: coupleVendorContracts.canViewSchedule,
+        canViewSpeeches: coupleVendorContracts.canViewSpeeches,
+        createdAt: coupleVendorContracts.createdAt,
+        vendorName: vendors.businessName,
+        vendorCategory: vendorCategories.name,
+      })
+        .from(coupleVendorContracts)
+        .leftJoin(vendors, eq(coupleVendorContracts.vendorId, vendors.id))
+        .leftJoin(vendorCategories, eq(vendors.categoryId, vendorCategories.id))
+        .where(eq(coupleVendorContracts.coupleId, coupleId))
+        .orderBy(desc(coupleVendorContracts.createdAt));
+      
+      res.json(contracts);
+    } catch (error) {
+      console.error("Error fetching vendor contracts:", error);
+      res.status(500).json({ error: "Kunne ikke hente leverandøravtaler" });
+    }
+  });
+
+  // Create vendor contract (when offer is accepted)
+  app.post("/api/couple/vendor-contracts", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { vendorId, offerId, vendorRole, notifyOnScheduleChanges, notifyOnSpeechChanges, canViewSchedule, canViewSpeeches } = req.body;
+      
+      // Check if contract already exists
+      const [existing] = await db.select()
+        .from(coupleVendorContracts)
+        .where(and(
+          eq(coupleVendorContracts.coupleId, coupleId),
+          eq(coupleVendorContracts.vendorId, vendorId),
+          eq(coupleVendorContracts.status, "active")
+        ));
+      
+      if (existing) {
+        return res.status(400).json({ error: "Avtale eksisterer allerede" });
+      }
+      
+      const [contract] = await db.insert(coupleVendorContracts)
+        .values({
+          coupleId,
+          vendorId,
+          offerId,
+          vendorRole,
+          notifyOnScheduleChanges: notifyOnScheduleChanges ?? true,
+          notifyOnSpeechChanges: notifyOnSpeechChanges ?? true,
+          canViewSchedule: canViewSchedule ?? true,
+          canViewSpeeches: canViewSpeeches ?? false,
+        })
+        .returning();
+      
+      // Notify vendor about new contract
+      const [couple] = await db.select({
+        displayName: coupleProfiles.displayName,
+      }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+      
+      await db.insert(notifications).values({
+        recipientType: "vendor",
+        recipientId: vendorId,
+        type: "contract_created",
+        title: "Ny avtale",
+        body: `${couple?.displayName || 'Et brudepar'} har opprettet en avtale med deg.`,
+        actorType: "couple",
+        actorId: coupleId,
+      });
+      
+      res.status(201).json(contract);
+    } catch (error) {
+      console.error("Error creating vendor contract:", error);
+      res.status(500).json({ error: "Kunne ikke opprette avtale" });
+    }
+  });
+
+  // Update vendor contract settings
+  app.patch("/api/couple/vendor-contracts/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      const { notifyOnScheduleChanges, notifyOnSpeechChanges, canViewSchedule, canViewSpeeches, status } = req.body;
+      
+      const [updated] = await db.update(coupleVendorContracts)
+        .set({
+          notifyOnScheduleChanges,
+          notifyOnSpeechChanges,
+          canViewSchedule,
+          canViewSpeeches,
+          status,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(coupleVendorContracts.id, id),
+          eq(coupleVendorContracts.coupleId, coupleId)
+        ))
+        .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Avtale ikke funnet" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating vendor contract:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere avtale" });
+    }
+  });
+
+  // ==========================================
+  // Notification Endpoints
+  // ==========================================
+
+  // Get vendor notifications
+  app.get("/api/vendor/notifications", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const vendorNotifications = await db.select()
+        .from(notifications)
+        .where(and(
+          eq(notifications.recipientType, "vendor"),
+          eq(notifications.recipientId, vendorId)
+        ))
+        .orderBy(desc(notifications.createdAt))
+        .limit(50);
+      
+      res.json(vendorNotifications);
+    } catch (error) {
+      console.error("Error fetching vendor notifications:", error);
+      res.status(500).json({ error: "Kunne ikke hente varsler" });
+    }
+  });
+
+  // Mark notification as read
+  app.patch("/api/vendor/notifications/:id/read", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+      
+      await db.update(notifications)
+        .set({ readAt: new Date() })
+        .where(and(
+          eq(notifications.id, id),
+          eq(notifications.recipientId, vendorId)
+        ));
+      
+      res.json({ message: "Varsel markert som lest" });
+    } catch (error) {
+      console.error("Error marking notification read:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere varsel" });
+    }
+  });
+
+  // Get couple notifications
+  app.get("/api/couple/notifications", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const coupleNotifications = await db.select()
+        .from(notifications)
+        .where(and(
+          eq(notifications.recipientType, "couple"),
+          eq(notifications.recipientId, coupleId)
+        ))
+        .orderBy(desc(notifications.createdAt))
+        .limit(50);
+      
+      res.json(coupleNotifications);
+    } catch (error) {
+      console.error("Error fetching couple notifications:", error);
+      res.status(500).json({ error: "Kunne ikke hente varsler" });
+    }
+  });
+
+  // Get unread notification count
+  app.get("/api/vendor/notifications/unread-count", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const [result] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(notifications)
+        .where(and(
+          eq(notifications.recipientType, "vendor"),
+          eq(notifications.recipientId, vendorId),
+          sql`${notifications.readAt} IS NULL`
+        ));
+      
+      res.json({ count: result?.count || 0 });
+    } catch (error) {
+      console.error("Error fetching unread count:", error);
+      res.status(500).json({ error: "Kunne ikke hente antall uleste" });
+    }
+  });
+
+  // Get vendor's view of couple's schedule (through contract)
+  app.get("/api/vendor/couple-schedule/:coupleId", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { coupleId } = req.params;
+      
+      // Check if vendor has contract with this couple
+      const [contract] = await db.select()
+        .from(coupleVendorContracts)
+        .where(and(
+          eq(coupleVendorContracts.coupleId, coupleId),
+          eq(coupleVendorContracts.vendorId, vendorId),
+          eq(coupleVendorContracts.status, "active"),
+          eq(coupleVendorContracts.canViewSchedule, true)
+        ));
+      
+      if (!contract) {
+        return res.status(403).json({ error: "Ingen tilgang til dette programmet" });
+      }
+      
+      // Get couple info
+      const [couple] = await db.select({
+        displayName: coupleProfiles.displayName,
+        weddingDate: coupleProfiles.weddingDate,
+      }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+      
+      // Get schedule
+      const schedule = await db.select()
+        .from(scheduleEvents)
+        .where(eq(scheduleEvents.coupleId, coupleId))
+        .orderBy(scheduleEvents.time);
+      
+      // Get speeches if allowed
+      let speechList: any[] = [];
+      if (contract.canViewSpeeches) {
+        speechList = await db.select()
+          .from(speeches)
+          .where(eq(speeches.coupleId, coupleId))
+          .orderBy(speeches.sortOrder);
+      }
+      
+      res.json({
+        couple,
+        schedule,
+        speeches: speechList,
+        canViewSpeeches: contract.canViewSpeeches,
+      });
+    } catch (error) {
+      console.error("Error fetching couple schedule for vendor:", error);
+      res.status(500).json({ error: "Kunne ikke hente program" });
+    }
+  });
+
+  // Get activity log for couple (to see who changed what)
+  app.get("/api/couple/activity-log", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const logs = await db.select()
+        .from(activityLogs)
+        .where(eq(activityLogs.coupleId, coupleId))
+        .orderBy(desc(activityLogs.createdAt))
+        .limit(50);
+      
+      res.json(logs);
+    } catch (error) {
+      console.error("Error fetching activity log:", error);
+      res.status(500).json({ error: "Kunne ikke hente aktivitetslogg" });
     }
   });
 
