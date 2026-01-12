@@ -24,7 +24,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { GuestsStackParamList } from "@/navigation/GuestsStackNavigator";
 import { getGuests, saveGuests, generateId } from "@/lib/storage";
-import { Guest } from "@/lib/types";
+import { Guest, GUEST_CATEGORIES } from "@/lib/types";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import emptyGuestsImage from "../../assets/images/empty-guests.png";
 
 type NavigationProp = NativeStackNavigationProp<GuestsStackParamList>;
@@ -52,8 +53,30 @@ export default function GuestsScreen() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newName, setNewName] = useState("");
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
+  
+  const [formName, setFormName] = useState("");
+  const [formCategory, setFormCategory] = useState<Guest["category"]>("other");
+  const [formPhone, setFormPhone] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formDietary, setFormDietary] = useState("");
+  const [formAllergies, setFormAllergies] = useState("");
+  const [formPlusOne, setFormPlusOne] = useState(false);
+  const [formPlusOneName, setFormPlusOneName] = useState("");
+  const [formNotes, setFormNotes] = useState("");
+
+  const resetForm = () => {
+    setFormName("");
+    setFormCategory("other");
+    setFormPhone("");
+    setFormEmail("");
+    setFormDietary("");
+    setFormAllergies("");
+    setFormPlusOne(false);
+    setFormPlusOneName("");
+    setFormNotes("");
+    setEditingGuest(null);
+  };
 
   const loadData = useCallback(async () => {
     const data = await getGuests();
@@ -73,7 +96,7 @@ export default function GuestsScreen() {
   const pendingCount = guests.filter((g) => g.status === "pending").length;
 
   const handleAddGuest = async () => {
-    if (!newName.trim()) {
+    if (!formName.trim()) {
       Alert.alert("Feil", "Vennligst skriv inn et navn");
       return;
     }
@@ -82,13 +105,34 @@ export default function GuestsScreen() {
 
     if (editingGuest) {
       updatedGuests = guests.map((g) =>
-        g.id === editingGuest.id ? { ...g, name: newName.trim() } : g
+        g.id === editingGuest.id
+          ? {
+              ...g,
+              name: formName.trim(),
+              category: formCategory,
+              phone: formPhone.trim() || undefined,
+              email: formEmail.trim() || undefined,
+              dietaryRequirements: formDietary.trim() || undefined,
+              allergies: formAllergies.trim() || undefined,
+              plusOne: formPlusOne,
+              plusOneName: formPlusOneName.trim() || undefined,
+              notes: formNotes.trim() || undefined,
+            }
+          : g
       );
     } else {
       const newGuest: Guest = {
         id: generateId(),
-        name: newName.trim(),
+        name: formName.trim(),
         status: "pending",
+        category: formCategory,
+        phone: formPhone.trim() || undefined,
+        email: formEmail.trim() || undefined,
+        dietaryRequirements: formDietary.trim() || undefined,
+        allergies: formAllergies.trim() || undefined,
+        plusOne: formPlusOne,
+        plusOneName: formPlusOneName.trim() || undefined,
+        notes: formNotes.trim() || undefined,
       };
       updatedGuests = [...guests, newGuest];
     }
@@ -96,15 +140,22 @@ export default function GuestsScreen() {
     setGuests(updatedGuests);
     await saveGuests(updatedGuests);
 
-    setNewName("");
-    setEditingGuest(null);
+    resetForm();
     setShowAddForm(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const handleEditGuest = (guest: Guest) => {
     setEditingGuest(guest);
-    setNewName(guest.name);
+    setFormName(guest.name);
+    setFormCategory(guest.category || "other");
+    setFormPhone(guest.phone || "");
+    setFormEmail(guest.email || "");
+    setFormDietary(guest.dietaryRequirements || "");
+    setFormAllergies(guest.allergies || "");
+    setFormPlusOne(guest.plusOne || false);
+    setFormPlusOneName(guest.plusOneName || "");
+    setFormNotes(guest.notes || "");
     setShowAddForm(true);
   };
 
@@ -137,6 +188,11 @@ export default function GuestsScreen() {
     ]);
   };
 
+  const getCategoryLabel = (category?: Guest["category"]) => {
+    const cat = GUEST_CATEGORIES.find((c) => c.value === category);
+    return cat?.label || "";
+  };
+
   const renderGuestItem = ({ item, index }: { item: Guest; index: number }) => (
     <Animated.View entering={FadeInRight.delay(index * 50).duration(300)}>
       <SwipeableRow
@@ -153,16 +209,59 @@ export default function GuestsScreen() {
           ]}
         >
           <View
-            style={[styles.avatar, { backgroundColor: theme.backgroundSecondary }]}
+            style={[
+              styles.avatar,
+              {
+                backgroundColor: item.category === "reserved" ? Colors.dark.accent + "30" : theme.backgroundSecondary,
+              },
+            ]}
           >
-            <Feather name="user" size={18} color={theme.textSecondary} />
+            <Feather
+              name={item.category === "reserved" ? "star" : "user"}
+              size={18}
+              color={item.category === "reserved" ? Colors.dark.accent : theme.textSecondary}
+            />
           </View>
           <View style={styles.guestInfo}>
-            <ThemedText style={styles.guestName}>{item.name}</ThemedText>
-            {item.tableNumber ? (
-              <ThemedText style={[styles.tableNumber, { color: theme.textSecondary }]}>
-                Bord {item.tableNumber}
-              </ThemedText>
+            <View style={styles.guestNameRow}>
+              <ThemedText style={styles.guestName}>{item.name}</ThemedText>
+              {item.plusOne ? (
+                <View style={[styles.plusOneBadge, { backgroundColor: theme.backgroundSecondary }]}>
+                  <ThemedText style={[styles.plusOneText, { color: theme.textSecondary }]}>+1</ThemedText>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.guestMeta}>
+              {item.category ? (
+                <ThemedText style={[styles.categoryLabel, { color: item.category === "reserved" ? Colors.dark.accent : theme.textSecondary }]}>
+                  {getCategoryLabel(item.category)}
+                </ThemedText>
+              ) : null}
+              {item.tableNumber ? (
+                <ThemedText style={[styles.tableNumber, { color: theme.textSecondary }]}>
+                  • Bord {item.tableNumber}
+                </ThemedText>
+              ) : null}
+            </View>
+            {item.dietaryRequirements || item.allergies ? (
+              <View style={styles.dietaryRow}>
+                {item.dietaryRequirements ? (
+                  <View style={[styles.dietaryBadge, { backgroundColor: "#4CAF5020" }]}>
+                    <Feather name="coffee" size={10} color="#4CAF50" />
+                    <ThemedText style={[styles.dietaryText, { color: "#4CAF50" }]}>
+                      {item.dietaryRequirements}
+                    </ThemedText>
+                  </View>
+                ) : null}
+                {item.allergies ? (
+                  <View style={[styles.dietaryBadge, { backgroundColor: "#EF535020" }]}>
+                    <Feather name="alert-circle" size={10} color="#EF5350" />
+                    <ThemedText style={[styles.dietaryText, { color: "#EF5350" }]}>
+                      {item.allergies}
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </View>
             ) : null}
           </View>
           <View
@@ -265,23 +364,144 @@ export default function GuestsScreen() {
           <ThemedText type="h4" style={styles.formTitle}>
             {editingGuest ? "Endre gjest" : "Legg til gjest"}
           </ThemedText>
+          
           <TextInput
             style={[
               styles.addInput,
               { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
             ]}
-            placeholder="Navn på gjest"
+            placeholder="Navn *"
             placeholderTextColor={theme.textMuted}
-            value={newName}
-            onChangeText={setNewName}
+            value={formName}
+            onChangeText={setFormName}
             autoFocus
           />
+
+          <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Kategori</ThemedText>
+          <View style={styles.categoryPicker}>
+            {GUEST_CATEGORIES.map((cat) => (
+              <Pressable
+                key={cat.value}
+                onPress={() => setFormCategory(cat.value as Guest["category"])}
+                style={[
+                  styles.categoryChip,
+                  {
+                    backgroundColor: formCategory === cat.value ? Colors.dark.accent : theme.backgroundSecondary,
+                  },
+                ]}
+              >
+                <ThemedText
+                  style={[
+                    styles.categoryChipText,
+                    { color: formCategory === cat.value ? "#1A1A1A" : theme.textSecondary },
+                  ]}
+                >
+                  {cat.label}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </View>
+
+          <View style={styles.inputRow}>
+            <TextInput
+              style={[
+                styles.addInput,
+                styles.halfInput,
+                { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
+              ]}
+              placeholder="Telefon"
+              placeholderTextColor={theme.textMuted}
+              value={formPhone}
+              onChangeText={setFormPhone}
+              keyboardType="phone-pad"
+            />
+            <TextInput
+              style={[
+                styles.addInput,
+                styles.halfInput,
+                { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
+              ]}
+              placeholder="E-post"
+              placeholderTextColor={theme.textMuted}
+              value={formEmail}
+              onChangeText={setFormEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
+
+          <TextInput
+            style={[
+              styles.addInput,
+              { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
+            ]}
+            placeholder="Kosthold / preferanser"
+            placeholderTextColor={theme.textMuted}
+            value={formDietary}
+            onChangeText={setFormDietary}
+          />
+
+          <TextInput
+            style={[
+              styles.addInput,
+              { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
+            ]}
+            placeholder="Allergier"
+            placeholderTextColor={theme.textMuted}
+            value={formAllergies}
+            onChangeText={setFormAllergies}
+          />
+
+          <Pressable
+            onPress={() => setFormPlusOne(!formPlusOne)}
+            style={[styles.checkboxRow, { borderColor: theme.border }]}
+          >
+            <View
+              style={[
+                styles.checkbox,
+                {
+                  backgroundColor: formPlusOne ? Colors.dark.accent : "transparent",
+                  borderColor: formPlusOne ? Colors.dark.accent : theme.border,
+                },
+              ]}
+            >
+              {formPlusOne ? <Feather name="check" size={14} color="#1A1A1A" /> : null}
+            </View>
+            <ThemedText style={{ color: theme.text }}>+1 (Følge)</ThemedText>
+          </Pressable>
+
+          {formPlusOne ? (
+            <TextInput
+              style={[
+                styles.addInput,
+                { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
+              ]}
+              placeholder="Navn på følge"
+              placeholderTextColor={theme.textMuted}
+              value={formPlusOneName}
+              onChangeText={setFormPlusOneName}
+            />
+          ) : null}
+
+          <TextInput
+            style={[
+              styles.addInput,
+              styles.notesInput,
+              { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
+            ]}
+            placeholder="Notater"
+            placeholderTextColor={theme.textMuted}
+            value={formNotes}
+            onChangeText={setFormNotes}
+            multiline
+            numberOfLines={3}
+          />
+
           <View style={styles.addFormButtons}>
             <Pressable
               onPress={() => {
                 setShowAddForm(false);
-                setEditingGuest(null);
-                setNewName("");
+                resetForm();
               }}
               style={[styles.cancelButton, { borderColor: theme.border }]}
             >
@@ -435,6 +655,51 @@ const styles = StyleSheet.create({
   formTitle: {
     marginBottom: Spacing.md,
   },
+  inputLabel: {
+    fontSize: 13,
+    marginBottom: Spacing.xs,
+  },
+  categoryPicker: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  categoryChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  inputRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  halfInput: {
+    flex: 1,
+  },
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+    gap: Spacing.sm,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  notesInput: {
+    height: 80,
+    textAlignVertical: "top",
+    paddingTop: Spacing.sm,
+  },
   addInput: {
     height: Spacing.inputHeight,
     borderRadius: BorderRadius.sm,
@@ -476,13 +741,53 @@ const styles = StyleSheet.create({
   guestInfo: {
     flex: 1,
   },
+  guestNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
   guestName: {
     fontSize: 16,
     fontWeight: "500",
   },
-  tableNumber: {
-    fontSize: 13,
+  plusOneBadge: {
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+  },
+  plusOneText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  guestMeta: {
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 2,
+  },
+  categoryLabel: {
+    fontSize: 12,
+  },
+  tableNumber: {
+    fontSize: 12,
+    marginLeft: Spacing.xs,
+  },
+  dietaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.xs,
+    marginTop: 4,
+  },
+  dietaryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+    gap: 3,
+  },
+  dietaryText: {
+    fontSize: 10,
+    fontWeight: "500",
   },
   statusBadge: {
     flexDirection: "row",

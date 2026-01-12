@@ -16,7 +16,24 @@ export interface Guest {
   name: string;
   status: "confirmed" | "pending" | "declined";
   tableNumber?: number;
+  category?: "bride_family" | "groom_family" | "friends" | "colleagues" | "reserved" | "other";
+  email?: string;
+  phone?: string;
+  dietaryRequirements?: string;
+  allergies?: string;
+  plusOne?: boolean;
+  plusOneName?: string;
+  notes?: string;
 }
+
+export const GUEST_CATEGORIES = [
+  { value: "bride_family", label: "Brudens familie" },
+  { value: "groom_family", label: "Brudgommens familie" },
+  { value: "friends", label: "Venner" },
+  { value: "colleagues", label: "Kolleger" },
+  { value: "reserved", label: "Reservert" },
+  { value: "other", label: "Annet" },
+] as const;
 
 export interface Table {
   id: string;
