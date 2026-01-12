@@ -23,6 +23,8 @@ import ChatScreen from "@/screens/ChatScreen";
 import CoupleOffersScreen from "@/screens/CoupleOffersScreen";
 import CoordinatorSharingScreen from "@/screens/CoordinatorSharingScreen";
 import SpeechListScreen from "@/screens/SpeechListScreen";
+import VendorReviewsScreen from "@/screens/VendorReviewsScreen";
+import FeedbackScreen from "@/screens/FeedbackScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -49,6 +51,8 @@ export type PlanningStackParamList = {
   CoupleOffers: undefined;
   CoordinatorSharing: undefined;
   SpeechList: undefined;
+  VendorReviews: undefined;
+  Feedback: undefined;
 };
 
 const Stack = createNativeStackNavigator<PlanningStackParamList>();
@@ -169,6 +173,16 @@ export default function PlanningStackNavigator() {
         name="SpeechList"
         component={SpeechListScreen}
         options={{ title: "Talerliste" }}
+      />
+      <Stack.Screen
+        name="VendorReviews"
+        component={VendorReviewsScreen}
+        options={{ title: "Anmeldelser" }}
+      />
+      <Stack.Screen
+        name="Feedback"
+        component={FeedbackScreen}
+        options={{ title: "Tilbakemelding" }}
       />
     </Stack.Navigator>
   );
