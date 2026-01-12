@@ -128,6 +128,18 @@ export default function VendorsScreen() {
     }
   };
 
+  const handleVendorPress = (vendor: Vendor) => {
+    navigation.navigate("VendorDetail", {
+      vendorId: vendor.id,
+      vendorName: vendor.name,
+      vendorDescription: vendor.description,
+      vendorLocation: vendor.location,
+      vendorPriceRange: vendor.priceRange,
+      vendorCategory: vendor.category,
+    });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   const renderVendorItem = ({ item, index }: { item: Vendor; index: number }) => (
     <Animated.View entering={FadeInRight.delay(index * 50).duration(300)}>
       <Pressable
@@ -135,6 +147,7 @@ export default function VendorsScreen() {
           styles.vendorCard,
           { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
         ]}
+        onPress={() => handleVendorPress(item)}
       >
         <View style={[styles.vendorImage, { backgroundColor: theme.backgroundSecondary }]}>
           <Feather name={getCategoryIcon(item.category)} size={24} color={Colors.dark.accent} />

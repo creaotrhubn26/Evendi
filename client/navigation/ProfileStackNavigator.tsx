@@ -21,6 +21,8 @@ import OfferCreateScreen from "@/screens/OfferCreateScreen";
 import NotificationSettingsScreen from "@/screens/NotificationSettingsScreen";
 import AboutScreen from "@/screens/AboutScreen";
 import SharePartnerScreen from "@/screens/SharePartnerScreen";
+import VendorReviewsScreen from "@/screens/VendorReviewsScreen";
+import FeedbackScreen from "@/screens/FeedbackScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
 export type ProfileStackParamList = {
@@ -44,6 +46,8 @@ export type ProfileStackParamList = {
   NotificationSettings: undefined;
   About: undefined;
   SharePartner: undefined;
+  VendorReviews: undefined;
+  Feedback: undefined;
 };
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -191,6 +195,20 @@ export default function ProfileStackNavigator() {
         component={SharePartnerScreen}
         options={{
           title: "Del med partner",
+        }}
+      />
+      <Stack.Screen
+        name="VendorReviews"
+        component={VendorReviewsScreen}
+        options={{
+          title: "Anmeldelser",
+        }}
+      />
+      <Stack.Screen
+        name="Feedback"
+        component={FeedbackScreen}
+        options={{
+          title: "Tilbakemelding",
         }}
       />
     </Stack.Navigator>

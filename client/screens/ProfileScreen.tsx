@@ -300,6 +300,18 @@ export default function ProfileScreen() {
             theme={theme}
             onPress={() => navigation.navigate("AdminDashboard")}
           />
+          <MenuItem
+            icon="star"
+            label="Anmeld leverandører"
+            theme={theme}
+            onPress={() => navigation.navigate("VendorReviews")}
+          />
+          <MenuItem
+            icon="message-square"
+            label="Tilbakemelding til Wedflow"
+            theme={theme}
+            onPress={() => navigation.navigate("Feedback")}
+          />
         </View>
       </Animated.View>
     </ScrollView>

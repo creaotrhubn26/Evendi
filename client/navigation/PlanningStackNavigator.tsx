@@ -25,6 +25,7 @@ import CoordinatorSharingScreen from "@/screens/CoordinatorSharingScreen";
 import SpeechListScreen from "@/screens/SpeechListScreen";
 import VendorReviewsScreen from "@/screens/VendorReviewsScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
+import VendorDetailScreen from "@/screens/VendorDetailScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -53,6 +54,14 @@ export type PlanningStackParamList = {
   SpeechList: undefined;
   VendorReviews: undefined;
   Feedback: undefined;
+  VendorDetail: {
+    vendorId: string;
+    vendorName: string;
+    vendorDescription?: string;
+    vendorLocation?: string;
+    vendorPriceRange?: string;
+    vendorCategory: string;
+  };
 };
 
 const Stack = createNativeStackNavigator<PlanningStackParamList>();
@@ -183,6 +192,11 @@ export default function PlanningStackNavigator() {
         name="Feedback"
         component={FeedbackScreen}
         options={{ title: "Tilbakemelding" }}
+      />
+      <Stack.Screen
+        name="VendorDetail"
+        component={VendorDetailScreen}
+        options={({ route }) => ({ title: route.params.vendorName })}
       />
     </Stack.Navigator>
   );
