@@ -367,3 +367,37 @@ export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type CoupleLogin = z.infer<typeof coupleLoginSchema>;
 export type SendMessage = z.infer<typeof sendMessageSchema>;
+
+// Reminders for wedding planning tasks
+export const reminders = pgTable("reminders", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  reminderDate: timestamp("reminder_date").notNull(),
+  category: text("category").notNull().default("general"),
+  isCompleted: boolean("is_completed").default(false),
+  notificationId: text("notification_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertReminderSchema = createInsertSchema(reminders).omit({
+  id: true,
+  isCompleted: true,
+  notificationId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const createReminderSchema = z.object({
+  title: z.string().min(1, "Tittel er påkrevd"),
+  description: z.string().optional(),
+  reminderDate: z.string(),
+  category: z.enum(["general", "vendor", "budget", "guest", "planning"]).default("general"),
+});
+
+export type Reminder = typeof reminders.$inferSelect;
+export type InsertReminder = z.infer<typeof insertReminderSchema>;
+export type CreateReminder = z.infer<typeof createReminderSchema>;
