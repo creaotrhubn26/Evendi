@@ -4,12 +4,14 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import ProfileScreen from "@/screens/ProfileScreen";
 import PhotoPlanScreen from "@/screens/PhotoPlanScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
+import AdminVendorsScreen from "@/screens/AdminVendorsScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
 export type ProfileStackParamList = {
   Profile: undefined;
   PhotoPlan: undefined;
   Settings: undefined;
+  AdminVendors: undefined;
 };
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -38,6 +40,13 @@ export default function ProfileStackNavigator() {
         component={SettingsScreen}
         options={{
           title: "Innstillinger",
+        }}
+      />
+      <Stack.Screen
+        name="AdminVendors"
+        component={AdminVendorsScreen}
+        options={{
+          title: "Admin: Leverandører",
         }}
       />
     </Stack.Navigator>

@@ -225,7 +225,7 @@ export default function ProfileScreen() {
           <Card
             elevation={1}
             onPress={() => navigation.navigate("PhotoPlan")}
-            style={[styles.toolCard, { borderColor: theme.border }]}
+            style={{ ...styles.toolCard, borderColor: theme.border }}
           >
             <View
               style={[
@@ -244,7 +244,7 @@ export default function ProfileScreen() {
           <Card
             elevation={1}
             onPress={() => navigation.navigate("Settings")}
-            style={[styles.toolCard, { borderColor: theme.border }]}
+            style={{ ...styles.toolCard, borderColor: theme.border }}
           >
             <View
               style={[
@@ -281,6 +281,12 @@ export default function ProfileScreen() {
             label="Del med partner"
             theme={theme}
             onPress={() => Alert.alert("Del", "Delefunksjon kommer snart!")}
+          />
+          <MenuItem
+            icon="shield"
+            label="Admin: Leverandører"
+            theme={theme}
+            onPress={() => navigation.navigate("AdminVendors")}
           />
         </View>
       </Animated.View>
