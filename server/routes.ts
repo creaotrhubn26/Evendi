@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { db } from "./db";
-import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema } from "@shared/schema";
+import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import crypto from "crypto";
 
@@ -1467,6 +1467,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating conversation from inquiry:", error);
       res.status(500).json({ error: "Kunne ikke opprette samtale" });
+    }
+  });
+
+  // Reminders endpoints
+  app.get("/api/reminders", async (req: Request, res: Response) => {
+    try {
+      const allReminders = await db.select().from(reminders).orderBy(reminders.reminderDate);
+      res.json(allReminders);
+    } catch (error) {
+      console.error("Error fetching reminders:", error);
+      res.status(500).json({ error: "Kunne ikke hente påminnelser" });
+    }
+  });
+
+  app.post("/api/reminders", async (req: Request, res: Response) => {
+    try {
+      const validatedData = createReminderSchema.parse(req.body);
+      const [newReminder] = await db.insert(reminders)
+        .values({
+          title: validatedData.title,
+          description: validatedData.description,
+          reminderDate: new Date(validatedData.reminderDate),
+          category: validatedData.category,
+        })
+        .returning();
+      res.status(201).json(newReminder);
+    } catch (error) {
+      console.error("Error creating reminder:", error);
+      res.status(500).json({ error: "Kunne ikke opprette påminnelse" });
+    }
+  });
+
+  app.patch("/api/reminders/:id", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { isCompleted, notificationId } = req.body;
+
+      const updates: Record<string, any> = { updatedAt: new Date() };
+      if (isCompleted !== undefined) updates.isCompleted = isCompleted;
+      if (notificationId !== undefined) updates.notificationId = notificationId;
+
+      const [updated] = await db.update(reminders)
+        .set(updates)
+        .where(eq(reminders.id, id))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: "Påminnelse ikke funnet" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating reminder:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere påminnelse" });
+    }
+  });
+
+  app.delete("/api/reminders/:id", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const [deleted] = await db.delete(reminders)
+        .where(eq(reminders.id, id))
+        .returning();
+
+      if (!deleted) {
+        return res.status(404).json({ error: "Påminnelse ikke funnet" });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting reminder:", error);
+      res.status(500).json({ error: "Kunne ikke slette påminnelse" });
     }
   });
 
