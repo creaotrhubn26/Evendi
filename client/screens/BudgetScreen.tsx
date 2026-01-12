@@ -16,6 +16,7 @@ import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
+import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getBudgetItems, saveBudgetItems, getTotalBudget, saveTotalBudget, generateId } from "@/lib/storage";
@@ -102,6 +103,7 @@ export default function BudgetScreen() {
   const [selectedCategory, setSelectedCategory] = useState("other");
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState("");
+  const [editingItem, setEditingItem] = useState<BudgetItem | null>(null);
 
   const loadData = useCallback(async () => {
     const [itemsData, budgetData] = await Promise.all([
@@ -136,23 +138,42 @@ export default function BudgetScreen() {
       return;
     }
 
-    const newItem: BudgetItem = {
-      id: generateId(),
-      category: selectedCategory,
-      name: newName.trim(),
-      estimatedCost: parseInt(newCost) || 0,
-      actualCost: 0,
-      paid: false,
-    };
+    let updatedItems: BudgetItem[];
 
-    const updatedItems = [...items, newItem];
+    if (editingItem) {
+      updatedItems = items.map((item) =>
+        item.id === editingItem.id
+          ? { ...item, name: newName.trim(), estimatedCost: parseInt(newCost) || 0, category: selectedCategory }
+          : item
+      );
+    } else {
+      const newItem: BudgetItem = {
+        id: generateId(),
+        category: selectedCategory,
+        name: newName.trim(),
+        estimatedCost: parseInt(newCost) || 0,
+        actualCost: 0,
+        paid: false,
+      };
+      updatedItems = [...items, newItem];
+    }
+
     setItems(updatedItems);
     await saveBudgetItems(updatedItems);
 
     setNewName("");
     setNewCost("");
+    setEditingItem(null);
     setShowForm(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleEditItem = (item: BudgetItem) => {
+    setEditingItem(item);
+    setNewName(item.name);
+    setNewCost(item.estimatedCost.toString());
+    setSelectedCategory(item.category);
+    setShowForm(true);
   };
 
   const handleTogglePaid = async (id: string) => {
@@ -291,6 +312,10 @@ export default function BudgetScreen() {
         </View>
       </Animated.View>
 
+      <ThemedText style={[styles.swipeHint, { color: theme.textMuted }]}>
+        Sveip til venstre for å endre eller slette
+      </ThemedText>
+
       {groupedItems.map((category, catIndex) => (
         <Animated.View key={category.id} entering={FadeInDown.delay(200 + catIndex * 100).duration(400)}>
           <View style={styles.categorySection}>
@@ -306,29 +331,34 @@ export default function BudgetScreen() {
 
             {category.items.map((item, index) => (
               <Animated.View key={item.id} entering={FadeInRight.delay(index * 50).duration(300)}>
-                <Pressable
-                  onPress={() => handleTogglePaid(item.id)}
-                  onLongPress={() => handleDeleteItem(item.id)}
-                  style={[styles.itemRow, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+                <SwipeableRow
+                  onEdit={() => handleEditItem(item)}
+                  onDelete={() => handleDeleteItem(item.id)}
+                  backgroundColor={theme.backgroundDefault}
                 >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      {
-                        backgroundColor: item.paid ? Colors.dark.accent : "transparent",
-                        borderColor: item.paid ? Colors.dark.accent : theme.border,
-                      },
-                    ]}
+                  <Pressable
+                    onPress={() => handleTogglePaid(item.id)}
+                    style={[styles.itemRow, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
                   >
-                    {item.paid ? <Feather name="check" size={12} color="#1A1A1A" /> : null}
-                  </View>
-                  <ThemedText style={[styles.itemName, item.paid && styles.itemPaid]}>
-                    {item.name}
-                  </ThemedText>
-                  <ThemedText style={[styles.itemCost, { color: Colors.dark.accent }]}>
-                    {formatCurrency(item.estimatedCost)}
-                  </ThemedText>
-                </Pressable>
+                    <View
+                      style={[
+                        styles.checkbox,
+                        {
+                          backgroundColor: item.paid ? Colors.dark.accent : "transparent",
+                          borderColor: item.paid ? Colors.dark.accent : theme.border,
+                        },
+                      ]}
+                    >
+                      {item.paid ? <Feather name="check" size={12} color="#1A1A1A" /> : null}
+                    </View>
+                    <ThemedText style={[styles.itemName, item.paid && styles.itemPaid]}>
+                      {item.name}
+                    </ThemedText>
+                    <ThemedText style={[styles.itemCost, { color: Colors.dark.accent }]}>
+                      {formatCurrency(item.estimatedCost)}
+                    </ThemedText>
+                  </Pressable>
+                </SwipeableRow>
               </Animated.View>
             ))}
           </View>
@@ -340,7 +370,7 @@ export default function BudgetScreen() {
           entering={FadeInDown.duration(300)}
           style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
-          <ThemedText type="h3" style={styles.formTitle}>Legg til utgift</ThemedText>
+          <ThemedText type="h3" style={styles.formTitle}>{editingItem ? "Endre utgift" : "Legg til utgift"}</ThemedText>
 
           <View>
             <TextInput
@@ -401,10 +431,20 @@ export default function BudgetScreen() {
           </ScrollView>
 
           <View style={styles.formButtons}>
-            <Pressable onPress={() => setShowForm(false)} style={[styles.cancelButton, { borderColor: theme.border }]}>
+            <Pressable
+              onPress={() => {
+                setShowForm(false);
+                setEditingItem(null);
+                setNewName("");
+                setNewCost("");
+                setSelectedCategory("other");
+                resetValidation();
+              }}
+              style={[styles.cancelButton, { borderColor: theme.border }]}
+            >
               <ThemedText style={{ color: theme.textSecondary }}>Avbryt</ThemedText>
             </Pressable>
-            <Button onPress={handleAddItem} style={styles.saveButton}>Lagre</Button>
+            <Button onPress={handleAddItem} style={styles.saveButton}>{editingItem ? "Oppdater" : "Lagre"}</Button>
           </View>
         </Animated.View>
       ) : (
@@ -459,6 +499,7 @@ const styles = StyleSheet.create({
   statItem: { alignItems: "center" },
   statValue: { fontSize: 16, fontWeight: "600" },
   statLabel: { fontSize: 12, marginTop: 2 },
+  swipeHint: { fontSize: 12, textAlign: "center", marginBottom: Spacing.md },
   categorySection: { marginBottom: Spacing.xl },
   categoryHeader: { flexDirection: "row", alignItems: "center", marginBottom: Spacing.md },
   categoryIcon: { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center", marginRight: Spacing.sm },

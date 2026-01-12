@@ -16,6 +16,7 @@ import Animated, { FadeInRight } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
+import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getImportantPeople, saveImportantPeople, generateId } from "@/lib/storage";
@@ -46,6 +47,7 @@ export default function ImportantPeopleScreen() {
   const [newName, setNewName] = useState("");
   const [newRole, setNewRole] = useState("");
   const [newPhone, setNewPhone] = useState("");
+  const [editingPerson, setEditingPerson] = useState<ImportantPerson | null>(null);
 
   const loadData = useCallback(async () => {
     const data = await getImportantPeople();
@@ -63,22 +65,41 @@ export default function ImportantPeopleScreen() {
       return;
     }
 
-    const newPerson: ImportantPerson = {
-      id: generateId(),
-      name: newName.trim(),
-      role: newRole.trim(),
-      phone: newPhone.trim() || undefined,
-    };
+    let updatedPeople: ImportantPerson[];
 
-    const updatedPeople = [...people, newPerson];
+    if (editingPerson) {
+      updatedPeople = people.map((p) =>
+        p.id === editingPerson.id
+          ? { ...p, name: newName.trim(), role: newRole.trim(), phone: newPhone.trim() || undefined }
+          : p
+      );
+    } else {
+      const newPerson: ImportantPerson = {
+        id: generateId(),
+        name: newName.trim(),
+        role: newRole.trim(),
+        phone: newPhone.trim() || undefined,
+      };
+      updatedPeople = [...people, newPerson];
+    }
+
     setPeople(updatedPeople);
     await saveImportantPeople(updatedPeople);
 
     setNewName("");
     setNewRole("");
     setNewPhone("");
+    setEditingPerson(null);
     setShowForm(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleEditPerson = (person: ImportantPerson) => {
+    setEditingPerson(person);
+    setNewName(person.name);
+    setNewRole(person.role);
+    setNewPhone(person.phone || "");
+    setShowForm(true);
   };
 
   const handleDeletePerson = async (id: string) => {
@@ -143,50 +164,61 @@ export default function ImportantPeopleScreen() {
           </ThemedText>
         </View>
       ) : (
-        <View style={styles.peopleList}>
+        <>
+          <ThemedText style={[styles.swipeHint, { color: theme.textMuted }]}>
+            Sveip til venstre for å endre eller slette
+          </ThemedText>
+
+          <View style={styles.peopleList}>
           {people.map((person, index) => (
             <Animated.View
               key={person.id}
               entering={FadeInRight.delay(index * 100).duration(300)}
             >
-              <Pressable
-                onLongPress={() => handleDeletePerson(person.id)}
-                style={[
-                  styles.personCard,
-                  {
-                    backgroundColor: theme.backgroundDefault,
-                    borderColor: theme.border,
-                  },
-                ]}
+              <SwipeableRow
+                onEdit={() => handleEditPerson(person)}
+                onDelete={() => handleDeletePerson(person.id)}
+                backgroundColor={theme.backgroundDefault}
               >
                 <View
                   style={[
-                    styles.avatar,
-                    { backgroundColor: theme.backgroundSecondary },
+                    styles.personCard,
+                    {
+                      backgroundColor: theme.backgroundDefault,
+                      borderColor: theme.border,
+                    },
                   ]}
                 >
-                  <Feather name="user" size={20} color={Colors.dark.accent} />
-                </View>
-                <View style={styles.personInfo}>
-                  <ThemedText style={styles.personName}>{person.name}</ThemedText>
-                  <ThemedText
-                    style={[styles.personRole, { color: Colors.dark.accent }]}
+                  <View
+                    style={[
+                      styles.avatar,
+                      { backgroundColor: theme.backgroundSecondary },
+                    ]}
                   >
-                    {person.role}
-                  </ThemedText>
-                  {person.phone ? (
+                    <Feather name="user" size={20} color={Colors.dark.accent} />
+                  </View>
+                  <View style={styles.personInfo}>
+                    <ThemedText style={styles.personName}>{person.name}</ThemedText>
                     <ThemedText
-                      style={[styles.personPhone, { color: theme.textSecondary }]}
+                      style={[styles.personRole, { color: Colors.dark.accent }]}
                     >
-                      {person.phone}
+                      {person.role}
                     </ThemedText>
-                  ) : null}
+                    {person.phone ? (
+                      <ThemedText
+                        style={[styles.personPhone, { color: theme.textSecondary }]}
+                      >
+                        {person.phone}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  <Feather name="chevron-right" size={20} color={theme.textMuted} />
                 </View>
-                <Feather name="chevron-right" size={20} color={theme.textMuted} />
-              </Pressable>
+              </SwipeableRow>
             </Animated.View>
           ))}
-        </View>
+          </View>
+        </>
       )}
 
       {showForm ? (
@@ -197,7 +229,7 @@ export default function ImportantPeopleScreen() {
           ]}
         >
           <ThemedText type="h3" style={styles.formTitle}>
-            Legg til person
+            {editingPerson ? "Endre person" : "Legg til person"}
           </ThemedText>
 
           <TextInput
@@ -273,13 +305,19 @@ export default function ImportantPeopleScreen() {
 
           <View style={styles.formButtons}>
             <Pressable
-              onPress={() => setShowForm(false)}
+              onPress={() => {
+                setShowForm(false);
+                setEditingPerson(null);
+                setNewName("");
+                setNewRole("");
+                setNewPhone("");
+              }}
               style={[styles.cancelButton, { borderColor: theme.border }]}
             >
               <ThemedText style={{ color: theme.textSecondary }}>Avbryt</ThemedText>
             </Pressable>
             <Button onPress={handleAddPerson} style={styles.saveButton}>
-              Lagre
+              {editingPerson ? "Oppdater" : "Lagre"}
             </Button>
           </View>
         </Animated.View>
@@ -329,6 +367,11 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     textAlign: "center",
+  },
+  swipeHint: {
+    fontSize: 12,
+    textAlign: "center",
+    marginBottom: Spacing.sm,
   },
   peopleList: {
     gap: Spacing.sm,

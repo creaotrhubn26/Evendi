@@ -16,6 +16,7 @@ import Animated, { FadeInRight } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
+import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getPhotoShots, savePhotoShots, generateId } from "@/lib/storage";
@@ -62,6 +63,7 @@ export default function PhotoPlanScreen() {
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<PhotoShot["category"]>("portraits");
+  const [editingShot, setEditingShot] = useState<PhotoShot | null>(null);
 
   const loadData = useCallback(async () => {
     const data = await getPhotoShots();
@@ -96,22 +98,41 @@ export default function PhotoPlanScreen() {
       return;
     }
 
-    const newShot: PhotoShot = {
-      id: generateId(),
-      title: newTitle.trim(),
-      description: newDescription.trim(),
-      completed: false,
-      category: selectedCategory,
-    };
+    let updatedShots: PhotoShot[];
+    
+    if (editingShot) {
+      updatedShots = shots.map((s) =>
+        s.id === editingShot.id
+          ? { ...s, title: newTitle.trim(), description: newDescription.trim(), category: selectedCategory }
+          : s
+      );
+    } else {
+      const newShot: PhotoShot = {
+        id: generateId(),
+        title: newTitle.trim(),
+        description: newDescription.trim(),
+        completed: false,
+        category: selectedCategory,
+      };
+      updatedShots = [...shots, newShot];
+    }
 
-    const updatedShots = [...shots, newShot];
     setShots(updatedShots);
     await savePhotoShots(updatedShots);
 
     setNewTitle("");
     setNewDescription("");
+    setEditingShot(null);
     setShowForm(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleEditShot = (shot: PhotoShot) => {
+    setEditingShot(shot);
+    setNewTitle(shot.title);
+    setNewDescription(shot.description || "");
+    setSelectedCategory(shot.category);
+    setShowForm(true);
   };
 
   const handleDeleteShot = async (id: string) => {
@@ -179,6 +200,10 @@ export default function PhotoPlanScreen() {
         </View>
       </View>
 
+      <ThemedText style={[styles.swipeHint, { color: theme.textMuted }]}>
+        Sveip til venstre for å endre eller slette
+      </ThemedText>
+
       {Object.entries(groupedShots).map(([category, categoryShots]) => (
         <View key={category} style={styles.categorySection}>
           <View style={styles.categoryHeader}>
@@ -198,52 +223,57 @@ export default function PhotoPlanScreen() {
                 key={shot.id}
                 entering={FadeInRight.delay(index * 50).duration(300)}
               >
-                <Pressable
-                  onPress={() => handleToggleComplete(shot.id)}
-                  onLongPress={() => handleDeleteShot(shot.id)}
-                  style={[
-                    styles.shotItem,
-                    {
-                      backgroundColor: theme.backgroundDefault,
-                      borderColor: theme.border,
-                    },
-                  ]}
+                <SwipeableRow
+                  onEdit={() => handleEditShot(shot)}
+                  onDelete={() => handleDeleteShot(shot.id)}
+                  backgroundColor={theme.backgroundDefault}
                 >
-                  <View
+                  <Pressable
+                    onPress={() => handleToggleComplete(shot.id)}
                     style={[
-                      styles.checkbox,
+                      styles.shotItem,
                       {
-                        backgroundColor: shot.completed
-                          ? Colors.dark.accent
-                          : "transparent",
-                        borderColor: shot.completed
-                          ? Colors.dark.accent
-                          : theme.border,
+                        backgroundColor: theme.backgroundDefault,
+                        borderColor: theme.border,
                       },
                     ]}
                   >
-                    {shot.completed ? (
-                      <Feather name="check" size={14} color="#1A1A1A" />
-                    ) : null}
-                  </View>
-                  <View style={styles.shotInfo}>
-                    <ThemedText
+                    <View
                       style={[
-                        styles.shotTitle,
-                        shot.completed && styles.shotTitleCompleted,
+                        styles.checkbox,
+                        {
+                          backgroundColor: shot.completed
+                            ? Colors.dark.accent
+                            : "transparent",
+                          borderColor: shot.completed
+                            ? Colors.dark.accent
+                            : theme.border,
+                        },
                       ]}
                     >
-                      {shot.title}
-                    </ThemedText>
-                    {shot.description ? (
+                      {shot.completed ? (
+                        <Feather name="check" size={14} color="#1A1A1A" />
+                      ) : null}
+                    </View>
+                    <View style={styles.shotInfo}>
                       <ThemedText
-                        style={[styles.shotDescription, { color: theme.textSecondary }]}
+                        style={[
+                          styles.shotTitle,
+                          shot.completed && styles.shotTitleCompleted,
+                        ]}
                       >
-                        {shot.description}
+                        {shot.title}
                       </ThemedText>
-                    ) : null}
-                  </View>
-                </Pressable>
+                      {shot.description ? (
+                        <ThemedText
+                          style={[styles.shotDescription, { color: theme.textSecondary }]}
+                        >
+                          {shot.description}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                </SwipeableRow>
               </Animated.View>
             ))}
           </View>
@@ -258,7 +288,7 @@ export default function PhotoPlanScreen() {
           ]}
         >
           <ThemedText type="h3" style={styles.formTitle}>
-            Legg til bilde
+            {editingShot ? "Endre bilde" : "Legg til bilde"}
           </ThemedText>
 
           <TextInput
@@ -321,13 +351,19 @@ export default function PhotoPlanScreen() {
 
           <View style={styles.formButtons}>
             <Pressable
-              onPress={() => setShowForm(false)}
+              onPress={() => {
+                setShowForm(false);
+                setEditingShot(null);
+                setNewTitle("");
+                setNewDescription("");
+                setSelectedCategory("portraits");
+              }}
               style={[styles.cancelButton, { borderColor: theme.border }]}
             >
               <ThemedText style={{ color: theme.textSecondary }}>Avbryt</ThemedText>
             </Pressable>
             <Button onPress={handleAddShot} style={styles.saveButton}>
-              Lagre
+              {editingShot ? "Oppdater" : "Lagre"}
             </Button>
           </View>
         </Animated.View>
@@ -381,6 +417,11 @@ const styles = StyleSheet.create({
   progressFill: {
     height: "100%",
     borderRadius: 4,
+  },
+  swipeHint: {
+    fontSize: 12,
+    textAlign: "center",
+    marginBottom: Spacing.md,
   },
   categorySection: {
     marginBottom: Spacing.xl,

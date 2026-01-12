@@ -16,6 +16,7 @@ import Animated, { FadeInRight } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
+import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getSpeeches, saveSpeeches, generateId } from "@/lib/storage";
@@ -40,6 +41,7 @@ export default function SpeechListScreen() {
   const [newName, setNewName] = useState("");
   const [newRole, setNewRole] = useState("");
   const [newTime, setNewTime] = useState("");
+  const [editingSpeech, setEditingSpeech] = useState<Speech | null>(null);
 
   const loadData = useCallback(async () => {
     const data = await getSpeeches();
@@ -62,23 +64,42 @@ export default function SpeechListScreen() {
       return;
     }
 
-    const newSpeech: Speech = {
-      id: generateId(),
-      speakerName: newName.trim(),
-      role: newRole.trim() || "Gjest",
-      time: newTime.trim() || "TBD",
-      order: speeches.length + 1,
-    };
+    let updatedSpeeches: Speech[];
 
-    const updatedSpeeches = [...speeches, newSpeech];
+    if (editingSpeech) {
+      updatedSpeeches = speeches.map((s) =>
+        s.id === editingSpeech.id
+          ? { ...s, speakerName: newName.trim(), role: newRole.trim() || "Gjest", time: newTime.trim() || "TBD" }
+          : s
+      );
+    } else {
+      const newSpeech: Speech = {
+        id: generateId(),
+        speakerName: newName.trim(),
+        role: newRole.trim() || "Gjest",
+        time: newTime.trim() || "TBD",
+        order: speeches.length + 1,
+      };
+      updatedSpeeches = [...speeches, newSpeech];
+    }
+
     setSpeeches(updatedSpeeches);
     await saveSpeeches(updatedSpeeches);
 
     setNewName("");
     setNewRole("");
     setNewTime("");
+    setEditingSpeech(null);
     setShowForm(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleEditSpeech = (speech: Speech) => {
+    setEditingSpeech(speech);
+    setNewName(speech.speakerName);
+    setNewRole(speech.role);
+    setNewTime(speech.time);
+    setShowForm(true);
   };
 
   const handleDeleteSpeech = async (id: string) => {
@@ -159,74 +180,83 @@ export default function SpeechListScreen() {
         {speeches.length} taler planlagt
       </ThemedText>
 
+      <ThemedText style={[styles.swipeHint, { color: theme.textMuted }]}>
+        Sveip til venstre for å endre eller slette
+      </ThemedText>
+
       <View style={styles.speechList}>
         {speeches.map((speech, index) => (
           <Animated.View
             key={speech.id}
             entering={FadeInRight.delay(index * 100).duration(300)}
           >
-            <Pressable
-              onLongPress={() => handleDeleteSpeech(speech.id)}
-              style={[
-                styles.speechItem,
-                {
-                  backgroundColor: theme.backgroundDefault,
-                  borderColor: theme.border,
-                },
-              ]}
+            <SwipeableRow
+              onEdit={() => handleEditSpeech(speech)}
+              onDelete={() => handleDeleteSpeech(speech.id)}
+              backgroundColor={theme.backgroundDefault}
             >
-              <View style={styles.orderContainer}>
-                <ThemedText
-                  style={[styles.orderNumber, { color: Colors.dark.accent }]}
-                >
-                  {speech.order}
-                </ThemedText>
-              </View>
-
-              <View style={styles.speechInfo}>
-                <ThemedText style={styles.speakerName}>
-                  {speech.speakerName}
-                </ThemedText>
-                <ThemedText
-                  style={[styles.speechRole, { color: theme.textSecondary }]}
-                >
-                  {speech.role}
-                </ThemedText>
-              </View>
-
-              <ThemedText
-                style={[styles.speechTime, { color: Colors.dark.accent }]}
+              <View
+                style={[
+                  styles.speechItem,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.border,
+                  },
+                ]}
               >
-                {speech.time}
-              </ThemedText>
+                <View style={styles.orderContainer}>
+                  <ThemedText
+                    style={[styles.orderNumber, { color: Colors.dark.accent }]}
+                  >
+                    {speech.order}
+                  </ThemedText>
+                </View>
 
-              <View style={styles.reorderButtons}>
-                <Pressable
-                  onPress={() => handleMoveUp(index)}
-                  style={[
-                    styles.reorderButton,
-                    { opacity: index === 0 ? 0.3 : 1 },
-                  ]}
-                  disabled={index === 0}
+                <View style={styles.speechInfo}>
+                  <ThemedText style={styles.speakerName}>
+                    {speech.speakerName}
+                  </ThemedText>
+                  <ThemedText
+                    style={[styles.speechRole, { color: theme.textSecondary }]}
+                  >
+                    {speech.role}
+                  </ThemedText>
+                </View>
+
+                <ThemedText
+                  style={[styles.speechTime, { color: Colors.dark.accent }]}
                 >
-                  <Feather name="chevron-up" size={18} color={theme.textSecondary} />
-                </Pressable>
-                <Pressable
-                  onPress={() => handleMoveDown(index)}
-                  style={[
-                    styles.reorderButton,
-                    { opacity: index === speeches.length - 1 ? 0.3 : 1 },
-                  ]}
-                  disabled={index === speeches.length - 1}
-                >
-                  <Feather
-                    name="chevron-down"
-                    size={18}
-                    color={theme.textSecondary}
-                  />
-                </Pressable>
+                  {speech.time}
+                </ThemedText>
+
+                <View style={styles.reorderButtons}>
+                  <Pressable
+                    onPress={() => handleMoveUp(index)}
+                    style={[
+                      styles.reorderButton,
+                      { opacity: index === 0 ? 0.3 : 1 },
+                    ]}
+                    disabled={index === 0}
+                  >
+                    <Feather name="chevron-up" size={18} color={theme.textSecondary} />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => handleMoveDown(index)}
+                    style={[
+                      styles.reorderButton,
+                      { opacity: index === speeches.length - 1 ? 0.3 : 1 },
+                    ]}
+                    disabled={index === speeches.length - 1}
+                  >
+                    <Feather
+                      name="chevron-down"
+                      size={18}
+                      color={theme.textSecondary}
+                    />
+                  </Pressable>
+                </View>
               </View>
-            </Pressable>
+            </SwipeableRow>
           </Animated.View>
         ))}
       </View>
@@ -239,7 +269,7 @@ export default function SpeechListScreen() {
           ]}
         >
           <ThemedText type="h3" style={styles.formTitle}>
-            Legg til tale
+            {editingSpeech ? "Endre tale" : "Legg til tale"}
           </ThemedText>
 
           <TextInput
@@ -292,13 +322,19 @@ export default function SpeechListScreen() {
 
           <View style={styles.formButtons}>
             <Pressable
-              onPress={() => setShowForm(false)}
+              onPress={() => {
+                setShowForm(false);
+                setEditingSpeech(null);
+                setNewName("");
+                setNewRole("");
+                setNewTime("");
+              }}
               style={[styles.cancelButton, { borderColor: theme.border }]}
             >
               <ThemedText style={{ color: theme.textSecondary }}>Avbryt</ThemedText>
             </Pressable>
             <Button onPress={handleAddSpeech} style={styles.saveButton}>
-              Lagre
+              {editingSpeech ? "Oppdater" : "Lagre"}
             </Button>
           </View>
         </Animated.View>
@@ -331,6 +367,11 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     marginBottom: Spacing.lg,
+  },
+  swipeHint: {
+    fontSize: 12,
+    textAlign: "center",
+    marginBottom: Spacing.sm,
   },
   speechList: {
     gap: Spacing.sm,
