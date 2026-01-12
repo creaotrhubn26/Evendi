@@ -20,6 +20,7 @@ import DeliveryAccessScreen from "@/screens/DeliveryAccessScreen";
 import MessagesScreen from "@/screens/MessagesScreen";
 import CoupleLoginScreen from "@/screens/CoupleLoginScreen";
 import ChatScreen from "@/screens/ChatScreen";
+import CoupleOffersScreen from "@/screens/CoupleOffersScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -43,6 +44,7 @@ export type PlanningStackParamList = {
   Messages: undefined;
   CoupleLogin: undefined;
   Chat: { conversationId: string; vendorName: string };
+  CoupleOffers: undefined;
 };
 
 const Stack = createNativeStackNavigator<PlanningStackParamList>();
@@ -148,6 +150,11 @@ export default function PlanningStackNavigator() {
         name="Chat"
         component={ChatScreen}
         options={({ route }) => ({ title: route.params.vendorName })}
+      />
+      <Stack.Screen
+        name="CoupleOffers"
+        component={CoupleOffersScreen}
+        options={{ title: "Tilbud" }}
       />
     </Stack.Navigator>
   );
