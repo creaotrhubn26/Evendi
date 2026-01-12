@@ -558,6 +558,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!vendorId) return;
 
     try {
+      const featureRows = await db.select().from(vendorFeatures)
+        .where(and(eq(vendorFeatures.vendorId, vendorId), eq(vendorFeatures.featureKey, "inspirations")));
+      
+      if (featureRows.length > 0 && !featureRows[0].isEnabled) {
+        return res.status(403).json({ error: "Inspirasjoner er deaktivert for denne kontoen" });
+      }
+
       const validation = createInspirationSchema.safeParse(req.body);
       if (!validation.success) {
         return res.status(400).json({
@@ -697,12 +704,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const VALID_FEATURE_KEYS = ["deliveries", "inspirations"];
+
   app.put("/api/admin/vendors/:id/features", async (req: Request, res: Response) => {
     if (!checkAdminAuth(req, res)) return;
 
     try {
       const { id } = req.params;
       const { features } = req.body as { features: { featureKey: string; isEnabled: boolean }[] };
+
+      if (!Array.isArray(features)) {
+        return res.status(400).json({ error: "Ugyldig format" });
+      }
+
+      for (const feature of features) {
+        if (!VALID_FEATURE_KEYS.includes(feature.featureKey)) {
+          return res.status(400).json({ error: `Ugyldig funksjonsnøkkel: ${feature.featureKey}` });
+        }
+      }
 
       for (const feature of features) {
         const existing = await db.select().from(vendorFeatures)
@@ -747,6 +766,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { categoryIds } = req.body as { categoryIds: string[] };
+
+      if (!Array.isArray(categoryIds)) {
+        return res.status(400).json({ error: "Ugyldig format" });
+      }
+
+      if (categoryIds.length > 0) {
+        const validCategories = await db.select({ id: inspirationCategories.id }).from(inspirationCategories);
+        const validCategoryIds = validCategories.map(c => c.id);
+        
+        for (const catId of categoryIds) {
+          if (!validCategoryIds.includes(catId)) {
+            return res.status(400).json({ error: `Ugyldig kategori-ID: ${catId}` });
+          }
+        }
+      }
 
       await db.delete(vendorInspirationCategories).where(eq(vendorInspirationCategories.vendorId, id));
 
@@ -825,6 +859,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [inspiration] = await db.select().from(inspirations).where(eq(inspirations.id, id));
       if (!inspiration || inspiration.status !== "approved") {
         return res.status(404).json({ error: "Inspirasjon ikke funnet" });
+      }
+
+      const featureRows = await db.select().from(vendorFeatures)
+        .where(and(eq(vendorFeatures.vendorId, inspiration.vendorId), eq(vendorFeatures.featureKey, "inspirations")));
+      
+      if (featureRows.length > 0 && !featureRows[0].isEnabled) {
+        return res.status(403).json({ error: "Denne leverandøren har deaktivert inspirasjoner" });
       }
 
       if (!inspiration.allowInquiryForm) {

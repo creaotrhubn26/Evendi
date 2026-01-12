@@ -472,10 +472,10 @@ export default function InspirationScreen() {
                 </ThemedText>
               ) : null}
 
-              {formatPrice(selectedInspiration!) ? (
+              {selectedInspiration && formatPrice(selectedInspiration) ? (
                 <View style={[styles.priceBox, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
                   <Feather name="tag" size={18} color={Colors.dark.accent} />
-                  <ThemedText style={styles.priceText}>{formatPrice(selectedInspiration!)}</ThemedText>
+                  <ThemedText style={styles.priceText}>{formatPrice(selectedInspiration)}</ThemedText>
                 </View>
               ) : null}
 
