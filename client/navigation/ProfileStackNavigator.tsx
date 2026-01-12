@@ -11,6 +11,8 @@ import DeliveryCreateScreen from "@/screens/DeliveryCreateScreen";
 import InspirationCreateScreen from "@/screens/InspirationCreateScreen";
 import VendorRegistrationScreen from "@/screens/VendorRegistrationScreen";
 import NotificationSettingsScreen from "@/screens/NotificationSettingsScreen";
+import AboutScreen from "@/screens/AboutScreen";
+import SharePartnerScreen from "@/screens/SharePartnerScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
 export type ProfileStackParamList = {
@@ -24,6 +26,8 @@ export type ProfileStackParamList = {
   InspirationCreate: undefined;
   VendorRegistration: undefined;
   NotificationSettings: undefined;
+  About: undefined;
+  SharePartner: undefined;
 };
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -101,6 +105,20 @@ export default function ProfileStackNavigator() {
         component={NotificationSettingsScreen}
         options={{
           title: "Varsler",
+        }}
+      />
+      <Stack.Screen
+        name="About"
+        component={AboutScreen}
+        options={{
+          title: "Om Wedflow",
+        }}
+      />
+      <Stack.Screen
+        name="SharePartner"
+        component={SharePartnerScreen}
+        options={{
+          title: "Del med partner",
         }}
       />
     </Stack.Navigator>

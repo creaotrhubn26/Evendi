@@ -274,7 +274,7 @@ export default function ProfileScreen() {
             icon="info"
             label="Om Wedflow"
             theme={theme}
-            onPress={() => Alert.alert("Wedflow", "Versjon 1.0.0\nby Norwedfilm\n\nKontakt:\ncontact@norwedfilm.no\nnorwedfilm.no\n@norwedfilm")}
+            onPress={() => navigation.navigate("About")}
           />
           <MenuItem
             icon="bell"
@@ -286,7 +286,7 @@ export default function ProfileScreen() {
             icon="share-2"
             label="Del med partner"
             theme={theme}
-            onPress={() => Alert.alert("Del", "Delefunksjon kommer snart!")}
+            onPress={() => navigation.navigate("SharePartner")}
           />
           <MenuItem
             icon="briefcase"
