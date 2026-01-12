@@ -19,11 +19,28 @@ export interface Guest {
 }
 
 export interface Table {
-  id: number;
+  id: string;
+  tableNumber: number;
   name: string;
+  category?: string; // "bride_family", "groom_family", "friends", "colleagues", "reserved", "main"
+  label?: string; // Custom label like "Brudens familie"
   seats: number;
+  isReserved?: boolean;
+  notes?: string;
+  vendorNotes?: string;
+  sortOrder: number;
   guests: string[];
 }
+
+export const TABLE_CATEGORIES = [
+  { value: "main", label: "Hovedbord" },
+  { value: "bride_family", label: "Brudens familie" },
+  { value: "groom_family", label: "Brudgommens familie" },
+  { value: "friends", label: "Venner" },
+  { value: "colleagues", label: "Kolleger" },
+  { value: "reserved", label: "Reservert" },
+  { value: "other", label: "Annet" },
+] as const;
 
 export interface Speech {
   id: string;

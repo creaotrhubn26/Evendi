@@ -672,6 +672,8 @@ export const coupleVendorContracts = pgTable("couple_vendor_contracts", {
   notifyOnSpeechChanges: boolean("notify_on_speech_changes").default(true),
   canViewSchedule: boolean("can_view_schedule").default(true),
   canViewSpeeches: boolean("can_view_speeches").default(false),
+  canViewTableSeating: boolean("can_view_table_seating").default(false),
+  notifyOnTableChanges: boolean("notify_on_table_changes").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

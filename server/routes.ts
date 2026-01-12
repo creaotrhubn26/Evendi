@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { db } from "./db";
-import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, coupleVendorContracts, notifications, activityLogs } from "@shared/schema";
+import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, coupleVendorContracts, notifications, activityLogs, weddingTables, tableGuestAssignments } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import crypto from "crypto";
 
@@ -3053,6 +3053,285 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting schedule event:", error);
       res.status(500).json({ error: "Kunne ikke slette hendelse" });
+    }
+  });
+
+  // ==========================================
+  // Wedding Tables Endpoints (Server-side storage)
+  // ==========================================
+
+  // Get couple's wedding tables
+  app.get("/api/couple/tables", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const tables = await db.select()
+        .from(weddingTables)
+        .where(eq(weddingTables.coupleId, coupleId))
+        .orderBy(weddingTables.sortOrder);
+      
+      // Get guest assignments for each table
+      const assignments = await db.select()
+        .from(tableGuestAssignments)
+        .where(eq(tableGuestAssignments.coupleId, coupleId));
+      
+      // Group assignments by tableId
+      const guestsByTable: Record<string, string[]> = {};
+      for (const a of assignments) {
+        if (!guestsByTable[a.tableId]) guestsByTable[a.tableId] = [];
+        guestsByTable[a.tableId].push(a.guestId);
+      }
+      
+      // Add guests array to each table
+      const tablesWithGuests = tables.map(t => ({
+        ...t,
+        guests: guestsByTable[t.id] || [],
+      }));
+      
+      res.json(tablesWithGuests);
+    } catch (error) {
+      console.error("Error fetching tables:", error);
+      res.status(500).json({ error: "Kunne ikke hente bord" });
+    }
+  });
+
+  // Create wedding table
+  app.post("/api/couple/tables", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { tableNumber, name, category, label, seats, isReserved, notes, vendorNotes, sortOrder } = req.body;
+      
+      const [table] = await db.insert(weddingTables)
+        .values({
+          coupleId,
+          tableNumber: tableNumber || 1,
+          name: name || `Bord ${tableNumber || 1}`,
+          category,
+          label,
+          seats: seats || 8,
+          isReserved: isReserved || false,
+          notes,
+          vendorNotes,
+          sortOrder: sortOrder || 0,
+        })
+        .returning();
+      
+      res.status(201).json({ ...table, guests: [] });
+    } catch (error) {
+      console.error("Error creating table:", error);
+      res.status(500).json({ error: "Kunne ikke opprette bord" });
+    }
+  });
+
+  // Update wedding table
+  app.patch("/api/couple/tables/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      const { tableNumber, name, category, label, seats, isReserved, notes, vendorNotes, sortOrder } = req.body;
+      
+      const updates: Record<string, any> = { updatedAt: new Date() };
+      if (tableNumber !== undefined) updates.tableNumber = tableNumber;
+      if (name !== undefined) updates.name = name;
+      if (category !== undefined) updates.category = category;
+      if (label !== undefined) updates.label = label;
+      if (seats !== undefined) updates.seats = seats;
+      if (isReserved !== undefined) updates.isReserved = isReserved;
+      if (notes !== undefined) updates.notes = notes;
+      if (vendorNotes !== undefined) updates.vendorNotes = vendorNotes;
+      if (sortOrder !== undefined) updates.sortOrder = sortOrder;
+      
+      const [updated] = await db.update(weddingTables)
+        .set(updates)
+        .where(and(
+          eq(weddingTables.id, id),
+          eq(weddingTables.coupleId, coupleId)
+        ))
+        .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Bord ikke funnet" });
+      }
+      
+      // Notify vendors who can view table seating
+      const contracts = await db.select({
+        vendorId: coupleVendorContracts.vendorId,
+        notifyOnTableChanges: coupleVendorContracts.notifyOnTableChanges,
+      })
+        .from(coupleVendorContracts)
+        .where(and(
+          eq(coupleVendorContracts.coupleId, coupleId),
+          eq(coupleVendorContracts.status, "active"),
+          eq(coupleVendorContracts.canViewTableSeating, true)
+        ));
+      
+      const [couple] = await db.select({ displayName: coupleProfiles.displayName })
+        .from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+      
+      for (const contract of contracts) {
+        if (contract.notifyOnTableChanges) {
+          await db.insert(notifications).values({
+            recipientType: "vendor",
+            recipientId: contract.vendorId,
+            type: "table_changed",
+            title: "Bordplassering endret",
+            body: `${couple?.displayName || 'Brudeparet'} har endret "${updated.name}".`,
+            actorType: "couple",
+            actorId: coupleId,
+            actorName: couple?.displayName || 'Brudeparet',
+          });
+        }
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating table:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere bord" });
+    }
+  });
+
+  // Delete wedding table
+  app.delete("/api/couple/tables/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      
+      // Delete guest assignments first
+      await db.delete(tableGuestAssignments)
+        .where(and(
+          eq(tableGuestAssignments.tableId, id),
+          eq(tableGuestAssignments.coupleId, coupleId)
+        ));
+      
+      await db.delete(weddingTables)
+        .where(and(
+          eq(weddingTables.id, id),
+          eq(weddingTables.coupleId, coupleId)
+        ));
+      
+      res.json({ message: "Bord slettet" });
+    } catch (error) {
+      console.error("Error deleting table:", error);
+      res.status(500).json({ error: "Kunne ikke slette bord" });
+    }
+  });
+
+  // Assign guest to table
+  app.post("/api/couple/tables/:tableId/guests", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { tableId } = req.params;
+      const { guestId, seatNumber } = req.body;
+      
+      // Remove any existing assignment for this guest
+      await db.delete(tableGuestAssignments)
+        .where(and(
+          eq(tableGuestAssignments.coupleId, coupleId),
+          eq(tableGuestAssignments.guestId, guestId)
+        ));
+      
+      // Create new assignment
+      await db.insert(tableGuestAssignments)
+        .values({
+          coupleId,
+          tableId,
+          guestId,
+          seatNumber,
+        });
+      
+      res.status(201).json({ success: true });
+    } catch (error) {
+      console.error("Error assigning guest:", error);
+      res.status(500).json({ error: "Kunne ikke plassere gjest" });
+    }
+  });
+
+  // Remove guest from table
+  app.delete("/api/couple/tables/:tableId/guests/:guestId", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { tableId, guestId } = req.params;
+      
+      await db.delete(tableGuestAssignments)
+        .where(and(
+          eq(tableGuestAssignments.coupleId, coupleId),
+          eq(tableGuestAssignments.tableId, tableId),
+          eq(tableGuestAssignments.guestId, guestId)
+        ));
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing guest:", error);
+      res.status(500).json({ error: "Kunne ikke fjerne gjest" });
+    }
+  });
+
+  // ==========================================
+  // Vendor Table Seating Access Endpoints
+  // ==========================================
+
+  // Vendor views couple's table seating (if granted access)
+  app.get("/api/vendor/couple/:coupleId/tables", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { coupleId } = req.params;
+      
+      // Check if vendor has access to this couple's table seating
+      const [contract] = await db.select()
+        .from(coupleVendorContracts)
+        .where(and(
+          eq(coupleVendorContracts.vendorId, vendorId),
+          eq(coupleVendorContracts.coupleId, coupleId),
+          eq(coupleVendorContracts.status, "active"),
+          eq(coupleVendorContracts.canViewTableSeating, true)
+        ));
+      
+      if (!contract) {
+        return res.status(403).json({ error: "Ingen tilgang til bordplassering" });
+      }
+      
+      // Get tables
+      const tables = await db.select()
+        .from(weddingTables)
+        .where(eq(weddingTables.coupleId, coupleId))
+        .orderBy(weddingTables.sortOrder);
+      
+      // Get guest assignments
+      const assignments = await db.select()
+        .from(tableGuestAssignments)
+        .where(eq(tableGuestAssignments.coupleId, coupleId));
+      
+      // Group by table
+      const guestsByTable: Record<string, string[]> = {};
+      for (const a of assignments) {
+        if (!guestsByTable[a.tableId]) guestsByTable[a.tableId] = [];
+        guestsByTable[a.tableId].push(a.guestId);
+      }
+      
+      const tablesWithGuests = tables.map(t => ({
+        ...t,
+        guests: guestsByTable[t.id] || [],
+        // Hide private notes, only show vendorNotes
+        notes: undefined,
+      }));
+      
+      res.json(tablesWithGuests);
+    } catch (error) {
+      console.error("Error fetching tables for vendor:", error);
+      res.status(500).json({ error: "Kunne ikke hente bordplassering" });
     }
   });
 
