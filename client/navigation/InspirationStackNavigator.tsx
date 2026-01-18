@@ -19,7 +19,7 @@ export default function InspirationStackNavigator() {
         name="Inspiration"
         component={InspirationScreen}
         options={{
-          title: "Inspirasjon",
+          title: "Showcase",
         }}
       />
     </Stack.Navigator>

@@ -1,0 +1,86 @@
+nohup: ignoring input
+
+> my-app@1.0.0 server:dev
+> NODE_ENV=development tsx server/index.ts
+
+[dotenv@17.2.3] injecting env (6) from .env.local -- tip: 🗂️ backup and recover secrets: https://dotenvx.com/ops
+[dotenv@17.2.3] injecting env (6) from .env.local -- tip: ⚙️  override existing env vars with { override: true }
+DATABASE_URL loaded: YES
+ADMIN_SECRET loaded: YES
+Serving static Expo files with dynamic manifest routing
+Expo routing: Checking expo-platform header on / and /manifest
+express server serving on port 5000
+HEAD /api/admin/settings 200 in 120ms :: [{"id":"349971e5-91f6-437b-89a5-81396e…
+HEAD /api/admin/settings 200 in 23ms :: [{"id":"349971e5-91f6-437b-89a5-81396e6…
+GET /api/admin/settings 200 in 619ms :: [{"id":"349971e5-91f6-437b-89a5-81396e6…
+GET /api/vendor/products 401 in 2ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/inspirations 200 in 158ms :: []
+GET /api/vendor/offers 401 in 1ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/conversations 200 in 151ms :: []
+GET /api/vendor/deliveries 200 in 44ms :: []
+GET /api/vendor/contracts 200 in 63ms :: []
+GET /api/vendor/reviews 200 in 111ms :: {"reviews":[],"stats":{"total":0,"appro…
+GET /api/admin/settings 200 in 614ms :: [{"id":"349971e5-91f6-437b-89a5-81396e6…
+GET /api/vendor/products 401 in 1ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/conversations 200 in 125ms :: []
+GET /api/vendor/offers 401 in 1ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/reviews 200 in 173ms :: {"reviews":[],"stats":{"total":0,"appro…
+GET /api/vendor/deliveries 200 in 127ms :: []
+GET /api/vendor/inspirations 200 in 45ms :: []
+GET /api/vendor/contracts 200 in 46ms :: []
+GET /api/admin/settings 200 in 586ms :: [{"id":"349971e5-91f6-437b-89a5-81396e6…
+GET /api/vendor/products 401 in 1ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/conversations 200 in 99ms :: []
+GET /api/vendor/reviews 200 in 88ms :: {"reviews":[],"stats":{"total":0,"approv…
+GET /api/vendor/offers 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/contracts 200 in 42ms :: []
+GET /api/vendor/inspirations 200 in 118ms :: []
+GET /api/vendor/deliveries 200 in 108ms :: []
+GET /api/admin/settings 200 in 96ms :: [{"id":"349971e5-91f6-437b-89a5-81396e63…
+GET /api/vendor/contracts 200 in 38ms :: []
+GET /api/vendor/offers 401 in 3ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/inspirations 200 in 121ms :: []
+GET /api/vendor/products 401 in 1ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/conversations 200 in 34ms :: []
+GET /api/vendor/deliveries 200 in 33ms :: []
+GET /api/vendor/reviews 200 in 124ms :: {"reviews":[],"stats":{"total":0,"appro…
+GET /api/vendor/offers 401 in 1ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/products 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/products 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/offers 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/admin/settings 200 in 99ms :: [{"id":"349971e5-91f6-437b-89a5-81396e63…
+GET /api/vendor/offers 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/deliveries 200 in 34ms :: []
+GET /api/vendor/products 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/inspirations 200 in 101ms :: []
+GET /api/vendor/contracts 200 in 101ms :: []
+GET /api/vendor/conversations 200 in 31ms :: []
+GET /api/vendor/reviews 200 in 55ms :: {"reviews":[],"stats":{"total":0,"approv…
+GET /api/vendor/offers 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/products 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/products 401 in 5ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/offers 401 in 2ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/offers 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/products 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/offers 401 in 1ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/products 401 in 2ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/offers 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/products 401 in 1ms :: {"error":"Ugyldig økt"}
+GET /api/admin/settings 200 in 565ms :: [{"id":"349971e5-91f6-437b-89a5-81396e6…
+GET /api/vendor/products 401 in 1ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/offers 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/reviews 200 in 146ms :: {"reviews":[],"stats":{"total":0,"appro…
+GET /api/vendor/deliveries 200 in 42ms :: []
+GET /api/vendor/inspirations 200 in 126ms :: []
+GET /api/vendor/conversations 200 in 37ms :: []
+GET /api/vendor/contracts 200 in 120ms :: []
+GET /api/admin/settings 200 in 98ms :: [{"id":"349971e5-91f6-437b-89a5-81396e63…
+GET /api/vendor/products 401 in 0ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/contracts 200 in 36ms :: []
+GET /api/vendor/offers 401 in 1ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/inspirations 200 in 36ms :: []
+GET /api/vendor/conversations 200 in 36ms :: []
+GET /api/vendor/deliveries 200 in 104ms :: []
+GET /api/vendor/reviews 200 in 127ms :: {"reviews":[],"stats":{"total":0,"appro…
+GET /api/vendor/contacts 401 in 1ms :: {"error":"Ugyldig økt"}
+GET /api/vendor/products 401 in 1ms :: {"error":"Ugyldig økt"}

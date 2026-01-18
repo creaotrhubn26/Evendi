@@ -50,6 +50,16 @@ export const vendors = pgTable("vendors", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const vendorSessions = pgTable("vendor_sessions", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertVendorCategorySchema = createInsertSchema(vendorCategories).pick({
   name: true,
   icon: true,
@@ -87,7 +97,7 @@ export const vendorFeatures = pgTable("vendor_features", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
   featureKey: text("feature_key").notNull(),
   isEnabled: boolean("is_enabled").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
@@ -98,8 +108,8 @@ export const vendorInspirationCategories = pgTable("vendor_inspiration_categorie
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
-  categoryId: varchar("category_id").notNull().references(() => inspirationCategories.id),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  categoryId: varchar("category_id").notNull().references(() => inspirationCategories.id, { onDelete: "cascade" }),
   assignedAt: timestamp("assigned_at").defaultNow(),
 });
 
@@ -110,7 +120,7 @@ export const deliveries = pgTable("deliveries", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
   coupleName: text("couple_name").notNull(),
   coupleEmail: text("couple_email"),
   accessCode: text("access_code").notNull().unique(),
@@ -126,7 +136,7 @@ export const deliveryItems = pgTable("delivery_items", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  deliveryId: varchar("delivery_id").notNull().references(() => deliveries.id),
+  deliveryId: varchar("delivery_id").notNull().references(() => deliveries.id, { onDelete: "cascade" }),
   type: text("type").notNull(),
   label: text("label").notNull(),
   url: text("url").notNull(),
@@ -181,8 +191,8 @@ export const inspirations = pgTable("inspirations", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
-  categoryId: varchar("category_id").references(() => inspirationCategories.id),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  categoryId: varchar("category_id").references(() => inspirationCategories.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   description: text("description"),
   coverImageUrl: text("cover_image_url"),
@@ -206,7 +216,7 @@ export const inspirationMedia = pgTable("inspiration_media", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  inspirationId: varchar("inspiration_id").notNull().references(() => inspirations.id),
+  inspirationId: varchar("inspiration_id").notNull().references(() => inspirations.id, { onDelete: "cascade" }),
   type: text("type").notNull(),
   url: text("url").notNull(),
   caption: text("caption"),
@@ -257,8 +267,8 @@ export const inspirationInquiries = pgTable("inspiration_inquiries", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  inspirationId: varchar("inspiration_id").notNull().references(() => inspirations.id),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  inspirationId: varchar("inspiration_id").notNull().references(() => inspirations.id, { onDelete: "cascade" }),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   email: text("email").notNull(),
   phone: text("phone"),
@@ -287,6 +297,47 @@ export type CreateInspiration = z.infer<typeof createInspirationSchema>;
 export type InspirationInquiry = typeof inspirationInquiries.$inferSelect;
 export type CreateInquiry = z.infer<typeof createInquirySchema>;
 
+// Checklist Tasks - Wedding planning checklist with server sync
+export const checklistTasks = pgTable("checklist_tasks", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  monthsBefore: integer("months_before").notNull().default(12),
+  category: text("category").notNull().default("planning"), // planning, vendors, attire, logistics, final
+  completed: boolean("completed").notNull().default(false),
+  completedAt: timestamp("completed_at"),
+  completedBy: varchar("completed_by"), // coupleId who completed it
+  assignedTo: varchar("assigned_to"), // Optional: assign to partner
+  notes: text("notes"),
+  linkedReminderId: varchar("linked_reminder_id").references(() => reminders.id),
+  isDefault: boolean("is_default").notNull().default(false), // True for system-generated tasks
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertChecklistTaskSchema = createInsertSchema(checklistTasks).omit({
+  id: true,
+  completedAt: true,
+  completedBy: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const createChecklistTaskSchema = z.object({
+  title: z.string().min(1, "Tittel er påkrevd"),
+  monthsBefore: z.number().min(0).max(24).default(12),
+  category: z.enum(["planning", "vendors", "attire", "logistics", "final"]).default("planning"),
+  notes: z.string().optional(),
+  assignedTo: z.string().optional(),
+});
+
+export type ChecklistTask = typeof checklistTasks.$inferSelect;
+export type InsertChecklistTask = z.infer<typeof insertChecklistTaskSchema>;
+export type CreateChecklistTask = z.infer<typeof createChecklistTaskSchema>;
+
 // Couple Profiles for messaging
 export const coupleProfiles = pgTable("couple_profiles", {
   id: varchar("id")
@@ -305,7 +356,7 @@ export const coupleSessions = pgTable("couple_sessions", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -316,10 +367,10 @@ export const conversations = pgTable("conversations", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
-  inspirationId: varchar("inspiration_id").references(() => inspirations.id),
-  inquiryId: varchar("inquiry_id").references(() => inspirationInquiries.id),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  inspirationId: varchar("inspiration_id").references(() => inspirations.id, { onDelete: "set null" }),
+  inquiryId: varchar("inquiry_id").references(() => inspirationInquiries.id, { onDelete: "set null" }),
   status: text("status").notNull().default("active"),
   lastMessageAt: timestamp("last_message_at").defaultNow(),
   coupleUnreadCount: integer("couple_unread_count").default(0),
@@ -335,7 +386,7 @@ export const messages = pgTable("messages", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  conversationId: varchar("conversation_id").notNull().references(() => conversations.id),
+  conversationId: varchar("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
   senderType: text("sender_type").notNull(), // 'couple' or 'vendor'
   senderId: varchar("sender_id").notNull(),
   body: text("body").notNull(),
@@ -411,7 +462,7 @@ export const vendorProducts = pgTable("vendor_products", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description"),
   unitPrice: integer("unit_price").notNull(), // Price in øre (NOK cents)
@@ -454,9 +505,9 @@ export const vendorOffers = pgTable("vendor_offers", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
-  conversationId: varchar("conversation_id").references(() => conversations.id),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   message: text("message"),
   status: text("status").notNull().default("pending"), // pending, accepted, declined, expired
@@ -473,8 +524,8 @@ export const vendorOfferItems = pgTable("vendor_offer_items", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  offerId: varchar("offer_id").notNull().references(() => vendorOffers.id),
-  productId: varchar("product_id").references(() => vendorProducts.id), // Optional - can be custom line
+  offerId: varchar("offer_id").notNull().references(() => vendorOffers.id, { onDelete: "cascade" }),
+  productId: varchar("product_id").references(() => vendorProducts.id, { onDelete: "set null" }), // Optional - can be custom line
   title: text("title").notNull(),
   description: text("description"),
   quantity: integer("quantity").notNull().default(1),
@@ -524,7 +575,7 @@ export const speeches = pgTable("speeches", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").references(() => coupleProfiles.id),
+  coupleId: varchar("couple_id").references(() => coupleProfiles.id, { onDelete: "cascade" }),
   speakerName: text("speaker_name").notNull(),
   role: text("role"), // brudgom, brud, forlovere, foreldre, etc.
   durationMinutes: integer("duration_minutes").notNull().default(5),
@@ -559,9 +610,9 @@ export const messageReminders = pgTable("message_reminders", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  conversationId: varchar("conversation_id").notNull().references(() => conversations.id),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
+  conversationId: varchar("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
   reminderType: text("reminder_type").notNull().default("gentle"), // gentle, deadline, final
   scheduledFor: timestamp("scheduled_for").notNull(),
   sentAt: timestamp("sent_at"),
@@ -595,7 +646,7 @@ export const scheduleEvents = pgTable("schedule_events", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
   time: text("time").notNull(), // HH:mm format
   title: text("title").notNull(),
   icon: text("icon").default("star"), // heart, camera, music, users, coffee, sun, moon, star
@@ -619,7 +670,7 @@ export const coordinatorInvitations = pgTable("coordinator_invitations", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
   email: text("email"),
   name: text("name").notNull(), // Display name like "Toastmaster Ole"
   roleLabel: text("role_label").notNull().default("Toastmaster"), // Toastmaster, Koordinator, etc.
@@ -661,14 +712,65 @@ export type CoordinatorInvitation = typeof coordinatorInvitations.$inferSelect;
 export type InsertCoordinatorInvitation = z.infer<typeof insertCoordinatorInvitationSchema>;
 export type CreateCoordinatorInvitation = z.infer<typeof createCoordinatorInvitationSchema>;
 
+// Guest Invitations - Send invite links to guests with response fields
+export const guestInvitations = pgTable("guest_invitations", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  template: text("template").notNull().default("classic"), // classic, floral, modern
+  message: text("message"),
+  inviteToken: text("invite_token").notNull().unique(),
+  status: text("status").notNull().default("pending"), // pending, sent, responded, declined
+  responseAttending: boolean("response_attending"),
+  responseDietary: text("response_dietary"),
+  responseAllergies: text("response_allergies"),
+  responseNotes: text("response_notes"),
+  responsePlusOne: text("response_plus_one"),
+  respondedAt: timestamp("responded_at"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertGuestInvitationSchema = createInsertSchema(guestInvitations).omit({
+  id: true,
+  inviteToken: true,
+  status: true,
+  responseAttending: true,
+  responseDietary: true,
+  responseAllergies: true,
+  responseNotes: true,
+  responsePlusOne: true,
+  respondedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const createGuestInvitationSchema = z.object({
+  name: z.string().min(1, "Navn er påkrevd"),
+  email: z.string().email().optional().or(z.literal("")),
+  phone: z.string().optional().or(z.literal("")),
+  template: z.enum(["classic", "floral", "modern"]).default("classic"),
+  message: z.string().optional().or(z.literal("")),
+  expiresAt: z.string().optional(),
+});
+
+export type GuestInvitation = typeof guestInvitations.$inferSelect;
+export type InsertGuestInvitation = z.infer<typeof insertGuestInvitationSchema>;
+export type CreateGuestInvitation = z.infer<typeof createGuestInvitationSchema>;
+
 // Couple-Vendor Contracts - Tracks active agreements for notifications
 export const coupleVendorContracts = pgTable("couple_vendor_contracts", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
-  offerId: varchar("offer_id").references(() => vendorOffers.id), // Link to accepted offer
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  offerId: varchar("offer_id").references(() => vendorOffers.id, { onDelete: "set null" }), // Link to accepted offer
   status: text("status").notNull().default("active"), // active, completed, cancelled
   vendorRole: text("vendor_role"), // "photographer", "videographer", "caterer", etc.
   notifyOnScheduleChanges: boolean("notify_on_schedule_changes").default(true),
@@ -728,7 +830,7 @@ export const activityLogs = pgTable("activity_logs", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
   actorType: text("actor_type").notNull(), // "couple", "coordinator"
   actorId: varchar("actor_id").notNull(), // coupleId or coordinatorInvitationId
   actorName: text("actor_name"),
@@ -742,12 +844,46 @@ export const activityLogs = pgTable("activity_logs", {
 
 export type ActivityLog = typeof activityLogs.$inferSelect;
 
+// Wedding Guests - Guest list with RSVPs and dietary info
+export const weddingGuests = pgTable("wedding_guests", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  category: text("category"), // "family", "friends", "colleagues", "reserved", "other"
+  status: text("status").notNull().default("pending"), // "pending", "confirmed", "declined"
+  dietaryRequirements: text("dietary_requirements"),
+  allergies: text("allergies"),
+  notes: text("notes"),
+  plusOne: boolean("plus_one").notNull().default(false),
+  plusOneName: text("plus_one_name"),
+  tableNumber: integer("table_number"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWeddingGuestSchema = createInsertSchema(weddingGuests).omit({
+  id: true,
+  coupleId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateWeddingGuestSchema = insertWeddingGuestSchema.partial();
+
+export type WeddingGuest = typeof weddingGuests.$inferSelect;
+export type InsertWeddingGuest = z.infer<typeof insertWeddingGuestSchema>;
+export type UpdateWeddingGuest = z.infer<typeof updateWeddingGuestSchema>;
+
 // Wedding Tables - Table seating with categories and labels
 export const weddingTables = pgTable("wedding_tables", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
   tableNumber: integer("table_number").notNull(),
   name: text("name").notNull(), // "Bord 1", "Hovedbord", etc.
   category: text("category"), // "bride_family", "groom_family", "friends", "colleagues", "reserved", "main"
@@ -775,9 +911,9 @@ export const tableGuestAssignments = pgTable("table_guest_assignments", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
-  tableId: varchar("table_id").notNull().references(() => weddingTables.id),
-  guestId: varchar("guest_id").notNull(),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  tableId: varchar("table_id").notNull().references(() => weddingTables.id, { onDelete: "cascade" }),
+  guestId: varchar("guest_id").notNull().references(() => weddingGuests.id, { onDelete: "cascade" }),
   seatNumber: integer("seat_number"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -789,7 +925,7 @@ export const tableSeatingInvitations = pgTable("table_seating_invitations", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
   recipientName: text("recipient_name").notNull(), // "Lokalet AS", "Dekoratør Hansen"
   recipientType: text("recipient_type").notNull(), // "venue", "decorator", "planner", "other"
   email: text("email"),
@@ -850,9 +986,9 @@ export const vendorReviews = pgTable("vendor_reviews", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  contractId: varchar("contract_id").notNull().references(() => coupleVendorContracts.id),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  contractId: varchar("contract_id").notNull().references(() => coupleVendorContracts.id, { onDelete: "cascade" }),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
   rating: integer("rating").notNull(), // 1-5 stars
   title: text("title"),
   body: text("body"),
@@ -883,8 +1019,8 @@ export const vendorReviewResponses = pgTable("vendor_review_responses", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  reviewId: varchar("review_id").notNull().references(() => vendorReviews.id),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  reviewId: varchar("review_id").notNull().references(() => vendorReviews.id, { onDelete: "cascade" }),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
   body: text("body").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

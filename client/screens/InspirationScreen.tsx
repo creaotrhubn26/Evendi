@@ -302,7 +302,7 @@ export default function InspirationScreen() {
           <ThemedText
             style={[styles.emptyText, { color: theme.textSecondary }]}
           >
-            {selectedCategory ? "Ingen inspirasjoner i denne kategorien" : "Ingen inspirasjoner ennå"}
+            {selectedCategory ? "Ingen showcases i denne kategorien" : "Ingen showcases ennå"}
           </ThemedText>
           <ThemedText
             style={[styles.emptySubtext, { color: theme.textMuted }]}
@@ -344,7 +344,7 @@ export default function InspirationScreen() {
                   <View style={styles.overlayTop}>
                     <View style={styles.categoryBadge}>
                       <ThemedText style={styles.categoryBadgeText}>
-                        {item.category?.name || "Inspirasjon"}
+                        {item.category?.name || "Showcase"}
                       </ThemedText>
                     </View>
                     <Pressable

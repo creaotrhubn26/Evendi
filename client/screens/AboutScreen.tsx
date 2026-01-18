@@ -75,7 +75,7 @@ export default function AboutScreen() {
             <FeatureItem icon="calendar" text="Dagsplan og tidslinjeplanlegging" theme={theme} />
             <FeatureItem icon="users" text="Gjesteliste og bordplassering" theme={theme} />
             <FeatureItem icon="dollar-sign" text="Budsjettoppfølging" theme={theme} />
-            <FeatureItem icon="image" text="Inspirasjonsgalleri fra leverandører" theme={theme} />
+            <FeatureItem icon="image" text="Showcase-galleri fra leverandører" theme={theme} />
             <FeatureItem icon="package" text="Leveranser fra fotografer og videografer" theme={theme} />
             <FeatureItem icon="message-circle" text="Meldinger med leverandører" theme={theme} />
             <FeatureItem icon="file-text" text="Pristilbud og tilbudsbehandling" theme={theme} />

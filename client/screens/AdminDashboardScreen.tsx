@@ -21,7 +21,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
-import type { ProfileStackParamList } from "@/navigation/ProfileStackNavigator";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 interface Statistics {
   vendors: { total: number; approved: number; pending: number };
@@ -37,7 +37,7 @@ export default function AdminDashboardScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
-  const navigation = useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [adminKey, setAdminKey] = useState("");
   const [storedKey, setStoredKey] = useState("");
@@ -95,11 +95,17 @@ export default function AdminDashboardScreen() {
       badge: stats?.vendors.pending || 0,
     },
     {
-      title: "Inspirasjoner",
+      title: "Showcases",
       icon: "image" as const,
-      description: "Moderer inspirasjonsgalleri",
+      description: "Moderer showcase-galleri",
       screen: "AdminInspirations" as const,
       badge: stats?.inspirations.pending || 0,
+    },
+    {
+      title: "Sjekklister",
+      icon: "clipboard" as const,
+      description: "Vis og administrer parenes sjekklister",
+      screen: "AdminChecklists" as const,
     },
     {
       title: "Kategorier",
@@ -186,7 +192,7 @@ export default function AdminDashboardScreen() {
             <View style={styles.statsRow}>
               <StatBox label="Par" value={stats?.couples || 0} icon="heart" theme={theme} />
               <StatBox label="Leverandører" value={stats?.vendors.approved || 0} icon="briefcase" theme={theme} />
-              <StatBox label="Inspirasjoner" value={stats?.inspirations.total || 0} icon="image" theme={theme} />
+              <StatBox label="Showcases" value={stats?.inspirations.total || 0} icon="image" theme={theme} />
               <StatBox label="Meldinger" value={stats?.messages || 0} icon="message-circle" theme={theme} />
             </View>
           )}
@@ -202,7 +208,8 @@ export default function AdminDashboardScreen() {
             style={[styles.menuItem, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              navigation.navigate(section.screen, { adminKey: storedKey } as any);
+              // @ts-ignore - dynamic navigation
+              navigation.navigate(section.screen, { adminKey: storedKey });
             }}
           >
             <View style={[styles.menuIcon, { backgroundColor: Colors.dark.accent + "20" }]}>

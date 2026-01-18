@@ -34,8 +34,9 @@ export function Button({
   style,
   disabled = false,
 }: ButtonProps) {
-  const { theme } = useTheme();
+  const { theme, designSettings } = useTheme();
   const scale = useSharedValue(1);
+  const buttonRadius = parseInt(designSettings.buttonRadius || "8");
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -62,7 +63,8 @@ export function Button({
       style={[
         styles.button,
         {
-          backgroundColor: theme.link,
+          backgroundColor: theme.primary,
+          borderRadius: buttonRadius,
           opacity: disabled ? 0.5 : 1,
         },
         style,
@@ -71,7 +73,7 @@ export function Button({
     >
       <ThemedText
         type="body"
-        style={[styles.buttonText, { color: theme.buttonText }]}
+        style={[styles.buttonText, { color: "#FFFFFF" }]}
       >
         {children}
       </ThemedText>

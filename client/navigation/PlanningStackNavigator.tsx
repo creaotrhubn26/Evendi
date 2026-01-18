@@ -22,6 +22,7 @@ import CoupleLoginScreen from "@/screens/CoupleLoginScreen";
 import ChatScreen from "@/screens/ChatScreen";
 import CoupleOffersScreen from "@/screens/CoupleOffersScreen";
 import CoordinatorSharingScreen from "@/screens/CoordinatorSharingScreen";
+import CoordinatorTimelineScreen from "@/screens/CoordinatorTimelineScreen";
 import SpeechListScreen from "@/screens/SpeechListScreen";
 import VendorReviewsScreen from "@/screens/VendorReviewsScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
@@ -51,6 +52,7 @@ export type PlanningStackParamList = {
   Chat: { conversationId: string; vendorName: string };
   CoupleOffers: undefined;
   CoordinatorSharing: undefined;
+  CoordinatorTimeline: undefined;
   SpeechList: undefined;
   VendorReviews: undefined;
   Feedback: undefined;
@@ -177,6 +179,11 @@ export default function PlanningStackNavigator() {
         name="CoordinatorSharing"
         component={CoordinatorSharingScreen}
         options={{ title: "Del med koordinatorer" }}
+      />
+      <Stack.Screen
+        name="CoordinatorTimeline"
+        component={CoordinatorTimelineScreen}
+        options={{ title: "Koordinator-tidslinje" }}
       />
       <Stack.Screen
         name="SpeechList"

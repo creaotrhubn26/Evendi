@@ -1,0 +1,42 @@
+                       List of relations
+ Schema |             Name              | Type  |    Owner     
+--------+-------------------------------+-------+--------------
+ public | activity_logs                 | table | neondb_owner
+ public | app_feedback                  | table | neondb_owner
+ public | app_settings                  | table | neondb_owner
+ public | checklist_tasks               | table | neondb_owner
+ public | conversations                 | table | neondb_owner
+ public | coordinator_invitations       | table | neondb_owner
+ public | couple_profiles               | table | neondb_owner
+ public | couple_sessions               | table | neondb_owner
+ public | couple_vendor_contracts       | table | neondb_owner
+ public | deliveries                    | table | neondb_owner
+ public | delivery_items                | table | neondb_owner
+ public | guest_invitations             | table | neondb_owner
+ public | inspiration_categories        | table | neondb_owner
+ public | inspiration_inquiries         | table | neondb_owner
+ public | inspiration_media             | table | neondb_owner
+ public | inspirations                  | table | neondb_owner
+ public | message_reminders             | table | neondb_owner
+ public | messages                      | table | neondb_owner
+ public | notifications                 | table | neondb_owner
+ public | reminders                     | table | neondb_owner
+ public | schedule_events               | table | neondb_owner
+ public | speeches                      | table | neondb_owner
+ public | table_guest_assignments       | table | neondb_owner
+ public | table_seating_invitations     | table | neondb_owner
+ public | users                         | table | neondb_owner
+ public | vendor_categories             | table | neondb_owner
+ public | vendor_features               | table | neondb_owner
+ public | vendor_inspiration_categories | table | neondb_owner
+ public | vendor_offer_items            | table | neondb_owner
+ public | vendor_offers                 | table | neondb_owner
+ public | vendor_products               | table | neondb_owner
+ public | vendor_review_responses       | table | neondb_owner
+ public | vendor_reviews                | table | neondb_owner
+ public | vendor_sessions               | table | neondb_owner
+ public | vendors                       | table | neondb_owner
+ public | wedding_guests                | table | neondb_owner
+ public | wedding_tables                | table | neondb_owner
+(37 rows)
+

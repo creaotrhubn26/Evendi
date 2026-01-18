@@ -7,7 +7,9 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
 import { useMutation } from "@tanstack/react-query";
@@ -32,14 +34,18 @@ interface CoupleSession {
 
 interface Props {
   navigation: NativeStackNavigationProp<any>;
+  onLoginSuccess?: () => void;
 }
 
-export default function CoupleLoginScreen({ navigation }: Props) {
+export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props) {
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
 
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -49,14 +55,20 @@ export default function CoupleLoginScreen({ navigation }: Props) {
         if (!value) return "E-post er påkrevd";
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Ugyldig e-postadresse";
         return "";
+      case "password":
+        if (!value) return "Passord er påkrevd";
+        if (isRegistering && value.length < 8) return "Passord må være minst 8 tegn";
+        return "";
       case "displayName":
-        if (!value) return "Navn er påkrevd";
-        if (value.length < 2) return "Navn må være minst 2 tegn";
+        if (isRegistering) {
+          if (!value) return "Navn er påkrevd";
+          if (value.length < 2) return "Navn må være minst 2 tegn";
+        }
         return "";
       default:
         return "";
     }
-  }, []);
+  }, [isRegistering]);
 
   const handleBlur = useCallback((field: string, value: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
@@ -73,7 +85,11 @@ export default function CoupleLoginScreen({ navigation }: Props) {
 
   const loginMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/couples/login", { email, displayName });
+      const response = await apiRequest("POST", "/api/couples/login", { 
+        email, 
+        password,
+        displayName: isRegistering ? displayName : undefined
+      });
       return response.json();
     },
     onSuccess: async (data) => {
@@ -86,6 +102,7 @@ export default function CoupleLoginScreen({ navigation }: Props) {
         };
         await AsyncStorage.setItem(COUPLE_STORAGE_KEY, JSON.stringify(session));
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onLoginSuccess?.();
         navigation.replace("Messages");
       } else {
         Alert.alert("Feil", "Kunne ikke logge inn. Prøv igjen.");
@@ -98,21 +115,30 @@ export default function CoupleLoginScreen({ navigation }: Props) {
   });
 
   const handleLogin = () => {
-    if (!email || !displayName) {
-      Alert.alert("Mangler informasjon", "Fyll ut e-post og navn.");
+    const newErrors: Record<string, string> = {};
+    
+    const emailError = validateField("email", email);
+    const passwordError = validateField("password", password);
+    const nameError = isRegistering ? validateField("displayName", displayName) : "";
+    
+    if (emailError) newErrors.email = emailError;
+    if (passwordError) newErrors.password = passwordError;
+    if (nameError) newErrors.displayName = nameError;
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setTouched({ email: true, password: true, displayName: true });
       return;
     }
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     loginMutation.mutate();
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={['top', 'bottom']}>
       <KeyboardAwareScrollViewCompat
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: headerHeight + Spacing.xl },
-        ]}
+        contentContainerStyle={styles.content}
       >
         <Image
           source={require("../../assets/images/wedflow-logo.png")}
@@ -120,30 +146,14 @@ export default function CoupleLoginScreen({ navigation }: Props) {
           resizeMode="contain"
         />
 
-        <ThemedText style={styles.title}>Logg inn for meldinger</ThemedText>
+        <ThemedText style={styles.title}>Velkommen til Wedflow</ThemedText>
         <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Logg inn for å chatte med leverandører og se meldingshistorikken din
+          {isRegistering 
+            ? "Opprett konto for å planlegge bryllupet ditt"
+            : "Logg inn for å planlegge bryllupet ditt"}
         </ThemedText>
 
         <View style={styles.form}>
-          <View>
-            <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("displayName")]}>
-              <Feather name="user" size={18} color={touched.displayName && errors.displayName ? "#DC3545" : theme.textMuted} />
-              <TextInput
-                style={[styles.input, { color: theme.text }]}
-                placeholder="Ditt navn"
-                placeholderTextColor={theme.textMuted}
-                value={displayName}
-                onChangeText={setDisplayName}
-                onBlur={() => handleBlur("displayName", displayName)}
-                autoCapitalize="words"
-              />
-            </View>
-            {touched.displayName && errors.displayName ? (
-              <ThemedText style={styles.errorText}>{errors.displayName}</ThemedText>
-            ) : null}
-          </View>
-
           <View>
             <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("email")]}>
               <Feather name="mail" size={18} color={touched.email && errors.email ? "#DC3545" : theme.textMuted} />
@@ -163,6 +173,48 @@ export default function CoupleLoginScreen({ navigation }: Props) {
             ) : null}
           </View>
 
+          <View>
+            <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("password")]}>
+              <Feather name="lock" size={18} color={touched.password && errors.password ? "#DC3545" : theme.textMuted} />
+              <TextInput
+                style={[styles.input, { color: theme.text }]}
+                placeholder="Passord"
+                placeholderTextColor={theme.textMuted}
+                value={password}
+                onChangeText={setPassword}
+                onBlur={() => handleBlur("password", password)}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+              />
+              <Pressable onPress={() => setShowPassword(!showPassword)}>
+                <Feather name={showPassword ? "eye-off" : "eye"} size={18} color={theme.textMuted} />
+              </Pressable>
+            </View>
+            {touched.password && errors.password ? (
+              <ThemedText style={styles.errorText}>{errors.password}</ThemedText>
+            ) : null}
+          </View>
+
+          {isRegistering && (
+            <View>
+              <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("displayName")]}>
+                <Feather name="user" size={18} color={touched.displayName && errors.displayName ? "#DC3545" : theme.textMuted} />
+                <TextInput
+                  style={[styles.input, { color: theme.text }]}
+                  placeholder="Ditt navn"
+                  placeholderTextColor={theme.textMuted}
+                  value={displayName}
+                  onChangeText={setDisplayName}
+                  onBlur={() => handleBlur("displayName", displayName)}
+                  autoCapitalize="words"
+                />
+              </View>
+              {touched.displayName && errors.displayName ? (
+                <ThemedText style={styles.errorText}>{errors.displayName}</ThemedText>
+              ) : null}
+            </View>
+          )}
+
           <Pressable
             onPress={handleLogin}
             disabled={loginMutation.isPending}
@@ -174,16 +226,69 @@ export default function CoupleLoginScreen({ navigation }: Props) {
             {loginMutation.isPending ? (
               <ActivityIndicator color="#1A1A1A" />
             ) : (
-              <ThemedText style={styles.loginBtnText}>Fortsett</ThemedText>
+              <ThemedText style={styles.loginBtnText}>Logg inn</ThemedText>
             )}
           </Pressable>
         </View>
 
+        <View style={styles.toggleContainer}>
+          <ThemedText style={[styles.toggleText, { color: theme.textSecondary }]}>
+            {isRegistering ? "Har du allerede konto? " : "Ny bruker? "}
+          </ThemedText>
+          <Pressable onPress={() => {
+            setIsRegistering(!isRegistering);
+            setErrors({});
+            setTouched({});
+          }}>
+            <ThemedText style={[styles.toggleLink, { color: Colors.dark.accent }]}>
+              {isRegistering ? "Logg inn" : "Registrer deg"}
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        <View style={styles.linkContainer}>
+          <Pressable 
+            onPress={() => {
+              if (Platform.OS === "web") {
+                navigation.navigate?.("VendorLogin");
+                return;
+              }
+
+              Alert.alert(
+                "Leverandør?",
+                "Leverandører logger inn via leverandør-portalen.",
+                [
+                  { text: "Avbryt", style: "cancel" },
+                  { 
+                    text: "Gå til leverandør-innlogging", 
+                    onPress: () => navigation.navigate?.("VendorLogin")
+                  }
+                ]
+              );
+            }}
+            style={styles.vendorLink}
+          >
+            <ThemedText style={[styles.vendorLinkText, { color: theme.textSecondary }]}>
+              Er du leverandør?
+            </ThemedText>
+          </Pressable>
+
+          <Pressable 
+            onPress={() => navigation.navigate?.("AdminLogin")}
+            style={styles.vendorLink}
+          >
+            <Feather name="shield" size={16} color={theme.textSecondary} />
+            <ThemedText style={[styles.vendorLinkText, { color: theme.textSecondary }]}>
+              Admin-portal
+            </ThemedText>
+          </Pressable>
+        </View>
+
         <ThemedText style={[styles.infoText, { color: theme.textMuted }]}>
-          Du vil kunne se alle dine samtaler med leverandører og fortsette dialogen direkte i appen.
+          Med Wedflow får du full kontroll over planleggingen av bryllupet ditt – fra gjesteoversikt og tidslinje til budsjett og leverandørsamtaler.
         </ThemedText>
       </KeyboardAwareScrollViewCompat>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -191,12 +296,14 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: {
     paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
     alignItems: "center",
   },
   logo: {
-    width: 300,
-    height: 80,
-    marginBottom: Spacing.xl,
+    width: 480,
+    height: 160,
+    marginBottom: Spacing.lg,
+    marginTop: Spacing.md,
   },
   title: {
     fontSize: 24,
@@ -236,6 +343,38 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600",
     color: "#1A1A1A",
+  },
+  toggleContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  toggleText: {
+    fontSize: 14,
+  },
+  toggleLink: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  linkContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: Spacing.lg,
+    gap: Spacing.xl,
+  },
+  vendorLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.xs,
+  },
+  vendorLinkText: {
+    fontSize: 13,
+    textAlign: "center",
+    textDecorationLine: "underline",
   },
   infoText: {
     fontSize: 13,

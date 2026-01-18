@@ -102,7 +102,7 @@ export default function MessagesScreen({ navigation }: Props) {
   if (isLoggedIn === null) {
     return (
       <View style={[styles.container, styles.centerContent, { backgroundColor: theme.backgroundRoot }]}>
-        <ActivityIndicator size="large" color={Colors.dark.accent} />
+        <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
@@ -111,8 +111,8 @@ export default function MessagesScreen({ navigation }: Props) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
         <View style={[styles.loginPrompt, { paddingTop: headerHeight + Spacing.xl }]}>
-          <View style={[styles.iconCircle, { backgroundColor: Colors.dark.accent + "20" }]}>
-            <Feather name="message-circle" size={32} color={Colors.dark.accent} />
+          <View style={[styles.iconCircle, { backgroundColor: theme.accent + "20" }]}>
+            <Feather name="message-circle" size={32} color={theme.accent} />
           </View>
           <ThemedText style={styles.loginTitle}>Meldinger</ThemedText>
           <ThemedText style={[styles.loginSubtitle, { color: theme.textSecondary }]}>
@@ -120,9 +120,9 @@ export default function MessagesScreen({ navigation }: Props) {
           </ThemedText>
           <Pressable
             onPress={() => navigation.navigate("CoupleLogin")}
-            style={[styles.loginBtn, { backgroundColor: Colors.dark.accent }]}
+            style={[styles.loginBtn, { backgroundColor: theme.accent }]}
           >
-            <ThemedText style={styles.loginBtnText}>Logg inn</ThemedText>
+            <ThemedText style={[styles.loginBtnText, { color: theme.buttonText }]}>Logg inn</ThemedText>
           </Pressable>
         </View>
       </View>
@@ -138,8 +138,8 @@ export default function MessagesScreen({ navigation }: Props) {
         }}
         style={[styles.conversationItem, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
       >
-        <View style={[styles.avatar, { backgroundColor: Colors.dark.accent + "20" }]}>
-          <Feather name="briefcase" size={20} color={Colors.dark.accent} />
+        <View style={[styles.avatar, { backgroundColor: theme.accent + "20" }]}>
+          <Feather name="briefcase" size={20} color={theme.accent} />
         </View>
         <View style={styles.conversationContent}>
           <View style={styles.conversationHeader}>
@@ -151,7 +151,7 @@ export default function MessagesScreen({ navigation }: Props) {
             </ThemedText>
           </View>
           {item.inspiration ? (
-            <ThemedText style={[styles.inspirationTitle, { color: Colors.dark.accent }]} numberOfLines={1}>
+            <ThemedText style={[styles.inspirationTitle, { color: theme.accent }]} numberOfLines={1}>
               {item.inspiration.title}
             </ThemedText>
           ) : null}
@@ -163,8 +163,8 @@ export default function MessagesScreen({ navigation }: Props) {
           ) : null}
         </View>
         {item.coupleUnreadCount > 0 ? (
-          <View style={[styles.unreadBadge, { backgroundColor: Colors.dark.accent }]}>
-            <ThemedText style={styles.unreadCount}>{item.coupleUnreadCount}</ThemedText>
+          <View style={[styles.unreadBadge, { backgroundColor: theme.accent }]}>
+            <ThemedText style={[styles.unreadCount, { color: theme.buttonText }]}>{item.coupleUnreadCount}</ThemedText>
           </View>
         ) : null}
       </Pressable>
@@ -179,8 +179,8 @@ export default function MessagesScreen({ navigation }: Props) {
         </View>
       ) : conversations.length === 0 ? (
         <View style={[styles.emptyState, { paddingTop: headerHeight + Spacing.xl }]}>
-          <View style={[styles.iconCircle, { backgroundColor: Colors.dark.accent + "20" }]}>
-            <Feather name="inbox" size={32} color={Colors.dark.accent} />
+          <View style={[styles.iconCircle, { backgroundColor: theme.accent + "20" }]}>
+            <Feather name="inbox" size={32} color={theme.accent} />
           </View>
           <ThemedText style={styles.emptyTitle}>Ingen samtaler ennå</ThemedText>
           <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
@@ -201,7 +201,7 @@ export default function MessagesScreen({ navigation }: Props) {
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={refetch}
-              tintColor={Colors.dark.accent}
+              tintColor={theme.accent}
             />
           }
           ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
@@ -249,7 +249,6 @@ const styles = StyleSheet.create({
   loginBtnText: {
     fontSize: 17,
     fontWeight: "600",
-    color: "#1A1A1A",
   },
   emptyState: {
     flex: 1,
@@ -317,6 +316,5 @@ const styles = StyleSheet.create({
   unreadCount: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#1A1A1A",
   },
 });

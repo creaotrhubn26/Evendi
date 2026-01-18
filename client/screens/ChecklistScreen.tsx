@@ -1,52 +1,21 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { ScrollView, StyleSheet, View, Pressable } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, Alert, TextInput, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
+import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { getWeddingDetails } from "@/lib/storage";
-
-interface ChecklistItem {
-  id: string;
-  title: string;
-  monthsBefore: number;
-  completed: boolean;
-  category: "planning" | "vendors" | "attire" | "logistics" | "final";
-}
-
-const DEFAULT_CHECKLIST: ChecklistItem[] = [
-  { id: "1", title: "Sett bryllupsbudsjett", monthsBefore: 12, completed: false, category: "planning" },
-  { id: "2", title: "Velg bryllupsdato", monthsBefore: 12, completed: false, category: "planning" },
-  { id: "3", title: "Book lokale", monthsBefore: 12, completed: false, category: "vendors" },
-  { id: "4", title: "Start gjesteliste", monthsBefore: 11, completed: false, category: "planning" },
-  { id: "5", title: "Book fotograf", monthsBefore: 10, completed: false, category: "vendors" },
-  { id: "6", title: "Book videograf", monthsBefore: 10, completed: false, category: "vendors" },
-  { id: "7", title: "Bestill/kjøp brudekjole", monthsBefore: 9, completed: false, category: "attire" },
-  { id: "8", title: "Book DJ/band", monthsBefore: 8, completed: false, category: "vendors" },
-  { id: "9", title: "Velg catering/meny", monthsBefore: 6, completed: false, category: "vendors" },
-  { id: "10", title: "Send 'save the date'", monthsBefore: 6, completed: false, category: "logistics" },
-  { id: "11", title: "Bestill invitasjoner", monthsBefore: 5, completed: false, category: "logistics" },
-  { id: "12", title: "Book overnatting for gjester", monthsBefore: 5, completed: false, category: "logistics" },
-  { id: "13", title: "Velg blomsterarrangement", monthsBefore: 4, completed: false, category: "vendors" },
-  { id: "14", title: "Kjøp/bestill gifteringer", monthsBefore: 4, completed: false, category: "attire" },
-  { id: "15", title: "Send invitasjoner", monthsBefore: 3, completed: false, category: "logistics" },
-  { id: "16", title: "Planlegg bryllupsreise", monthsBefore: 3, completed: false, category: "logistics" },
-  { id: "17", title: "Prøv brudekjole", monthsBefore: 2, completed: false, category: "attire" },
-  { id: "18", title: "Ferdigstill kjøreplan", monthsBefore: 2, completed: false, category: "planning" },
-  { id: "19", title: "Bekreft alle leverandører", monthsBefore: 1, completed: false, category: "vendors" },
-  { id: "20", title: "Ferdigstill bordplassering", monthsBefore: 1, completed: false, category: "logistics" },
-  { id: "21", title: "Hent brudekjole", monthsBefore: 1, completed: false, category: "attire" },
-  { id: "22", title: "Øv på brudevals", monthsBefore: 1, completed: false, category: "final" },
-  { id: "23", title: "Pakk til bryllupsreise", monthsBefore: 0, completed: false, category: "final" },
-  { id: "24", title: "Siste gjennomgang med lokale", monthsBefore: 0, completed: false, category: "final" },
-];
+import { getWeddingDetails, getCoupleSession } from "@/lib/storage";
+import { getChecklistTasks, updateChecklistTask, createChecklistTask, deleteChecklistTask, seedDefaultChecklist } from "@/lib/api-checklist";
+import { migrateChecklistFromAsyncStorage, needsMigration } from "@/lib/checklist-migration";
+import type { ChecklistTask } from "@shared/schema";
 
 const CATEGORY_INFO: Record<string, { name: string; icon: keyof typeof Feather.glyphMap; color: string }> = {
   planning: { name: "Planlegging", icon: "clipboard", color: "#64B5F6" },
@@ -56,79 +25,255 @@ const CATEGORY_INFO: Record<string, { name: string; icon: keyof typeof Feather.g
   final: { name: "Siste uken", icon: "check-circle", color: "#E57373" },
 };
 
-const STORAGE_KEY = "@wedflow/checklist";
-
 export default function ChecklistScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const queryClient = useQueryClient();
 
-  const [items, setItems] = useState<ChecklistItem[]>([]);
   const [monthsLeft, setMonthsLeft] = useState(12);
-  const [loading, setLoading] = useState(true);
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<ChecklistTask | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editMonthsBefore, setEditMonthsBefore] = useState(12);
+  const [editCategory, setEditCategory] = useState<"planning" | "vendors" | "attire" | "logistics" | "final">("planning");
+  const [editNotes, setEditNotes] = useState("");
+  const [editAssignedTo, setEditAssignedTo] = useState<"me" | "partner" | "both">("both");
 
-  const loadData = useCallback(async () => {
-    const [storedData, weddingData] = await Promise.all([
-      AsyncStorage.getItem(STORAGE_KEY),
-      getWeddingDetails(),
-    ]);
-
-    if (storedData) {
-      setItems(JSON.parse(storedData));
-    } else {
-      setItems(DEFAULT_CHECKLIST);
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_CHECKLIST));
+  useEffect(() => {
+    async function loadSession() {
+      const session = await getCoupleSession();
+      if (session) {
+        setSessionToken(session.token);
+      }
     }
-
-    if (weddingData) {
-      const weddingDate = new Date(weddingData.weddingDate);
-      const today = new Date();
-      const diffTime = weddingDate.getTime() - today.getTime();
-      const diffMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30));
-      setMonthsLeft(Math.max(0, diffMonths));
-    }
-
-    setLoading(false);
+    loadSession();
   }, []);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    async function loadWeddingDate() {
+      const weddingData = await getWeddingDetails();
+      if (weddingData) {
+        const weddingDate = new Date(weddingData.weddingDate);
+        const today = new Date();
+        const diffTime = weddingDate.getTime() - today.getTime();
+        const diffMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30));
+        setMonthsLeft(Math.max(0, diffMonths));
+      }
+    }
+    loadWeddingDate();
+  }, []);
 
-  const handleToggle = async (id: string) => {
-    const updatedItems = items.map((item) =>
-      item.id === id ? { ...item, completed: !item.completed } : item
+  const { data: tasks = [], isLoading } = useQuery({
+    queryKey: ["checklist"],
+    queryFn: () => sessionToken ? getChecklistTasks(sessionToken) : [],
+    enabled: !!sessionToken,
+  });
+
+  // Check for migration on mount
+  useEffect(() => {
+    async function checkMigration() {
+      if (!sessionToken) return;
+      
+      const hasTasks = tasks.length > 0;
+      const needsDataMigration = await needsMigration();
+      
+      if (!hasTasks && needsDataMigration) {
+        Alert.alert(
+          "Migrer eksisterende data",
+          "Vi fant sjekkliste-data lagret lokalt. Vil du flytte den til serveren?",
+          [
+            { text: "Avbryt", style: "cancel" },
+            {
+              text: "Migrer",
+              onPress: async () => {
+                const success = await migrateChecklistFromAsyncStorage(sessionToken);
+                if (success) {
+                  queryClient.invalidateQueries({ queryKey: ["checklist"] });
+                  Alert.alert("Suksess", "Data ble migrert!");
+                }
+              },
+            },
+          ]
+        );
+      }
+    }
+    
+    if (!isLoading) {
+      checkMigration();
+    }
+  }, [sessionToken, tasks.length, isLoading]);
+
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, completed }: { id: string; completed: boolean }) =>
+      updateChecklistTask(sessionToken!, id, { completed }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["checklist"] });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    },
+  });
+
+  const seedMutation = useMutation({
+    mutationFn: () => seedDefaultChecklist(sessionToken!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["checklist"] });
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (title: string) =>
+      createChecklistTask(sessionToken!, {
+        title,
+        monthsBefore: 12,
+        category: "planning",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["checklist"] });
+      setShowAddModal(false);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteChecklistTask(sessionToken!, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["checklist"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<ChecklistTask> }) =>
+      updateChecklistTask(sessionToken!, id, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["checklist"] });
+      setEditingTask(null);
+    },
+  });
+
+  const handleToggle = (id: string, completed: boolean) => {
+    toggleMutation.mutate({ id, completed: !completed });
+  };
+
+  const handleSeedDefaults = () => {
+    Alert.alert(
+      "Opprett standardsjekkliste",
+      "Dette vil legge til 24 standardoppgaver. Fortsette?",
+      [
+        { text: "Avbryt", style: "cancel" },
+        { text: "Opprett", onPress: () => seedMutation.mutate() },
+      ]
     );
-    setItems(updatedItems);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedItems));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const completedCount = items.filter((i) => i.completed).length;
-  const progress = (completedCount / items.length) * 100;
-
-  const filteredItems = filterCategory
-    ? items.filter((i) => i.category === filterCategory)
-    : items;
-
-  const urgentItems = items.filter((i) => !i.completed && i.monthsBefore >= monthsLeft);
-  const upcomingItems = items.filter((i) => !i.completed && i.monthsBefore < monthsLeft && i.monthsBefore >= monthsLeft - 2);
-
-  const getUrgencyColor = (monthsBefore: number) => {
-    if (monthsBefore > monthsLeft) return theme.error;
-    if (monthsBefore >= monthsLeft - 1) return "#FFB74D";
-    return theme.textSecondary;
+  const handleAddTask = () => {
+    if (editTitle.trim()) {
+      createMutation.mutate(editTitle.trim());
+    }
   };
 
-  if (loading) {
+  const handleEditTask = (task: ChecklistTask) => {
+    setEditingTask(task);
+    setEditTitle(task.title);
+    setEditMonthsBefore(task.monthsBefore);
+    setEditCategory(task.category as any);
+    setEditNotes(task.notes || "");
+    setEditAssignedTo(task.assignedTo ? "partner" : "both");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingTask || !editTitle.trim()) return;
+    
+    updateMutation.mutate({
+      id: editingTask.id,
+      updates: {
+        title: editTitle,
+        monthsBefore: editMonthsBefore,
+        category: editCategory,
+        notes: editNotes || null,
+        assignedTo: editAssignedTo === "both" ? null : sessionToken,
+      },
+    });
+  };
+
+  const handleDeleteTask = (task: ChecklistTask) => {
+    if (task.isDefault) {
+      Alert.alert("Kan ikke slette", "Standardoppgaver kan ikke slettes");
+      return;
+    }
+    
+    Alert.alert(
+      "Slett oppgave",
+      `Er du sikker på at du vil slette "${task.title}"?`,
+      [
+        { text: "Avbryt", style: "cancel" },
+        { 
+          text: "Slett", 
+          style: "destructive",
+          onPress: () => deleteMutation.mutate(task.id)
+        },
+      ]
+    );
+  };
+
+  if (!sessionToken) {
+    return (
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
+        <ThemedText style={{ color: theme.textSecondary }}>Logg inn for å se sjekkliste</ThemedText>
+      </View>
+    );
+  }
+
+  if (isLoading) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
         <ThemedText style={{ color: theme.textSecondary }}>Laster...</ThemedText>
       </View>
     );
   }
+
+  if (tasks.length === 0) {
+    return (
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
+        <Feather name="clipboard" size={64} color={theme.textSecondary} />
+        <ThemedText type="h3" style={{ marginTop: Spacing.lg }}>Tom sjekkliste</ThemedText>
+        <ThemedText style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm, marginHorizontal: Spacing.xl }}>
+          Opprett standardoppgaver eller legg til dine egne
+        </ThemedText>
+        <Pressable
+          onPress={handleSeedDefaults}
+          style={[styles.button, { backgroundColor: Colors.dark.accent, marginTop: Spacing.lg }]}
+        >
+          <ThemedText style={{ color: "#1A1A1A", fontWeight: "600" }}>Opprett standardsjekkliste</ThemedText>
+        </Pressable>
+        <Pressable
+          onPress={() => { setEditTitle(""); setShowAddModal(true); }}
+          style={[styles.button, { backgroundColor: theme.backgroundDefault, borderWidth: 1, borderColor: theme.border, marginTop: Spacing.md }]}
+        >
+          <ThemedText style={{ color: theme.text, fontWeight: "600" }}>Legg til oppgave</ThemedText>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const completedCount = tasks.filter((i) => i.completed).length;
+  const progress = (completedCount / tasks.length) * 100;
+
+  const filteredItems = filterCategory
+    ? tasks.filter((i) => i.category === filterCategory)
+    : tasks;
+
+  const urgentItems = tasks.filter((i) => !i.completed && i.monthsBefore >= monthsLeft);
+
+  const getUrgencyColor = (monthsBefore: number) => {
+    if (monthsBefore > monthsLeft) return theme.error;
+    if (monthsBefore >= monthsLeft - 1) return "#FFB74D";
+    return theme.textSecondary;
+  };
 
   return (
     <ScrollView
@@ -152,7 +297,7 @@ export default function ChecklistScreen() {
             <View style={[styles.progressFill, { backgroundColor: Colors.dark.accent, width: `${progress}%` }]} />
           </View>
           <ThemedText style={[styles.progressSubtext, { color: theme.textSecondary }]}>
-            {completedCount} av {items.length} oppgaver fullført
+            {completedCount} av {tasks.length} oppgaver fullført
           </ThemedText>
         </View>
       </Animated.View>
@@ -217,48 +362,229 @@ export default function ChecklistScreen() {
         const catInfo = CATEGORY_INFO[item.category];
         return (
           <Animated.View key={item.id} entering={FadeInRight.delay(400 + index * 30).duration(300)}>
-            <Pressable onPress={() => handleToggle(item.id)}>
-              <View
-                style={[
-                  styles.itemCard,
-                  {
-                    backgroundColor: theme.backgroundDefault,
-                    borderColor: theme.border,
-                    opacity: item.completed ? 0.6 : 1,
-                  },
-                ]}
+            <SwipeableRow
+              onEdit={() => handleEditTask(item)}
+              onDelete={() => handleDeleteTask(item)}
+              showEdit={true}
+              showDelete={!item.isDefault}
+              backgroundColor={theme.backgroundDefault}
+            >
+              <Pressable 
+                onPress={() => handleToggle(item.id, item.completed)}
+                onLongPress={() => handleEditTask(item)}
               >
                 <View
                   style={[
-                    styles.checkbox,
+                    styles.itemCard,
                     {
-                      backgroundColor: item.completed ? Colors.dark.accent : "transparent",
-                      borderColor: item.completed ? Colors.dark.accent : theme.border,
+                      backgroundColor: theme.backgroundDefault,
+                      borderColor: theme.border,
+                      opacity: item.completed ? 0.6 : 1,
                     },
                   ]}
                 >
-                  {item.completed ? <Feather name="check" size={12} color="#1A1A1A" /> : null}
-                </View>
-                <View style={styles.itemContent}>
-                  <ThemedText style={[styles.itemTitle, item.completed && styles.itemCompleted]}>
-                    {item.title}
-                  </ThemedText>
-                  <View style={styles.itemMeta}>
-                    <View style={[styles.categoryBadge, { backgroundColor: catInfo.color + "20" }]}>
-                      <ThemedText style={[styles.categoryBadgeText, { color: catInfo.color }]}>
-                        {catInfo.name}
+                  <View
+                    style={[
+                      styles.checkbox,
+                      {
+                        backgroundColor: item.completed ? Colors.dark.accent : "transparent",
+                        borderColor: item.completed ? Colors.dark.accent : theme.border,
+                      },
+                    ]}
+                  >
+                    {item.completed ? <Feather name="check" size={12} color="#1A1A1A" /> : null}
+                  </View>
+                  <View style={styles.itemContent}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.xs }}>
+                      <ThemedText style={[styles.itemTitle, item.completed && styles.itemCompleted]}>
+                        {item.title}
+                      </ThemedText>
+                      {item.assignedTo && (
+                        <View style={[styles.assignedBadge, { backgroundColor: Colors.dark.accent + "30" }]}>
+                          <Feather name="user" size={10} color={Colors.dark.accent} />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.itemMeta}>
+                      <View style={[styles.categoryBadge, { backgroundColor: catInfo.color + "20" }]}>
+                        <ThemedText style={[styles.categoryBadgeText, { color: catInfo.color }]}>
+                          {catInfo.name}
+                        </ThemedText>
+                      </View>
+                      <ThemedText style={[styles.monthsText, { color: getUrgencyColor(item.monthsBefore) }]}>
+                        {item.monthsBefore} mnd før
                       </ThemedText>
                     </View>
-                    <ThemedText style={[styles.monthsText, { color: getUrgencyColor(item.monthsBefore) }]}>
-                      {item.monthsBefore} mnd før
-                    </ThemedText>
+                    {item.notes && (
+                      <ThemedText style={[styles.notesText, { color: theme.textSecondary }]} numberOfLines={1}>
+                        {item.notes}
+                      </ThemedText>
+                    )}
                   </View>
                 </View>
-              </View>
-            </Pressable>
+              </Pressable>
+            </SwipeableRow>
           </Animated.View>
         );
       })}
+
+      <Pressable
+        onPress={() => { setEditTitle(""); setShowAddModal(true); }}
+        style={[styles.addButton, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+      >
+        <Feather name="plus" size={20} color={Colors.dark.accent} />
+        <ThemedText style={{ color: Colors.dark.accent, marginLeft: Spacing.sm, fontWeight: "600" }}>
+          Legg til oppgave
+        </ThemedText>
+      </Pressable>
+
+      {/* Add Task Modal */}
+      <Modal visible={showAddModal} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowAddModal(false)}>
+          <Pressable style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]} onPress={(e) => e.stopPropagation()}>
+            <ThemedText type="h3" style={{ marginBottom: Spacing.md }}>Ny oppgave</ThemedText>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+              value={editTitle}
+              onChangeText={setEditTitle}
+              placeholder="Oppgavetittel"
+              placeholderTextColor={theme.textSecondary}
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <Pressable onPress={() => setShowAddModal(false)} style={[styles.modalButton, { backgroundColor: theme.backgroundSecondary }]}>
+                <ThemedText style={{ color: theme.text }}>Avbryt</ThemedText>
+              </Pressable>
+              <Pressable onPress={handleAddTask} style={[styles.modalButton, { backgroundColor: Colors.dark.accent }]}>
+                <ThemedText style={{ color: "#1A1A1A", fontWeight: "600" }}>Legg til</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Edit Task Modal */}
+      <Modal visible={!!editingTask} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setEditingTask(null)}>
+          <Pressable style={[styles.modalContentLarge, { backgroundColor: theme.backgroundDefault }]} onPress={(e) => e.stopPropagation()}>
+            <ThemedText type="h3" style={{ marginBottom: Spacing.md }}>Rediger oppgave</ThemedText>
+            
+            <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Tittel</ThemedText>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+              value={editTitle}
+              onChangeText={setEditTitle}
+              placeholder="Oppgavetittel"
+              placeholderTextColor={theme.textSecondary}
+            />
+
+            <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>Kategori</ThemedText>
+            <View style={styles.categoryGrid}>
+              {Object.entries(CATEGORY_INFO).map(([key, info]) => (
+                <Pressable
+                  key={key}
+                  onPress={() => setEditCategory(key as any)}
+                  style={[
+                    styles.categoryOption,
+                    {
+                      backgroundColor: editCategory === key ? info.color + "30" : theme.backgroundSecondary,
+                      borderColor: editCategory === key ? info.color : "transparent",
+                    },
+                  ]}
+                >
+                  <Feather name={info.icon} size={16} color={editCategory === key ? info.color : theme.textSecondary} />
+                  <ThemedText style={{ fontSize: 12, marginTop: 4, color: editCategory === key ? theme.text : theme.textSecondary }}>
+                    {info.name}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+
+            <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>Måneder før bryllup</ThemedText>
+            <View style={styles.monthsSlider}>
+              {[0, 1, 2, 3, 6, 9, 12].map((months) => (
+                <Pressable
+                  key={months}
+                  onPress={() => setEditMonthsBefore(months)}
+                  style={[
+                    styles.monthOption,
+                    {
+                      backgroundColor: editMonthsBefore === months ? Colors.dark.accent : theme.backgroundSecondary,
+                    },
+                  ]}
+                >
+                  <ThemedText style={{ color: editMonthsBefore === months ? "#1A1A1A" : theme.text, fontSize: 13 }}>
+                    {months}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+
+            <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>Tildel til</ThemedText>
+            <View style={styles.assignmentOptions}>
+              <Pressable
+                onPress={() => setEditAssignedTo("both")}
+                style={[
+                  styles.assignmentOption,
+                  {
+                    backgroundColor: editAssignedTo === "both" ? Colors.dark.accent + "30" : theme.backgroundSecondary,
+                    borderColor: editAssignedTo === "both" ? Colors.dark.accent : "transparent",
+                  },
+                ]}
+              >
+                <Feather name="users" size={16} color={editAssignedTo === "both" ? Colors.dark.accent : theme.textSecondary} />
+                <ThemedText style={{ marginLeft: 6 }}>Begge</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => setEditAssignedTo("me")}
+                style={[
+                  styles.assignmentOption,
+                  {
+                    backgroundColor: editAssignedTo === "me" ? Colors.dark.accent + "30" : theme.backgroundSecondary,
+                    borderColor: editAssignedTo === "me" ? Colors.dark.accent : "transparent",
+                  },
+                ]}
+              >
+                <Feather name="user" size={16} color={editAssignedTo === "me" ? Colors.dark.accent : theme.textSecondary} />
+                <ThemedText style={{ marginLeft: 6 }}>Meg</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => setEditAssignedTo("partner")}
+                style={[
+                  styles.assignmentOption,
+                  {
+                    backgroundColor: editAssignedTo === "partner" ? Colors.dark.accent + "30" : theme.backgroundSecondary,
+                    borderColor: editAssignedTo === "partner" ? Colors.dark.accent : "transparent",
+                  },
+                ]}
+              >
+                <Feather name="heart" size={16} color={editAssignedTo === "partner" ? Colors.dark.accent : theme.textSecondary} />
+                <ThemedText style={{ marginLeft: 6 }}>Partner</ThemedText>
+              </Pressable>
+            </View>
+
+            <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>Notater (valgfritt)</ThemedText>
+            <TextInput
+              style={[styles.textArea, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+              value={editNotes}
+              onChangeText={setEditNotes}
+              placeholder="Legg til notater..."
+              placeholderTextColor={theme.textSecondary}
+              multiline
+              numberOfLines={3}
+            />
+
+            <View style={styles.modalButtons}>
+              <Pressable onPress={() => setEditingTask(null)} style={[styles.modalButton, { backgroundColor: theme.backgroundSecondary }]}>
+                <ThemedText style={{ color: theme.text }}>Avbryt</ThemedText>
+              </Pressable>
+              <Pressable onPress={handleSaveEdit} style={[styles.modalButton, { backgroundColor: Colors.dark.accent }]}>
+                <ThemedText style={{ color: "#1A1A1A", fontWeight: "600" }}>Lagre</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -321,4 +647,107 @@ const styles = StyleSheet.create({
   categoryBadge: { paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: BorderRadius.sm, marginRight: Spacing.sm },
   categoryBadgeText: { fontSize: 11, fontWeight: "500" },
   monthsText: { fontSize: 12 },
+  notesText: { fontSize: 12, marginTop: 4, fontStyle: "italic" },
+  assignedBadge: { width: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  addButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    marginTop: Spacing.md,
+  },
+  button: {
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "85%",
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.lg,
+  },
+  modalContentLarge: {
+    width: "90%",
+    maxHeight: "85%",
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.lg,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: 16,
+  },
+  textArea: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: 16,
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: Spacing.xs,
+  },
+  categoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+  },
+  categoryOption: {
+    width: "30%",
+    aspectRatio: 1,
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  monthsSlider: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    flexWrap: "wrap",
+  },
+  monthOption: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    minWidth: 40,
+    alignItems: "center",
+  },
+  assignmentOptions: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  assignmentOption: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
+  },
+  modalButton: {
+    flex: 1,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+  },
 });

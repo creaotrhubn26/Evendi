@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -16,12 +16,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Button } from "@/components/Button";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -35,13 +35,17 @@ const UNIT_TYPES = [
 
 interface Props {
   navigation: NativeStackNavigationProp<any>;
+  route: RouteProp<{ params: { product?: any } }, "params">;
 }
 
-export default function ProductCreateScreen({ navigation }: Props) {
+export default function ProductCreateScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
+  
+  const editingProduct = route.params?.product;
+  const isEditMode = !!editingProduct;
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -51,16 +55,33 @@ export default function ProductCreateScreen({ navigation }: Props) {
   const [minQuantity, setMinQuantity] = useState("1");
   const [categoryTag, setCategoryTag] = useState("");
 
-  const createMutation = useMutation({
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingProduct) {
+      setTitle(editingProduct.title || "");
+      setDescription(editingProduct.description || "");
+      setUnitPrice(editingProduct.unitPrice ? String(editingProduct.unitPrice / 100) : "");
+      setUnitType(editingProduct.unitType || "stk");
+      setLeadTimeDays(editingProduct.leadTimeDays ? String(editingProduct.leadTimeDays) : "");
+      setMinQuantity(editingProduct.minQuantity ? String(editingProduct.minQuantity) : "1");
+      setCategoryTag(editingProduct.categoryTag || "");
+    }
+  }, [editingProduct]);
+
+  const saveMutation = useMutation({
     mutationFn: async () => {
       const sessionData = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
       if (!sessionData) throw new Error("Ikke innlogget");
       const session = JSON.parse(sessionData);
 
       const priceInOre = Math.round(parseFloat(unitPrice) * 100);
+      
+      const url = isEditMode 
+        ? new URL(`/api/vendor/products/${editingProduct.id}`, getApiUrl()).toString()
+        : new URL("/api/vendor/products", getApiUrl()).toString();
 
-      const response = await fetch(new URL("/api/vendor/products", getApiUrl()).toString(), {
-        method: "POST",
+      const response = await fetch(url, {
+        method: isEditMode ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.sessionToken}`,
@@ -78,7 +99,7 @@ export default function ProductCreateScreen({ navigation }: Props) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Kunne ikke opprette produkt");
+        throw new Error(error.error || (isEditMode ? "Kunne ikke oppdatere produkt" : "Kunne ikke opprette produkt"));
       }
 
       return response.json();
@@ -93,20 +114,94 @@ export default function ProductCreateScreen({ navigation }: Props) {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const sessionData = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
+      if (!sessionData) throw new Error("Ikke innlogget");
+      const session = JSON.parse(sessionData);
+
+      const response = await fetch(
+        new URL(`/api/vendor/products/${editingProduct.id}`, getApiUrl()).toString(),
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Kunne ikke slette produkt");
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      queryClient.invalidateQueries({ queryKey: ["/api/vendor/products"] });
+      navigation.goBack();
+    },
+    onError: (error: Error) => {
+      Alert.alert("Feil", error.message);
+    },
+  });
+
+  const handleDelete = () => {
+    Alert.alert(
+      "Slett produkt",
+      `Er du sikker på at du vil slette "${title}"?`,
+      [
+        { text: "Avbryt", style: "cancel" },
+        { text: "Slett", style: "destructive", onPress: () => deleteMutation.mutate() },
+      ]
+    );
+  };
+
   const isValid = title.trim().length >= 2 && parseFloat(unitPrice) >= 0;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+        <View style={styles.headerContent}>
+          <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}>
+            <Feather name="shopping-bag" size={20} color="#FFFFFF" />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <ThemedText style={[styles.headerTitle, { color: theme.text }]}>
+              {isEditMode ? "Rediger produkt" : "Nytt produkt"}
+            </ThemedText>
+            <ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+              {isEditMode ? "Oppdater produktinfo" : "Legg til tjeneste eller vare"}
+            </ThemedText>
+          </View>
+        </View>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={({ pressed }) => [
+            styles.closeButton,
+            { backgroundColor: pressed ? theme.backgroundSecondary : theme.backgroundRoot },
+          ]}
+        >
+          <Feather name="x" size={20} color={theme.textSecondary} />
+        </Pressable>
+      </View>
       <KeyboardAwareScrollViewCompat
+        style={{ flex: 1 }}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + Spacing.xl },
+          { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl },
         ]}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
       >
-        <Animated.View entering={FadeInDown.duration(300)} style={styles.formSection}>
+        <Animated.View entering={FadeInDown.duration(300)}>
           <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <ThemedText style={styles.formTitle}>Produktinformasjon</ThemedText>
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
+                <Feather name="info" size={16} color={theme.accent} />
+              </View>
+              <ThemedText style={[styles.formTitle, { color: theme.text }]}>Produktinformasjon</ThemedText>
+            </View>
 
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Tittel</ThemedText>
@@ -164,20 +259,25 @@ export default function ProductCreateScreen({ navigation }: Props) {
                   {UNIT_TYPES.map((unit) => (
                     <Pressable
                       key={unit.value}
-                      onPress={() => setUnitType(unit.value)}
-                      style={[
-                        styles.unitOption,
-                        { 
-                          backgroundColor: unitType === unit.value ? Colors.dark.accent : theme.backgroundRoot,
-                          borderColor: unitType === unit.value ? Colors.dark.accent : theme.border,
-                        },
-                      ]}
+                      onPress={() => {
+                        setUnitType(unit.value);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[{
+                        paddingHorizontal: Spacing.md,
+                        paddingVertical: Spacing.sm,
+                        borderRadius: BorderRadius.full,
+                        borderWidth: unitType === unit.value ? 0 : 1,
+                        backgroundColor: unitType === unit.value ? theme.accent : theme.backgroundRoot,
+                        borderColor: theme.border,
+                      }]}
                     >
                       <ThemedText
-                        style={[
-                          styles.unitOptionText,
-                          { color: unitType === unit.value ? "#1A1A1A" : theme.textMuted },
-                        ]}
+                        style={[{
+                          fontSize: 13,
+                          fontWeight: "600",
+                          color: unitType === unit.value ? "#FFFFFF" : theme.textMuted,
+                        }]}
                       >
                         {unit.label}
                       </ThemedText>
@@ -236,22 +336,71 @@ export default function ProductCreateScreen({ navigation }: Props) {
               />
             </View>
 
-            <View style={styles.pricePreview}>
-              <Feather name="tag" size={20} color={Colors.dark.accent} />
-              <ThemedText style={styles.pricePreviewText}>
+            <View style={[styles.pricePreview, { backgroundColor: theme.accent + "12" }]}>
+              <View style={[styles.pricePreviewIcon, { backgroundColor: theme.accent }]}>
+                <Feather name="tag" size={16} color="#FFFFFF" />
+              </View>
+              <ThemedText style={[styles.pricePreviewText, { color: theme.text }]}>
                 {parseFloat(unitPrice) > 0
                   ? `${parseFloat(unitPrice).toLocaleString("nb-NO")} kr / ${UNIT_TYPES.find(u => u.value === unitType)?.label.toLowerCase()}`
                   : "Angi pris for forhåndsvisning"}
               </ThemedText>
             </View>
 
-            <Button
-              onPress={() => createMutation.mutate()}
-              disabled={!isValid || createMutation.isPending}
-              style={styles.submitButton}
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                saveMutation.mutate();
+              }}
+              disabled={!isValid || saveMutation.isPending}
+              style={({ pressed }) => [
+                styles.submitBtn,
+                { 
+                  backgroundColor: theme.accent, 
+                  opacity: (!isValid || saveMutation.isPending) ? 0.5 : 1,
+                  transform: [{ scale: pressed && isValid ? 0.98 : 1 }],
+                },
+              ]}
             >
-              {createMutation.isPending ? "Oppretter..." : "Opprett produkt"}
-            </Button>
+              {saveMutation.isPending ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <View style={styles.submitBtnIcon}>
+                    <Feather name="check" size={18} color="#FFFFFF" />
+                  </View>
+                  <ThemedText style={styles.submitBtnText}>
+                    {isEditMode ? "Lagre endringer" : "Opprett produkt"}
+                  </ThemedText>
+                </>
+              )}
+            </Pressable>
+
+            {isEditMode && (
+              <Pressable
+                onPress={handleDelete}
+                disabled={deleteMutation.isPending}
+                style={({ pressed }) => [
+                  styles.deleteBtn,
+                  { 
+                    backgroundColor: "#F44336" + "15",
+                    opacity: deleteMutation.isPending ? 0.5 : 1,
+                    transform: [{ scale: pressed ? 0.98 : 1 }],
+                  },
+                ]}
+              >
+                {deleteMutation.isPending ? (
+                  <ActivityIndicator color="#F44336" />
+                ) : (
+                  <>
+                    <Feather name="trash-2" size={18} color="#F44336" />
+                    <ThemedText style={[styles.deleteBtnText, { color: "#F44336" }]}>
+                      Slett produkt
+                    </ThemedText>
+                  </>
+                )}
+              </Pressable>
+            )}
           </View>
         </Animated.View>
       </KeyboardAwareScrollViewCompat>
@@ -261,21 +410,71 @@ export default function ProductCreateScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    flex: 1,
+  },
+  headerIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    marginTop: 1,
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   content: {
     paddingHorizontal: Spacing.lg,
   },
-  formSection: {
-    marginBottom: Spacing.lg,
-  },
   formCard: {
     padding: Spacing.lg,
-    borderRadius: BorderRadius.md,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
   },
-  formTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
     marginBottom: Spacing.lg,
+  },
+  sectionIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  formTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: -0.2,
   },
   inputGroup: {
     marginBottom: Spacing.md,
@@ -288,7 +487,7 @@ const styles = StyleSheet.create({
   textInput: {
     fontSize: 16,
     padding: Spacing.md,
-    borderRadius: BorderRadius.sm,
+    borderRadius: BorderRadius.md,
     borderWidth: 1,
   },
   textArea: {
@@ -304,32 +503,65 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: Spacing.xs,
   },
-  unitOption: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.sm,
-    borderWidth: 1,
-  },
-  unitOptionText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
   pricePreview: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
+    gap: Spacing.md,
     padding: Spacing.md,
-    backgroundColor: Colors.dark.accent + "15",
-    borderRadius: BorderRadius.sm,
+    borderRadius: BorderRadius.md,
     marginTop: Spacing.md,
     marginBottom: Spacing.lg,
+  },
+  pricePreviewIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
   pricePreviewText: {
     fontSize: 16,
     fontWeight: "600",
-    color: Colors.dark.accent,
+    flex: 1,
   },
-  submitButton: {
-    marginTop: Spacing.sm,
+  submitBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 56,
+    borderRadius: BorderRadius.lg,
+    gap: Spacing.sm,
+    shadowColor: "#C9A962",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  submitBtnIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  submitBtnText: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+  },
+  deleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 48,
+    borderRadius: BorderRadius.lg,
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  deleteBtnText: {
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

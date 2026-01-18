@@ -3,6 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { getWeddingDetails } from "./storage";
 
+const isWeb = Platform.OS === "web";
+
 const NOTIFICATION_SETTINGS_KEY = "@wedflow/notification_settings";
 const COUNTDOWN_NOTIFICATIONS_KEY = "@wedflow/countdown_notifications";
 const CHECKLIST_NOTIFICATIONS_KEY = "@wedflow/checklist_notifications";
@@ -22,19 +24,23 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   daysBefore: [30, 7, 1],
 };
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    priority: Notifications.AndroidNotificationPriority.HIGH,
-  }),
-});
+// Avoid registering native notification handlers on web where expo-notifications
+// push token listeners are not supported and emit noisy warnings.
+if (!isWeb) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      priority: Notifications.AndroidNotificationPriority.HIGH,
+    }),
+  });
+}
 
 export async function requestNotificationPermission(): Promise<boolean> {
-  if (Platform.OS === "web") {
+  if (isWeb) {
     return false;
   }
 

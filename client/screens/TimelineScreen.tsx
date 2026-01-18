@@ -1,16 +1,20 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { ScrollView, StyleSheet, View, Pressable } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, Modal, TextInput, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInLeft } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
+import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { getSchedule, getWeddingDetails } from "@/lib/storage";
+import { getCoupleSession, getTimelineCulture, saveTimelineCulture } from "@/lib/storage";
+import { getScheduleEvents, updateScheduleEvent } from "@/lib/api-schedule-events";
+import { getCoupleProfile } from "@/lib/api-couples";
 import { ScheduleEvent } from "@/lib/types";
 
 const ICON_MAP: Record<string, keyof typeof Feather.glyphMap> = {
@@ -33,22 +37,72 @@ export default function TimelineScreen() {
   const [schedule, setSchedule] = useState<ScheduleEvent[]>([]);
   const [weddingDate, setWeddingDate] = useState("");
   const [loading, setLoading] = useState(true);
+  const [culture, setCulture] = useState<string | null>(null);
+
+  const [expandedBuffer, setExpandedBuffer] = useState<string | null>(null);
+  const [totalBufferTime, setTotalBufferTime] = useState(0);
+  const [problematicIntervals, setProblematicIntervals] = useState<any[]>([]);
+  const [showOptimizationTips, setShowOptimizationTips] = useState(false);
+  const [editingInterval, setEditingInterval] = useState<any>(null);
+  const [newTime, setNewTime] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newIcon, setNewIcon] = useState<string>("star");
+  const [newEventTime, setNewEventTime] = useState("");
 
   const loadData = useCallback(async () => {
-    const [scheduleData, weddingData] = await Promise.all([
-      getSchedule(),
-      getWeddingDetails(),
-    ]);
-    setSchedule(scheduleData.sort((a, b) => a.time.localeCompare(b.time)));
-    if (weddingData) {
-      setWeddingDate(weddingData.weddingDate);
+    setLoading(true);
+    const session = await getCoupleSession();
+    const storedCulture = await getTimelineCulture();
+    if (storedCulture) setCulture(storedCulture);
+
+    let fetchedSchedule: ScheduleEvent[] = [];
+    let fetchedWeddingDate = "";
+    if (session?.token) {
+      try {
+        const [serverSchedule, coupleProfile] = await Promise.all([
+          getScheduleEvents(session.token),
+          getCoupleProfile(session.token),
+        ]);
+        fetchedSchedule = serverSchedule;
+        fetchedWeddingDate = coupleProfile.weddingDate || "";
+      } catch (err) {
+        // fall back to empty on error
+        fetchedSchedule = [];
+      }
     }
+    const sortedSchedule = fetchedSchedule.sort((a, b) => a.time.localeCompare(b.time));
+    setSchedule(sortedSchedule);
+    
+    // Calculate total buffer time and problematic intervals
+    let totalBuffer = 0;
+    const problems = [];
+    for (let i = 0; i < sortedSchedule.length - 1; i++) {
+      const diff = getTimeDiff(sortedSchedule[i].time, sortedSchedule[i + 1].time);
+      totalBuffer += diff;
+      if (diff < 30) {
+        problems.push({
+          from: sortedSchedule[i].title,
+          to: sortedSchedule[i + 1].title,
+          current: diff,
+          needed: getRecommendedBuffer(diff),
+          index: i,
+        });
+      }
+    }
+    setTotalBufferTime(totalBuffer);
+    setProblematicIntervals(problems);
+    
+    setWeddingDate(fetchedWeddingDate);
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const getTimeDiff = (time1: string, time2: string): number => {
     const [h1, m1] = time1.split(":").map(Number);
@@ -56,10 +110,192 @@ export default function TimelineScreen() {
     return (h2 * 60 + m2) - (h1 * 60 + m1);
   };
 
-  const getBufferStatus = (diff: number): { color: string; label: string; icon: keyof typeof Feather.glyphMap } => {
-    if (diff < 15) return { color: theme.error, label: "For kort buffer!", icon: "alert-triangle" };
-    if (diff < 30) return { color: "#FFB74D", label: "Stram tidslinje", icon: "clock" };
-    return { color: theme.success, label: "God buffer", icon: "check-circle" };
+  const handleCreateEvent = async () => {
+    if (!newTitle.trim() || !newEventTime.trim()) {
+      Alert.alert("Feil", "Fyll ut tittel og tid");
+      return;
+    }
+    const session = await getCoupleSession();
+    if (!session?.token) {
+      Alert.alert("Innlogging kreves", "Logg inn for å legge til hendelser.");
+      return;
+    }
+    try {
+      const tempId = `temp_${Date.now()}`;
+      const optimistic = [...schedule, { id: tempId, time: newEventTime, title: newTitle.trim(), icon: (newIcon as any) }].sort((a, b) => a.time.localeCompare(b.time));
+      setSchedule(optimistic);
+      setShowAddModal(false);
+
+      await import("@/lib/api-schedule-events").then(({ createScheduleEvent }) => createScheduleEvent(session.token!, { time: newEventTime, title: newTitle.trim(), icon: newIcon }));
+      await loadData();
+      setNewTitle("");
+      setNewEventTime("");
+      setNewIcon("star");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      Alert.alert("Feil", "Kunne ikke opprette hendelse");
+      await loadData();
+    }
+  };
+
+  const handleDeleteEvent = async (id: string) => {
+    const session = await getCoupleSession();
+    if (!session?.token) {
+      Alert.alert("Innlogging kreves", "Logg inn for å slette hendelser.");
+      return;
+    }
+    try {
+      const prev = [...schedule];
+      setSchedule(prev.filter((e) => e.id !== id));
+      await import("@/lib/api-schedule-events").then(({ deleteScheduleEvent }) => deleteScheduleEvent(session.token!, id));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      Alert.alert("Feil", "Kunne ikke slette hendelse");
+      await loadData();
+    }
+  };
+
+  const getRecommendedBuffer = (diff: number): number => {
+    if (diff < 15) return 15 - diff; // Minstekrav
+    if (diff < 30) return 30 - diff; // Ideell
+    return 0; // Allerede bra
+  };
+
+  const getProblematicIntervals = () => {
+    const problems = [];
+    for (let i = 0; i < schedule.length - 1; i++) {
+      const diff = getTimeDiff(schedule[i].time, schedule[i + 1].time);
+      if (diff < 30) {
+        problems.push({
+          from: schedule[i].title,
+          to: schedule[i + 1].title,
+          current: diff,
+          needed: getRecommendedBuffer(diff),
+          index: i,
+          eventIdFrom: schedule[i].id,
+          eventIdTo: schedule[i + 1].id,
+        });
+      }
+    }
+    return problems;
+  };
+
+  const getTraditionInsight = (eventTitle: string): string => {
+    const insights: Record<string, Record<string, string>> = {
+      norwegian: {
+        "Kransekake": "Norsk tradisjon: Kransekaken krever tid for oppstabling. Gi minst 15-20 min.",
+        "Brudevalsen": "Brudevalsen er hjertepunktet. Planlegg 10-15 min for forberedelse og gjestenes deltagelse.",
+        "Felemusikk": "Hardingfelen setter stemningen. Planlegg 5-10 min før og etter inngang.",
+      },
+      hindu: {
+        "Saptapadi": "De syv skritt er hellige. Planlegg 15-20 min for denne sentrale seremonien.",
+        "Sindoor": "Sindoor-seremonien er kort men betydningsfull. 5 min er nok.",
+      },
+      sikh: {
+        "Laavan": "De fire runder er kjernen. Planlegg 20-30 min med hymner og ritualer.",
+        "Milni": "Familiene møtes formelt. 10-15 min for presentasjoner og girlander.",
+      },
+      jewish: {
+        "Chuppah": "Vielsen under baldakinen er sentral. Gi 15-20 min.",
+        "Knuse glasset": "Det ikoniske øyeblikket! Planlegg 5 min.",
+      },
+      muslim: {
+        "Nikah": "Nikah-seremonien med imam. Planlegg 15-25 min.",
+        "Walima": "Bryllupsmiddagen markerer ekteskapet. Gi tilstrekkelig tid.",
+      },
+    };
+
+    const eventLower = eventTitle.toLowerCase();
+    if (culture && insights[culture]) {
+      for (const [event, insight] of Object.entries(insights[culture])) {
+        if (eventLower.includes(event.toLowerCase())) {
+          return insight;
+        }
+      }
+    } else {
+      for (const entries of Object.values(insights)) {
+        for (const [event, insight] of Object.entries(entries)) {
+          if (eventLower.includes(event.toLowerCase())) {
+            return insight;
+          }
+        }
+      }
+    }
+    return "";
+  };
+
+  const handleEditTime = async (interval: any) => {
+    setEditingInterval(interval);
+    const nextEvent = schedule.find(e => e.id === interval.eventIdTo);
+    if (nextEvent) {
+      setNewTime(nextEvent.time);
+    }
+  };
+
+  const handleSaveTime = async () => {
+    if (!editingInterval || !newTime) return;
+
+    setIsSaving(true);
+    try {
+      const timeParts = newTime.split(":");
+      if (timeParts.length !== 2 || isNaN(parseInt(timeParts[0])) || isNaN(parseInt(timeParts[1]))) {
+        Alert.alert("Ugyldig tid", "Bruk format HH:MM (e.g., 14:30)");
+        setIsSaving(false);
+        return;
+      }
+
+      const session = await getCoupleSession();
+      if (!session?.token) {
+        Alert.alert("Innlogging kreves", "Logg inn for å lagre endringer.");
+        setIsSaving(false);
+        return;
+      }
+
+      // optimistic update
+      const prevSchedule = [...schedule];
+      const optimistic = schedule
+        .map((e) => (e.id === editingInterval.eventIdTo ? { ...e, time: newTime } : e))
+        .sort((a, b) => a.time.localeCompare(b.time));
+      setSchedule(optimistic);
+
+      try {
+        await updateScheduleEvent(session.token, editingInterval.eventIdTo, { time: newTime });
+        await loadData();
+      } catch (err) {
+        setSchedule(prevSchedule);
+        throw err;
+      }
+      
+      setEditingInterval(null);
+      setNewTime("");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Lagret!", "Tidsplan er oppdatert og synkronisert.");
+    } catch (error) {
+      Alert.alert("Feil", "Kunne ikke lagre tidsplan.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const getBufferStatus = (diff: number): { color: string; label: string; icon: keyof typeof Feather.glyphMap; suggestion: string } => {
+    if (diff < 15) return { 
+      color: theme.error, 
+      label: "For kort buffer!", 
+      icon: "alert-triangle",
+      suggestion: "Vurder å legge til mer tid mellom hendelsene"
+    };
+    if (diff < 30) return { 
+      color: "#FFB74D", 
+      label: "Stram tidslinje", 
+      icon: "clock",
+      suggestion: "Kan strammes opp litt, men er håndterbar"
+    };
+    return { 
+      color: theme.success, 
+      label: "God buffer", 
+      icon: "check-circle",
+      suggestion: "Perfekt timing med god fleksibilitet"
+    };
   };
 
   const formatDate = (dateStr: string): string => {
@@ -93,6 +329,29 @@ export default function TimelineScreen() {
           <ThemedText style={[styles.headerDate, { color: theme.textSecondary }]}>
             {formatDate(weddingDate)}
           </ThemedText>
+          <View style={styles.cultureRow}>
+            {[
+              { key: "norwegian", label: "Norsk" },
+              { key: "hindu", label: "Hindu" },
+              { key: "sikh", label: "Sikh" },
+              { key: "jewish", label: "Jødisk" },
+              { key: "muslim", label: "Muslimsk" },
+            ].map((c) => (
+              <Pressable
+                key={c.key}
+                onPress={async () => {
+                  setCulture(c.key);
+                  await saveTimelineCulture(c.key);
+                }}
+                style={[
+                  styles.cultureChip,
+                  { borderColor: theme.border, backgroundColor: culture === c.key ? Colors.dark.accent + "20" : theme.backgroundSecondary },
+                ]}
+              >
+                <ThemedText style={{ fontSize: 12 }}>{c.label}</ThemedText>
+              </Pressable>
+            ))}
+          </View>
         </View>
       </Animated.View>
 
@@ -122,6 +381,21 @@ export default function TimelineScreen() {
 
                 <View style={[styles.eventCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
                   <ThemedText style={styles.eventTitle}>{event.title}</ThemedText>
+                  <Pressable
+                    onPress={() =>
+                      Alert.alert(
+                        "Slett hendelse",
+                        `Fjern "${event.title}"?`,
+                        [
+                          { text: "Avbryt", style: "cancel" },
+                          { text: "Slett", style: "destructive", onPress: () => handleDeleteEvent(event.id) },
+                        ]
+                      )
+                    }
+                    style={styles.deleteBtn}
+                  >
+                    <Feather name="trash-2" size={14} color={theme.textSecondary} />
+                  </Pressable>
                   {nextEvent ? (
                     <ThemedText style={[styles.duration, { color: theme.textSecondary }]}>
                       {timeDiff} min til neste
@@ -133,12 +407,23 @@ export default function TimelineScreen() {
               {bufferStatus && timeDiff < 30 ? (
                 <View style={styles.bufferWarning}>
                   <View style={styles.bufferSpacer} />
-                  <View style={[styles.bufferCard, { backgroundColor: bufferStatus.color + "20", borderColor: bufferStatus.color }]}>
+                  <Pressable
+                    onPress={() => setExpandedBuffer(expandedBuffer === event.id ? null : event.id)}
+                    style={[styles.bufferCard, { backgroundColor: bufferStatus.color + "20", borderColor: bufferStatus.color }]}
+                  >
                     <Feather name={bufferStatus.icon} size={14} color={bufferStatus.color} />
-                    <ThemedText style={[styles.bufferText, { color: bufferStatus.color }]}>
-                      {bufferStatus.label}
-                    </ThemedText>
-                  </View>
+                    <View style={{ flex: 1, marginLeft: Spacing.xs }}>
+                      <ThemedText style={[styles.bufferText, { color: bufferStatus.color }]}>
+                        {bufferStatus.label} • {timeDiff} min
+                      </ThemedText>
+                      {expandedBuffer === event.id && (
+                        <ThemedText style={[styles.bufferSuggestion, { color: bufferStatus.color }]}>
+                          {bufferStatus.suggestion}
+                        </ThemedText>
+                      )}
+                    </View>
+                    <Feather name={expandedBuffer === event.id ? "chevron-up" : "chevron-down"} size={14} color={bufferStatus.color} />
+                  </Pressable>
                 </View>
               ) : null}
             </Animated.View>
@@ -155,29 +440,250 @@ export default function TimelineScreen() {
         </View>
       ) : null}
 
+      {problematicIntervals.length > 0 ? (
+        <Animated.View entering={FadeInDown.delay(400).duration(400)}>
+          <View style={[styles.optimizationCard, { backgroundColor: Colors.dark.accent + "08", borderColor: Colors.dark.accent }]}>
+            <View style={styles.optimizationHeader}>
+              <Feather name="alert-circle" size={20} color={Colors.dark.accent} />
+              <ThemedText type="h4" style={[styles.optimizationTitle, { color: Colors.dark.accent }]}>
+                Tidsoptimalisering
+              </ThemedText>
+            </View>
+            
+            <ThemedText style={[styles.optimizationSubtext, { color: theme.textSecondary }]}>
+              {problematicIntervals.length} intervall{problematicIntervals.length > 1 ? "er" : ""} kan forbedres
+            </ThemedText>
+            
+            {problematicIntervals.map((interval, idx) => (
+              <Pressable 
+                key={idx}
+                onPress={() => handleEditTime(interval)}
+                style={[styles.optimizationItem, { borderColor: theme.border }]}
+              >
+                <View style={styles.optimizationContent}>
+                  <View style={styles.eventPair}>
+                    <ThemedText style={[styles.eventName, { color: theme.textSecondary }]}>
+                      {interval.from}
+                    </ThemedText>
+                    <Feather name="arrow-right" size={12} color={theme.textSecondary} />
+                    <ThemedText style={[styles.eventName, { color: theme.textSecondary }]}>
+                      {interval.to}
+                    </ThemedText>
+                  </View>
+                  
+                  {getTraditionInsight(interval.from) && (
+                    <ThemedText style={[styles.traditionTip, { color: Colors.dark.accent }]}>
+                      💡 {getTraditionInsight(interval.from)}
+                    </ThemedText>
+                  )}
+                  
+                  <View style={styles.timingInfo}>
+                    <View style={styles.currentTime}>
+                      <ThemedText style={[styles.timeLabel, { color: theme.textSecondary }]}>
+                        Nåværende
+                      </ThemedText>
+                      <ThemedText style={[styles.timeBold, { color: theme.text }]}>
+                        {interval.current} min
+                      </ThemedText>
+                    </View>
+                    <Feather name="arrow-right" size={14} color={Colors.dark.accent} />
+                    <View style={styles.recommendedTime}>
+                      <ThemedText style={[styles.timeLabel, { color: Colors.dark.accent }]}>
+                        Anbefalt
+                      </ThemedText>
+                      <ThemedText style={[styles.timeBold, { color: Colors.dark.accent }]}>
+                        {interval.current + interval.needed} min
+                      </ThemedText>
+                    </View>
+                    <View style={[styles.addBadge, { backgroundColor: Colors.dark.accent + "20" }]}>
+                      <ThemedText style={[styles.addText, { color: Colors.dark.accent }]}>
+                        +{interval.needed}
+                      </ThemedText>
+                    </View>
+                  </View>
+                  
+                  <View style={[styles.editHint, { backgroundColor: Colors.dark.accent + "10" }]}>
+                    <Feather name="edit-2" size={12} color={Colors.dark.accent} />
+                    <ThemedText style={[styles.editHintText, { color: Colors.dark.accent }]}>
+                      Trykk for å redigere tiden
+                    </ThemedText>
+                  </View>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </Animated.View>
+      ) : null}
+
       <Animated.View entering={FadeInDown.delay(600).duration(400)}>
         <View style={[styles.tipsCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-          <ThemedText type="h4" style={styles.tipsTitle}>Buffer-tips</ThemedText>
+          <View style={styles.tipsHeader}>
+            <ThemedText type="h4" style={styles.tipsTitle}>Buffer-oversikt</ThemedText>
+            <View style={[styles.bufferSummary, { backgroundColor: Colors.dark.accent + "15" }]}>
+              <Feather name="clock" size={14} color={Colors.dark.accent} />
+              <ThemedText style={[styles.bufferSummaryText, { color: Colors.dark.accent }]}>
+                {totalBufferTime} min totalt
+              </ThemedText>
+            </View>
+          </View>
+          
+          <ThemedText style={[styles.tipsSubtitle, { color: theme.textSecondary }]}>
+            Retningslinjer
+          </ThemedText>
+          
           <View style={styles.tipRow}>
             <View style={[styles.tipDot, { backgroundColor: theme.success }]} />
-            <ThemedText style={[styles.tipText, { color: theme.textSecondary }]}>
-              30+ min: Ideell buffer
-            </ThemedText>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={[styles.tipText, { color: theme.text }]}>
+                <ThemedText style={{ fontWeight: "600" }}>30+ min:</ThemedText> Ideell buffer
+              </ThemedText>
+              <ThemedText style={[styles.tipHint, { color: theme.textSecondary }]}>
+                God fleksibilitet for uforutsette forsinkelser
+              </ThemedText>
+            </View>
           </View>
+          
           <View style={styles.tipRow}>
             <View style={[styles.tipDot, { backgroundColor: "#FFB74D" }]} />
-            <ThemedText style={[styles.tipText, { color: theme.textSecondary }]}>
-              15-30 min: Stram, men ok
-            </ThemedText>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={[styles.tipText, { color: theme.text }]}>
+                <ThemedText style={{ fontWeight: "600" }}>15-30 min:</ThemedText> Stram, men ok
+              </ThemedText>
+              <ThemedText style={[styles.tipHint, { color: theme.textSecondary }]}>
+                Krever mer presisjon, begrenset fleksibilitet
+              </ThemedText>
+            </View>
           </View>
+          
           <View style={styles.tipRow}>
             <View style={[styles.tipDot, { backgroundColor: theme.error }]} />
-            <ThemedText style={[styles.tipText, { color: theme.textSecondary }]}>
-              Under 15 min: Risikabelt
-            </ThemedText>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={[styles.tipText, { color: theme.text }]}>
+                <ThemedText style={{ fontWeight: "600" }}>Under 15 min:</ThemedText> Risikabelt
+              </ThemedText>
+              <ThemedText style={[styles.tipHint, { color: theme.textSecondary }]}>
+                Lite rom for uforutsette hendelser
+              </ThemedText>
+            </View>
           </View>
         </View>
       </Animated.View>
+
+      <View style={styles.addFabContainer}>
+        <Pressable onPress={() => setShowAddModal(true)} style={[styles.addFab, { backgroundColor: Colors.dark.accent }]}>
+          <Feather name="plus" size={24} color="#1A1A1A" />
+        </Pressable>
+      </View>
+
+      <Modal visible={!!editingInterval} transparent animationType="fade">
+        <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.5)" }]}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText type="h3" style={styles.modalTitle}>
+                Rediger tid
+              </ThemedText>
+              <Pressable onPress={() => setEditingInterval(null)}>
+                <Feather name="x" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+
+            {editingInterval && (
+              <>
+                <View style={styles.modalSection}>
+                  <ThemedText style={[styles.modalLabel, { color: theme.textSecondary }]}>
+                    Hendelse: <ThemedText style={{ fontWeight: "600" }}>{editingInterval.to}</ThemedText>
+                  </ThemedText>
+                  <ThemedText style={[styles.modalDescription, { color: theme.textSecondary }]}>
+                    Etter: {editingInterval.from}
+                  </ThemedText>
+                </View>
+
+                <View style={styles.modalSection}>
+                  <ThemedText style={[styles.modalLabel, { color: theme.textSecondary }]}>
+                    Ny tid (HH:MM)
+                  </ThemedText>
+                  <TextInput
+                    style={[styles.timeInput, { borderColor: Colors.dark.accent, color: theme.text }]}
+                    placeholder="14:30"
+                    placeholderTextColor={theme.textSecondary}
+                    value={newTime}
+                    onChangeText={setNewTime}
+                    maxLength={5}
+                  />
+                </View>
+
+                {getTraditionInsight(editingInterval.from) && (
+                  <View style={[styles.modalTip, { backgroundColor: Colors.dark.accent + "15", borderColor: Colors.dark.accent }]}>
+                    <Feather name="lightbulb" size={16} color={Colors.dark.accent} />
+                    <ThemedText style={[styles.modalTipText, { color: Colors.dark.accent }]}>
+                      {getTraditionInsight(editingInterval.from)}
+                    </ThemedText>
+                  </View>
+                )}
+
+                <View style={styles.modalButtonGroup}>
+                  <Button
+                    onPress={() => setEditingInterval(null)}
+                    style={styles.cancelButton}
+                    textColor={Colors.dark.accent}
+                  >
+                    Avbryt
+                  </Button>
+                  <Button
+                    onPress={handleSaveTime}
+                    style={styles.saveButton}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? "Lagrer..." : "Lagre endringer"}
+                  </Button>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
+        <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.5)" }] }>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }] }>
+            <View style={styles.modalHeader}>
+              <ThemedText type="h3" style={styles.modalTitle}>Ny hendelse</ThemedText>
+              <Pressable onPress={() => setShowAddModal(false)}>
+                <Feather name="x" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+            <View style={styles.modalSection}>
+              <ThemedText style={[styles.modalLabel, { color: theme.textSecondary }]}>Tittel</ThemedText>
+              <TextInput style={[styles.timeInput, { borderColor: theme.border, color: theme.text }]} value={newTitle} onChangeText={setNewTitle} placeholder="F.eks. Inngang" placeholderTextColor={theme.textSecondary} />
+            </View>
+            <View style={styles.modalSection}>
+              <ThemedText style={[styles.modalLabel, { color: theme.textSecondary }]}>Tid (HH:MM)</ThemedText>
+              <TextInput style={[styles.timeInput, { borderColor: Colors.dark.accent, color: theme.text }]} value={newEventTime} onChangeText={setNewEventTime} placeholder="14:00" placeholderTextColor={theme.textSecondary} maxLength={5} />
+            </View>
+                <View style={styles.modalSection}>
+                  <ThemedText style={[styles.modalLabel, { color: theme.textSecondary }]}>Ikon</ThemedText>
+                  <View style={styles.iconRow}>
+                    {Object.keys(ICON_MAP).map((key) => (
+                      <Pressable
+                        key={key}
+                        onPress={() => setNewIcon(key)}
+                        style={[
+                          styles.iconChip,
+                          { borderColor: theme.border, backgroundColor: newIcon === key ? Colors.dark.accent + "20" : theme.backgroundSecondary },
+                        ]}
+                      >
+                        <Feather name={ICON_MAP[key]} size={16} color={newIcon === key ? Colors.dark.accent : theme.textSecondary} />
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+            <View style={styles.modalButtonGroup}>
+              <Button onPress={() => setShowAddModal(false)} style={styles.cancelButton} textColor={Colors.dark.accent}>Avbryt</Button>
+              <Button onPress={handleCreateEvent} style={styles.saveButton}>Legg til</Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -194,6 +700,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: { marginTop: Spacing.sm, textAlign: "center" },
   headerDate: { marginTop: Spacing.xs, fontSize: 14 },
+  cultureRow: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.xs, marginTop: Spacing.sm },
+  cultureChip: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderWidth: 1, borderRadius: BorderRadius.full },
   timeline: { marginBottom: Spacing.xl },
   timelineItem: { flexDirection: "row", marginBottom: Spacing.sm },
   timeColumn: { width: 50, alignItems: "flex-end", paddingRight: Spacing.md },
@@ -215,25 +723,68 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginLeft: Spacing.sm,
   },
+  deleteBtn: { position: "absolute", right: Spacing.sm, top: Spacing.sm, padding: Spacing.xs },
   eventTitle: { fontSize: 15, fontWeight: "500" },
   duration: { fontSize: 12, marginTop: 2 },
   bufferWarning: { flexDirection: "row", marginBottom: Spacing.sm, marginTop: -Spacing.xs },
   bufferSpacer: { width: 80 },
   bufferCard: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
+    paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.sm,
     borderWidth: 1,
     marginLeft: Spacing.sm,
   },
-  bufferText: { fontSize: 12, marginLeft: Spacing.xs, fontWeight: "500" },
+  bufferText: { fontSize: 12, fontWeight: "500", flex: 1 },
+  bufferSuggestion: { fontSize: 11, marginTop: Spacing.xs, fontStyle: "italic", lineHeight: 16 },
+  iconRow: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.xs },
+  iconChip: { padding: Spacing.sm, borderRadius: BorderRadius.full, borderWidth: 1 },
   emptyState: { alignItems: "center", paddingVertical: Spacing["5xl"] },
   emptyText: { fontSize: 16, marginTop: Spacing.lg },
   tipsCard: { padding: Spacing.lg, borderRadius: BorderRadius.md, borderWidth: 1 },
-  tipsTitle: { marginBottom: Spacing.md },
-  tipRow: { flexDirection: "row", alignItems: "center", marginBottom: Spacing.sm },
-  tipDot: { width: 12, height: 12, borderRadius: 6, marginRight: Spacing.sm },
-  tipText: { fontSize: 13 },
+  tipsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.md },
+  tipsTitle: { marginBottom: 0 },
+  bufferSummary: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm },
+  bufferSummaryText: { fontSize: 12, fontWeight: "600", marginLeft: Spacing.xs },
+  tipsSubtitle: { fontSize: 12, fontWeight: "600", marginBottom: Spacing.md },
+  tipRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: Spacing.md },
+  tipDot: { width: 12, height: 12, borderRadius: 6, marginRight: Spacing.sm, marginTop: 3 },
+  tipText: { fontSize: 13, fontWeight: "500", flex: 1 },
+  tipHint: { fontSize: 12, marginTop: Spacing.xs, lineHeight: 16 },
+  optimizationCard: { padding: Spacing.lg, borderRadius: BorderRadius.md, borderWidth: 1, marginBottom: Spacing.lg },
+  optimizationHeader: { flexDirection: "row", alignItems: "center", marginBottom: Spacing.md },
+  optimizationTitle: { marginLeft: Spacing.sm, marginBottom: 0 },
+  optimizationSubtext: { fontSize: 12, marginBottom: Spacing.md, fontStyle: "italic" },
+  optimizationItem: { borderTopWidth: 1, paddingVertical: Spacing.md, paddingHorizontal: Spacing.sm },
+  optimizationContent: { gap: Spacing.sm },
+  eventPair: { flexDirection: "row", alignItems: "center", gap: Spacing.xs },
+  eventName: { fontSize: 12, fontWeight: "500", flex: 1 },
+  traditionTip: { fontSize: 11, fontStyle: "italic", lineHeight: 16, marginVertical: Spacing.xs },
+  timingInfo: { flexDirection: "row", alignItems: "center", gap: Spacing.md, marginTop: Spacing.xs },
+  currentTime: { alignItems: "center" },
+  recommendedTime: { alignItems: "center" },
+  timeLabel: { fontSize: 10, marginBottom: 2 },
+  timeBold: { fontSize: 13, fontWeight: "700" },
+  addBadge: { paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: BorderRadius.sm },
+  addText: { fontSize: 11, fontWeight: "600" },
+  editHint: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm, marginTop: Spacing.sm, gap: Spacing.xs },
+  editHintText: { fontSize: 11, fontWeight: "500" },
+  modalOverlay: { flex: 1, justifyContent: "center", alignItems: "center" },
+  modalContent: { borderRadius: BorderRadius.lg, padding: Spacing.lg, width: "85%", maxWidth: 400 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.lg },
+  modalTitle: { marginBottom: 0 },
+  modalSection: { marginBottom: Spacing.lg },
+  modalLabel: { fontSize: 12, fontWeight: "600", marginBottom: Spacing.sm },
+  modalDescription: { fontSize: 12, lineHeight: 16 },
+  timeInput: { borderWidth: 1, borderRadius: BorderRadius.sm, padding: Spacing.md, fontSize: 16, fontWeight: "600" },
+  modalTip: { borderWidth: 1, borderRadius: BorderRadius.sm, padding: Spacing.md, marginBottom: Spacing.lg, flexDirection: "row", alignItems: "flex-start", gap: Spacing.sm },
+  modalTipText: { flex: 1, fontSize: 12, lineHeight: 16, fontWeight: "500" },
+  modalButtonGroup: { flexDirection: "row", gap: Spacing.md },
+  cancelButton: { flex: 1, backgroundColor: "transparent" },
+  saveButton: { flex: 1 },
+  addFabContainer: { position: "absolute", right: Spacing.lg, bottom: Spacing.lg },
+  addFab: { width: 56, height: 56, borderRadius: 28, justifyContent: "center", alignItems: "center" },
 });

@@ -1,0 +1,25 @@
+export interface CoupleProfile {
+  id: string;
+  displayName: string;
+  email: string;
+  weddingDate?: string | null;
+}
+
+const API_URL = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+  : "http://localhost:5000";
+
+function authHeader(token: string) {
+  return { Authorization: `Bearer ${token}` };
+}
+
+export async function getCoupleProfile(sessionToken: string): Promise<CoupleProfile> {
+  const res = await fetch(`${API_URL}/api/couples/me`, {
+    headers: authHeader(sessionToken),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.error || "Kunne ikke hente parprofil");
+  }
+  return res.json();
+}

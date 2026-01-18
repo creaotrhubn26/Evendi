@@ -1,0 +1,103 @@
+name: Wedflow Scheduled Jobs
+on:
+  schedule:
+    # Run offer expiration job every day at midnight UTC
+    - cron: '0 0 * * *'
+    # Run message reminder processing every hour
+    - cron: '0 * * * *'
+  # Allow manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      job_type:
+        description: 'Job type to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - expire-offers
+          - process-reminders
+
+jobs:
+  expire-offers:
+    name: Expire Old Offers
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 0 * * *') ||
+      (github.event_name == 'workflow_dispatch' && 
+       (github.event.inputs.job_type == 'all' || 
+        github.event.inputs.job_type == 'expire-offers'))
+    steps:
+      - name: Run offer expiration job
+        run: |
+          echo "Starting offer expiration job..."
+          curl -X POST ${{ secrets.APP_URL }}/api/admin/jobs/expire-offers \
+            -H "Authorization: Bearer ${{ secrets.ADMIN_KEY }}" \
+            -H "Content-Type: application/json" \
+            -w "\nStatus: %{http_code}\n" \
+            --max-time 30
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+      
+      - name: Log job completion
+        if: success()
+        run: |
+          echo "✅ Offer expiration job completed successfully at $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+      
+      - name: Log job failure
+        if: failure()
+        run: |
+          echo "❌ Offer expiration job failed at $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          exit 1
+
+  process-reminders:
+    name: Process Message Reminders
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && 
+       (github.event.inputs.job_type == 'all' || 
+        github.event.inputs.job_type == 'process-reminders'))
+    steps:
+      - name: Run message reminder processing job
+        run: |
+          echo "Starting message reminder processing job..."
+          curl -X POST ${{ secrets.APP_URL }}/api/admin/jobs/process-message-reminders \
+            -H "Authorization: Bearer ${{ secrets.ADMIN_KEY }}" \
+            -H "Content-Type: application/json" \
+            -w "\nStatus: %{http_code}\n" \
+            --max-time 30
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+      
+      - name: Log job completion
+        if: success()
+        run: |
+          echo "✅ Message reminder processing job completed successfully at $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+      
+      - name: Log job failure
+        if: failure()
+        run: |
+          echo "❌ Message reminder processing job failed at $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          exit 1
+
+  notify-completion:
+    name: Notify Job Completion
+    runs-on: ubuntu-latest
+    needs: [expire-offers, process-reminders]
+    if: always()
+    steps:
+      - name: Check job results
+        run: |
+          echo "Job execution summary:"
+          echo "- Offer expiration: ${{ needs.expire-offers.result }}"
+          echo "- Message reminders: ${{ needs.process-reminders.result }}"
+          
+          if [[ "${{ needs.expire-offers.result }}" == "failure" ]] || [[ "${{ needs.process-reminders.result }}" == "failure" ]]; then
+            echo "⚠️ One or more jobs failed"
+            exit 1
+          fi
+          
+          echo "✅ All scheduled jobs completed successfully"

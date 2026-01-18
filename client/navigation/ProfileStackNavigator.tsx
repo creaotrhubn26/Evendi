@@ -4,12 +4,6 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import ProfileScreen from "@/screens/ProfileScreen";
 import PhotoPlanScreen from "@/screens/PhotoPlanScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
-import AdminVendorsScreen from "@/screens/AdminVendorsScreen";
-import AdminDashboardScreen from "@/screens/AdminDashboardScreen";
-import AdminDesignScreen from "@/screens/AdminDesignScreen";
-import AdminInspirationsScreen from "@/screens/AdminInspirationsScreen";
-import AdminCategoriesScreen from "@/screens/AdminCategoriesScreen";
-import AdminSettingsScreen from "@/screens/AdminSettingsScreen";
 import VendorLoginScreen from "@/screens/VendorLoginScreen";
 import VendorDashboardScreen from "@/screens/VendorDashboardScreen";
 import DeliveryCreateScreen from "@/screens/DeliveryCreateScreen";
@@ -22,6 +16,7 @@ import NotificationSettingsScreen from "@/screens/NotificationSettingsScreen";
 import AboutScreen from "@/screens/AboutScreen";
 import SharePartnerScreen from "@/screens/SharePartnerScreen";
 import VendorReviewsScreen from "@/screens/VendorReviewsScreen";
+import VendorProfileScreen from "@/screens/VendorProfileScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -29,20 +24,15 @@ export type ProfileStackParamList = {
   Profile: undefined;
   PhotoPlan: undefined;
   Settings: undefined;
-  AdminDashboard: undefined;
-  AdminVendors: { adminKey: string };
-  AdminDesign: { adminKey: string };
-  AdminInspirations: { adminKey: string };
-  AdminCategories: { adminKey: string };
-  AdminSettings: { adminKey: string };
   VendorLogin: undefined;
   VendorDashboard: undefined;
-  DeliveryCreate: undefined;
-  InspirationCreate: undefined;
-  ProductCreate: undefined;
-  OfferCreate: undefined;
+  DeliveryCreate: { delivery?: any } | undefined;
+  InspirationCreate: { inspiration?: any } | undefined;
+  ProductCreate: { product?: any } | undefined;
+  OfferCreate: { offer?: any } | undefined;
   VendorRegistration: undefined;
   VendorChat: { conversationId: string; coupleName: string };
+  VendorProfile: undefined;
   NotificationSettings: undefined;
   About: undefined;
   SharePartner: undefined;
@@ -79,48 +69,6 @@ export default function ProfileStackNavigator() {
         }}
       />
       <Stack.Screen
-        name="AdminDashboard"
-        component={AdminDashboardScreen}
-        options={{
-          title: "Admin",
-        }}
-      />
-      <Stack.Screen
-        name="AdminVendors"
-        component={AdminVendorsScreen}
-        options={{
-          title: "Admin: Leverandører",
-        }}
-      />
-      <Stack.Screen
-        name="AdminDesign"
-        component={AdminDesignScreen}
-        options={{
-          title: "Admin: Design",
-        }}
-      />
-      <Stack.Screen
-        name="AdminInspirations"
-        component={AdminInspirationsScreen}
-        options={{
-          title: "Admin: Inspirasjoner",
-        }}
-      />
-      <Stack.Screen
-        name="AdminCategories"
-        component={AdminCategoriesScreen}
-        options={{
-          title: "Admin: Kategorier",
-        }}
-      />
-      <Stack.Screen
-        name="AdminSettings"
-        component={AdminSettingsScreen}
-        options={{
-          title: "Admin: Innstillinger",
-        }}
-      />
-      <Stack.Screen
         name="VendorLogin"
         component={VendorLoginScreen}
         options={{
@@ -138,28 +86,28 @@ export default function ProfileStackNavigator() {
         name="DeliveryCreate"
         component={DeliveryCreateScreen}
         options={{
-          title: "Ny leveranse",
+          headerShown: false,
         }}
       />
       <Stack.Screen
         name="InspirationCreate"
         component={InspirationCreateScreen}
         options={{
-          title: "Ny inspirasjon",
+          headerShown: false,
         }}
       />
       <Stack.Screen
         name="ProductCreate"
         component={ProductCreateScreen}
         options={{
-          title: "Nytt produkt",
+          headerShown: false,
         }}
       />
       <Stack.Screen
         name="OfferCreate"
         component={OfferCreateScreen}
         options={{
-          title: "Nytt tilbud",
+          headerShown: false,
         }}
       />
       <Stack.Screen
@@ -202,6 +150,13 @@ export default function ProfileStackNavigator() {
         component={VendorReviewsScreen}
         options={{
           title: "Anmeldelser",
+        }}
+      />
+      <Stack.Screen
+        name="VendorProfile"
+        component={VendorProfileScreen}
+        options={{
+          headerShown: false,
         }}
       />
       <Stack.Screen

@@ -8,6 +8,10 @@ import {
   Alert,
   RefreshControl,
   ScrollView,
+  Linking,
+  Platform,
+  Dimensions,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -203,7 +207,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           Authorization: `Bearer ${session.sessionToken}`,
         },
       });
-      if (!response.ok) throw new Error("Kunne ikke hente inspirasjoner");
+      if (!response.ok) throw new Error("Kunne ikke hente showcases");
       return response.json();
     },
     enabled: !!session?.sessionToken,
@@ -249,6 +253,21 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         },
       });
       if (!response.ok) throw new Error("Kunne ikke hente tilbud");
+      return response.json();
+    },
+    enabled: !!session?.sessionToken,
+  });
+
+  const { data: vendorProfile } = useQuery<{ googleReviewUrl: string | null }>({
+    queryKey: ["/api/vendor/profile"],
+    queryFn: async () => {
+      if (!session?.sessionToken) return { googleReviewUrl: null };
+      const response = await fetch(new URL("/api/vendor/profile", getApiUrl()).toString(), {
+        headers: {
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+      });
+      if (!response.ok) return { googleReviewUrl: null };
       return response.json();
     },
     enabled: !!session?.sessionToken,
@@ -337,33 +356,43 @@ export default function VendorDashboardScreen({ navigation }: Props) {
   }, [activeTab, refetchDeliveries, refetchInspirations, refetchConversations, refetchProducts, refetchOffers, refetchReviews, refetchContracts]);
 
   const handleLogout = async () => {
-    Alert.alert(
-      "Logg ut",
-      "Er du sikker på at du vil logge ut?",
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Logg ut",
-          style: "destructive",
-          onPress: async () => {
-            if (session?.sessionToken) {
-              try {
-                await fetch(new URL("/api/vendors/logout", getApiUrl()).toString(), {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${session.sessionToken}`,
-                  },
-                });
-              } catch {
-              }
-            }
-            await AsyncStorage.removeItem(VENDOR_STORAGE_KEY);
-            queryClient.clear();
-            navigation.replace("VendorLogin");
+    const performLogout = async () => {
+      if (session?.sessionToken) {
+        try {
+          await fetch(new URL("/api/vendors/logout", getApiUrl()).toString(), {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${session.sessionToken}`,
+            },
+          });
+        } catch {
+          // Ignore errors
+        }
+      }
+      await AsyncStorage.removeItem(VENDOR_STORAGE_KEY);
+      queryClient.clear();
+      navigation.replace("VendorLogin");
+    };
+
+    // Use window.confirm on web for better compatibility
+    if (typeof window !== "undefined" && window.confirm) {
+      if (window.confirm("Er du sikker på at du vil logge ut?")) {
+        await performLogout();
+      }
+    } else {
+      Alert.alert(
+        "Logg ut",
+        "Er du sikker på at du vil logge ut?",
+        [
+          { text: "Avbryt", style: "cancel" },
+          {
+            text: "Logg ut",
+            style: "destructive",
+            onPress: performLogout,
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const copyAccessCode = async (code: string) => {
@@ -398,7 +427,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       case "approved": return "#4CAF50";
       case "pending": return "#FF9800";
       case "rejected": return "#F44336";
-      default: return Colors.dark.accent;
+      default: return theme.accent;
     }
   };
 
@@ -411,106 +440,243 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     }
   };
 
-  const renderInspirationItem = ({ item, index }: { item: Inspiration; index: number }) => (
-    <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
-      <View style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleRow}>
-            <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + "30" }]}>
-              <ThemedText style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-                {getStatusLabel(item.status)}
+  const renderInspirationItem = ({ item, index }: { item: Inspiration; index: number }) => {
+    // Get thumbnail: prefer coverImageUrl, then first image from media
+    const thumbnailUrl = item.coverImageUrl || item.media.find(m => m.type === "image")?.url;
+    const thumbnails = item.media.filter(m => m.type === "image").slice(0, 4);
+    
+    return (
+      <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            navigation.navigate("InspirationCreate", { inspiration: item });
+          }}
+          style={[styles.showcaseCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+        >
+          {/* Thumbnail Grid */}
+          {thumbnails.length > 0 ? (
+            <View style={styles.thumbnailGrid}>
+              {thumbnails.length === 1 ? (
+                <Image
+                  source={{ uri: thumbnails[0].url }}
+                  style={styles.singleThumbnail}
+                  resizeMode="cover"
+                />
+              ) : thumbnails.length === 2 ? (
+                <View style={styles.twoThumbnails}>
+                  {thumbnails.map((media, i) => (
+                    <Image
+                      key={media.id}
+                      source={{ uri: media.url }}
+                      style={styles.halfThumbnail}
+                      resizeMode="cover"
+                    />
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.gridThumbnails}>
+                  <Image
+                    source={{ uri: thumbnails[0].url }}
+                    style={styles.mainThumbnail}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.sideThumbnails}>
+                    {thumbnails.slice(1, 4).map((media, i) => (
+                      <View key={media.id} style={styles.smallThumbnailWrapper}>
+                        <Image
+                          source={{ uri: media.url }}
+                          style={styles.smallThumbnail}
+                          resizeMode="cover"
+                        />
+                        {i === 2 && item.media.length > 4 && (
+                          <View style={styles.moreOverlay}>
+                            <ThemedText style={styles.moreText}>+{item.media.length - 4}</ThemedText>
+                          </View>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+              {/* Status badge overlay */}
+              <View style={[styles.statusOverlay, { backgroundColor: getStatusColor(item.status) }]}>
+                <ThemedText style={styles.statusOverlayText}>
+                  {getStatusLabel(item.status)}
+                </ThemedText>
+              </View>
+            </View>
+          ) : (
+            <View style={[styles.noThumbnail, { backgroundColor: theme.backgroundRoot }]}>
+              <Feather name="image" size={32} color={theme.textMuted} />
+              <ThemedText style={[styles.noThumbnailText, { color: theme.textMuted }]}>Ingen bilder</ThemedText>
+            </View>
+          )}
+
+          {/* Content */}
+          <View style={styles.showcaseContent}>
+            <ThemedText style={[styles.showcaseTitle, { color: theme.text }]} numberOfLines={1}>
+              {item.title}
+            </ThemedText>
+            {item.category ? (
+              <View style={styles.categoryRow}>
+                <Feather name="folder" size={12} color={theme.textSecondary} />
+                <ThemedText style={[styles.categoryText, { color: theme.textSecondary }]}>
+                  {item.category.name}
+                </ThemedText>
+              </View>
+            ) : null}
+            {item.description ? (
+              <ThemedText style={[styles.showcaseDescription, { color: theme.textMuted }]} numberOfLines={2}>
+                {item.description}
+              </ThemedText>
+            ) : null}
+            <View style={styles.showcaseFooter}>
+              <View style={styles.mediaCount}>
+                <Feather name="image" size={12} color={theme.textMuted} />
+                <ThemedText style={[styles.mediaCountText, { color: theme.textMuted }]}>
+                  {item.media.length}
+                </ThemedText>
+              </View>
+              <ThemedText style={[styles.showcaseDate, { color: theme.textMuted }]}>
+                {formatDate(item.createdAt)}
               </ThemedText>
             </View>
           </View>
-          {item.category ? (
+        </Pressable>
+      </Animated.View>
+    );
+  };
+
+  const renderDeliveryItem = ({ item, index }: { item: Delivery; index: number }) => {
+    // Get thumbnails from delivery items that are images
+    const imageThumbnails = item.items
+      .filter(i => i.type === "image" || i.type === "photo" || i.url.match(/\.(jpg|jpeg|png|gif|webp)$/i))
+      .slice(0, 4);
+    
+    return (
+      <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            navigation.navigate("DeliveryCreate", { delivery: item });
+          }}
+          style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+        >
+          {/* Thumbnail Grid */}
+          {imageThumbnails.length > 0 ? (
+            <View style={styles.deliveryThumbnailGrid}>
+              {imageThumbnails.length === 1 ? (
+                <Image
+                  source={{ uri: imageThumbnails[0].url }}
+                  style={styles.deliverySingleThumbnail}
+                  resizeMode="cover"
+                />
+              ) : imageThumbnails.length === 2 ? (
+                <View style={styles.deliveryTwoThumbnails}>
+                  {imageThumbnails.map((img) => (
+                    <Image
+                      key={img.id}
+                      source={{ uri: img.url }}
+                      style={styles.deliveryHalfThumbnail}
+                      resizeMode="cover"
+                    />
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.deliveryGridThumbnails}>
+                  <Image
+                    source={{ uri: imageThumbnails[0].url }}
+                    style={styles.deliveryMainThumbnail}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.deliverySideThumbnails}>
+                    {imageThumbnails.slice(1, 4).map((img, i) => (
+                      <View key={img.id} style={styles.deliverySmallWrapper}>
+                        <Image
+                          source={{ uri: img.url }}
+                          style={styles.deliverySmallThumbnail}
+                          resizeMode="cover"
+                        />
+                        {i === 2 && item.items.filter(it => it.type === "image" || it.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)).length > 4 && (
+                          <View style={styles.deliveryMoreOverlay}>
+                            <ThemedText style={styles.deliveryMoreText}>
+                              +{item.items.filter(it => it.type === "image" || it.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)).length - 4}
+                            </ThemedText>
+                          </View>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+              {/* Status badge overlay */}
+              <View style={[styles.deliveryStatusOverlay, { backgroundColor: theme.accent }]}>
+                <ThemedText style={styles.deliveryStatusText}>Aktiv</ThemedText>
+              </View>
+            </View>
+          ) : null}
+
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
+              {imageThumbnails.length === 0 && (
+                <View style={[styles.statusBadge, { backgroundColor: theme.accent + "30" }]}>
+                  <ThemedText style={[styles.statusText, { color: theme.accent }]}>
+                    Aktiv
+                  </ThemedText>
+                </View>
+              )}
+            </View>
             <ThemedText style={[styles.coupleName, { color: theme.textSecondary }]}>
-              {item.category.name}
+              {item.coupleName}
             </ThemedText>
-          ) : null}
-          {item.description ? (
-            <ThemedText style={[styles.dateText, { color: theme.textMuted, marginTop: 4 }]} numberOfLines={2}>
-              {item.description}
-            </ThemedText>
-          ) : null}
-        </View>
-
-        <View style={styles.itemsList}>
-          <View style={styles.itemRow}>
-            <Feather name="image" size={14} color={theme.textSecondary} />
-            <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
-              {item.media.length} {item.media.length === 1 ? "bilde/video" : "bilder/videoer"}
-            </ThemedText>
+            {item.weddingDate ? (
+              <View style={styles.dateRow}>
+                <Feather name="calendar" size={12} color={theme.textMuted} />
+                <ThemedText style={[styles.dateText, { color: theme.textMuted }]}>
+                  {item.weddingDate}
+                </ThemedText>
+              </View>
+            ) : null}
           </View>
-        </View>
 
-        <ThemedText style={[styles.createdAt, { color: theme.textMuted }]}>
-          Opprettet {formatDate(item.createdAt)}
-        </ThemedText>
-      </View>
-    </Animated.View>
-  );
-
-  const renderDeliveryItem = ({ item, index }: { item: Delivery; index: number }) => (
-    <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
-      <View style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleRow}>
-            <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
-            <View style={[styles.statusBadge, { backgroundColor: Colors.dark.accent + "30" }]}>
-              <ThemedText style={[styles.statusText, { color: Colors.dark.accent }]}>
-                Aktiv
-              </ThemedText>
+          <View style={[styles.accessCodeContainer, { backgroundColor: theme.backgroundRoot }]}>
+            <View style={styles.accessCodeLeft}>
+              <ThemedText style={[styles.accessCodeLabel, { color: theme.textMuted }]}>Tilgangskode:</ThemedText>
+              <ThemedText style={styles.accessCode}>{item.accessCode}</ThemedText>
             </View>
+            <Pressable
+              onPress={() => copyAccessCode(item.accessCode)}
+              style={[styles.copyBtn, { backgroundColor: theme.accent + "20" }]}
+            >
+              <Feather name="copy" size={16} color={theme.accent} />
+            </Pressable>
           </View>
-          <ThemedText style={[styles.coupleName, { color: theme.textSecondary }]}>
-            {item.coupleName}
+
+          <View style={styles.itemsList}>
+            {item.items.map((deliveryItem) => (
+              <View key={deliveryItem.id} style={styles.itemRow}>
+                <Feather name={getTypeIcon(deliveryItem.type)} size={14} color={theme.textSecondary} />
+                <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]} numberOfLines={1}>
+                  {deliveryItem.label}
+                </ThemedText>
+              </View>
+            ))}
+          </View>
+
+          <ThemedText style={[styles.createdAt, { color: theme.textMuted }]}>
+            Opprettet {formatDate(item.createdAt)}
           </ThemedText>
-          {item.weddingDate ? (
-            <View style={styles.dateRow}>
-              <Feather name="calendar" size={12} color={theme.textMuted} />
-              <ThemedText style={[styles.dateText, { color: theme.textMuted }]}>
-                {item.weddingDate}
-              </ThemedText>
-            </View>
-          ) : null}
-        </View>
-
-        <View style={[styles.accessCodeContainer, { backgroundColor: theme.backgroundRoot }]}>
-          <View style={styles.accessCodeLeft}>
-            <ThemedText style={[styles.accessCodeLabel, { color: theme.textMuted }]}>Tilgangskode:</ThemedText>
-            <ThemedText style={styles.accessCode}>{item.accessCode}</ThemedText>
-          </View>
-          <Pressable
-            onPress={() => copyAccessCode(item.accessCode)}
-            style={[styles.copyBtn, { backgroundColor: Colors.dark.accent + "20" }]}
-          >
-            <Feather name="copy" size={16} color={Colors.dark.accent} />
-          </Pressable>
-        </View>
-
-        <View style={styles.itemsList}>
-          {item.items.map((deliveryItem) => (
-            <View key={deliveryItem.id} style={styles.itemRow}>
-              <Feather name={getTypeIcon(deliveryItem.type)} size={14} color={theme.textSecondary} />
-              <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]} numberOfLines={1}>
-                {deliveryItem.label}
-              </ThemedText>
-            </View>
-          ))}
-        </View>
-
-        <ThemedText style={[styles.createdAt, { color: theme.textMuted }]}>
-          Opprettet {formatDate(item.createdAt)}
-        </ThemedText>
-      </View>
-    </Animated.View>
-  );
+        </Pressable>
+      </Animated.View>
+    );
+  };
 
   if (!session) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <ActivityIndicator size="large" color={Colors.dark.accent} />
+        <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
@@ -547,11 +713,17 @@ export default function VendorDashboardScreen({ navigation }: Props) {
 
   const renderProductItem = ({ item, index }: { item: VendorProduct; index: number }) => (
     <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
-      <View style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+      <Pressable
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          navigation.navigate("ProductCreate", { product: item });
+        }}
+        style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+      >
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleRow}>
             <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
-            <ThemedText style={[styles.priceTag, { color: Colors.dark.accent }]}>
+            <ThemedText style={[styles.priceTag, { color: theme.accent }]}>
               {formatPrice(item.unitPrice)} / {item.unitType}
             </ThemedText>
           </View>
@@ -587,13 +759,19 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             </View>
           ) : null}
         </View>
-      </View>
+      </Pressable>
     </Animated.View>
   );
 
   const renderOfferItem = ({ item, index }: { item: VendorOffer; index: number }) => (
     <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
-      <View style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+      <Pressable
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          navigation.navigate("OfferCreate", { offer: item });
+        }}
+        style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+      >
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleRow}>
             <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
@@ -611,7 +789,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         </View>
         <View style={[styles.offerTotalContainer, { backgroundColor: theme.backgroundRoot }]}>
           <ThemedText style={[styles.offerTotalLabel, { color: theme.textMuted }]}>Totalt:</ThemedText>
-          <ThemedText style={[styles.offerTotal, { color: Colors.dark.accent }]}>
+          <ThemedText style={[styles.offerTotal, { color: theme.accent }]}>
             {formatPrice(item.totalAmount)}
           </ThemedText>
         </View>
@@ -633,7 +811,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         <ThemedText style={[styles.createdAt, { color: theme.textMuted }]}>
           Sendt {formatDate(item.createdAt)}
         </ThemedText>
-      </View>
+      </Pressable>
     </Animated.View>
   );
 
@@ -661,7 +839,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           <View style={styles.cardTitleRow}>
             <ThemedText style={styles.cardTitle}>{item.couple.displayName}</ThemedText>
             {item.vendorUnreadCount > 0 ? (
-              <View style={[styles.unreadBadge, { backgroundColor: Colors.dark.accent }]}>
+              <View style={[styles.unreadBadge, { backgroundColor: theme.accent }]}>
                 <ThemedText style={styles.unreadText}>{item.vendorUnreadCount}</ThemedText>
               </View>
             ) : null}
@@ -670,7 +848,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             {item.couple.email}
           </ThemedText>
           {item.inspiration ? (
-            <ThemedText style={[styles.dateText, { color: Colors.dark.accent, marginTop: 4 }]}>
+            <ThemedText style={[styles.dateText, { color: theme.accent, marginTop: 4 }]}>
               {item.inspiration.title}
             </ThemedText>
           ) : null}
@@ -691,140 +869,153 @@ export default function VendorDashboardScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      <View style={[styles.header, { paddingTop: headerHeight + Spacing.md }]}>
-        <View style={styles.headerLeft}>
-          <ThemedText style={styles.welcomeText}>Velkommen tilbake,</ThemedText>
-          <ThemedText style={styles.businessName}>{session.businessName}</ThemedText>
+      <View style={[styles.header, { paddingTop: headerHeight + Spacing.lg }]}>
+        <View style={[styles.headerCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <Pressable 
+            onPress={() => navigation.navigate("VendorProfile")}
+            style={styles.headerContent}
+          >
+            <View style={[styles.avatarContainer, { backgroundColor: theme.accent }]}>
+              <ThemedText style={styles.avatarText}>
+                {session.businessName.charAt(0).toUpperCase()}
+              </ThemedText>
+            </View>
+            <View style={styles.headerTextContainer}>
+              <ThemedText style={[styles.welcomeText, { color: theme.textMuted }]}>Velkommen tilbake</ThemedText>
+              <ThemedText style={[styles.businessName, { color: theme.text }]} numberOfLines={1}>{session.businessName}</ThemedText>
+            </View>
+            <View style={[styles.profileArrow, { backgroundColor: theme.accent + "15" }]}>
+              <Feather name="chevron-right" size={16} color={theme.accent} />
+            </View>
+          </Pressable>
+          <Pressable 
+            onPress={handleLogout} 
+            style={({ pressed }) => [
+              styles.logoutBtn, 
+              { backgroundColor: pressed ? theme.backgroundTertiary : theme.backgroundSecondary }
+            ]}
+          >
+            <Feather name="log-out" size={18} color={theme.textSecondary} />
+          </Pressable>
         </View>
-        <Pressable onPress={handleLogout} style={styles.logoutBtn}>
-          <Feather name="log-out" size={20} color={theme.textSecondary} />
-        </Pressable>
       </View>
 
       <ScrollView 
         horizontal 
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.tabContainer}
+        style={[styles.tabScroll, { backgroundColor: theme.backgroundRoot }]}
       >
-        <Pressable
-          onPress={() => setActiveTab("deliveries")}
-          style={[
-            styles.tab,
-            activeTab === "deliveries" && { borderBottomColor: Colors.dark.accent, borderBottomWidth: 2 }
-          ]}
-        >
-          <Feather name="package" size={16} color={activeTab === "deliveries" ? Colors.dark.accent : theme.textMuted} />
-          <ThemedText style={[styles.tabText, { color: activeTab === "deliveries" ? Colors.dark.accent : theme.textMuted }]}>
-            Leveranser
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab("inspirations")}
-          style={[
-            styles.tab,
-            activeTab === "inspirations" && { borderBottomColor: Colors.dark.accent, borderBottomWidth: 2 }
-          ]}
-        >
-          <Feather name="image" size={16} color={activeTab === "inspirations" ? Colors.dark.accent : theme.textMuted} />
-          <ThemedText style={[styles.tabText, { color: activeTab === "inspirations" ? Colors.dark.accent : theme.textMuted }]}>
-            Inspirasjon
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab("products")}
-          style={[
-            styles.tab,
-            activeTab === "products" && { borderBottomColor: Colors.dark.accent, borderBottomWidth: 2 }
-          ]}
-        >
-          <Feather name="shopping-bag" size={16} color={activeTab === "products" ? Colors.dark.accent : theme.textMuted} />
-          <ThemedText style={[styles.tabText, { color: activeTab === "products" ? Colors.dark.accent : theme.textMuted }]}>
-            Produkter
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab("offers")}
-          style={[
-            styles.tab,
-            activeTab === "offers" && { borderBottomColor: Colors.dark.accent, borderBottomWidth: 2 }
-          ]}
-        >
-          <Feather name="file-text" size={16} color={activeTab === "offers" ? Colors.dark.accent : theme.textMuted} />
-          <ThemedText style={[styles.tabText, { color: activeTab === "offers" ? Colors.dark.accent : theme.textMuted }]}>
-            Tilbud
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab("messages")}
-          style={[
-            styles.tab,
-            activeTab === "messages" && { borderBottomColor: Colors.dark.accent, borderBottomWidth: 2 }
-          ]}
-        >
-          <View style={styles.tabWithBadge}>
-            <Feather name="message-circle" size={16} color={activeTab === "messages" ? Colors.dark.accent : theme.textMuted} />
-            {totalUnread > 0 ? (
-              <View style={[styles.tabBadge, { backgroundColor: Colors.dark.accent }]}>
-                <ThemedText style={styles.tabBadgeText}>{totalUnread}</ThemedText>
+        {[
+          { key: "deliveries" as TabType, icon: "package" as const, label: "Leveranser" },
+          { key: "inspirations" as TabType, icon: "image" as const, label: "Showcase" },
+          { key: "products" as TabType, icon: "shopping-bag" as const, label: "Produkter" },
+          { key: "offers" as TabType, icon: "file-text" as const, label: "Tilbud" },
+          { key: "messages" as TabType, icon: "message-circle" as const, label: "Meldinger", badge: totalUnread },
+          { key: "reviews" as TabType, icon: "star" as const, label: "Anmeldelser", badge: reviewsData.length },
+        ].map((tab) => {
+          const isActive = activeTab === tab.key;
+          return (
+            <Pressable
+              key={tab.key}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setActiveTab(tab.key);
+              }}
+              style={({ pressed }) => [
+                styles.tab,
+                isActive && [styles.tabActive, { backgroundColor: theme.accent }],
+                !isActive && { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+                pressed && !isActive && { backgroundColor: theme.backgroundSecondary },
+              ]}
+            >
+              <View style={styles.tabIconContainer}>
+                <Feather 
+                  name={tab.icon} 
+                  size={20} 
+                  color={isActive ? "#FFFFFF" : theme.textSecondary} 
+                />
+                {tab.badge && tab.badge > 0 ? (
+                  <View style={[styles.tabBadge, { backgroundColor: isActive ? "#FFFFFF" : theme.accent }]}>
+                    <ThemedText style={[styles.tabBadgeText, { color: isActive ? theme.accent : "#FFFFFF" }]}>
+                      {tab.badge > 9 ? "9+" : tab.badge}
+                    </ThemedText>
+                  </View>
+                ) : null}
               </View>
-            ) : null}
-          </View>
-          <ThemedText style={[styles.tabText, { color: activeTab === "messages" ? Colors.dark.accent : theme.textMuted }]}>
-            Meldinger
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab("reviews")}
-          style={[
-            styles.tab,
-            activeTab === "reviews" && { borderBottomColor: Colors.dark.accent, borderBottomWidth: 2 }
-          ]}
-        >
-          <View style={styles.tabWithBadge}>
-            <Feather name="star" size={16} color={activeTab === "reviews" ? Colors.dark.accent : theme.textMuted} />
-            {reviewsData.length > 0 ? (
-              <View style={[styles.tabBadge, { backgroundColor: Colors.dark.accent }]}>
-                <ThemedText style={styles.tabBadgeText}>{reviewsData.length}</ThemedText>
-              </View>
-            ) : null}
-          </View>
-          <ThemedText style={[styles.tabText, { color: activeTab === "reviews" ? Colors.dark.accent : theme.textMuted }]}>
-            Anmeldelser
-          </ThemedText>
-        </Pressable>
+              <ThemedText 
+                style={[
+                  styles.tabText, 
+                  { color: isActive ? "#FFFFFF" : theme.textSecondary },
+                  isActive && { fontWeight: "600" }
+                ]}
+              >
+                {tab.label}
+              </ThemedText>
+            </Pressable>
+          );
+        })}
       </ScrollView>
 
+
       {activeTab !== "messages" && activeTab !== "reviews" ? (
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            if (activeTab === "deliveries") {
-              navigation.navigate("DeliveryCreate");
-            } else if (activeTab === "inspirations") {
-              navigation.navigate("InspirationCreate");
-            } else if (activeTab === "products") {
-              navigation.navigate("ProductCreate");
-            } else if (activeTab === "offers") {
-              navigation.navigate("OfferCreate");
-            }
-          }}
-          style={[styles.createBtn, { backgroundColor: Colors.dark.accent }]}
-        >
-          <Feather name="plus" size={20} color="#1A1A1A" />
-          <ThemedText style={styles.createBtnText}>
-            {activeTab === "deliveries" ? "Ny leveranse" : 
-             activeTab === "inspirations" ? "Ny inspirasjon" :
-             activeTab === "products" ? "Nytt produkt" : "Nytt tilbud"}
-          </ThemedText>
-        </Pressable>
+        <View style={styles.createBtnContainer}>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              if (activeTab === "deliveries") {
+                navigation.navigate("DeliveryCreate");
+              } else if (activeTab === "inspirations") {
+                navigation.navigate("InspirationCreate");
+              } else if (activeTab === "products") {
+                navigation.navigate("ProductCreate");
+              } else if (activeTab === "offers") {
+                navigation.navigate("OfferCreate");
+              }
+            }}
+            style={({ pressed }) => [
+              styles.createBtn,
+              { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+              pressed && { backgroundColor: theme.backgroundSecondary, transform: [{ scale: 0.98 }] }
+            ]}
+          >
+            <View style={[styles.createBtnIconCircle, { backgroundColor: theme.accent }]}>
+              <Feather 
+                name={
+                  activeTab === "deliveries" ? "package" : 
+                  activeTab === "inspirations" ? "image" :
+                  activeTab === "products" ? "shopping-bag" : "file-text"
+                } 
+                size={18} 
+                color="#FFFFFF" 
+              />
+            </View>
+            <View style={styles.createBtnContent}>
+              <ThemedText style={[styles.createBtnText, { color: theme.text }]}>
+                {activeTab === "deliveries" ? "Ny leveranse" : 
+                 activeTab === "inspirations" ? "Ny showcase" :
+                 activeTab === "products" ? "Nytt produkt" : "Nytt tilbud"}
+              </ThemedText>
+              <ThemedText style={[styles.createBtnSubtext, { color: theme.textSecondary }]}>
+                {activeTab === "deliveries" ? "Del innhold med brudepar" : 
+                 activeTab === "inspirations" ? "Vis frem ditt arbeid" :
+                 activeTab === "products" ? "Legg til tjeneste eller vare" : "Send pristilbud til par"}
+              </ThemedText>
+            </View>
+            <View style={[styles.createBtnArrow, { backgroundColor: theme.accent + "15" }]}>
+              <Feather name="plus" size={20} color={theme.accent} />
+            </View>
+          </Pressable>
+        </View>
       ) : null}
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.dark.accent} />
+          <ActivityIndicator size="large" color={theme.accent} />
         </View>
       ) : activeTab === "deliveries" ? (
         <FlatList
+          style={{ zIndex: 1, flex: 1 }}
           data={deliveries}
           renderItem={renderDeliveryItem}
           keyExtractor={(item) => item.id}
@@ -837,16 +1028,18 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={Colors.dark.accent}
+              tintColor={theme.accent}
             />
           }
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
-              <Feather name="package" size={48} color={theme.textMuted} />
-              <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
+              <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
+                <Feather name="package" size={32} color={theme.accent} />
+              </View>
+              <ThemedText style={[styles.emptyText, { color: theme.text }]}>
                 Ingen leveranser ennå
               </ThemedText>
-              <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
+              <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
                 Opprett din første leveranse for å dele innhold med brudepar
               </ThemedText>
             </View>
@@ -854,6 +1047,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         />
       ) : activeTab === "inspirations" ? (
         <FlatList
+          style={{ zIndex: 1, flex: 1 }}
           data={inspirationsData}
           renderItem={renderInspirationItem}
           keyExtractor={(item) => item.id}
@@ -866,16 +1060,18 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={Colors.dark.accent}
+              tintColor={theme.accent}
             />
           }
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
-              <Feather name="image" size={48} color={theme.textMuted} />
-              <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
-                Ingen inspirasjoner ennå
+              <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
+                <Feather name="image" size={32} color={theme.accent} />
+              </View>
+              <ThemedText style={[styles.emptyText, { color: theme.text }]}>
+                Ingen showcases ennå
               </ThemedText>
-              <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
+              <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
                 Del vakre bilder og videoer for å inspirere brudepar
               </ThemedText>
             </View>
@@ -883,6 +1079,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         />
       ) : activeTab === "products" ? (
         <FlatList
+          style={{ zIndex: 1, flex: 1 }}
           data={productsData}
           renderItem={renderProductItem}
           keyExtractor={(item) => item.id}
@@ -895,16 +1092,18 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={Colors.dark.accent}
+              tintColor={theme.accent}
             />
           }
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
-              <Feather name="shopping-bag" size={48} color={theme.textMuted} />
-              <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
+              <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
+                <Feather name="shopping-bag" size={32} color={theme.accent} />
+              </View>
+              <ThemedText style={[styles.emptyText, { color: theme.text }]}>
                 Ingen produkter ennå
               </ThemedText>
-              <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
+              <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
                 Opprett produkter og tjenester for å kunne sende tilbud
               </ThemedText>
             </View>
@@ -912,6 +1111,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         />
       ) : activeTab === "offers" ? (
         <FlatList
+          style={{ zIndex: 1, flex: 1 }}
           data={offersData}
           renderItem={renderOfferItem}
           keyExtractor={(item) => item.id}
@@ -924,16 +1124,18 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={Colors.dark.accent}
+              tintColor={theme.accent}
             />
           }
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
-              <Feather name="file-text" size={48} color={theme.textMuted} />
-              <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
+              <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
+                <Feather name="file-text" size={32} color={theme.accent} />
+              </View>
+              <ThemedText style={[styles.emptyText, { color: theme.text }]}>
                 Ingen tilbud ennå
               </ThemedText>
-              <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
+              <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
                 Send tilbud til brudepar basert på dine produkter
               </ThemedText>
             </View>
@@ -941,6 +1143,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         />
       ) : activeTab === "reviews" ? (
         <FlatList
+          style={{ zIndex: 1, flex: 1 }}
           data={reviewsData}
           renderItem={({ item, index }) => (
             <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
@@ -954,7 +1157,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                           key={star}
                           name="star"
                           size={14}
-                          color={star <= item.rating ? Colors.dark.accent : theme.border}
+                          color={star <= item.rating ? theme.accent : theme.border}
                         />
                       ))}
                     </View>
@@ -977,7 +1180,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                 ) : null}
                 {item.response ? (
                   <View style={[styles.responseContainer, { backgroundColor: theme.backgroundRoot }]}>
-                    <ThemedText style={[styles.responseLabel, { color: Colors.dark.accent }]}>Ditt svar:</ThemedText>
+                    <ThemedText style={[styles.responseLabel, { color: theme.accent }]}>Ditt svar:</ThemedText>
                     <ThemedText style={[styles.responseBody, { color: theme.textSecondary }]}>{item.response.body}</ThemedText>
                   </View>
                 ) : null}
@@ -997,10 +1200,103 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={Colors.dark.accent}
+              tintColor={theme.accent}
             />
           }
-          ListHeaderComponent={() => completedWithoutReview.length > 0 ? (
+          ListHeaderComponent={() => (
+            <View>
+              {/* Google Reviews Link */}
+              <View style={[styles.googleReviewsCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+                <View style={styles.googleReviewsHeader}>
+                  <View style={[styles.googleIconCircle, { backgroundColor: "#FFFFFF" }]}>
+                    <Image
+                      source={{ uri: "https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png" }}
+                      style={{ width: 22, height: 22 }}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <View style={styles.googleReviewsText}>
+                    <ThemedText style={[styles.googleReviewsTitle, { color: theme.text }]}>
+                      Google Anmeldelser
+                    </ThemedText>
+                    <ThemedText style={[styles.googleReviewsSubtitle, { color: theme.textSecondary }]}>
+                      {vendorProfile?.googleReviewUrl 
+                        ? "Vis dine Google-anmeldelser til brudepar"
+                        : "Legg til Google anmeldelser URL i profilen din"}
+                    </ThemedText>
+                  </View>
+                </View>
+                {vendorProfile?.googleReviewUrl ? (
+                  <Pressable
+                    style={[styles.googleReviewsBtn, { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#DADCE0" }]}
+                    onPress={async () => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      try {
+                        await Linking.openURL(vendorProfile.googleReviewUrl!);
+                      } catch (e) {
+                        Alert.alert("Feil", "Kunne ikke åpne lenken");
+                      }
+                    }}
+                  >
+                    <Image
+                      source={{ uri: "https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png" }}
+                      style={{ width: 16, height: 16 }}
+                      resizeMode="contain"
+                    />
+                    <ThemedText style={[styles.googleReviewsBtnText, { color: "#3C4043" }]}>Åpne i Google</ThemedText>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    style={[styles.googleReviewsBtn, { backgroundColor: theme.accent }]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      navigation.navigate("VendorProfile");
+                    }}
+                  >
+                    <Feather name="edit-2" size={14} color="#FFFFFF" />
+                    <ThemedText style={styles.googleReviewsBtnText}>Rediger profil</ThemedText>
+                  </Pressable>
+                )}
+              </View>
+
+              {/* Stats Card */}
+              {reviewsResponse?.stats && reviewsResponse.stats.total > 0 ? (
+                <View style={[styles.reviewStatsCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+                  <View style={styles.statItem}>
+                    <ThemedText style={[styles.statValue, { color: theme.accent }]}>
+                      {Number(reviewsResponse.stats.average).toFixed(1)}
+                    </ThemedText>
+                    <View style={styles.starsRow}>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Feather
+                          key={star}
+                          name="star"
+                          size={12}
+                          color={star <= Math.round(Number(reviewsResponse.stats.average)) ? theme.accent : theme.border}
+                        />
+                      ))}
+                    </View>
+                    <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Snitt</ThemedText>
+                  </View>
+                  <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
+                  <View style={styles.statItem}>
+                    <ThemedText style={[styles.statValue, { color: theme.text }]}>
+                      {reviewsResponse.stats.total}
+                    </ThemedText>
+                    <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Totalt</ThemedText>
+                  </View>
+                  <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
+                  <View style={styles.statItem}>
+                    <ThemedText style={[styles.statValue, { color: "#4CAF50" }]}>
+                      {reviewsResponse.stats.approved}
+                    </ThemedText>
+                    <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Godkjent</ThemedText>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Reminders Section */}
+              {completedWithoutReview.length > 0 ? (
             <View style={styles.reminderSection}>
               <ThemedText style={[styles.reminderTitle, { color: theme.text }]}>
                 Venter på anmeldelse
@@ -1024,7 +1320,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                     <Pressable
                       style={[
                         styles.reminderBtn,
-                        { backgroundColor: canSend ? Colors.dark.accent : theme.backgroundSecondary }
+                        { backgroundColor: canSend ? theme.accent : theme.backgroundSecondary }
                       ]}
                       onPress={() => {
                         if (canSend) {
@@ -1051,14 +1347,18 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                 );
               })}
             </View>
-          ) : null}
+              ) : null}
+            </View>
+          )}
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
-              <Feather name="star" size={48} color={theme.textMuted} />
-              <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
+              <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
+                <Feather name="star" size={32} color={theme.accent} />
+              </View>
+              <ThemedText style={[styles.emptyText, { color: theme.text }]}>
                 Ingen anmeldelser ennå
               </ThemedText>
-              <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
+              <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
                 Når par anmelder dine tjenester, vil de vises her
               </ThemedText>
             </View>
@@ -1066,6 +1366,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         />
       ) : activeTab === "messages" ? (
         <FlatList
+          style={{ zIndex: 1, flex: 1 }}
           data={conversationsData}
           renderItem={renderConversationItem}
           keyExtractor={(item) => item.id}
@@ -1078,16 +1379,18 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={Colors.dark.accent}
+              tintColor={theme.accent}
             />
           }
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
-              <Feather name="message-circle" size={48} color={theme.textMuted} />
-              <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
+              <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
+                <Feather name="message-circle" size={32} color={theme.accent} />
+              </View>
+              <ThemedText style={[styles.emptyText, { color: theme.text }]}>
                 Ingen meldinger ennå
               </ThemedText>
-              <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
+              <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
                 Når brudepar kontakter deg, vil samtalene vises her
               </ThemedText>
             </View>
@@ -1101,56 +1404,167 @@ export default function VendorDashboardScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
+    position: "relative",
+    zIndex: 1000,
+    elevation: 1000,
+    flexShrink: 0,
   },
-  headerLeft: {
+  headerCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: Spacing.md,
+  },
+  avatarContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  headerTextContainer: {
     flex: 1,
   },
   welcomeText: {
-    fontSize: 14,
-    opacity: 0.7,
+    fontSize: 12,
+    fontWeight: "500",
+    letterSpacing: 0.3,
+    marginBottom: 2,
   },
   businessName: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: "700",
+    letterSpacing: -0.2,
+  },
+  profileArrow: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
   logoutBtn: {
-    padding: Spacing.sm,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: Spacing.sm,
+  },
+  tabScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+    position: "relative",
+    zIndex: 999,
   },
   tabContainer: {
     flexDirection: "row",
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    gap: Spacing.sm,
   },
   tab: {
-    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: Spacing.sm,
-    gap: Spacing.xs,
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: "transparent",
+    minWidth: 72,
+  },
+  tabActive: {
+    borderWidth: 0,
+    shadowColor: "#C9A962",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  tabIconContainer: {
+    position: "relative",
+    marginBottom: 4,
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
+    letterSpacing: 0.1,
+  },
+  tabBadge: {
+    position: "absolute",
+    top: -6,
+    right: -10,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  tabBadgeText: {
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  createBtnContainer: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
+    position: "relative",
+    zIndex: 998,
+    flexShrink: 0,
   },
   createBtn: {
     flexDirection: "row",
     alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    gap: Spacing.md,
+  },
+  createBtnIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
     justifyContent: "center",
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.sm,
-    gap: Spacing.xs,
+  },
+  createBtnContent: {
+    flex: 1,
   },
   createBtnText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1A1A1A",
+    letterSpacing: -0.2,
+  },
+  createBtnSubtext: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  createBtnArrow: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
   loadingContainer: {
     flex: 1,
@@ -1159,26 +1573,111 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     alignItems: "center",
-    paddingTop: Spacing.xl * 2,
-    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing["4xl"],
+    paddingHorizontal: Spacing["2xl"],
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.md,
   },
   emptyText: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginTop: Spacing.md,
+    fontSize: 20,
+    fontWeight: "700",
+    marginTop: Spacing.sm,
+    letterSpacing: -0.3,
   },
   emptySubtext: {
-    fontSize: 14,
+    fontSize: 15,
     textAlign: "center",
-    marginTop: Spacing.xs,
+    marginTop: Spacing.sm,
+    lineHeight: 22,
+    maxWidth: 280,
   },
   deliveryCard: {
-    padding: Spacing.md,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+    overflow: "hidden",
+  },
+  deliveryThumbnailGrid: {
+    height: 140,
+    position: "relative",
+  },
+  deliverySingleThumbnail: {
+    width: "100%",
+    height: "100%",
+  },
+  deliveryTwoThumbnails: {
+    flexDirection: "row",
+    height: "100%",
+    gap: 2,
+  },
+  deliveryHalfThumbnail: {
+    flex: 1,
+    height: "100%",
+  },
+  deliveryGridThumbnails: {
+    flexDirection: "row",
+    height: "100%",
+    gap: 2,
+  },
+  deliveryMainThumbnail: {
+    width: "60%",
+    height: "100%",
+  },
+  deliverySideThumbnails: {
+    flex: 1,
+    gap: 2,
+  },
+  deliverySmallWrapper: {
+    flex: 1,
+    position: "relative",
+  },
+  deliverySmallThumbnail: {
+    width: "100%",
+    height: "100%",
+  },
+  deliveryMoreOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deliveryMoreText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  deliveryStatusOverlay: {
+    position: "absolute",
+    top: Spacing.sm,
+    right: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.sm,
+  },
+  deliveryStatusText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  deliveryCardContent: {
+    padding: Spacing.lg,
   },
   cardHeader: {
     marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
   },
   cardTitleRow: {
     flexDirection: "row",
@@ -1219,6 +1718,7 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
     borderRadius: BorderRadius.sm,
     marginBottom: Spacing.md,
+    marginHorizontal: Spacing.lg,
   },
   accessCodeLeft: {
     flexDirection: "row",
@@ -1240,6 +1740,7 @@ const styles = StyleSheet.create({
   itemsList: {
     gap: 4,
     marginBottom: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
   },
   itemRow: {
     flexDirection: "row",
@@ -1253,24 +1754,8 @@ const styles = StyleSheet.create({
   createdAt: {
     fontSize: 12,
     textAlign: "right",
-  },
-  tabWithBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  tabBadge: {
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 4,
-    paddingHorizontal: 4,
-  },
-  tabBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#1A1A1A",
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
   },
   unreadBadge: {
     minWidth: 20,
@@ -1393,5 +1878,235 @@ const styles = StyleSheet.create({
   reminderBtnText: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  googleReviewsCard: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  googleReviewsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  googleIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  googleReviewsText: {
+    flex: 1,
+  },
+  googleReviewsTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  googleReviewsSubtitle: {
+    fontSize: 13,
+  },
+  googleReviewsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
+  googleReviewsBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  reviewStatsCard: {
+    flexDirection: "row",
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  statValue: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  starsRow: {
+    flexDirection: "row",
+    gap: 2,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  statDivider: {
+    width: 1,
+    marginVertical: Spacing.sm,
+  },
+  webViewContainer: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing.lg,
+    overflow: "hidden",
+  },
+  webViewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  webViewHeaderText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  webViewWrapper: {
+    overflow: "hidden",
+  },
+  webView: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  webViewLoading: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  // Showcase card with thumbnails
+  showcaseCard: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  thumbnailGrid: {
+    height: 160,
+    position: "relative",
+  },
+  singleThumbnail: {
+    width: "100%",
+    height: "100%",
+  },
+  twoThumbnails: {
+    flexDirection: "row",
+    height: "100%",
+    gap: 2,
+  },
+  halfThumbnail: {
+    flex: 1,
+    height: "100%",
+  },
+  gridThumbnails: {
+    flexDirection: "row",
+    height: "100%",
+    gap: 2,
+  },
+  mainThumbnail: {
+    flex: 2,
+    height: "100%",
+  },
+  sideThumbnails: {
+    flex: 1,
+    gap: 2,
+  },
+  smallThumbnailWrapper: {
+    flex: 1,
+    position: "relative",
+  },
+  smallThumbnail: {
+    width: "100%",
+    height: "100%",
+  },
+  moreOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  moreText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  statusOverlay: {
+    position: "absolute",
+    top: Spacing.sm,
+    right: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.sm,
+  },
+  statusOverlayText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  noThumbnail: {
+    height: 120,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  noThumbnailText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  showcaseContent: {
+    padding: Spacing.md,
+    gap: Spacing.xs,
+  },
+  showcaseTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+  },
+  categoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  categoryText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  showcaseDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  showcaseFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: Spacing.xs,
+  },
+  mediaCount: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  mediaCountText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  showcaseDate: {
+    fontSize: 11,
   },
 });

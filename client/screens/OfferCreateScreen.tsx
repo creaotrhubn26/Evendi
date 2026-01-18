@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -9,13 +9,13 @@ import {
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -23,7 +23,6 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -48,12 +47,19 @@ interface OfferItem {
 }
 
 interface Props {
-  navigation: NativeStackNavigationProp<any>;
 }
 
-export default function OfferCreateScreen({ navigation }: Props) {
+type RouteParams = {
+  OfferCreate: { offer?: any };
+};
+
+export default function OfferCreateScreen() {
+  const route = useRoute<RouteProp<RouteParams, "OfferCreate">>();
+  const navigation = useNavigation();
+  const editingOffer = route.params?.offer;
+  const isEditMode = !!editingOffer;
+  
   const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
 
@@ -66,6 +72,32 @@ export default function OfferCreateScreen({ navigation }: Props) {
   const [customItemTitle, setCustomItemTitle] = useState("");
   const [customItemPrice, setCustomItemPrice] = useState("");
   const [customItemQuantity, setCustomItemQuantity] = useState("1");
+
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingOffer) {
+      setTitle(editingOffer.title || "");
+      setMessage(editingOffer.message || "");
+      if (editingOffer.validUntil) {
+        setValidUntil(new Date(editingOffer.validUntil));
+      }
+      if (editingOffer.couple) {
+        setSelectedContact({
+          couple: editingOffer.couple,
+          conversationId: editingOffer.conversationId || "",
+        });
+      }
+      if (editingOffer.items && Array.isArray(editingOffer.items)) {
+        setItems(editingOffer.items.map((item: any) => ({
+          productId: item.productId,
+          title: item.title,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })));
+      }
+    }
+  }, [editingOffer]);
 
   const { data: contacts = [], isLoading: contactsLoading } = useQuery<Contact[]>({
     queryKey: ["/api/vendor/contacts"],
@@ -95,24 +127,28 @@ export default function OfferCreateScreen({ navigation }: Props) {
     },
   });
 
-  const createMutation = useMutation({
+  const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedContact) throw new Error("Velg en mottaker");
+      if (!isEditMode && !selectedContact) throw new Error("Velg en mottaker");
       if (items.length === 0) throw new Error("Legg til minst én linje");
 
       const sessionData = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
       if (!sessionData) throw new Error("Ikke innlogget");
       const session = JSON.parse(sessionData);
 
-      const response = await fetch(new URL("/api/vendor/offers", getApiUrl()).toString(), {
-        method: "POST",
+      const url = isEditMode
+        ? new URL(`/api/vendor/offers/${editingOffer.id}`, getApiUrl()).toString()
+        : new URL("/api/vendor/offers", getApiUrl()).toString();
+      
+      const response = await fetch(url, {
+        method: isEditMode ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
-          coupleId: selectedContact.couple.id,
-          conversationId: selectedContact.conversationId,
+          coupleId: selectedContact?.couple.id || editingOffer?.couple?.id,
+          conversationId: selectedContact?.conversationId || editingOffer?.conversationId,
           title,
           message: message || undefined,
           validUntil: validUntil.toISOString(),
@@ -128,7 +164,7 @@ export default function OfferCreateScreen({ navigation }: Props) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Kunne ikke opprette tilbud");
+        throw new Error(error.error || (isEditMode ? "Kunne ikke oppdatere tilbud" : "Kunne ikke opprette tilbud"));
       }
 
       return response.json();
@@ -142,6 +178,46 @@ export default function OfferCreateScreen({ navigation }: Props) {
       Alert.alert("Feil", error.message);
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const sessionData = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
+      if (!sessionData) throw new Error("Ikke innlogget");
+      const session = JSON.parse(sessionData);
+
+      const response = await fetch(
+        new URL(`/api/vendor/offers/${editingOffer.id}`, getApiUrl()).toString(),
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${session.sessionToken}` },
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Kunne ikke slette tilbud");
+      }
+    },
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      queryClient.invalidateQueries({ queryKey: ["/api/vendor/offers"] });
+      navigation.goBack();
+    },
+    onError: (error: Error) => {
+      Alert.alert("Feil", error.message);
+    },
+  });
+
+  const handleDelete = () => {
+    Alert.alert(
+      "Slett tilbud",
+      "Er du sikker på at du vil slette dette tilbudet?",
+      [
+        { text: "Avbryt", style: "cancel" },
+        { text: "Slett", style: "destructive", onPress: () => deleteMutation.mutate() },
+      ]
+    );
+  };
 
   const addProductToOffer = (product: VendorProduct) => {
     setItems([...items, {
@@ -199,14 +275,39 @@ export default function OfferCreateScreen({ navigation }: Props) {
     }
   };
 
-  const isValid = title.trim().length >= 2 && selectedContact && items.length > 0;
+  const isValid = title.trim().length >= 2 && (selectedContact || isEditMode) && items.length > 0;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+        <View style={styles.headerContent}>
+          <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}>
+            <Feather name="file-text" size={20} color="#FFFFFF" />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <ThemedText style={[styles.headerTitle, { color: theme.text }]}>
+              {isEditMode ? "Rediger tilbud" : "Nytt tilbud"}
+            </ThemedText>
+            <ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+              {isEditMode ? "Oppdater tilbudsinfo" : "Send tilbud til brudepar"}
+            </ThemedText>
+          </View>
+        </View>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={({ pressed }) => [
+            styles.closeButton,
+            { backgroundColor: pressed ? theme.backgroundSecondary : theme.backgroundRoot },
+          ]}
+        >
+          <Feather name="x" size={20} color={theme.textSecondary} />
+        </Pressable>
+      </View>
       <KeyboardAwareScrollViewCompat
+        style={{ flex: 1 }}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + Spacing.xl },
+          { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl },
         ]}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
       >
@@ -448,12 +549,31 @@ export default function OfferCreateScreen({ navigation }: Props) {
         ) : null}
 
         <Button
-          onPress={() => createMutation.mutate()}
-          disabled={!isValid || createMutation.isPending}
+          onPress={() => saveMutation.mutate()}
+          disabled={!isValid || saveMutation.isPending}
           style={styles.submitButton}
         >
-          {createMutation.isPending ? "Sender tilbud..." : "Send tilbud"}
+          {saveMutation.isPending 
+            ? (isEditMode ? "Oppdaterer tilbud..." : "Sender tilbud...") 
+            : (isEditMode ? "Oppdater tilbud" : "Send tilbud")}
         </Button>
+
+        {isEditMode ? (
+          <Pressable
+            onPress={handleDelete}
+            disabled={deleteMutation.isPending}
+            style={[styles.deleteBtn, { borderColor: "#F44336" }]}
+          >
+            {deleteMutation.isPending ? (
+              <ActivityIndicator size="small" color="#F44336" />
+            ) : (
+              <>
+                <Feather name="trash-2" size={18} color="#F44336" />
+                <ThemedText style={styles.deleteBtnText}>Slett tilbud</ThemedText>
+              </>
+            )}
+          </Pressable>
+        ) : null}
       </KeyboardAwareScrollViewCompat>
     </View>
   );
@@ -461,6 +581,45 @@ export default function OfferCreateScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: Spacing.md,
+  },
+  headerIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   content: {
     paddingHorizontal: Spacing.lg,
   },
@@ -639,5 +798,21 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: Spacing.md,
+  },
+  deleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  deleteBtnText: {
+    color: "#F44336",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

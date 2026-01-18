@@ -18,6 +18,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
+import { AdminHeader } from "@/components/AdminHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
@@ -155,14 +156,19 @@ export default function AdminSettingsScreen() {
   }
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
-      contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: insets.bottom + Spacing.xl,
-        paddingHorizontal: Spacing.lg,
-      }}
-    >
+    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+      <AdminHeader 
+        title="Innstillinger" 
+        subtitle="Generelle appinnstillinger"
+      />
+      <ScrollView
+        style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+        contentContainerStyle={{
+          paddingTop: Spacing.lg,
+          paddingBottom: insets.bottom + Spacing.xl,
+          paddingHorizontal: Spacing.lg,
+        }}
+      >
       <Animated.View entering={FadeInDown.duration(400)}>
         <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <ThemedText style={styles.sectionTitle}>Funksjoner</ThemedText>
@@ -186,9 +192,9 @@ export default function AdminSettingsScreen() {
 
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
-              <ThemedText style={styles.settingLabel}>Godkjenning av inspirasjoner</ThemedText>
+              <ThemedText style={styles.settingLabel}>Godkjenning av showcases</ThemedText>
               <ThemedText style={[styles.settingDesc, { color: theme.textSecondary }]}>
-                Krev admin-godkjenning for nye inspirasjoner
+                Krev admin-godkjenning for nye showcases
               </ThemedText>
             </View>
             <Switch
@@ -316,6 +322,7 @@ export default function AdminSettingsScreen() {
         </Pressable>
       </Animated.View>
     </ScrollView>
+    </View>
   );
 }
 

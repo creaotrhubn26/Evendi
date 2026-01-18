@@ -13,6 +13,7 @@ import {
 const KEYS = {
   WEDDING_DETAILS: "@wedflow/wedding_details",
   SCHEDULE: "@wedflow/schedule",
+  TIMELINE_CULTURE: "@wedflow/timeline_culture",
   GUESTS: "@wedflow/guests",
   TABLES: "@wedflow/tables",
   SPEECHES: "@wedflow/speeches",
@@ -20,7 +21,25 @@ const KEYS = {
   PHOTO_SHOTS: "@wedflow/photo_shots",
   BUDGET_ITEMS: "@wedflow/budget_items",
   TOTAL_BUDGET: "@wedflow/total_budget",
+  COUPLE_SESSION: "@wedflow/couple_session",
 };
+
+export async function getCoupleSession(): Promise<{ token: string } | null> {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.COUPLE_SESSION);
+    return data ? JSON.parse(data) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveCoupleSession(token: string): Promise<void> {
+  await AsyncStorage.setItem(KEYS.COUPLE_SESSION, JSON.stringify({ token }));
+}
+
+export async function clearCoupleSession(): Promise<void> {
+  await AsyncStorage.removeItem(KEYS.COUPLE_SESSION);
+}
 
 export async function getWeddingDetails(): Promise<WeddingDetails | null> {
   try {
@@ -46,6 +65,19 @@ export async function getSchedule(): Promise<ScheduleEvent[]> {
 
 export async function saveSchedule(events: ScheduleEvent[]): Promise<void> {
   await AsyncStorage.setItem(KEYS.SCHEDULE, JSON.stringify(events));
+}
+
+export async function getTimelineCulture(): Promise<string | null> {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.TIMELINE_CULTURE);
+    return data || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveTimelineCulture(cultureKey: string): Promise<void> {
+  await AsyncStorage.setItem(KEYS.TIMELINE_CULTURE, cultureKey);
 }
 
 export async function getGuests(): Promise<Guest[]> {

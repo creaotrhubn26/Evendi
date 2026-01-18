@@ -27,7 +27,7 @@ export default function MainTabNavigator() {
     <Tab.Navigator
       initialRouteName="PlanningTab"
       screenOptions={{
-        tabBarActiveTintColor: Colors.dark.accent,
+        tabBarActiveTintColor: theme.accent,
         tabBarInactiveTintColor: theme.tabIconDefault,
         tabBarStyle: {
           position: "absolute",
@@ -65,7 +65,7 @@ export default function MainTabNavigator() {
         name="InspirationTab"
         component={InspirationStackNavigator}
         options={{
-          title: "Inspirasjon",
+          title: "Showcase",
           tabBarIcon: ({ color, size }) => (
             <Feather name="heart" size={size} color={color} />
           ),

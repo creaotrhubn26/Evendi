@@ -1,9 +1,10 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
+import crypto from "node:crypto";
 import { db } from "./db";
-import { vendors, vendorCategories, vendorRegistrationSchema, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, coupleVendorContracts, notifications, activityLogs, weddingTables, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses } from "@shared/schema";
+import bcrypt from "bcryptjs";
+import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema } from "@shared/schema";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
-import crypto from "crypto";
 
 function generateAccessCode(): string {
   return crypto.randomBytes(8).toString("hex").toUpperCase();
@@ -42,7 +43,12 @@ setInterval(cleanExpiredSessions, 60 * 60 * 1000);
 const YR_CACHE: Map<string, { data: any; expires: Date }> = new Map();
 
 function hashPassword(password: string): string {
-  return crypto.createHash("sha256").update(password).digest("hex");
+  const salt = bcrypt.genSaltSync(10);
+  return bcrypt.hashSync(password, salt);
+}
+
+function verifyPassword(password: string, hash: string): boolean {
+  return bcrypt.compareSync(password, hash);
 }
 
 const DEFAULT_CATEGORIES = [
@@ -277,16 +283,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Ugyldig e-post eller passord" });
       }
 
-      if (vendor.password !== hashPassword(password)) {
+      if (!verifyPassword(password, vendor.password)) {
         return res.status(401).json({ error: "Ugyldig e-post eller passord" });
       }
 
       const sessionToken = generateSessionToken();
-      const now = new Date();
-      VENDOR_SESSIONS.set(sessionToken, {
+      const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+      
+      await db.insert(vendorSessions).values({
         vendorId: vendor.id,
-        createdAt: now,
-        expiresAt: new Date(now.getTime() + SESSION_DURATION_MS),
+        token: sessionToken,
+        expiresAt,
       });
 
       const { password: _, ...vendorWithoutPassword } = vendor;
@@ -301,9 +308,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.replace("Bearer ", "");
-      VENDOR_SESSIONS.delete(token);
+      await db.delete(vendorSessions).where(eq(vendorSessions.token, token));
     }
     res.json({ message: "Logget ut" });
+  });
+
+  // Session validation endpoint for checking if a stored session is still valid
+  app.get("/api/vendor/session", async (req: Request, res: Response) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({ valid: false, error: "Ikke autorisert" });
+      return;
+    }
+    const token = authHeader.replace("Bearer ", "");
+    
+    try {
+      const [vendorSession] = await db.select({ vendorId: vendorSessions.vendorId })
+        .from(vendorSessions)
+        .where(and(
+          eq(vendorSessions.token, token),
+          sql`${vendorSessions.expiresAt} > NOW()`
+        ));
+      
+      if (!vendorSession) {
+        res.status(401).json({ valid: false, error: "Økt utløpt" });
+        return;
+      }
+
+      const [vendor] = await db.select().from(vendors).where(eq(vendors.id, vendorSession.vendorId));
+      if (!vendor || vendor.status !== "approved") {
+        res.status(401).json({ valid: false, error: "Ikke autorisert" });
+        return;
+      }
+
+      res.json({ valid: true, vendorId: vendorSession.vendorId, businessName: vendor.businessName });
+    } catch (error) {
+      res.status(500).json({ valid: false, error: "Serverfeil" });
+    }
   });
 
   app.get("/api/vendors", async (req: Request, res: Response) => {
@@ -342,7 +383,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return false;
     }
     const authHeader = req.headers.authorization;
+    console.log("Auth check - Header:", authHeader, "Expected:", `Bearer ${adminSecret}`);
     if (!authHeader || authHeader !== `Bearer ${adminSecret}`) {
+      console.error("Auth failed - Header does not match expected value");
       res.status(401).json({ error: "Ikke autorisert" });
       return false;
     }
@@ -422,26 +465,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return null;
     }
     const token = authHeader.replace("Bearer ", "");
-    const session = VENDOR_SESSIONS.get(token);
     
-    if (!session) {
+    // Check if session exists in database and is not expired
+    const [vendorSession] = await db.select({ vendorId: vendorSessions.vendorId })
+      .from(vendorSessions)
+      .where(and(
+        eq(vendorSessions.token, token),
+        sql`${vendorSessions.expiresAt} > NOW()`
+      ));
+    
+    if (!vendorSession) {
       res.status(401).json({ error: "Økt utløpt. Vennligst logg inn på nytt." });
       return null;
     }
 
-    if (session.expiresAt < new Date()) {
-      VENDOR_SESSIONS.delete(token);
-      res.status(401).json({ error: "Økt utløpt. Vennligst logg inn på nytt." });
-      return null;
-    }
-
-    const [vendor] = await db.select().from(vendors).where(eq(vendors.id, session.vendorId));
+    const [vendor] = await db.select().from(vendors).where(eq(vendors.id, vendorSession.vendorId));
     if (!vendor || vendor.status !== "approved") {
       res.status(401).json({ error: "Ikke autorisert" });
       return null;
     }
-    return session.vendorId;
+    return vendorSession.vendorId;
   };
+
+  // Get vendor profile
+  app.get("/api/vendor/profile", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const [vendor] = await db.select().from(vendors).where(eq(vendors.id, vendorId));
+      if (!vendor) {
+        return res.status(404).json({ error: "Leverandør ikke funnet" });
+      }
+
+      // Get category if exists
+      let category = null;
+      if (vendor.categoryId) {
+        const [cat] = await db.select().from(vendorCategories).where(eq(vendorCategories.id, vendor.categoryId));
+        category = cat ? { id: cat.id, name: cat.name } : null;
+      }
+
+      res.json({
+        id: vendor.id,
+        email: vendor.email,
+        businessName: vendor.businessName,
+        organizationNumber: vendor.organizationNumber,
+        description: vendor.description,
+        location: vendor.location,
+        phone: vendor.phone,
+        website: vendor.website,
+        priceRange: vendor.priceRange,
+        imageUrl: vendor.imageUrl,
+        googleReviewUrl: vendor.googleReviewUrl,
+        status: vendor.status,
+        category,
+      });
+    } catch (error) {
+      console.error("Error fetching vendor profile:", error);
+      res.status(500).json({ error: "Kunne ikke hente profil" });
+    }
+  });
+
+  // Update vendor profile
+  app.patch("/api/vendor/profile", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { businessName, organizationNumber, description, location, phone, website, priceRange, googleReviewUrl } = req.body;
+
+      if (!businessName || businessName.trim().length < 2) {
+        return res.status(400).json({ error: "Bedriftsnavn er påkrevd" });
+      }
+
+      const [updatedVendor] = await db.update(vendors)
+        .set({
+          businessName: businessName.trim(),
+          organizationNumber: organizationNumber || null,
+          description: description || null,
+          location: location || null,
+          phone: phone || null,
+          website: website || null,
+          priceRange: priceRange || null,
+          googleReviewUrl: googleReviewUrl || null,
+          updatedAt: new Date(),
+        })
+        .where(eq(vendors.id, vendorId))
+        .returning();
+
+      res.json(updatedVendor);
+    } catch (error) {
+      console.error("Error updating vendor profile:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere profil" });
+    }
+  });
 
   app.get("/api/vendor/deliveries", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
@@ -512,6 +629,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating delivery:", error);
       res.status(500).json({ error: "Kunne ikke opprette leveranse" });
+    }
+  });
+
+  // PATCH - Update delivery
+  app.patch("/api/vendor/deliveries/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+      const { items, ...deliveryData } = req.body;
+
+      // Verify ownership
+      const [existing] = await db.select()
+        .from(deliveries)
+        .where(and(
+          eq(deliveries.id, id),
+          eq(deliveries.vendorId, vendorId)
+        ));
+
+      if (!existing) {
+        return res.status(404).json({ error: "Leveranse ikke funnet" });
+      }
+
+      // Update delivery data
+      const [updated] = await db.update(deliveries)
+        .set({
+          coupleName: deliveryData.coupleName,
+          coupleEmail: deliveryData.coupleEmail || null,
+          title: deliveryData.title,
+          description: deliveryData.description || null,
+          weddingDate: deliveryData.weddingDate || null,
+          status: deliveryData.status || existing.status,
+          updatedAt: new Date(),
+        })
+        .where(eq(deliveries.id, id))
+        .returning();
+
+      // If items are provided, replace them
+      if (items && Array.isArray(items)) {
+        // Delete existing items
+        await db.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id));
+        
+        // Insert new items
+        await Promise.all(
+          items.map((item: any, index: number) =>
+            db.insert(deliveryItems).values({
+              deliveryId: id,
+              type: item.type,
+              label: item.label,
+              url: item.url,
+              description: item.description || null,
+              sortOrder: index,
+            })
+          )
+        );
+      }
+
+      const updatedItems = await db.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, id));
+
+      res.json({ 
+        delivery: { ...updated, items: updatedItems },
+        message: "Leveranse oppdatert!" 
+      });
+    } catch (error) {
+      console.error("Error updating delivery:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere leveranse" });
+    }
+  });
+
+  // DELETE - Delete delivery
+  app.delete("/api/vendor/deliveries/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+
+      // Verify ownership
+      const [existing] = await db.select()
+        .from(deliveries)
+        .where(and(
+          eq(deliveries.id, id),
+          eq(deliveries.vendorId, vendorId)
+        ));
+
+      if (!existing) {
+        return res.status(404).json({ error: "Leveranse ikke funnet" });
+      }
+
+      // Delete items first (foreign key constraint)
+      await db.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id));
+      // Delete delivery
+      await db.delete(deliveries).where(eq(deliveries.id, id));
+
+      res.json({ message: "Leveranse slettet" });
+    } catch (error) {
+      console.error("Error deleting delivery:", error);
+      res.status(500).json({ error: "Kunne ikke slette leveranse" });
     }
   });
 
@@ -671,6 +887,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating inspiration:", error);
       res.status(500).json({ error: "Kunne ikke opprette inspirasjon" });
+    }
+  });
+
+  // PATCH - Update inspiration
+  app.patch("/api/vendor/inspirations/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+      const { media, ...inspirationData } = req.body;
+
+      // Verify ownership
+      const [existing] = await db.select()
+        .from(inspirations)
+        .where(and(
+          eq(inspirations.id, id),
+          eq(inspirations.vendorId, vendorId)
+        ));
+
+      if (!existing) {
+        return res.status(404).json({ error: "Showcase ikke funnet" });
+      }
+
+      // Update inspiration data
+      const [updated] = await db.update(inspirations)
+        .set({
+          categoryId: inspirationData.categoryId || existing.categoryId,
+          title: inspirationData.title,
+          description: inspirationData.description || null,
+          coverImageUrl: inspirationData.coverImageUrl || (media && media.length > 0 ? media[0].url : existing.coverImageUrl),
+          priceSummary: inspirationData.priceSummary || null,
+          priceMin: inspirationData.priceMin || null,
+          priceMax: inspirationData.priceMax || null,
+          currency: inspirationData.currency || "NOK",
+          websiteUrl: inspirationData.websiteUrl || null,
+          inquiryEmail: inspirationData.inquiryEmail || null,
+          inquiryPhone: inspirationData.inquiryPhone || null,
+          ctaLabel: inspirationData.ctaLabel || null,
+          ctaUrl: inspirationData.ctaUrl || null,
+          allowInquiryForm: inspirationData.allowInquiryForm ?? existing.allowInquiryForm,
+          // Reset status to pending if content changes
+          status: "pending",
+          updatedAt: new Date(),
+        })
+        .where(eq(inspirations.id, id))
+        .returning();
+
+      // If media is provided, replace it
+      if (media && Array.isArray(media)) {
+        // Delete existing media
+        await db.delete(inspirationMedia).where(eq(inspirationMedia.inspirationId, id));
+        
+        // Insert new media
+        await Promise.all(
+          media.map((item: any, index: number) =>
+            db.insert(inspirationMedia).values({
+              inspirationId: id,
+              type: item.type,
+              url: item.url,
+              caption: item.caption || null,
+              sortOrder: index,
+            })
+          )
+        );
+      }
+
+      const updatedMedia = await db.select().from(inspirationMedia).where(eq(inspirationMedia.inspirationId, id));
+
+      res.json({
+        inspiration: { ...updated, media: updatedMedia },
+        message: "Showcase oppdatert! Endringer vil bli synlig etter godkjenning.",
+      });
+    } catch (error) {
+      console.error("Error updating inspiration:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere showcase" });
+    }
+  });
+
+  // DELETE - Delete inspiration
+  app.delete("/api/vendor/inspirations/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+
+      // Verify ownership
+      const [existing] = await db.select()
+        .from(inspirations)
+        .where(and(
+          eq(inspirations.id, id),
+          eq(inspirations.vendorId, vendorId)
+        ));
+
+      if (!existing) {
+        return res.status(404).json({ error: "Showcase ikke funnet" });
+      }
+
+      // Delete media first (foreign key constraint)
+      await db.delete(inspirationMedia).where(eq(inspirationMedia.inspirationId, id));
+      // Delete inspiration
+      await db.delete(inspirations).where(eq(inspirations.id, id));
+
+      res.json({ message: "Showcase slettet" });
+    } catch (error) {
+      console.error("Error deleting inspiration:", error);
+      res.status(500).json({ error: "Kunne ikke slette showcase" });
     }
   });
 
@@ -1952,6 +2276,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Background job: Process due message reminders
+  app.post("/api/admin/jobs/process-message-reminders", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    
+    try {
+      // Find all pending reminders that are due
+      const dueReminders = await db.select()
+        .from(messageReminders)
+        .where(and(
+          eq(messageReminders.status, 'pending'),
+          sql`${messageReminders.scheduledFor} <= NOW()`
+        ));
+      
+      if (dueReminders.length === 0) {
+        return res.json({ message: "Ingen påminnelser å behandle", sent: 0 });
+      }
+      
+      let sent = 0;
+      // Process each reminder
+      for (const reminder of dueReminders) {
+        const [vendor] = await db.select({ businessName: vendors.businessName })
+          .from(vendors)
+          .where(eq(vendors.id, reminder.vendorId));
+        
+        const reminderText = reminder.reminderType === 'final' 
+          ? 'Siste påminnelse: ' 
+          : 'Påminnelse: ';
+        
+        // Send notification to couple
+        await db.insert(notifications).values({
+          recipientType: "couple",
+          recipientId: reminder.coupleId,
+          type: "message_reminder",
+          title: reminderText + "Ubesvart melding",
+          body: `Du har en ubesvart melding fra ${vendor?.businessName}. Svar snart.`,
+          relatedEntityType: "conversation",
+          relatedEntityId: reminder.conversationId,
+        });
+        
+        // Mark reminder as sent
+        await db.update(messageReminders)
+          .set({ status: 'sent', sentAt: new Date() })
+          .where(eq(messageReminders.id, reminder.id));
+        
+        sent++;
+      }
+      
+      res.json({ message: `${sent} påminnelser sendt`, sent });
+    } catch (error) {
+      console.error("Error processing message reminders:", error);
+      res.status(500).json({ error: "Kunne ikke behandle påminnelser" });
+    }
+  });
+
   // Cancel a scheduled reminder
   app.delete("/api/vendor/message-reminders/:id", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
@@ -1981,21 +2359,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Vendor Products endpoints
   app.get("/api/vendor/products", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        return res.status(401).json({ error: "Ikke autentisert" });
-      }
-
-      const session = VENDOR_SESSIONS.get(token);
-      if (!session || session.expiresAt < new Date()) {
-        return res.status(401).json({ error: "Ugyldig økt" });
-      }
-
       const products = await db.select()
         .from(vendorProducts)
         .where(and(
-          eq(vendorProducts.vendorId, session.vendorId),
+          eq(vendorProducts.vendorId, vendorId),
           eq(vendorProducts.isArchived, false)
         ))
         .orderBy(vendorProducts.sortOrder);
@@ -2008,22 +2379,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/vendor/products", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        return res.status(401).json({ error: "Ikke autentisert" });
-      }
-
-      const session = VENDOR_SESSIONS.get(token);
-      if (!session || session.expiresAt < new Date()) {
-        return res.status(401).json({ error: "Ugyldig økt" });
-      }
-
       const validatedData = createVendorProductSchema.parse(req.body);
       
       const [product] = await db.insert(vendorProducts)
         .values({
-          vendorId: session.vendorId,
+          vendorId,
           title: validatedData.title,
           description: validatedData.description,
           unitPrice: validatedData.unitPrice,
@@ -2044,17 +2408,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/vendor/products/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        return res.status(401).json({ error: "Ikke autentisert" });
-      }
-
-      const session = VENDOR_SESSIONS.get(token);
-      if (!session || session.expiresAt < new Date()) {
-        return res.status(401).json({ error: "Ugyldig økt" });
-      }
-
       const { id } = req.params;
       const updates = req.body;
 
@@ -2063,7 +2420,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(vendorProducts)
         .where(and(
           eq(vendorProducts.id, id),
-          eq(vendorProducts.vendorId, session.vendorId)
+          eq(vendorProducts.vendorId, vendorId)
         ));
 
       if (!existing) {
@@ -2083,17 +2440,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/vendor/products/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        return res.status(401).json({ error: "Ikke autentisert" });
-      }
-
-      const session = VENDOR_SESSIONS.get(token);
-      if (!session || session.expiresAt < new Date()) {
-        return res.status(401).json({ error: "Ugyldig økt" });
-      }
-
       const { id } = req.params;
 
       // Soft delete - archive the product
@@ -2101,7 +2451,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .set({ isArchived: true, updatedAt: new Date() })
         .where(and(
           eq(vendorProducts.id, id),
-          eq(vendorProducts.vendorId, session.vendorId)
+          eq(vendorProducts.vendorId, vendorId)
         ))
         .returning();
 
@@ -2118,17 +2468,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Vendor Offers endpoints
   app.get("/api/vendor/offers", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        return res.status(401).json({ error: "Ikke autentisert" });
-      }
-
-      const session = VENDOR_SESSIONS.get(token);
-      if (!session || session.expiresAt < new Date()) {
-        return res.status(401).json({ error: "Ugyldig økt" });
-      }
-
       const offers = await db.select({
         offer: vendorOffers,
         couple: {
@@ -2139,7 +2482,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       })
         .from(vendorOffers)
         .leftJoin(coupleProfiles, eq(vendorOffers.coupleId, coupleProfiles.id))
-        .where(eq(vendorOffers.vendorId, session.vendorId))
+        .where(eq(vendorOffers.vendorId, vendorId))
         .orderBy(desc(vendorOffers.createdAt));
 
       // Get offer items for each offer
@@ -2161,17 +2504,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/vendor/offers", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        return res.status(401).json({ error: "Ikke autentisert" });
-      }
-
-      const session = VENDOR_SESSIONS.get(token);
-      if (!session || session.expiresAt < new Date()) {
-        return res.status(401).json({ error: "Ugyldig økt" });
-      }
-
       const validatedData = createOfferSchema.parse(req.body);
       
       // Calculate total
@@ -2182,7 +2518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [offer] = await db.insert(vendorOffers)
         .values({
-          vendorId: session.vendorId,
+          vendorId,
           coupleId: validatedData.coupleId,
           conversationId: validatedData.conversationId || null,
           title: validatedData.title,
@@ -2216,7 +2552,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await db.insert(messages).values({
           conversationId: validatedData.conversationId,
           senderType: "vendor",
-          senderId: session.vendorId,
+          senderId: vendorId,
           body: `📋 Nytt tilbud: ${validatedData.title}\nTotalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`,
         });
 
@@ -2237,17 +2573,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/vendor/offers/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        return res.status(401).json({ error: "Ikke autentisert" });
-      }
-
-      const session = VENDOR_SESSIONS.get(token);
-      if (!session || session.expiresAt < new Date()) {
-        return res.status(401).json({ error: "Ugyldig økt" });
-      }
-
       const { id } = req.params;
       const updates = req.body;
 
@@ -2256,7 +2585,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(vendorOffers)
         .where(and(
           eq(vendorOffers.id, id),
-          eq(vendorOffers.vendorId, session.vendorId)
+          eq(vendorOffers.vendorId, vendorId)
         ));
 
       if (!existing) {
@@ -2272,6 +2601,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating vendor offer:", error);
       res.status(500).json({ error: "Kunne ikke oppdatere tilbud" });
+    }
+  });
+
+  // Delete a vendor offer
+  app.delete("/api/vendor/offers/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+
+      // Verify ownership
+      const [existing] = await db.select()
+        .from(vendorOffers)
+        .where(and(
+          eq(vendorOffers.id, id),
+          eq(vendorOffers.vendorId, vendorId)
+        ));
+
+      if (!existing) {
+        return res.status(404).json({ error: "Tilbud ikke funnet" });
+      }
+
+      // Delete offer items first
+      await db.delete(vendorOfferItems).where(eq(vendorOfferItems.offerId, id));
+      // Delete the offer
+      await db.delete(vendorOffers).where(eq(vendorOffers.id, id));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting vendor offer:", error);
+      res.status(500).json({ error: "Kunne ikke slette tilbud" });
     }
   });
 
@@ -2454,9 +2815,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin Settings Routes
+  // Admin Settings Routes - Public read for design settings (anyone can see the design)
   app.get("/api/admin/settings", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
-    
     try {
       const settings = await db.select().from(appSettings);
       res.json(settings);
@@ -2531,6 +2891,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching statistics:", error);
       res.status(500).json({ error: "Kunne ikke hente statistikk" });
+    }
+  });
+
+  // Background job: Expire old offers and notify couples
+  app.post("/api/admin/jobs/expire-offers", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    
+    try {
+      // Find all pending offers that have expired
+      const expiredOffers = await db.select()
+        .from(vendorOffers)
+        .where(and(
+          eq(vendorOffers.status, "pending"),
+          sql`${vendorOffers.validUntil} < NOW()`
+        ));
+      
+      if (expiredOffers.length === 0) {
+        return res.json({ message: "Ingen utløpte tilbud", updated: 0 });
+      }
+      
+      // Update all expired offers to "expired" status
+      await db.update(vendorOffers)
+        .set({ status: "expired", updatedAt: new Date() })
+        .where(and(
+          eq(vendorOffers.status, "pending"),
+          sql`${vendorOffers.validUntil} < NOW()`
+        ));
+      
+      // Send notifications to couples about expired offers
+      for (const offer of expiredOffers) {
+        const [vendor] = await db.select({ businessName: vendors.businessName })
+          .from(vendors)
+          .where(eq(vendors.id, offer.vendorId));
+        
+        await db.insert(notifications).values({
+          recipientType: "couple",
+          recipientId: offer.coupleId,
+          type: "offer_expired",
+          title: "Tilbud utløpt",
+          body: `Tilbudet fra ${vendor?.businessName} "${offer.title}" har utløpt`,
+          relatedEntityType: "offer",
+          relatedEntityId: offer.id,
+        });
+      }
+      
+      res.json({ message: `${expiredOffers.length} tilbud marked som utløpt`, updated: expiredOffers.length });
+    } catch (error) {
+      console.error("Error expiring offers:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere tilbud" });
     }
   });
 
@@ -2828,6 +3237,345 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==========================================
+  // Guest Invitations - public RSVP links
+  // ==========================================
+
+  app.get("/api/couple/guest-invitations", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const domain = process.env.EXPO_PUBLIC_DOMAIN
+        ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+        : `http://localhost:${process.env.PORT || 5000}`;
+
+      const invitations = await db
+        .select()
+        .from(guestInvitations)
+        .where(eq(guestInvitations.coupleId, coupleId))
+        .orderBy(desc(guestInvitations.createdAt));
+
+      res.json(
+        invitations.map((inv) => ({
+          ...inv,
+          inviteUrl: `${domain}/invite/${inv.inviteToken}`,
+        })),
+      );
+    } catch (error) {
+      console.error("Error fetching guest invitations:", error);
+      res.status(500).json({ error: "Kunne ikke hente invitasjoner" });
+    }
+  });
+
+  app.post("/api/couple/guest-invitations", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    const parsed = createGuestInvitationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.message });
+    }
+
+    const { name, email, phone, template, message, expiresAt } = parsed.data;
+
+    try {
+      const inviteToken = crypto.randomBytes(24).toString("hex");
+      const [invitation] = await db
+        .insert(guestInvitations)
+        .values({
+          coupleId,
+          name,
+          email: email || null,
+          phone: phone || null,
+          template,
+          message: message || null,
+          inviteToken,
+          status: "sent",
+          expiresAt: expiresAt ? new Date(expiresAt) : null,
+        })
+        .returning();
+
+      const domain = process.env.EXPO_PUBLIC_DOMAIN
+        ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+        : `http://localhost:${process.env.PORT || 5000}`;
+
+      res.status(201).json({
+        ...invitation,
+        inviteUrl: `${domain}/invite/${inviteToken}`,
+      });
+    } catch (error) {
+      console.error("Error creating guest invitation:", error);
+      res.status(500).json({ error: "Kunne ikke opprette invitasjon" });
+    }
+  });
+
+  app.patch("/api/couple/guest-invitations/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    const { id } = req.params;
+    const { status, template, message, expiresAt } = req.body;
+
+    try {
+      const [updated] = await db
+        .update(guestInvitations)
+        .set({
+          status,
+          template,
+          message,
+          expiresAt: expiresAt ? new Date(expiresAt) : undefined,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(guestInvitations.id, id), eq(guestInvitations.coupleId, coupleId)))
+        .returning();
+
+      if (!updated) return res.status(404).json({ error: "Invitasjon ikke funnet" });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating guest invitation:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere invitasjon" });
+    }
+  });
+
+  app.delete("/api/couple/guest-invitations/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    const { id } = req.params;
+
+    try {
+      await db
+        .delete(guestInvitations)
+        .where(and(eq(guestInvitations.id, id), eq(guestInvitations.coupleId, coupleId)));
+
+      res.json({ message: "Invitasjon slettet" });
+    } catch (error) {
+      console.error("Error deleting guest invitation:", error);
+      res.status(500).json({ error: "Kunne ikke slette invitasjon" });
+    }
+  });
+
+  // Public: fetch invitation by token
+  app.get("/api/guest/invite/:token", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+
+      const [invitation] = await db
+        .select({
+          invite: guestInvitations,
+          coupleName: coupleProfiles.displayName,
+        })
+        .from(guestInvitations)
+        .leftJoin(coupleProfiles, eq(guestInvitations.coupleId, coupleProfiles.id))
+        .where(eq(guestInvitations.inviteToken, token));
+
+      if (!invitation?.invite) {
+        return res.status(404).json({ error: "Ugyldig invitasjon" });
+      }
+
+      const expires = invitation.invite.expiresAt ? new Date(invitation.invite.expiresAt) : null;
+      if (expires && expires < new Date()) {
+        return res.status(410).json({ error: "Invitasjonen er utløpt" });
+      }
+
+      res.json({
+        ...invitation.invite,
+        coupleName: invitation.coupleName,
+      });
+    } catch (error) {
+      console.error("Error fetching guest invitation:", error);
+      res.status(500).json({ error: "Kunne ikke hente invitasjon" });
+    }
+  });
+
+  // Public: respond to invitation
+  app.post("/api/guest/invite/:token/respond", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const { attending, dietary, allergies, notes, plusOne } = req.body;
+
+      const [existing] = await db
+        .select()
+        .from(guestInvitations)
+        .where(eq(guestInvitations.inviteToken, token));
+
+      if (!existing) {
+        return res.status(404).json({ error: "Ugyldig invitasjon" });
+      }
+
+      const expires = existing.expiresAt ? new Date(existing.expiresAt) : null;
+      if (expires && expires < new Date()) {
+        return res.status(410).json({ error: "Invitasjonen er utløpt" });
+      }
+
+      const [updated] = await db
+        .update(guestInvitations)
+        .set({
+          responseAttending: attending,
+          responseDietary: dietary || null,
+          responseAllergies: allergies || null,
+          responseNotes: notes || null,
+          responsePlusOne: plusOne || null,
+          status: attending === false ? "declined" : "responded",
+          respondedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(guestInvitations.id, existing.id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error responding to invitation:", error);
+      res.status(500).json({ error: "Kunne ikke lagre svar" });
+    }
+  });
+
+  // Public landing page for invitation
+  app.get("/invite/:token", async (req: Request, res: Response) => {
+    const { token } = req.params;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    const apiBase = process.env.EXPO_PUBLIC_DOMAIN
+      ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+      : `http://localhost:${process.env.PORT || 5000}`;
+
+    const html = `<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bryllupsinvitasjon</title>
+  <style>
+    :root { --bg: #f7f5f2; --card: #ffffff; --text: #1f1f1f; --accent: #c07b5a; }
+    body { margin:0; font-family: 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text); display:flex; justify-content:center; padding:24px; }
+    .card { max-width: 520px; width:100%; background: var(--card); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); overflow:hidden; }
+    .hero { padding: 28px; background: linear-gradient(135deg, #f2e8df, #f7f1ea); }
+    .badge { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; background: rgba(0,0,0,0.05); border-radius: 999px; font-size:12px; letter-spacing:0.4px; text-transform:uppercase; }
+    .title { font-size:28px; margin:14px 0 6px; letter-spacing:-0.3px; }
+    .subtitle { color:#5f5f5f; margin:0; }
+    form { padding: 24px; display:flex; flex-direction:column; gap:14px; }
+    label { font-weight:600; font-size:14px; }
+    input, textarea, select { width:100%; padding:12px 14px; border-radius:10px; border:1px solid #e1d9cf; font-size:15px; box-sizing:border-box; background:#faf7f4; }
+    textarea { min-height:96px; resize:vertical; }
+    button { background: var(--accent); color:#1f1f1f; border:none; padding:14px; border-radius:12px; font-weight:700; font-size:15px; cursor:pointer; transition: transform 120ms ease, box-shadow 120ms ease; }
+    button:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(0,0,0,0.12); }
+    .chips { display:flex; gap:8px; flex-wrap:wrap; }
+    .chip { padding:9px 12px; border-radius:10px; background:#f0e8df; font-weight:600; border:1px solid transparent; }
+    .chip.active { background:#1f1f1f; color:#fff; }
+    .divider { height:1px; background:#eee4da; margin:0 24px; }
+    .note { color:#7a7a7a; font-size:13px; margin-top:4px; }
+    .error { color:#b00020; background:#fdeaea; padding:10px 12px; border-radius:10px; border:1px solid #f5c6c6; }
+    .success { color:#0b5d1e; background:#e7f6ec; padding:10px 12px; border-radius:10px; border:1px solid #bde5c8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="hero">
+      <div class="badge">Bryllupsinvitasjon</div>
+      <h1 class="title" id="title">Laster invitasjon...</h1>
+      <p class="subtitle" id="subtitle"></p>
+    </div>
+    <div class="divider"></div>
+    <form id="rsvpForm">
+      <div id="alert"></div>
+      <div>
+        <label>Kan du komme?</label>
+        <div class="chips">
+          <div class="chip active" data-value="yes">Ja, jeg kommer</div>
+          <div class="chip" data-value="no">Dessverre nei</div>
+        </div>
+      </div>
+      <div>
+        <label>Telefon</label>
+        <input id="phone" placeholder="Telefon (valgfritt)" />
+      </div>
+      <div>
+        <label>E-post</label>
+        <input id="email" placeholder="E-post (valgfritt)" />
+      </div>
+      <div>
+        <label>Kosthold</label>
+        <input id="dietary" placeholder="Vegetar, halal, osv" />
+      </div>
+      <div>
+        <label>Allergier</label>
+        <input id="allergies" placeholder="Nøtter, gluten, laktose, osv" />
+      </div>
+      <div>
+        <label>Plus-one navn</label>
+        <input id="plusOne" placeholder="Navn på følge (valgfritt)" />
+      </div>
+      <div>
+        <label>Notater</label>
+        <textarea id="notes" placeholder="Andre hensyn"></textarea>
+      </div>
+      <button type="submit">Send svar</button>
+      <p class="note">Vi lagrer kun dette svaret til bryllupsplanleggingen.</p>
+    </form>
+  </div>
+
+  <script>
+    const token = ${JSON.stringify(token)};
+    const apiBase = ${JSON.stringify(apiBase)};
+    const alertBox = document.getElementById('alert');
+    const chips = Array.from(document.querySelectorAll('.chip'));
+    let attending = true;
+
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        chips.forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        attending = chip.dataset.value === 'yes';
+      });
+    });
+
+    async function loadInvitation() {
+      try {
+        const res = await fetch(apiBase + '/api/guest/invite/' + token);
+        if (!res.ok) throw new Error('Kunne ikke hente invitasjon');
+        const data = await res.json();
+        document.getElementById('title').textContent = data.name;
+        document.getElementById('subtitle').textContent = data.coupleName ? 'Invitert av ' + data.coupleName : 'Bryllup';
+      } catch (err) {
+        alertBox.innerHTML = '<div class="error">' + err.message + '</div>';
+      }
+    }
+
+    document.getElementById('rsvpForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      alertBox.innerHTML = '';
+      try {
+        const payload = {
+          attending,
+          dietary: document.getElementById('dietary').value,
+          allergies: document.getElementById('allergies').value,
+          notes: document.getElementById('notes').value,
+          plusOne: document.getElementById('plusOne').value,
+        };
+        const res = await fetch(apiBase + '/api/guest/invite/' + token + '/respond', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Ukjent feil' }));
+          throw new Error(err.error || 'Kunne ikke lagre svar');
+        }
+        alertBox.innerHTML = '<div class="success">Takk! Svaret ditt er registrert.</div>';
+      } catch (err) {
+        alertBox.innerHTML = '<div class="error">' + err.message + '</div>';
+      }
+    });
+
+    loadInvitation();
+  </script>
+</body>
+</html>`;
+
+    res.send(html);
+  });
+
   // Coordinator access - validate token and get data
   app.get("/api/coordinator/access/:token", async (req: Request, res: Response) => {
     try {
@@ -3096,6 +3844,180 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting schedule event:", error);
       res.status(500).json({ error: "Kunne ikke slette hendelse" });
+    }
+  });
+
+  // ==========================================
+  // Coordinator Read-Only Endpoints
+  // ==========================================
+
+  async function checkCoordinatorAuth(req: Request, res: Response): Promise<string | null> {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({ error: "Ikke autorisert" });
+      return null;
+    }
+    const token = authHeader.replace("Bearer ", "");
+    const [invite] = await db
+      .select()
+      .from(coordinatorInvitations)
+      .where(and(eq(coordinatorInvitations.accessToken, token), eq(coordinatorInvitations.status, "active")));
+    if (!invite) {
+      res.status(401).json({ error: "Ugyldig eller inaktiv tilgang" });
+      return null;
+    }
+    // Update lastAccessedAt
+    await db
+      .update(coordinatorInvitations)
+      .set({ lastAccessedAt: new Date(), updatedAt: new Date() })
+      .where(eq(coordinatorInvitations.id, invite.id));
+    return invite.coupleId as string;
+  }
+
+  // Read-only schedule for coordinator
+  app.get("/api/coordinator/schedule-events", async (req: Request, res: Response) => {
+    const coupleId = await checkCoordinatorAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const events = await db
+        .select({ id: scheduleEvents.id, time: scheduleEvents.time, title: scheduleEvents.title, icon: scheduleEvents.icon })
+        .from(scheduleEvents)
+        .where(eq(scheduleEvents.coupleId, coupleId))
+        .orderBy(scheduleEvents.time);
+      res.json(events);
+    } catch (error) {
+      console.error("Error fetching coordinator schedule:", error);
+      res.status(500).json({ error: "Kunne ikke hente program" });
+    }
+  });
+
+  // Read-only couple profile for coordinator (display name and wedding date)
+  app.get("/api/coordinator/couple-profile", async (req: Request, res: Response) => {
+    const coupleId = await checkCoordinatorAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const [couple] = await db
+        .select({ id: coupleProfiles.id, displayName: coupleProfiles.displayName, weddingDate: coupleProfiles.weddingDate })
+        .from(coupleProfiles)
+        .where(eq(coupleProfiles.id, coupleId));
+      if (!couple) return res.status(404).json({ error: "Profil ikke funnet" });
+      res.json(couple);
+    } catch (error) {
+      console.error("Error fetching coordinator couple profile:", error);
+      res.status(500).json({ error: "Kunne ikke hente profil" });
+    }
+  });
+
+  // ==========================================
+  // Wedding Guests Endpoints (Server-side storage)
+  // ==========================================
+
+  // Get couple's wedding guests
+  app.get("/api/couple/guests", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const guests = await db
+        .select()
+        .from(weddingGuests)
+        .where(eq(weddingGuests.coupleId, coupleId))
+        .orderBy(weddingGuests.createdAt);
+
+      res.json(guests);
+    } catch (error) {
+      console.error("Error fetching guests:", error);
+      res.status(500).json({ error: "Kunne ikke hente gjester" });
+    }
+  });
+
+  // Create a guest
+  app.post("/api/couple/guests", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const parsed = insertWeddingGuestSchema.parse(req.body);
+      const [guest] = await db
+        .insert(weddingGuests)
+        .values({ ...parsed, coupleId })
+        .returning();
+
+      res.json(guest);
+    } catch (error) {
+      console.error("Error creating guest:", error);
+      res.status(400).json({ error: "Kunne ikke opprett gjest" });
+    }
+  });
+
+  // Update a guest
+  app.patch("/api/couple/guests/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      const parsed = updateWeddingGuestSchema.parse(req.body);
+
+      // Verify guest belongs to couple
+      const [guest] = await db
+        .select()
+        .from(weddingGuests)
+        .where(
+          and(
+            eq(weddingGuests.id, id),
+            eq(weddingGuests.coupleId, coupleId)
+          )
+        );
+
+      if (!guest) {
+        return res.status(404).json({ error: "Gjest ikke funnet" });
+      }
+
+      const [updated] = await db
+        .update(weddingGuests)
+        .set({ ...parsed, updatedAt: new Date() })
+        .where(eq(weddingGuests.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating guest:", error);
+      res.status(400).json({ error: "Kunne ikke oppdatere gjest" });
+    }
+  });
+
+  // Delete a guest
+  app.delete("/api/couple/guests/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+
+      // Verify guest belongs to couple
+      const [guest] = await db
+        .select()
+        .from(weddingGuests)
+        .where(
+          and(
+            eq(weddingGuests.id, id),
+            eq(weddingGuests.coupleId, coupleId)
+          )
+        );
+
+      if (!guest) {
+        return res.status(404).json({ error: "Gjest ikke funnet" });
+      }
+
+      await db.delete(weddingGuests).where(eq(weddingGuests.id, id));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting guest:", error);
+      res.status(400).json({ error: "Kunne ikke slette gjest" });
     }
   });
 
@@ -3922,6 +4844,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating vendor contract:", error);
       res.status(500).json({ error: "Kunne ikke oppdatere avtale" });
+    }
+  });
+
+  // Mark vendor contract as completed
+  app.post("/api/couple/vendor-contracts/:id/complete", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      
+      const [updated] = await db.update(coupleVendorContracts)
+        .set({
+          status: "completed",
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(coupleVendorContracts.id, id),
+          eq(coupleVendorContracts.coupleId, coupleId)
+        ))
+        .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Avtale ikke funnet" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error completing vendor contract:", error);
+      res.status(500).json({ error: "Kunne ikke fullføre avtale" });
     }
   });
 
@@ -4785,6 +5738,333 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error completing contract:", error);
       res.status(500).json({ error: "Kunne ikke fullføre avtale" });
+    }
+  });
+
+  // ===== CHECKLIST ENDPOINTS =====
+  
+  // Admin: Get all checklists (all couples)
+  app.get("/api/admin/checklists", async (req: Request, res: Response) => {
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
+
+    try {
+      const checklists = await db.select({
+        taskId: checklistTasks.id,
+        taskTitle: checklistTasks.title,
+        taskMonthsBefore: checklistTasks.monthsBefore,
+        taskCategory: checklistTasks.category,
+        taskCompleted: checklistTasks.completed,
+        taskCompletedAt: checklistTasks.completedAt,
+        taskNotes: checklistTasks.notes,
+        taskIsDefault: checklistTasks.isDefault,
+        taskSortOrder: checklistTasks.sortOrder,
+        coupleId: coupleProfiles.id,
+        coupleName: coupleProfiles.displayName,
+        coupleEmail: coupleProfiles.email,
+        weddingDate: coupleProfiles.weddingDate,
+      })
+        .from(checklistTasks)
+        .innerJoin(coupleProfiles, eq(checklistTasks.coupleId, coupleProfiles.id))
+        .orderBy(coupleProfiles.displayName, checklistTasks.sortOrder);
+
+      res.json(checklists);
+    } catch (error) {
+      console.error("Error fetching admin checklists:", error);
+      res.status(500).json({ error: "Kunne ikke hente sjekklister" });
+    }
+  });
+
+  // Admin: Get checklist for specific couple
+  app.get("/api/admin/checklists/:coupleId", async (req: Request, res: Response) => {
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
+
+    try {
+      const { coupleId } = req.params;
+
+      const tasks = await db.select()
+        .from(checklistTasks)
+        .where(eq(checklistTasks.coupleId, coupleId))
+        .orderBy(checklistTasks.sortOrder, checklistTasks.monthsBefore);
+
+      const [couple] = await db.select()
+        .from(coupleProfiles)
+        .where(eq(coupleProfiles.id, coupleId));
+
+      res.json({ couple, tasks });
+    } catch (error) {
+      console.error("Error fetching couple checklist:", error);
+      res.status(500).json({ error: "Kunne ikke hente sjekkliste" });
+    }
+  });
+
+  // Admin: Update any checklist task
+  app.patch("/api/admin/checklists/:id", async (req: Request, res: Response) => {
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
+
+    try {
+      const { id } = req.params;
+      const { title, monthsBefore, category, completed, notes, assignedTo } = req.body;
+
+      const updateData: any = { updatedAt: new Date() };
+      if (title !== undefined) updateData.title = title;
+      if (monthsBefore !== undefined) updateData.monthsBefore = monthsBefore;
+      if (category !== undefined) updateData.category = category;
+      if (notes !== undefined) updateData.notes = notes;
+      if (assignedTo !== undefined) updateData.assignedTo = assignedTo;
+      
+      if (completed !== undefined) {
+        updateData.completed = completed;
+        if (completed) {
+          updateData.completedAt = new Date();
+        } else {
+          updateData.completedAt = null;
+          updateData.completedBy = null;
+        }
+      }
+
+      const [updated] = await db.update(checklistTasks)
+        .set(updateData)
+        .where(eq(checklistTasks.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating checklist task (admin):", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere oppgave" });
+    }
+  });
+
+  // Admin: Delete any checklist task
+  app.delete("/api/admin/checklists/:id", async (req: Request, res: Response) => {
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
+
+    try {
+      const { id } = req.params;
+
+      await db.delete(checklistTasks)
+        .where(eq(checklistTasks.id, id));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting checklist task (admin):", error);
+      res.status(500).json({ error: "Kunne ikke slette oppgave" });
+    }
+  });
+  
+  // Get checklist tasks for couple
+  app.get("/api/checklist", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const tasks = await db.select()
+        .from(checklistTasks)
+        .where(eq(checklistTasks.coupleId, coupleId))
+        .orderBy(checklistTasks.sortOrder, checklistTasks.monthsBefore);
+
+      res.json(tasks);
+    } catch (error) {
+      console.error("Error fetching checklist:", error);
+      res.status(500).json({ error: "Kunne ikke hente sjekkliste" });
+    }
+  });
+
+  // Create new checklist task
+  app.post("/api/checklist", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const validation = createChecklistTaskSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          error: "Ugyldig data", 
+          details: validation.error.errors 
+        });
+      }
+
+      const [task] = await db.insert(checklistTasks).values({
+        coupleId,
+        ...validation.data,
+      }).returning();
+
+      res.json(task);
+    } catch (error) {
+      console.error("Error creating checklist task:", error);
+      res.status(500).json({ error: "Kunne ikke opprette oppgave" });
+    }
+  });
+
+  // Update checklist task
+  app.patch("/api/checklist/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      const { title, monthsBefore, category, completed, notes, assignedTo, createReminder } = req.body;
+
+      const [existing] = await db.select()
+        .from(checklistTasks)
+        .where(and(
+          eq(checklistTasks.id, id),
+          eq(checklistTasks.coupleId, coupleId)
+        ));
+
+      if (!existing) {
+        return res.status(404).json({ error: "Fant ikke oppgave" });
+      }
+
+      const updateData: any = { updatedAt: new Date() };
+      if (title !== undefined) updateData.title = title;
+      if (monthsBefore !== undefined) updateData.monthsBefore = monthsBefore;
+      if (category !== undefined) updateData.category = category;
+      if (notes !== undefined) updateData.notes = notes;
+      if (assignedTo !== undefined) updateData.assignedTo = assignedTo;
+      
+      if (completed !== undefined) {
+        updateData.completed = completed;
+        if (completed) {
+          updateData.completedAt = new Date();
+          updateData.completedBy = coupleId;
+        } else {
+          updateData.completedAt = null;
+          updateData.completedBy = null;
+        }
+      }
+
+      // Create linked reminder if requested
+      if (createReminder && monthsBefore !== undefined) {
+        const [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+        
+        if (couple?.weddingDate) {
+          const weddingDate = new Date(couple.weddingDate);
+          const reminderDate = new Date(weddingDate);
+          reminderDate.setMonth(reminderDate.getMonth() - monthsBefore);
+          
+          const [reminder] = await db.insert(reminders).values({
+            title: title || existing.title,
+            description: notes || `Fra sjekkliste: ${title || existing.title}`,
+            reminderDate: reminderDate,
+            category: "planning",
+          }).returning();
+
+          updateData.linkedReminderId = reminder.id;
+        }
+      }
+
+      const [updated] = await db.update(checklistTasks)
+        .set(updateData)
+        .where(eq(checklistTasks.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating checklist task:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere oppgave" });
+    }
+  });
+
+  // Delete checklist task
+  app.delete("/api/checklist/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+
+      const [existing] = await db.select()
+        .from(checklistTasks)
+        .where(and(
+          eq(checklistTasks.id, id),
+          eq(checklistTasks.coupleId, coupleId)
+        ));
+
+      if (!existing) {
+        return res.status(404).json({ error: "Fant ikke oppgave" });
+      }
+
+      // Don't allow deleting default tasks
+      if (existing.isDefault) {
+        return res.status(400).json({ error: "Kan ikke slette standardoppgaver" });
+      }
+
+      await db.delete(checklistTasks)
+        .where(eq(checklistTasks.id, id));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting checklist task:", error);
+      res.status(500).json({ error: "Kunne ikke slette oppgave" });
+    }
+  });
+
+  // Seed default checklist for couple
+  app.post("/api/checklist/seed-defaults", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      // Check if couple already has tasks
+      const existing = await db.select()
+        .from(checklistTasks)
+        .where(eq(checklistTasks.coupleId, coupleId));
+
+      if (existing.length > 0) {
+        return res.status(400).json({ error: "Sjekkliste finnes allerede" });
+      }
+
+      const DEFAULT_TASKS = [
+        { title: "Sett bryllupsbudsjett", monthsBefore: 12, category: "planning", sortOrder: 1 },
+        { title: "Velg bryllupsdato", monthsBefore: 12, category: "planning", sortOrder: 2 },
+        { title: "Book lokale", monthsBefore: 12, category: "vendors", sortOrder: 3 },
+        { title: "Start gjesteliste", monthsBefore: 11, category: "planning", sortOrder: 4 },
+        { title: "Book fotograf", monthsBefore: 10, category: "vendors", sortOrder: 5 },
+        { title: "Book videograf", monthsBefore: 10, category: "vendors", sortOrder: 6 },
+        { title: "Bestill/kjøp brudekjole", monthsBefore: 9, category: "attire", sortOrder: 7 },
+        { title: "Book DJ/band", monthsBefore: 8, category: "vendors", sortOrder: 8 },
+        { title: "Velg catering/meny", monthsBefore: 6, category: "vendors", sortOrder: 9 },
+        { title: "Send 'save the date'", monthsBefore: 6, category: "logistics", sortOrder: 10 },
+        { title: "Bestill invitasjoner", monthsBefore: 5, category: "logistics", sortOrder: 11 },
+        { title: "Book overnatting for gjester", monthsBefore: 5, category: "logistics", sortOrder: 12 },
+        { title: "Velg blomsterarrangement", monthsBefore: 4, category: "vendors", sortOrder: 13 },
+        { title: "Kjøp/bestill gifteringer", monthsBefore: 4, category: "attire", sortOrder: 14 },
+        { title: "Send invitasjoner", monthsBefore: 3, category: "logistics", sortOrder: 15 },
+        { title: "Planlegg bryllupsreise", monthsBefore: 3, category: "logistics", sortOrder: 16 },
+        { title: "Prøv brudekjole", monthsBefore: 2, category: "attire", sortOrder: 17 },
+        { title: "Ferdigstill kjøreplan", monthsBefore: 2, category: "planning", sortOrder: 18 },
+        { title: "Bekreft alle leverandører", monthsBefore: 1, category: "vendors", sortOrder: 19 },
+        { title: "Ferdigstill bordplassering", monthsBefore: 1, category: "logistics", sortOrder: 20 },
+        { title: "Hent brudekjole", monthsBefore: 1, category: "attire", sortOrder: 21 },
+        { title: "Øv på brudevals", monthsBefore: 1, category: "final", sortOrder: 22 },
+        { title: "Pakk til bryllupsreise", monthsBefore: 0, category: "final", sortOrder: 23 },
+        { title: "Siste gjennomgang med lokale", monthsBefore: 0, category: "final", sortOrder: 24 },
+      ];
+
+      const tasks = await db.insert(checklistTasks).values(
+        DEFAULT_TASKS.map((task) => ({
+          coupleId,
+          ...task,
+          isDefault: true,
+        }))
+      ).returning();
+
+      res.json(tasks);
+    } catch (error) {
+      console.error("Error seeding checklist:", error);
+      res.status(500).json({ error: "Kunne ikke opprette standardsjekkliste" });
     }
   });
 

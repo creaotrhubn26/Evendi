@@ -21,6 +21,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
+import { AdminHeader } from "@/components/AdminHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
@@ -430,7 +431,11 @@ export default function AdminVendorsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      <View style={[styles.tabsContainer, { paddingTop: headerHeight + Spacing.lg }]}>
+      <AdminHeader 
+        title="Leverandører" 
+        subtitle={`${vendors.length} ${selectedTab === "pending" ? "venter" : selectedTab === "approved" ? "godkjent" : "avvist"}`}
+      />
+      <View style={[styles.tabsContainer, { paddingTop: Spacing.lg }]}>
         {(["pending", "approved", "rejected"] as const).map((tab) => (
           <Pressable
             key={tab}
@@ -517,7 +522,7 @@ export default function AdminVendorsScreen() {
               <View style={[styles.featureRow, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
                 <View style={styles.featureInfo}>
                   <Feather name="image" size={18} color={Colors.dark.accent} />
-                  <ThemedText style={styles.featureLabel}>Inspirasjoner</ThemedText>
+                  <ThemedText style={styles.featureLabel}>Showcases</ThemedText>
                 </View>
                 <Switch
                   value={vendorFeatures.inspirations}
@@ -528,10 +533,10 @@ export default function AdminVendorsScreen() {
               </View>
 
               <ThemedText style={[styles.sectionTitle, { marginTop: Spacing.xl }]}>
-                Tillatte inspirasjonskategorier
+                Tillatte showcase-kategorier
               </ThemedText>
               <ThemedText style={[styles.sectionSubtitle, { color: theme.textMuted }]}>
-                Velg hvilke kategorier denne leverandøren kan legge inn inspirasjoner i. Hvis ingen er valgt, har de tilgang til alle.
+                Velg hvilke kategorier denne leverandøren kan legge inn showcases i. Hvis ingen er valgt, har de tilgang til alle.
               </ThemedText>
 
               <View style={styles.categoriesGrid}>

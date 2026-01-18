@@ -1,18 +1,21 @@
 import React from "react";
 import { View, StyleSheet, Image } from "react-native";
 
+import { useTheme } from "@/hooks/useTheme";
+
 interface HeaderTitleProps {
   title?: string;
 }
 
 export function HeaderTitle({ title }: HeaderTitleProps) {
+  const { designSettings } = useTheme();
+  const logoSource = designSettings.logoUrl
+    ? { uri: designSettings.logoUrl }
+    : require("../../assets/images/wedflow-logo.png");
+
   return (
     <View style={styles.container}>
-      <Image
-        source={require("../../assets/images/wedflow-logo.png")}
-        style={styles.logo}
-        resizeMode="contain"
-      />
+      <Image source={logoSource} style={styles.logo} resizeMode="contain" />
     </View>
   );
 }

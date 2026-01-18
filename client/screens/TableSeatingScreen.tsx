@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, View, Pressable, Alert, TextInput, Modal } from
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInUp } from "react-native-reanimated";
@@ -12,9 +13,12 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { getGuests, saveGuests } from "@/lib/storage";
-import { Table, Guest, TABLE_CATEGORIES } from "@/lib/types";
+import { getCoupleSession } from "@/lib/storage";
+import { getGuests } from "@/lib/api-guests";
+import { Table, TABLE_CATEGORIES, Speech } from "@/lib/types";
 import { apiRequest } from "@/lib/query-client";
+import { getSpeeches } from "@/lib/storage";
+import type { WeddingGuest } from "@shared/schema";
 
 export default function TableSeatingScreen() {
   const insets = useSafeAreaInsets();
@@ -23,23 +27,57 @@ export default function TableSeatingScreen() {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
 
-  const [guests, setGuests] = useState<Guest[]>([]);
-  const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
+  const [guests, setGuests] = useState<WeddingGuest[]>([]);
+  const [speeches, setSpeeches] = useState<Speech[]>([]);
+  const [selectedGuest, setSelectedGuest] = useState<WeddingGuest | null>(null);
   const [editingTable, setEditingTable] = useState<Table | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [showSpeakers, setShowSpeakers] = useState(true);
 
   const { data: tables = [], isLoading } = useQuery<Table[]>({
     queryKey: ["/api/couple/tables"],
   });
 
   const loadGuests = useCallback(async () => {
-    const guestsData = await getGuests();
-    setGuests(guestsData);
+    if (!sessionToken) {
+      const token = await getCoupleSession();
+      if (token) {
+        setSessionToken(token);
+      } else {
+        return;
+      }
+    }
+    try {
+      const guestsData = await getGuests(sessionToken!);
+      setGuests(guestsData);
+    } catch (err) {
+      console.warn("Failed to load guests:", err);
+    }
+  }, [sessionToken]);
+
+  const loadSpeeches = useCallback(async () => {
+    try {
+      const data = await getSpeeches();
+      const normalized = data.map((speech, index) => ({
+        ...speech,
+        status: speech.status || "ready",
+        tableId: speech.tableId ?? null,
+        order: speech.order || index + 1,
+      }));
+      setSpeeches(normalized);
+    } catch (err) {
+      console.warn("Failed to load speeches:", err);
+    }
   }, []);
 
-  React.useEffect(() => {
-    loadGuests();
-  }, [loadGuests]);
+  useFocusEffect(
+    useCallback(() => {
+      loadGuests();
+      loadSpeeches();
+      queryClient.invalidateQueries({ queryKey: ["/api/couple/tables"] });
+    }, [loadGuests, loadSpeeches, queryClient])
+  );
 
   const createTableMutation = useMutation({
     mutationFn: async (data: Partial<Table>) => {
@@ -114,7 +152,7 @@ export default function TableSeatingScreen() {
     assignGuestMutation.mutate({ tableId, guestId: selectedGuest.id });
   };
 
-  const handleRemoveGuest = (guest: Guest, tableId: string) => {
+  const handleRemoveGuest = (guest: WeddingGuest, tableId: string) => {
     Alert.alert(
       "Fjern fra bord",
       `Fjerne ${guest.name} fra bordet?`,
@@ -132,6 +170,22 @@ export default function TableSeatingScreen() {
     const table = tables.find(t => t.id === tableId);
     if (!table) return [];
     return guests.filter((g) => table.guests.includes(g.id));
+  };
+
+  const speechesByTable = React.useMemo(() => {
+    const map = new Map<string, Speech[]>();
+    speeches.forEach((speech) => {
+      if (!speech.tableId) return;
+      const existing = map.get(speech.tableId) || [];
+      map.set(speech.tableId, [...existing, speech]);
+    });
+    return map;
+  }, [speeches]);
+
+  const statusColor: Record<NonNullable<Speech["status"]>, string> = {
+    ready: Colors.dark.accent,
+    speaking: "#f59e0b",
+    done: "#16a34a",
   };
 
   const handleAddTable = () => {
@@ -207,10 +261,37 @@ export default function TableSeatingScreen() {
           </Animated.View>
         ) : null}
 
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1 }}>
+            <ThemedText style={styles.toggleLabel}>Vis talere på bord</ThemedText>
+            <ThemedText style={[styles.toggleHint, { color: theme.textSecondary }]}>
+              Få oversikt over hvem som taler hvor
+            </ThemedText>
+          </View>
+          <Pressable
+            onPress={() => setShowSpeakers(!showSpeakers)}
+            style={[
+              styles.toggle,
+              { backgroundColor: showSpeakers ? Colors.dark.accent : theme.backgroundSecondary },
+            ]}
+          >
+            <View
+              style={[
+                styles.toggleKnob,
+                {
+                  backgroundColor: "#fff",
+                  transform: [{ translateX: showSpeakers ? 20 : 0 }],
+                },
+              ]}
+            />
+          </Pressable>
+        </View>
+
         <View style={styles.tablesGrid}>
           {tables.map((table, index) => {
             const tableGuests = getGuestsByTable(table.id);
             const availableSeats = table.seats - tableGuests.length;
+            const tableSpeeches = speechesByTable.get(table.id) || [];
 
             return (
               <Animated.View
@@ -271,6 +352,49 @@ export default function TableSeatingScreen() {
                       <Feather name="edit-2" size={16} color={theme.textSecondary} />
                     </Pressable>
                   </View>
+
+                  {showSpeakers && tableSpeeches.length > 0 ? (
+                    <View style={styles.speechOverlay}>
+                      <View style={styles.speechOverlayHeader}>
+                        <Feather name="mic" size={14} color={Colors.dark.accent} />
+                        <ThemedText style={[styles.speechOverlayTitle, { color: theme.text }]}>
+                          Taler ved bordet
+                        </ThemedText>
+                      </View>
+                      <View style={styles.speechBadges}>
+                        {tableSpeeches
+                          .sort((a, b) => (a.order || 0) - (b.order || 0))
+                          .map((speech) => (
+                            <View
+                              key={speech.id}
+                              style={[
+                                styles.speechBadge,
+                                { borderColor: statusColor[speech.status || "ready"] },
+                              ]}
+                            >
+                              <ThemedText style={[styles.speechBadgeOrder, { color: statusColor[speech.status || "ready"] }]}>
+                                {speech.order}
+                              </ThemedText>
+                              <View style={{ flex: 1 }}>
+                                <ThemedText style={styles.speechBadgeName} numberOfLines={1}>
+                                  {speech.speakerName}
+                                </ThemedText>
+                                <ThemedText style={[styles.speechBadgeStatus, { color: statusColor[speech.status || "ready"] }]}>
+                                  {speech.status === "done"
+                                    ? "Ferdig"
+                                    : speech.status === "speaking"
+                                    ? "Snakker nå"
+                                    : "Klar"}
+                                </ThemedText>
+                              </View>
+                              <ThemedText style={[styles.speechBadgeTime, { color: theme.textSecondary }]}>
+                                {speech.time}
+                              </ThemedText>
+                            </View>
+                          ))}
+                      </View>
+                    </View>
+                  ) : null}
 
                   {table.isReserved ? (
                     <View style={[styles.reservedBadge, { backgroundColor: Colors.dark.accent + "20" }]}>
@@ -523,6 +647,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1A1A1A",
   },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  toggleLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  toggleHint: {
+    fontSize: 13,
+    marginTop: 2,
+  },
   tablesGrid: {
     gap: Spacing.md,
     marginBottom: Spacing.lg,
@@ -566,6 +704,47 @@ const styles = StyleSheet.create({
   },
   editButton: {
     padding: Spacing.sm,
+  },
+  speechOverlay: {
+    marginBottom: Spacing.md,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: "rgba(255,255,255,0.02)",
+  },
+  speechOverlayHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  speechOverlayTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  speechBadges: {
+    gap: Spacing.xs,
+  },
+  speechBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+  },
+  speechBadgeOrder: {
+    fontWeight: "700",
+  },
+  speechBadgeName: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  speechBadgeStatus: {
+    fontSize: 12,
+  },
+  speechBadgeTime: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   reservedBadge: {
     flexDirection: "row",

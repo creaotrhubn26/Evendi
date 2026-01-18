@@ -65,6 +65,8 @@ export interface Speech {
   role: string;
   time: string;
   order: number;
+  status?: "ready" | "speaking" | "done";
+  tableId?: string | null;
   durationMinutes?: number;
   notes?: string;
 }

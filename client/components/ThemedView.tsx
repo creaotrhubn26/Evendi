@@ -5,15 +5,17 @@ import { useTheme } from "@/hooks/useTheme";
 export type ThemedViewProps = ViewProps & {
   lightColor?: string;
   darkColor?: string;
+  cardStyle?: boolean; // Use cardRadius from design settings
 };
 
 export function ThemedView({
   style,
   lightColor,
   darkColor,
+  cardStyle = false,
   ...otherProps
 }: ThemedViewProps) {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, designSettings } = useTheme();
 
   const backgroundColor =
     isDark && darkColor
@@ -22,5 +24,15 @@ export function ThemedView({
         ? lightColor
         : theme.backgroundRoot;
 
-  return <View style={[{ backgroundColor }, style]} {...otherProps} />;
+  const cardRadius = cardStyle ? parseInt(designSettings.cardRadius || "12") : undefined;
+
+  return (
+    <View 
+      style={[
+        { backgroundColor, ...(cardRadius && { borderRadius: cardRadius }) }, 
+        style
+      ]} 
+      {...otherProps} 
+    />
+  );
 }

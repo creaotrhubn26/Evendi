@@ -6,15 +6,20 @@ import {
   TextInput,
   Pressable,
   Alert,
+  Share,
+  Modal,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
+import * as Clipboard from "expo-clipboard";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -22,9 +27,13 @@ import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { GuestsStackParamList } from "@/navigation/GuestsStackNavigator";
-import { getGuests, saveGuests, generateId } from "@/lib/storage";
-import { Guest, GUEST_CATEGORIES } from "@/lib/types";
+import { getCoupleSession } from "@/lib/storage";
+import { getGuests, createGuest, updateGuest, deleteGuest } from "@/lib/api-guests";
+import { GUEST_CATEGORIES } from "@/lib/types";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
+import { searchContacts, requestContactsPermission, ContactResult } from "@/lib/contacts";
+import { createGuestInvitation, getGuestInvitations } from "@/lib/api-guest-invitations";
+import type { GuestInvitation, WeddingGuest } from "@shared/schema";
 
 type NavigationProp = NativeStackNavigationProp<GuestsStackParamList>;
 
@@ -47,14 +56,25 @@ export default function GuestsScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
 
-  const [guests, setGuests] = useState<Guest[]>([]);
+  const [guests, setGuests] = useState<WeddingGuest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [contactResults, setContactResults] = useState<ContactResult[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
+  const [editingGuest, setEditingGuest] = useState<WeddingGuest | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<"classic" | "floral" | "modern">("classic");
+  const [invitationMessage, setInvitationMessage] = useState("");
+  const [invitations, setInvitations] = useState<Array<GuestInvitation & { inviteUrl: string }>>([]);
+  const [loadingInvites, setLoadingInvites] = useState(false);
+  const [rsvpFilter, setRsvpFilter] = useState<"all" | "hasInvite" | "responded" | "declined" | "sent">("all");
+  const [inviteModalVisible, setInviteModalVisible] = useState(false);
+  const [selectedInvite, setSelectedInvite] = useState<GuestInvitation & { inviteUrl: string } | null>(null);
   
   const [formName, setFormName] = useState("");
-  const [formCategory, setFormCategory] = useState<Guest["category"]>("other");
+  const [formCategory, setFormCategory] = useState<string>("other");
   const [formPhone, setFormPhone] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formDietary, setFormDietary] = useState("");
@@ -77,21 +97,147 @@ export default function GuestsScreen() {
   };
 
   const loadData = useCallback(async () => {
-    const data = await getGuests();
-    setGuests(data);
-    setLoading(false);
-  }, []);
+    if (!sessionToken) return;
+    try {
+      const data = await getGuests(sessionToken);
+      setGuests(data);
+    } catch (err) {
+      console.warn("Kunne ikke hente gjester", err);
+      Alert.alert("Feil", "Kunne ikke laste gjester fra server");
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionToken]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    const initSession = async () => {
+      const session = await getCoupleSession();
+      if (session?.token) {
+        setSessionToken(session.token);
+      }
+    };
+    initSession();
+  }, []);
 
-  const filteredGuests = guests.filter((g) =>
-    g.name.toLowerCase().includes(searchQuery.toLowerCase())
+  useFocusEffect(
+    useCallback(() => {
+      if (sessionToken) {
+        loadData();
+      }
+    }, [sessionToken, loadData])
   );
+
+  const refreshInvitations = useCallback(async () => {
+    if (!sessionToken) return;
+    setLoadingInvites(true);
+    try {
+      const data = await getGuestInvitations(sessionToken);
+      setInvitations(data);
+    } catch (err) {
+      console.warn("Kunne ikke hente invitasjoner", err);
+    } finally {
+      setLoadingInvites(false);
+    }
+  }, [sessionToken]);
+
+  useEffect(() => {
+    refreshInvitations();
+  }, [refreshInvitations]);
+
+  const handleSearchChange = async (query: string) => {
+    setSearchQuery(query);
+    
+    if (query.trim().length > 0) {
+      const hasPermission = await requestContactsPermission();
+      if (hasPermission) {
+        const results = await searchContacts(query);
+        setContactResults(results);
+      }
+    } else {
+      setContactResults([]);
+    }
+  };
+
+  const handleSelectContact = (contact: ContactResult) => {
+    setFormName(contact.name);
+    if (contact.phone) setFormPhone(contact.phone);
+    if (contact.email) setFormEmail(contact.email);
+    setContactResults([]);
+    setSearchQuery("");
+  };
+
+  const handleSendInvitation = async () => {
+    if (!formName.trim()) {
+      Alert.alert("Feil", "Legg inn et navn før du sender invitasjon");
+      return;
+    }
+    if (!sessionToken) {
+      Alert.alert("Ikke innlogget", "Logg inn som par for å sende invitasjoner.");
+      return;
+    }
+
+    setSendingInvite(true);
+    try {
+      const invitation = await createGuestInvitation(sessionToken, {
+        name: formName.trim(),
+        email: formEmail.trim() || undefined,
+        phone: formPhone.trim() || undefined,
+        template: selectedTemplate,
+        message: invitationMessage.trim() || undefined,
+      });
+
+      await refreshInvitations();
+
+      await Share.share({
+        message: `Invitasjon til ${formName.trim()}: ${invitation.inviteUrl}`,
+      });
+
+      Alert.alert("Sendt", "Lenken er klar til deling. Du kan dele den senere også.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Kunne ikke sende invitasjon";
+      Alert.alert("Feil", message);
+    } finally {
+      setSendingInvite(false);
+    }
+  };
+
+  const handleShareExisting = async (invite: GuestInvitation & { inviteUrl: string }) => {
+    try {
+      await Share.share({
+        message: `Invitasjon til ${invite.name}: ${invite.inviteUrl}`,
+      });
+    } catch (error) {
+      console.warn("Share error", error);
+    }
+  };
+
+  const invitationStatusLabel = (status?: string) => {
+    switch (status) {
+      case "responded":
+        return "Svar mottatt";
+      case "declined":
+        return "Kan ikke komme";
+      case "sent":
+        return "Sendt";
+      default:
+        return "Venter";
+    }
+  };
+
+  const nameMatches = (g: WeddingGuest) => g.name.toLowerCase().includes(searchQuery.toLowerCase());
+  const rsvpMatches = (g: WeddingGuest) => {
+    if (rsvpFilter === "all") return true;
+    const inv = getInviteForGuest(g);
+    if (rsvpFilter === "hasInvite") return !!inv;
+    return inv?.status === rsvpFilter;
+  };
+  const filteredGuests = guests.filter((g) => nameMatches(g)).filter((g) => rsvpMatches(g));
 
   const confirmedCount = guests.filter((g) => g.status === "confirmed").length;
   const pendingCount = guests.filter((g) => g.status === "pending").length;
+  const respondedCount = invitations.filter((inv) => inv.status === "responded").length;
+  const declinedCountInv = invitations.filter((inv) => inv.status === "declined").length;
+  const sentCountInv = invitations.filter((inv) => inv.status === "sent").length;
 
   const handleAddGuest = async () => {
     if (!formName.trim()) {
@@ -99,51 +245,55 @@ export default function GuestsScreen() {
       return;
     }
 
-    let updatedGuests: Guest[];
-
-    if (editingGuest) {
-      updatedGuests = guests.map((g) =>
-        g.id === editingGuest.id
-          ? {
-              ...g,
-              name: formName.trim(),
-              category: formCategory,
-              phone: formPhone.trim() || undefined,
-              email: formEmail.trim() || undefined,
-              dietaryRequirements: formDietary.trim() || undefined,
-              allergies: formAllergies.trim() || undefined,
-              plusOne: formPlusOne,
-              plusOneName: formPlusOneName.trim() || undefined,
-              notes: formNotes.trim() || undefined,
-            }
-          : g
-      );
-    } else {
-      const newGuest: Guest = {
-        id: generateId(),
-        name: formName.trim(),
-        status: "pending",
-        category: formCategory,
-        phone: formPhone.trim() || undefined,
-        email: formEmail.trim() || undefined,
-        dietaryRequirements: formDietary.trim() || undefined,
-        allergies: formAllergies.trim() || undefined,
-        plusOne: formPlusOne,
-        plusOneName: formPlusOneName.trim() || undefined,
-        notes: formNotes.trim() || undefined,
-      };
-      updatedGuests = [...guests, newGuest];
+    if (!sessionToken) {
+      Alert.alert("Ikke innlogget", "Logg inn som par for å legge til gjester.");
+      return;
     }
 
-    setGuests(updatedGuests);
-    await saveGuests(updatedGuests);
+    setIsSaving(true);
+    try {
+      if (editingGuest) {
+        await updateGuest(sessionToken, editingGuest.id, {
+          name: formName.trim(),
+          category: formCategory,
+          phone: formPhone.trim() || undefined,
+          email: formEmail.trim() || undefined,
+          dietaryRequirements: formDietary.trim() || undefined,
+          allergies: formAllergies.trim() || undefined,
+          plusOne: formPlusOne,
+          plusOneName: formPlusOneName.trim() || undefined,
+          notes: formNotes.trim() || undefined,
+          status: editingGuest.status,
+          tableNumber: editingGuest.tableNumber || undefined,
+        });
+      } else {
+        await createGuest(sessionToken, {
+          name: formName.trim(),
+          status: "pending",
+          category: formCategory,
+          phone: formPhone.trim() || undefined,
+          email: formEmail.trim() || undefined,
+          dietaryRequirements: formDietary.trim() || undefined,
+          allergies: formAllergies.trim() || undefined,
+          plusOne: formPlusOne,
+          plusOneName: formPlusOneName.trim() || undefined,
+          notes: formNotes.trim() || undefined,
+        });
+      }
 
-    resetForm();
-    setShowAddForm(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await loadData();
+      resetForm();
+      setShowAddForm(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Kunne ikke lagre gjest";
+      Alert.alert("Feil", message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleEditGuest = (guest: Guest) => {
+  const handleEditGuest = (guest: WeddingGuest) => {
     setEditingGuest(guest);
     setFormName(guest.name);
     setFormCategory(guest.category || "other");
@@ -157,41 +307,81 @@ export default function GuestsScreen() {
     setShowAddForm(true);
   };
 
-  const handleToggleStatus = async (guest: Guest) => {
-    const statusOrder: Guest["status"][] = ["pending", "confirmed", "declined"];
+  const handleToggleStatus = async (guest: WeddingGuest) => {
+    if (!sessionToken) return;
+
+    const statusOrder: WeddingGuest["status"][] = ["pending", "confirmed", "declined"];
     const currentIndex = statusOrder.indexOf(guest.status);
     const nextStatus = statusOrder[(currentIndex + 1) % statusOrder.length];
 
-    const updatedGuests = guests.map((g) =>
-      g.id === guest.id ? { ...g, status: nextStatus } : g
-    );
-    setGuests(updatedGuests);
-    await saveGuests(updatedGuests);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsSaving(true);
+    try {
+      await updateGuest(sessionToken, guest.id, { status: nextStatus });
+      await loadData();
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (error) {
+      Alert.alert("Feil", "Kunne ikke oppdatere status");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDeleteGuest = async (id: string) => {
+    if (!sessionToken) return;
+
     Alert.alert("Slett gjest", "Er du sikker på at du vil slette denne gjesten?", [
       { text: "Avbryt", style: "cancel" },
       {
         text: "Slett",
         style: "destructive",
         onPress: async () => {
-          const updatedGuests = guests.filter((g) => g.id !== id);
-          setGuests(updatedGuests);
-          await saveGuests(updatedGuests);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          setIsSaving(true);
+          try {
+            await deleteGuest(sessionToken, id);
+            await loadData();
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          } catch (error) {
+            Alert.alert("Feil", "Kunne ikke slette gjest");
+          } finally {
+            setIsSaving(false);
+          }
         },
       },
     ]);
   };
 
-  const getCategoryLabel = (category?: Guest["category"]) => {
+  const getCategoryLabel = (category?: string | null) => {
     const cat = GUEST_CATEGORIES.find((c) => c.value === category);
     return cat?.label || "";
   };
 
-  const renderGuestItem = ({ item, index }: { item: Guest; index: number }) => (
+  const normalize = (s?: string | null) => (s || "").replace(/\s+/g, "").toLowerCase();
+  const getInviteForGuest = (guest: WeddingGuest) => {
+    const gEmail = normalize(guest.email);
+    const gPhone = normalize(guest.phone);
+    return invitations.find(
+      (inv) => normalize(inv.email) === gEmail || normalize(inv.phone) === gPhone
+    );
+  };
+
+  const renderRsvpBadge = (guest: WeddingGuest) => {
+    const inv = getInviteForGuest(guest);
+    if (!inv || !inv.status) return null;
+    const status = inv.status;
+    const color = status === "responded" ? "#4CAF50" : status === "declined" ? "#EF5350" : Colors.dark.accent;
+    const label = invitationStatusLabel(status);
+    return (
+      <Pressable
+        onPress={() => handleShareExisting(inv)}
+        style={[styles.rsvpBadge, { backgroundColor: color + "20" }]}
+      >
+        <View style={[styles.rsvpDot, { backgroundColor: color }]} />
+        <ThemedText style={[styles.rsvpText, { color }]}>{`RSVP: ${label}`}</ThemedText>
+      </Pressable>
+    );
+  };
+
+  const renderGuestItem = ({ item, index }: { item: WeddingGuest; index: number }) => (
     <Animated.View entering={FadeInRight.delay(index * 50).duration(300)}>
       <SwipeableRow
         onEdit={() => handleEditGuest(item)}
@@ -240,6 +430,7 @@ export default function GuestsScreen() {
                   • Bord {item.tableNumber}
                 </ThemedText>
               ) : null}
+              {renderRsvpBadge(item)}
             </View>
             {item.dietaryRequirements || item.allergies ? (
               <View style={styles.dietaryRow}>
@@ -314,6 +505,32 @@ export default function GuestsScreen() {
         </View>
       </View>
 
+      <View style={styles.filterRow}>
+        {[
+          { value: "all", label: "Alle" },
+          { value: "hasInvite", label: "Har invitasjon" },
+          { value: "responded", label: "Svar" },
+          { value: "declined", label: "Avslått" },
+          { value: "sent", label: "Sendt" },
+        ].map((f) => (
+          <Pressable
+            key={f.value}
+            onPress={() => setRsvpFilter(f.value as typeof rsvpFilter)}
+            style={[
+              styles.filterChip,
+              {
+                backgroundColor: rsvpFilter === f.value ? Colors.dark.accent : theme.backgroundSecondary,
+                borderColor: rsvpFilter === f.value ? Colors.dark.accent : theme.border,
+              },
+            ]}
+          >
+            <ThemedText style={[styles.filterChipText, { color: rsvpFilter === f.value ? "#1A1A1A" : theme.textSecondary }]}>
+              {f.label}
+            </ThemedText>
+          </Pressable>
+        ))}
+      </View>
+
       <View style={styles.actionButtons}>
         <Pressable
           onPress={() => navigation.navigate("TableSeating")}
@@ -329,6 +546,13 @@ export default function GuestsScreen() {
           <Feather name="mic" size={18} color={Colors.dark.accent} />
           <ThemedText style={styles.actionButtonText}>Taleliste</ThemedText>
         </Pressable>
+        <Pressable
+          onPress={() => navigation.navigate("GuestInvitations")}
+          style={[styles.actionButton, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+        >
+          <Feather name="mail" size={18} color={Colors.dark.accent} />
+          <ThemedText style={styles.actionButtonText}>Invitasjoner</ThemedText>
+        </Pressable>
       </View>
 
       <View
@@ -340,16 +564,93 @@ export default function GuestsScreen() {
         <Feather name="search" size={18} color={theme.textMuted} />
         <TextInput
           style={[styles.searchInput, { color: theme.text }]}
-          placeholder="Søk etter gjest..."
+          placeholder="Søk etter gjest eller kontakt..."
           placeholderTextColor={theme.textMuted}
           value={searchQuery}
-          onChangeText={setSearchQuery}
+          onChangeText={handleSearchChange}
         />
       </View>
+
+      {contactResults.length > 0 && (
+        <Animated.View
+          entering={FadeInDown.duration(200)}
+          style={[
+            styles.contactResultsContainer,
+            { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+          ]}
+        >
+          <ThemedText style={[styles.contactResultsTitle, { color: theme.textSecondary }]}>
+            Kontakter fra telefonen
+          </ThemedText>
+          {contactResults.map((contact) => (
+            <Pressable
+              key={contact.id}
+              onPress={() => handleSelectContact(contact)}
+              style={[
+                styles.contactResultItem,
+                { backgroundColor: theme.backgroundSecondary, borderColor: theme.border },
+              ]}
+            >
+              <View style={[styles.contactAvatar, { backgroundColor: Colors.dark.accent + "20" }]}>
+                <Feather name="phone" size={14} color={Colors.dark.accent} />
+              </View>
+              <View style={styles.contactInfo}>
+                <ThemedText style={styles.contactName}>{contact.name}</ThemedText>
+                {contact.phone && (
+                  <ThemedText style={[styles.contactDetail, { color: theme.textSecondary }]}>
+                    {contact.phone}
+                  </ThemedText>
+                )}
+                {contact.email && (
+                  <ThemedText style={[styles.contactDetail, { color: theme.textSecondary }]}>
+                    {contact.email}
+                  </ThemedText>
+                )}
+              </View>
+              <Feather name="arrow-right" size={16} color={theme.textMuted} />
+            </Pressable>
+          ))}
+        </Animated.View>
+      )}
 
       <ThemedText style={[styles.swipeHint, { color: theme.textMuted }]}>
         Trykk for å endre status • Sveip til venstre for å endre eller slette
       </ThemedText>
+
+      <View style={[styles.inviteCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        <View style={styles.inviteHeader}>
+          <ThemedText style={[styles.inviteTitle, { color: theme.text }]}>Invitasjoner</ThemedText>
+          <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+            {loadingInvites ? "Laster..." : `${invitations.length} stk`}
+          </ThemedText>
+        </View>
+        {invitations.length === 0 ? (
+          <ThemedText style={{ color: theme.textSecondary }}>Ingen invitasjoner enda</ThemedText>
+        ) : (
+          invitations.slice(0, 5).map((inv) => (
+            <View
+              key={inv.id}
+              style={[styles.inviteRow, { borderColor: theme.border }]}
+            >
+              <View style={{ flex: 1 }}>
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>{inv.name}</ThemedText>
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                  {inv.email || inv.phone || "Lenke"}
+                </ThemedText>
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                  {invitationStatusLabel(inv.status)}
+                </ThemedText>
+              </View>
+              <Pressable
+                onPress={() => handleShareExisting(inv)}
+                style={[styles.inviteShareBtn, { borderColor: theme.border }]}
+              >
+                <Feather name="share-2" size={16} color={theme.text} />
+              </Pressable>
+            </View>
+          ))
+        )}
+      </View>
 
       {showAddForm ? (
         <Animated.View
@@ -380,7 +681,7 @@ export default function GuestsScreen() {
             {GUEST_CATEGORIES.map((cat) => (
               <Pressable
                 key={cat.value}
-                onPress={() => setFormCategory(cat.value as Guest["category"])}
+                onPress={() => setFormCategory(cat.value)}
                 style={[
                   styles.categoryChip,
                   {
@@ -405,7 +706,7 @@ export default function GuestsScreen() {
               style={[
                 styles.addInput,
                 styles.halfInput,
-                { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
+                { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border, marginBottom: 0 },
               ]}
               placeholder="Telefon"
               placeholderTextColor={theme.textMuted}
@@ -417,7 +718,7 @@ export default function GuestsScreen() {
               style={[
                 styles.addInput,
                 styles.halfInput,
-                { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
+                { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border, marginBottom: 0 },
               ]}
               placeholder="E-post"
               placeholderTextColor={theme.textMuted}
@@ -448,6 +749,50 @@ export default function GuestsScreen() {
             placeholderTextColor={theme.textMuted}
             value={formAllergies}
             onChangeText={setFormAllergies}
+          />
+
+          <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Invitasjonskort</ThemedText>
+          <View style={styles.templateRow}>
+            {[
+              { value: "classic", label: "Klassisk" },
+              { value: "floral", label: "Floralt" },
+              { value: "modern", label: "Moderne" },
+            ].map((tpl) => (
+              <Pressable
+                key={tpl.value}
+                onPress={() => setSelectedTemplate(tpl.value as typeof selectedTemplate)}
+                style={[
+                  styles.templateChip,
+                  {
+                    backgroundColor: selectedTemplate === tpl.value ? Colors.dark.accent : theme.backgroundSecondary,
+                    borderColor: selectedTemplate === tpl.value ? Colors.dark.accent : theme.border,
+                  },
+                ]}
+              >
+                <ThemedText
+                  style={{
+                    color: selectedTemplate === tpl.value ? "#1A1A1A" : theme.textSecondary,
+                    fontWeight: "600",
+                  }}
+                >
+                  {tpl.label}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </View>
+
+          <TextInput
+            style={[
+              styles.addInput,
+              styles.notesInput,
+              { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
+            ]}
+            placeholder="Hilsen / melding til invitasjonen"
+            placeholderTextColor={theme.textMuted}
+            value={invitationMessage}
+            onChangeText={setInvitationMessage}
+            multiline
+            numberOfLines={3}
           />
 
           <Pressable
@@ -494,6 +839,12 @@ export default function GuestsScreen() {
             multiline
             numberOfLines={3}
           />
+
+          <View style={[styles.addFormButtons, { marginBottom: Spacing.md }]}>
+            <Button onPress={handleSendInvitation} style={styles.saveButton} disabled={sendingInvite}>
+              {sendingInvite ? "Sender..." : "Send invitasjon"}
+            </Button>
+          </View>
 
           <View style={styles.addFormButtons}>
             <Pressable
@@ -560,6 +911,115 @@ export default function GuestsScreen() {
         ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
       />
 
+      <Modal
+        animationType="slide"
+        transparent
+        visible={inviteModalVisible}
+        onRequestClose={() => setInviteModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+          >
+            <ThemedText style={[styles.modalTitle, { color: theme.text }]}>Invitasjon</ThemedText>
+            {selectedInvite ? (
+              <>
+                <View style={styles.modalRow}>
+                  <ThemedText style={{ color: theme.textSecondary }}>Navn:</ThemedText>
+                  <ThemedText style={{ color: theme.text }}>{selectedInvite.name}</ThemedText>
+                </View>
+                {selectedInvite.email ? (
+                  <View style={styles.modalRow}>
+                    <ThemedText style={{ color: theme.textSecondary }}>E-post:</ThemedText>
+                    <ThemedText style={{ color: theme.text }}>{selectedInvite.email}</ThemedText>
+                  </View>
+                ) : null}
+                {selectedInvite.phone ? (
+                  <View style={styles.modalRow}>
+                    <ThemedText style={{ color: theme.textSecondary }}>Telefon:</ThemedText>
+                    <ThemedText style={{ color: theme.text }}>{selectedInvite.phone}</ThemedText>
+                  </View>
+                ) : null}
+                <View style={styles.modalRow}>
+                  <ThemedText style={{ color: theme.textSecondary }}>Status:</ThemedText>
+                  <ThemedText style={{ color: theme.text }}>{invitationStatusLabel(selectedInvite.status)}</ThemedText>
+                </View>
+                <View style={styles.modalRow}>
+                  <ThemedText style={{ color: theme.textSecondary }}>Lenke:</ThemedText>
+                  <ThemedText style={{ color: Colors.dark.accent }}>{selectedInvite.inviteUrl}</ThemedText>
+                </View>
+
+                <View style={styles.addFormButtons}>
+                  <Button
+                    onPress={async () => {
+                      if (selectedInvite?.inviteUrl) {
+                        await Clipboard.setStringAsync(selectedInvite.inviteUrl);
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        Alert.alert("Kopiert", "Lenken er kopiert til utklippstavlen.");
+                      }
+                    }}
+                    style={styles.saveButton}
+                  >
+                    Kopier lenke
+                  </Button>
+                  <Button
+                    onPress={() => {
+                      if (selectedInvite?.inviteUrl) Linking.openURL(selectedInvite.inviteUrl);
+                    }}
+                    style={styles.saveButton}
+                  >
+                    Åpne RSVP-side
+                  </Button>
+                </View>
+                <View style={styles.addFormButtons}>
+                  <Button
+                    onPress={() => selectedInvite && handleShareExisting(selectedInvite)}
+                    style={styles.saveButton}
+                  >
+                    Del invitasjon
+                  </Button>
+                  <Button
+                    onPress={() => {
+                      if (selectedInvite?.phone && selectedInvite?.inviteUrl) {
+                        const smsUrl = `sms:${selectedInvite.phone}?body=${encodeURIComponent(selectedInvite.inviteUrl)}`;
+                        Linking.openURL(smsUrl);
+                      } else {
+                        Alert.alert("Mangler telefon", "Legg til telefonnummer for å sende SMS.");
+                      }
+                    }}
+                    style={styles.saveButton}
+                  >
+                    Send via SMS
+                  </Button>
+                </View>
+                <View style={styles.addFormButtons}>
+                  <Button
+                    onPress={() => {
+                      if (selectedInvite?.email && selectedInvite?.inviteUrl) {
+                        const subject = "Bryllupsinvitasjon";
+                        const body = `Hei ${selectedInvite.name},\n\nHer er din invitasjon: ${selectedInvite.inviteUrl}\n`;
+                        const mailto = `mailto:${selectedInvite.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                        Linking.openURL(mailto);
+                      } else {
+                        Alert.alert("Mangler e-post", "Legg til e-postadresse for å sende e-post.");
+                      }
+                    }}
+                    style={styles.saveButton}
+                  >
+                    Send via e-post
+                  </Button>
+                </View>
+              </>
+            ) : null}
+            <Pressable
+              onPress={() => setInviteModalVisible(false)}
+              style={[styles.modalCloseButton, { borderColor: theme.border }]}
+            >
+              <ThemedText style={{ color: theme.textSecondary }}>Lukk</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {!showAddForm ? (
         <Pressable
           onPress={() => {
@@ -614,13 +1074,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: Spacing.md,
+    padding: Spacing.sm,
     borderRadius: BorderRadius.sm,
     borderWidth: 1,
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "500",
   },
   searchContainer: {
@@ -673,9 +1133,11 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: "row",
     gap: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   halfInput: {
     flex: 1,
+    marginBottom: 0,
   },
   checkboxRow: {
     flexDirection: "row",
@@ -696,6 +1158,18 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
     paddingTop: Spacing.sm,
   },
+  templateRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  templateChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
   addInput: {
     height: Spacing.inputHeight,
     borderRadius: BorderRadius.sm,
@@ -707,6 +1181,7 @@ const styles = StyleSheet.create({
   addFormButtons: {
     flexDirection: "row",
     gap: Spacing.md,
+    marginBottom: Spacing.md,
   },
   cancelButton: {
     flex: 1,
@@ -766,6 +1241,40 @@ const styles = StyleSheet.create({
   tableNumber: {
     fontSize: 12,
     marginLeft: Spacing.xs,
+  },
+  filterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+  filterChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  rsvpBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+    marginLeft: Spacing.xs,
+  },
+  rsvpDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: Spacing.xs,
+  },
+  rsvpText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
   dietaryRow: {
     flexDirection: "row",
@@ -832,10 +1341,77 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.25)",
     elevation: 5,
+  },
+  contactResultsContainer: {
+    marginHorizontal: Spacing.md,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  contactResultsTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xs,
+  },
+  contactResultItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  contactAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: Spacing.md,
+  },
+  contactInfo: {
+    flex: 1,
+  },
+  contactName: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  contactDetail: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  modalCard: {
+    padding: Spacing.lg,
+    borderTopLeftRadius: BorderRadius.lg,
+    borderTopRightRadius: BorderRadius.lg,
+    borderWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: Spacing.md,
+  },
+  modalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: Spacing.xs,
+  },
+  modalCloseButton: {
+    height: Spacing.buttonHeight,
+    borderRadius: BorderRadius.full,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    marginTop: Spacing.md,
   },
 });

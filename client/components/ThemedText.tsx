@@ -16,7 +16,7 @@ export function ThemedText({
   type = "body",
   ...rest
 }: ThemedTextProps) {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, designSettings } = useTheme();
 
   const getColor = () => {
     if (isDark && darkColor) {
@@ -35,23 +35,30 @@ export function ThemedText({
   };
 
   const getTypeStyle = () => {
+    const baseFontSize = parseInt(designSettings.fontSize || "16");
+    const fontFamily = designSettings.fontFamily;
+    
+    const fontFamilyStyle = fontFamily !== "System" 
+      ? { fontFamily }
+      : {};
+
     switch (type) {
       case "h1":
-        return Typography.h1;
+        return { ...Typography.h1, ...fontFamilyStyle, fontSize: baseFontSize * 2 };
       case "h2":
-        return Typography.h2;
+        return { ...Typography.h2, ...fontFamilyStyle, fontSize: baseFontSize * 1.75 };
       case "h3":
-        return Typography.h3;
+        return { ...Typography.h3, ...fontFamilyStyle, fontSize: baseFontSize * 1.5 };
       case "h4":
-        return Typography.h4;
+        return { ...Typography.h4, ...fontFamilyStyle, fontSize: baseFontSize * 1.25 };
       case "body":
-        return Typography.body;
+        return { ...Typography.body, ...fontFamilyStyle, fontSize: baseFontSize };
       case "small":
-        return Typography.small;
+        return { ...Typography.small, ...fontFamilyStyle, fontSize: baseFontSize * 0.875 };
       case "link":
-        return Typography.link;
+        return { ...Typography.link, ...fontFamilyStyle, fontSize: baseFontSize };
       default:
-        return Typography.body;
+        return { ...Typography.body, ...fontFamilyStyle, fontSize: baseFontSize };
     }
   };
 

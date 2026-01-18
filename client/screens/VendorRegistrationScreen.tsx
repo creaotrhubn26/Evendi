@@ -142,15 +142,25 @@ export default function VendorRegistrationScreen() {
 
     setIsSearchingBrreg(true);
     try {
-      const url = new URL("/api/brreg/search", getApiUrl());
-      url.searchParams.set("q", query);
-      const response = await fetch(url.toString());
+      const url = `${getApiUrl()}/api/brreg/search?q=${encodeURIComponent(query)}`;
+      console.log("Searching Brreg:", url);
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        console.error("Brreg API error:", response.status, response.statusText);
+        setBrregResults([]);
+        setShowBrregDropdown(false);
+        return;
+      }
+      
       const data = await response.json();
+      console.log("Brreg results:", data.entities?.length || 0, "entities");
       setBrregResults(data.entities || []);
       setShowBrregDropdown(data.entities?.length > 0);
     } catch (error) {
       console.error("Brreg search error:", error);
       setBrregResults([]);
+      setShowBrregDropdown(false);
     } finally {
       setIsSearchingBrreg(false);
     }
@@ -342,7 +352,7 @@ export default function VendorRegistrationScreen() {
             <Feather name="briefcase" size={18} color={theme.textMuted} />
             <TextInput
               style={[styles.input, { color: theme.text }]}
-              placeholder="Bedriftsnavn *"
+              placeholder="Bedriftsnavn (søk i Brønnøysundregistrene) *"
               placeholderTextColor={theme.textMuted}
               value={formData.businessName}
               onChangeText={handleBusinessNameChange}
@@ -357,25 +367,27 @@ export default function VendorRegistrationScreen() {
 
           {showBrregDropdown && brregResults.length > 0 ? (
             <View style={[styles.brregDropdown, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-              {brregResults.map((entity) => (
-                <Pressable
-                  key={entity.organizationNumber}
-                  style={[styles.brregItem, { borderBottomColor: theme.border }]}
-                  onPress={() => selectBrregEntity(entity)}
-                >
-                  <View style={styles.brregItemMain}>
-                    <ThemedText style={styles.brregItemName}>{entity.name}</ThemedText>
-                    <ThemedText style={[styles.brregItemOrg, { color: theme.textMuted }]}>
-                      Org.nr: {entity.organizationNumber}
-                    </ThemedText>
-                  </View>
-                  {entity.address?.city ? (
-                    <ThemedText style={[styles.brregItemLocation, { color: theme.textSecondary }]}>
-                      {entity.address.city}
-                    </ThemedText>
-                  ) : null}
-                </Pressable>
-              ))}
+              <ScrollView style={{ maxHeight: 200 }}>
+                {brregResults.map((entity) => (
+                  <Pressable
+                    key={entity.organizationNumber}
+                    style={[styles.brregItem, { borderBottomColor: theme.border }]}
+                    onPress={() => selectBrregEntity(entity)}
+                  >
+                    <View style={styles.brregItemMain}>
+                      <ThemedText style={styles.brregItemName}>{entity.name}</ThemedText>
+                      <ThemedText style={[styles.brregItemOrg, { color: theme.textMuted }]}>
+                        Org.nr: {entity.organizationNumber}
+                      </ThemedText>
+                    </View>
+                    {entity.address?.city ? (
+                      <ThemedText style={[styles.brregItemLocation, { color: theme.textSecondary }]}>
+                        {entity.address.city}
+                      </ThemedText>
+                    ) : null}
+                  </Pressable>
+                ))}
+              </ScrollView>
               <Pressable
                 style={styles.brregCloseBtn}
                 onPress={() => setShowBrregDropdown(false)}
@@ -525,8 +537,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   logo: {
-    width: 300,
-    height: 80,
+    width: 480,
+    height: 160,
   },
   successContainer: {
     flex: 1,
@@ -641,7 +653,8 @@ const styles = StyleSheet.create({
   },
   businessNameContainer: {
     position: "relative",
-    zIndex: 10,
+    zIndex: 1000,
+    marginBottom: Spacing.md,
   },
   brregDropdown: {
     position: "absolute",
@@ -651,7 +664,9 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     borderWidth: 1,
     maxHeight: 250,
-    overflow: "hidden",
+    zIndex: 1001,
+    elevation: 5,
+    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.25)",
   },
   brregItem: {
     flexDirection: "row",

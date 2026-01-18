@@ -54,8 +54,9 @@ export function Card({
   onPress,
   style,
 }: CardProps) {
-  const { theme } = useTheme();
+  const { theme, designSettings } = useTheme();
   const scale = useSharedValue(1);
+  const cardRadius = parseInt(designSettings.cardRadius || "12");
 
   const cardBackgroundColor = getBackgroundColorForElevation(elevation, theme);
 
@@ -80,6 +81,7 @@ export function Card({
         styles.card,
         {
           backgroundColor: cardBackgroundColor,
+          borderRadius: cardRadius,
         },
         animatedStyle,
         style,
@@ -103,7 +105,7 @@ export function Card({
 const styles = StyleSheet.create({
   card: {
     padding: Spacing.xl,
-    borderRadius: BorderRadius["2xl"],
+    // borderRadius is now dynamic from design settings
   },
   cardTitle: {
     marginBottom: Spacing.sm,

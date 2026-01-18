@@ -25,6 +25,7 @@ export function useScreenOptions({
         web: theme.backgroundRoot,
       }),
     },
+    headerShadowVisible: false,
     gestureEnabled: true,
     gestureDirection: "horizontal",
     fullScreenGestureEnabled: isLiquidGlassAvailable() ? false : true,

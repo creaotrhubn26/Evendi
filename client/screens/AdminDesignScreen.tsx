@@ -7,16 +7,20 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Switch,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from 'expo-image-picker';
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
+import { AdminHeader } from "@/components/AdminHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
@@ -39,6 +43,28 @@ const COLOR_PRESETS = [
   { name: "Navy", primary: "#1E3A5F", secondary: "#F5F5F5" },
 ];
 
+const THEME_PRESETS = [
+  { name: "Klassisk Bryllup", primary: "#C9A962", bg: "#FFFFFF", accent: "#1A1A1A" },
+  { name: "Romantisk", primary: "#DE98AB", bg: "#FFF5F7", accent: "#8B4F5C" },
+  { name: "Moderne Minimalist", primary: "#1A1A1A", bg: "#FFFFFF", accent: "#666666" },
+  { name: "Boho Chic", primary: "#9CAF88", bg: "#F5F3EF", accent: "#5C6B4F" },
+  { name: "Elegant Mørk", primary: "#C9A962", bg: "#1A1A1A", accent: "#FFFFFF" },
+];
+
+const FONT_OPTIONS = [
+  "System",
+  "Playfair Display",
+  "Montserrat",
+  "Lora",
+  "Raleway",
+];
+
+const LAYOUT_OPTIONS = [
+  { label: "Kompakt", value: "compact", description: "Mindre mellomrom mellom elementer" },
+  { label: "Standard", value: "standard", description: "Normal mellomrom" },
+  { label: "Romslig", value: "spacious", description: "Mer mellomrom for luftighet" },
+];
+
 export default function AdminDesignScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -52,6 +78,13 @@ export default function AdminDesignScreen() {
   const [appName, setAppName] = useState("Wedflow");
   const [tagline, setTagline] = useState("Din bryllupsplanlegger");
   const [logoUrl, setLogoUrl] = useState("");
+  const [darkMode, setDarkMode] = useState(true);
+  const [fontFamily, setFontFamily] = useState("System");
+  const [fontSize, setFontSize] = useState("16");
+  const [layoutDensity, setLayoutDensity] = useState("standard");
+  const [buttonRadius, setButtonRadius] = useState("8");
+  const [cardRadius, setCardRadius] = useState("12");
+  const [borderWidth, setBorderWidth] = useState("1");
 
   const { data: settings, isLoading } = useQuery<AppSetting[]>({
     queryKey: ["/api/admin/settings", adminKey],
@@ -77,12 +110,22 @@ export default function AdminDesignScreen() {
       setAppName(getSetting("app_name", "Wedflow"));
       setTagline(getSetting("app_tagline", "Din bryllupsplanlegger"));
       setLogoUrl(getSetting("app_logo_url", ""));
+      setDarkMode(getSetting("design_dark_mode", "true") === "true");
+      setFontFamily(getSetting("design_font_family", "System"));
+      setFontSize(getSetting("design_font_size", "16"));
+      setLayoutDensity(getSetting("design_layout_density", "standard"));
+      setButtonRadius(getSetting("design_button_radius", "8"));
+      setCardRadius(getSetting("design_card_radius", "12"));
+      setBorderWidth(getSetting("design_border_width", "1"));
     }
   }, [settings]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const url = new URL("/api/admin/settings", getApiUrl());
+      console.log("Saving design settings to:", url.toString());
+      console.log("Admin key:", adminKey);
+      
       const response = await fetch(url.toString(), {
         method: "PUT",
         headers: {
@@ -96,21 +139,66 @@ export default function AdminDesignScreen() {
             { key: "app_name", value: appName, category: "branding" },
             { key: "app_tagline", value: tagline, category: "branding" },
             { key: "app_logo_url", value: logoUrl, category: "branding" },
+            { key: "design_dark_mode", value: darkMode.toString(), category: "design" },
+            { key: "design_font_family", value: fontFamily, category: "design" },
+            { key: "design_font_size", value: fontSize, category: "design" },
+            { key: "design_layout_density", value: layoutDensity, category: "design" },
+            { key: "design_button_radius", value: buttonRadius, category: "design" },
+            { key: "design_card_radius", value: cardRadius, category: "design" },
+            { key: "design_border_width", value: borderWidth, category: "design" },
           ],
         }),
       });
-      if (!response.ok) throw new Error("Kunne ikke lagre");
+      
+      console.log("Response status:", response.status);
+      if (!response.ok) {
+        const error = await response.text();
+        console.error("Save error:", error);
+        throw new Error("Kunne ikke lagre");
+      }
       return response.json();
     },
     onSuccess: () => {
+      console.log("Save successful!");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["design-settings"] });
       Alert.alert("Lagret", "Designinnstillinger er oppdatert");
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Save failed:", error);
       Alert.alert("Feil", "Kunne ikke lagre innstillinger");
     },
   });
+
+  const pickImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      Alert.alert("Tillatelse kreves", "Du må gi tilgang til bildebiblioteket");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      // In production, upload to cloud storage and get URL
+      setLogoUrl(result.assets[0].uri);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  };
+
+  const applyThemePreset = (preset: typeof THEME_PRESETS[0]) => {
+    setPrimaryColor(preset.primary);
+    setBackgroundColor(preset.bg);
+    setDarkMode(preset.bg === "#1A1A1A");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
 
   if (isLoading) {
     return (
@@ -121,14 +209,19 @@ export default function AdminDesignScreen() {
   }
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
-      contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: insets.bottom + Spacing.xl,
-        paddingHorizontal: Spacing.lg,
-      }}
-    >
+    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+      <AdminHeader 
+        title="Design" 
+        subtitle="Tilpass farger, logo og utseende"
+      />
+      <ScrollView
+        style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+        contentContainerStyle={{
+          paddingTop: Spacing.lg,
+          paddingBottom: insets.bottom + Spacing.xl,
+          paddingHorizontal: Spacing.lg,
+        }}
+      >
       <Animated.View entering={FadeInDown.duration(400)}>
         <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <ThemedText style={styles.sectionTitle}>Fargeskjema</ThemedText>
@@ -210,19 +303,227 @@ export default function AdminDesignScreen() {
           />
 
           <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>Logo URL</ThemedText>
-          <TextInput
-            style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
-            value={logoUrl}
-            onChangeText={setLogoUrl}
-            placeholder="https://..."
-            placeholderTextColor={theme.textMuted}
-            autoCapitalize="none"
-            keyboardType="url"
-          />
+          <View style={styles.colorInputRow}>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border, flex: 1 }]}
+              value={logoUrl}
+              onChangeText={setLogoUrl}
+              placeholder="https://..."
+              placeholderTextColor={theme.textMuted}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+            <Pressable
+              onPress={pickImage}
+              style={[styles.pickButton, { backgroundColor: theme.accent, borderColor: theme.border }]}
+            >
+              <Feather name="upload" size={18} color="#000" />
+            </Pressable>
+          </View>
+          {logoUrl ? (
+            <Image
+              source={{ uri: logoUrl }}
+              style={styles.logoPreview}
+              resizeMode="contain"
+            />
+          ) : null}
         </View>
       </Animated.View>
 
+      {/* Tema Presets */}
+      <Animated.View entering={FadeInDown.delay(150).duration(400)}>
+        <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <ThemedText style={styles.sectionTitle}>🎨 Tema Presets</ThemedText>
+          <ThemedText style={[styles.label, { color: theme.textMuted, marginBottom: Spacing.md }]}>
+            Velg et ferdiglaget fargetema
+          </ThemedText>
+          
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -Spacing.lg }}>
+            <View style={{ paddingHorizontal: Spacing.lg, flexDirection: 'row', gap: Spacing.md }}>
+              {THEME_PRESETS.map((preset) => (
+                <Pressable
+                  key={preset.name}
+                  onPress={() => applyThemePreset(preset)}
+                  style={[
+                    styles.presetCard,
+                    { 
+                      borderColor: primaryColor === preset.primary ? theme.accent : theme.border,
+                      borderWidth: primaryColor === preset.primary ? 2 : 1,
+                      backgroundColor: theme.backgroundSecondary,
+                    }
+                  ]}
+                >
+                  <View style={styles.presetColors}>
+                    <View style={[styles.presetColorBox, { backgroundColor: preset.primary }]} />
+                    <View style={[styles.presetColorBox, { backgroundColor: preset.bg }]} />
+                    <View style={[styles.presetColorBox, { backgroundColor: preset.accent }]} />
+                  </View>
+                  <ThemedText style={{ fontSize: 12, marginTop: Spacing.sm, textAlign: 'center' }}>
+                    {preset.name}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
+      </Animated.View>
+
+      {/* Typografi */}
+      <Animated.View entering={FadeInDown.delay(175).duration(400)}>
+        <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <ThemedText style={styles.sectionTitle}>🔤 Typografi</ThemedText>
+          
+          <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Font-familie</ThemedText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -Spacing.lg, marginBottom: Spacing.md }}>
+            <View style={{ paddingHorizontal: Spacing.lg, flexDirection: 'row', gap: Spacing.sm }}>
+              {FONT_OPTIONS.map((font) => (
+                <Pressable
+                  key={font}
+                  onPress={() => {
+                    setFontFamily(font);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={[
+                    styles.fontOption,
+                    {
+                      backgroundColor: fontFamily === font ? theme.accent : theme.backgroundSecondary,
+                      borderColor: theme.border,
+                    }
+                  ]}
+                >
+                  <ThemedText style={{ color: fontFamily === font ? '#000' : theme.text, fontSize: 13 }}>
+                    {font}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+
+          <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>
+            Basis skriftstørrelse
+          </ThemedText>
+          <View style={styles.colorInputRow}>
+            <TextInput
+              value={fontSize}
+              onChangeText={setFontSize}
+              keyboardType="numeric"
+              style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border, flex: 1 }]}
+              placeholder="16"
+              placeholderTextColor={theme.textMuted}
+            />
+            <ThemedText style={{ color: theme.textMuted, marginLeft: Spacing.sm }}>px</ThemedText>
+          </View>
+        </View>
+      </Animated.View>
+
+      {/* Layout */}
       <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+        <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <ThemedText style={styles.sectionTitle}>📐 Layout</ThemedText>
+          
+          <ThemedText style={[styles.label, { color: theme.textSecondary, marginBottom: Spacing.md }]}>
+            Layout-tetthet
+          </ThemedText>
+          {LAYOUT_OPTIONS.map((option) => (
+            <Pressable
+              key={option.value}
+              onPress={() => {
+                setLayoutDensity(option.value);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              style={[
+                styles.layoutOption,
+                {
+                  backgroundColor: layoutDensity === option.value ? theme.accent + '20' : theme.backgroundSecondary,
+                  borderColor: layoutDensity === option.value ? theme.accent : theme.border,
+                  marginBottom: Spacing.sm,
+                }
+              ]}
+            >
+              <View style={{ flex: 1 }}>
+                <ThemedText style={{ fontWeight: '600', marginBottom: 2 }}>{option.label}</ThemedText>
+                <ThemedText style={{ fontSize: 12, color: theme.textMuted }}>{option.description}</ThemedText>
+              </View>
+              {layoutDensity === option.value && (
+                <Feather name="check" size={20} color={theme.accent} />
+              )}
+            </Pressable>
+          ))}
+        </View>
+      </Animated.View>
+
+      {/* Komponent-styling */}
+      <Animated.View entering={FadeInDown.delay(225).duration(400)}>
+        <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <ThemedText style={styles.sectionTitle}>🎯 Komponent-styling</ThemedText>
+          
+          <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Button-radius</ThemedText>
+          <View style={styles.colorInputRow}>
+            <TextInput
+              value={buttonRadius}
+              onChangeText={setButtonRadius}
+              keyboardType="numeric"
+              style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border, flex: 1 }]}
+              placeholder="8"
+              placeholderTextColor={theme.textMuted}
+            />
+            <ThemedText style={{ color: theme.textMuted, marginLeft: Spacing.sm }}>px</ThemedText>
+          </View>
+
+          <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>Card-radius</ThemedText>
+          <View style={styles.colorInputRow}>
+            <TextInput
+              value={cardRadius}
+              onChangeText={setCardRadius}
+              keyboardType="numeric"
+              style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border, flex: 1 }]}
+              placeholder="12"
+              placeholderTextColor={theme.textMuted}
+            />
+            <ThemedText style={{ color: theme.textMuted, marginLeft: Spacing.sm }}>px</ThemedText>
+          </View>
+
+          <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>Border-bredde</ThemedText>
+          <View style={styles.colorInputRow}>
+            <TextInput
+              value={borderWidth}
+              onChangeText={setBorderWidth}
+              keyboardType="numeric"
+              style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border, flex: 1 }]}
+              placeholder="1"
+              placeholderTextColor={theme.textMuted}
+            />
+            <ThemedText style={{ color: theme.textMuted, marginLeft: Spacing.sm }}>px</ThemedText>
+          </View>
+        </View>
+      </Animated.View>
+
+      {/* Dark Mode */}
+      <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+        <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <ThemedText style={styles.sectionTitle}>🌙 Visningsvalg</ThemedText>
+          
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={{ fontWeight: '600', marginBottom: 2 }}>Mørk modus</ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textMuted }}>
+                Aktiver mørkt tema som standard
+              </ThemedText>
+            </View>
+            <Switch
+              value={darkMode}
+              onValueChange={(value) => {
+                setDarkMode(value);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              trackColor={{ false: theme.border, true: theme.accent }}
+              thumbColor="#fff"
+            />
+          </View>
+        </View>
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(275).duration(400)}>
         <View style={[styles.previewSection, { backgroundColor: backgroundColor, borderColor: theme.border }]}>
           <ThemedText style={[styles.previewTitle, { color: primaryColor }]}>
             Forhåndsvisning
@@ -260,6 +561,7 @@ export default function AdminDesignScreen() {
         </Pressable>
       </Animated.View>
     </ScrollView>
+    </View>
   );
 }
 
@@ -370,5 +672,55 @@ const styles = StyleSheet.create({
     color: "#000",
     fontSize: 16,
     fontWeight: "600",
+  },
+  pickButton: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logoPreview: {
+    width: "100%",
+    height: 120,
+    marginTop: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: "#f0f0f0",
+  },
+  presetCard: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    width: 120,
+  },
+  presetColors: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  presetColorBox: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.xs,
+  },
+  fontOption: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+  },
+  layoutOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+  },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.md,
   },
 });

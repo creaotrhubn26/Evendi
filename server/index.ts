@@ -1,8 +1,16 @@
+import "dotenv/config";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import * as fs from "fs";
 import * as path from "path";
+
+// Load .env.local if exists
+import { config } from "dotenv";
+config({ path: ".env.local", override: true });
+
+console.log("DATABASE_URL loaded:", process.env.DATABASE_URL ? "YES" : "NO");
+console.log("ADMIN_SECRET loaded:", process.env.ADMIN_SECRET ? "YES" : "NO");
 
 const app = express();
 const log = console.log;
@@ -15,18 +23,6 @@ declare module "http" {
 
 function setupCors(app: express.Application) {
   app.use((req, res, next) => {
-    const origins = new Set<string>();
-
-    if (process.env.REPLIT_DEV_DOMAIN) {
-      origins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
-    }
-
-    if (process.env.REPLIT_DOMAINS) {
-      process.env.REPLIT_DOMAINS.split(",").forEach((d) => {
-        origins.add(`https://${d.trim()}`);
-      });
-    }
-
     const origin = req.header("origin");
 
     // Allow localhost origins for Expo web development (any port)
@@ -34,18 +30,33 @@ function setupCors(app: express.Application) {
       origin?.startsWith("http://localhost:") ||
       origin?.startsWith("http://127.0.0.1:");
 
-    if (origin && (origins.has(origin) || isLocalhost)) {
+    // Allow GitHub Codespaces preview URLs
+    const isGitHubCodespaces = origin?.includes(".app.github.dev");
+
+    // Allow Cloudflare tunnel
+    const isCloudflare = origin?.includes(".trycloudflare.com");
+
+    // Allow Replit domains
+    const isReplit = origin?.includes(".replit.dev") || origin?.includes(".repl.co");
+
+    // For GitHub Codespaces, always allow the origin
+    if (origin && (isLocalhost || isGitHubCodespaces || isCloudflare || isReplit)) {
       res.header("Access-Control-Allow-Origin", origin);
       res.header(
         "Access-Control-Allow-Methods",
-        "GET, POST, PUT, DELETE, OPTIONS",
+        "GET, POST, PUT, DELETE, OPTIONS, PATCH",
       );
-      res.header("Access-Control-Allow-Headers", "Content-Type");
+      res.header(
+        "Access-Control-Allow-Headers",
+        "Content-Type, x-session-token, x-admin-secret, authorization, Authorization",
+      );
       res.header("Access-Control-Allow-Credentials", "true");
+      res.header("Access-Control-Max-Age", "86400");
     }
 
+    // Handle preflight OPTIONS requests immediately
     if (req.method === "OPTIONS") {
-      return res.sendStatus(200);
+      return res.sendStatus(204);
     }
 
     next();
@@ -226,9 +237,10 @@ function setupErrorHandler(app: express.Application) {
   setupBodyParsing(app);
   setupRequestLogging(app);
 
-  configureExpoAndLanding(app);
-
   const server = await registerRoutes(app);
+
+  // Configure Expo AFTER routes so /api endpoints are not caught by landing page middleware
+  configureExpoAndLanding(app);
 
   setupErrorHandler(app);
 

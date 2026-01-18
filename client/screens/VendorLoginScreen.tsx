@@ -18,7 +18,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
@@ -76,9 +76,26 @@ export default function VendorLoginScreen({ navigation }: Props) {
   }, []);
 
   const checkExistingSession = async () => {
-    const session = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
-    if (session) {
-      navigation.replace("VendorDashboard");
+    const sessionData = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
+    if (sessionData) {
+      try {
+        const session = JSON.parse(sessionData);
+        // Validate that the session token is still valid by making a test request
+        const response = await fetch(new URL("/api/vendor/session", getApiUrl()).toString(), {
+          headers: {
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+        });
+        if (response.ok) {
+          navigation.replace("VendorDashboard");
+        } else {
+          // Session is invalid, clear it
+          await AsyncStorage.removeItem(VENDOR_STORAGE_KEY);
+        }
+      } catch {
+        // Invalid session data, clear it
+        await AsyncStorage.removeItem(VENDOR_STORAGE_KEY);
+      }
     }
   };
 
@@ -219,8 +236,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   logo: {
-    width: 300,
-    height: 80,
+    width: 480,
+    height: 160,
     marginBottom: Spacing.xl,
   },
   title: {

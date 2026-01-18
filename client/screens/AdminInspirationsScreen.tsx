@@ -17,6 +17,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
+import { AdminHeader } from "@/components/AdminHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
@@ -50,7 +51,7 @@ export default function AdminInspirationsScreen() {
       const response = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${adminKey}` },
       });
-      if (!response.ok) throw new Error("Kunne ikke hente inspirasjoner");
+      if (!response.ok) throw new Error("Kunne ikke hente showcases");
       return response.json();
     },
     enabled: adminKey.length > 0,
@@ -94,7 +95,7 @@ export default function AdminInspirationsScreen() {
 
   const handleReject = (id: string) => {
     Alert.prompt(
-      "Avvis inspirasjon",
+      "Avvis showcase",
       "Oppgi en begrunnelse (valgfritt):",
       [
         { text: "Avbryt", style: "cancel" },
@@ -165,7 +166,11 @@ export default function AdminInspirationsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      <View style={[styles.tabRow, { paddingTop: headerHeight + Spacing.sm }]}>
+      <AdminHeader 
+        title="Showcases" 
+        subtitle={`${inspirations.length} ${selectedTab === "pending" ? "venter" : selectedTab === "approved" ? "godkjent" : "avvist"}`}
+      />
+      <View style={[styles.tabRow, { paddingTop: Spacing.sm }]}>
         {tabs.map((tab) => (
           <Pressable
             key={tab.key}
@@ -206,7 +211,7 @@ export default function AdminInspirationsScreen() {
             <View style={styles.emptyContainer}>
               <Feather name="inbox" size={48} color={theme.textMuted} />
               <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-                Ingen {selectedTab === "pending" ? "ventende" : selectedTab === "approved" ? "godkjente" : "avviste"} inspirasjoner
+                Ingen {selectedTab === "pending" ? "ventende" : selectedTab === "approved" ? "godkjente" : "avviste"} showcases
               </ThemedText>
             </View>
           }

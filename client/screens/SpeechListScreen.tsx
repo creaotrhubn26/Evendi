@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -10,9 +10,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 import Animated, { FadeInRight } from "react-native-reanimated";
+import { useQuery } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -20,13 +24,13 @@ import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getSpeeches, saveSpeeches, generateId } from "@/lib/storage";
-import { Speech } from "@/lib/types";
+import { Speech, Table } from "@/lib/types";
 
 const DEFAULT_SPEECHES: Speech[] = [
-  { id: "1", speakerName: "Mor til bruden", role: "Familie", time: "18:00", order: 1 },
-  { id: "2", speakerName: "Far til brudgommen", role: "Familie", time: "18:15", order: 2 },
-  { id: "3", speakerName: "Forlover", role: "Forlover", time: "18:30", order: 3 },
-  { id: "4", speakerName: "Toastmaster", role: "Toastmaster", time: "18:45", order: 4 },
+  { id: "1", speakerName: "Mor til bruden", role: "Familie", time: "18:00", order: 1, status: "ready", tableId: null },
+  { id: "2", speakerName: "Far til brudgommen", role: "Familie", time: "18:15", order: 2, status: "ready", tableId: null },
+  { id: "3", speakerName: "Forlover", role: "Forlover", time: "18:30", order: 3, status: "ready", tableId: null },
+  { id: "4", speakerName: "Toastmaster", role: "Toastmaster", time: "18:45", order: 4, status: "ready", tableId: null },
 ];
 
 export default function SpeechListScreen() {
@@ -41,22 +45,137 @@ export default function SpeechListScreen() {
   const [newName, setNewName] = useState("");
   const [newRole, setNewRole] = useState("");
   const [newTime, setNewTime] = useState("");
+  const [newStatus, setNewStatus] = useState<NonNullable<Speech["status"]>>("ready");
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [editingSpeech, setEditingSpeech] = useState<Speech | null>(null);
+
+  const { data: tables = [] } = useQuery<Table[]>({ queryKey: ["/api/couple/tables"] });
 
   const loadData = useCallback(async () => {
     const data = await getSpeeches();
+    const source = data.length === 0 ? DEFAULT_SPEECHES : data;
+    const normalized = source
+      .map((speech, index) => ({
+        ...speech,
+        status: speech.status || "ready",
+        tableId: speech.tableId ?? null,
+        order: speech.order || index + 1,
+      }))
+      .sort((a, b) => a.order - b.order);
+
     if (data.length === 0) {
-      await saveSpeeches(DEFAULT_SPEECHES);
-      setSpeeches(DEFAULT_SPEECHES);
-    } else {
-      setSpeeches(data);
+      await saveSpeeches(normalized);
     }
+
+    setSpeeches(normalized);
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
+  const tableLookup = useMemo(() => {
+    const lookup = new Map<string, Table>();
+    tables.forEach((table) => lookup.set(table.id, table));
+    return lookup;
+  }, [tables]);
+
+  const statusLabel: Record<NonNullable<Speech["status"]>, string> = {
+    ready: "Klar",
+    speaking: "Snakker nå",
+    done: "Ferdig",
+  };
+
+  const statusColor: Record<NonNullable<Speech["status"]>, string> = {
+    ready: Colors.dark.accent,
+    speaking: "#f59e0b",
+    done: "#16a34a",
+  };
+
+  const getTableLabel = (tableId?: string | null) => {
+    if (!tableId) return "Uten bord";
+    const table = tableLookup.get(tableId);
+    if (!table) return "Uten bord";
+    const number = table.tableNumber ? ` ${table.tableNumber}` : "";
+    return table.name ? `${table.name}${number ? ` (bord${number})` : ""}` : `Bord${number}`;
+  };
+
+  const handleExportPdf = async () => {
+    if (speeches.length === 0) {
+      Alert.alert("Ingen taler", "Legg til taler før du eksporterer.");
+      return;
+    }
+
+    const grouped: Record<string, Speech[]> = {};
+    speeches.forEach((speech) => {
+      const key = getTableLabel(speech.tableId);
+      grouped[key] = grouped[key] ? [...grouped[key], speech] : [speech];
+    });
+
+    const sectionHtml = Object.entries(grouped)
+      .map(([tableName, items]) => {
+        const rows = items
+          .sort((a, b) => a.order - b.order)
+          .map(
+            (speech) => `
+              <tr>
+                <td style="padding:8px 4px; width:40px; text-align:center;">${speech.order}</td>
+                <td style="padding:8px 4px;">
+                  <div style="font-weight:600;">${speech.speakerName}</div>
+                  <div style="font-size:12px; color:#6b7280;">${speech.role}</div>
+                </td>
+                <td style="padding:8px 4px; text-align:center; color:${statusColor[speech.status || "ready"]};">${statusLabel[speech.status || "ready"]}</td>
+                <td style="padding:8px 4px; text-align:center;">${speech.time}</td>
+              </tr>
+            `,
+          )
+          .join("");
+        return `
+          <h3 style="margin:16px 0 8px;">${tableName}</h3>
+          <table style="width:100%; border-collapse:collapse;">
+            <thead>
+              <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+                <th style="padding:8px 4px; width:40px;">#</th>
+                <th style="padding:8px 4px;">Taler</th>
+                <th style="padding:8px 4px;">Status</th>
+                <th style="padding:8px 4px; text-align:center;">Tid</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
+      })
+      .join("");
+
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Taler per bord</title>
+        </head>
+        <body style="font-family: Arial, sans-serif; padding: 24px;">
+          <h1 style="margin-top:0;">Taler per bord</h1>
+          ${sectionHtml}
+        </body>
+      </html>
+    `;
+
+    try {
+      const file = await Print.printToFileAsync({ html });
+      const sharingAvailable = await Sharing.isAvailableAsync();
+      if (sharingAvailable) {
+        await Sharing.shareAsync(file.uri, { dialogTitle: "Del PDF" });
+      } else {
+        Alert.alert("PDF klar", `Fant ikke delingsmulighet. Fil lagret til:\n${file.uri}`);
+      }
+    } catch (error) {
+      console.warn("PDF export failed", error);
+      Alert.alert("Kunne ikke generere PDF", "Prøv igjen senere.");
+    }
+  };
 
   const handleAddSpeech = async () => {
     if (!newName.trim()) {
@@ -69,7 +188,14 @@ export default function SpeechListScreen() {
     if (editingSpeech) {
       updatedSpeeches = speeches.map((s) =>
         s.id === editingSpeech.id
-          ? { ...s, speakerName: newName.trim(), role: newRole.trim() || "Gjest", time: newTime.trim() || "TBD" }
+          ? {
+              ...s,
+              speakerName: newName.trim(),
+              role: newRole.trim() || "Gjest",
+              time: newTime.trim() || "TBD",
+              status: newStatus,
+              tableId: selectedTableId,
+            }
           : s
       );
     } else {
@@ -79,6 +205,8 @@ export default function SpeechListScreen() {
         role: newRole.trim() || "Gjest",
         time: newTime.trim() || "TBD",
         order: speeches.length + 1,
+        status: newStatus,
+        tableId: selectedTableId,
       };
       updatedSpeeches = [...speeches, newSpeech];
     }
@@ -89,6 +217,8 @@ export default function SpeechListScreen() {
     setNewName("");
     setNewRole("");
     setNewTime("");
+    setNewStatus("ready");
+    setSelectedTableId(null);
     setEditingSpeech(null);
     setShowForm(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -99,6 +229,8 @@ export default function SpeechListScreen() {
     setNewName(speech.speakerName);
     setNewRole(speech.role);
     setNewTime(speech.time);
+    setNewStatus(speech.status || "ready");
+    setSelectedTableId(speech.tableId ?? null);
     setShowForm(true);
   };
 
@@ -174,6 +306,18 @@ export default function SpeechListScreen() {
       }}
       scrollIndicatorInsets={{ bottom: insets.bottom }}
     >
+      <View style={styles.toolbar}>
+        <Pressable
+          onPress={handleExportPdf}
+          style={[styles.exportButton, { borderColor: Colors.dark.accent }]}
+        >
+          <Feather name="printer" size={18} color={Colors.dark.accent} />
+          <ThemedText style={[styles.exportButtonText, { color: Colors.dark.accent }]}>
+            Eksporter PDF per bord
+          </ThemedText>
+        </Pressable>
+      </View>
+
       <ThemedText
         style={[styles.subtitle, { color: theme.textSecondary }]}
       >
@@ -221,8 +365,31 @@ export default function SpeechListScreen() {
                   >
                     {speech.role}
                   </ThemedText>
+                  <View style={styles.metaRow}>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        { backgroundColor: statusColor[speech.status || "ready"] + "20" },
+                      ]}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.statusText,
+                          { color: statusColor[speech.status || "ready"] },
+                        ]}
+                      >
+                        {statusLabel[speech.status || "ready"]}
+                      </ThemedText>
+                    </View>
+                    <View style={[styles.tableChip, { borderColor: theme.border }]}
+                    >
+                      <Feather name="map-pin" size={12} color={theme.textSecondary} />
+                      <ThemedText style={[styles.tableChipText, { color: theme.textSecondary }]}>
+                        {getTableLabel(speech.tableId)}
+                      </ThemedText>
+                    </View>
+                  </View>
                 </View>
-
                 <ThemedText
                   style={[styles.speechTime, { color: Colors.dark.accent }]}
                 >
@@ -320,6 +487,74 @@ export default function SpeechListScreen() {
             />
           </View>
 
+          <ThemedText style={[styles.statusLabel, { color: theme.textSecondary }]}>Status</ThemedText>
+          <View style={styles.statusRow}>
+            {["ready", "speaking", "done"].map((status) => (
+              <Pressable
+                key={status}
+                onPress={() => setNewStatus(status as Speech["status"])}
+                style={[
+                  styles.statusOption,
+                  {
+                    borderColor:
+                      newStatus === status ? statusColor[status as NonNullable<Speech["status"]>] : theme.border,
+                    backgroundColor:
+                      newStatus === status
+                        ? (statusColor[status as NonNullable<Speech["status"]>] + "20")
+                        : theme.backgroundSecondary,
+                  },
+                ]}
+              >
+                <ThemedText
+                  style={{
+                    color:
+                      newStatus === status
+                        ? statusColor[status as NonNullable<Speech["status"]>]
+                        : theme.text,
+                    fontWeight: "600",
+                  }}
+                >
+                  {statusLabel[status as NonNullable<Speech["status"]>]}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </View>
+
+          <ThemedText style={[styles.statusLabel, { color: theme.textSecondary }]}>Bord</ThemedText>
+          <View style={styles.tablePicker}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.sm }}>
+              <Pressable
+                onPress={() => setSelectedTableId(null)}
+                style={[
+                  styles.tableOption,
+                  {
+                    borderColor: selectedTableId === null ? Colors.dark.accent : theme.border,
+                    backgroundColor:
+                      selectedTableId === null ? Colors.dark.accent + "20" : theme.backgroundSecondary,
+                  },
+                ]}
+              >
+                <ThemedText style={{ color: theme.text }}>Ingen</ThemedText>
+              </Pressable>
+              {tables.map((table) => (
+                <Pressable
+                  key={table.id}
+                  onPress={() => setSelectedTableId(table.id)}
+                  style={[
+                    styles.tableOption,
+                    {
+                      borderColor: selectedTableId === table.id ? Colors.dark.accent : theme.border,
+                      backgroundColor:
+                        selectedTableId === table.id ? Colors.dark.accent + "20" : theme.backgroundSecondary,
+                    },
+                  ]}
+                >
+                  <ThemedText style={{ color: theme.text }}>{table.name || `Bord ${table.tableNumber}`}</ThemedText>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+
           <View style={styles.formButtons}>
             <Pressable
               onPress={() => {
@@ -328,6 +563,8 @@ export default function SpeechListScreen() {
                 setNewName("");
                 setNewRole("");
                 setNewTime("");
+                setNewStatus("ready");
+                setSelectedTableId(null);
               }}
               style={[styles.cancelButton, { borderColor: theme.border }]}
             >
@@ -342,6 +579,8 @@ export default function SpeechListScreen() {
         <Pressable
           onPress={() => {
             setShowForm(true);
+            setNewStatus("ready");
+            setSelectedTableId(null);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
           style={[styles.addButton, { borderColor: Colors.dark.accent }]}
@@ -359,6 +598,23 @@ export default function SpeechListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  toolbar: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginBottom: Spacing.sm,
+  },
+  exportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  exportButtonText: {
+    fontWeight: "600",
   },
   centered: {
     justifyContent: "center",
@@ -406,6 +662,34 @@ const styles = StyleSheet.create({
   speechRole: {
     fontSize: 13,
   },
+  metaRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    alignItems: "center",
+    marginTop: Spacing.xs,
+    flexWrap: "wrap",
+  },
+  statusBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  tableChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  tableChipText: {
+    fontSize: 12,
+  },
   speechTime: {
     fontSize: 14,
     fontWeight: "600",
@@ -445,6 +729,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: Spacing.md,
     marginTop: Spacing.sm,
+  },
+  statusLabel: {
+    marginBottom: Spacing.xs,
+    fontSize: 14,
+  },
+  statusRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  statusOption: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  tablePicker: {
+    flexDirection: "row",
+    marginBottom: Spacing.lg,
+  },
+  tableOption: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
   },
   cancelButton: {
     flex: 1,

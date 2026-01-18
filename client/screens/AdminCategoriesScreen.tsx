@@ -18,6 +18,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
+import { AdminHeader } from "@/components/AdminHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
@@ -167,7 +168,7 @@ export default function AdminCategoriesScreen() {
   };
 
   const tabs = [
-    { key: "inspiration" as const, label: "Inspirasjon" },
+    { key: "inspiration" as const, label: "Showcase" },
     { key: "vendor" as const, label: "Leverandører" },
   ];
 
@@ -203,7 +204,11 @@ export default function AdminCategoriesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      <View style={[styles.tabRow, { paddingTop: headerHeight + Spacing.sm }]}>
+      <AdminHeader 
+        title="Kategorier" 
+        subtitle={`${categories.length} ${selectedTab === "inspiration" ? "showcase" : "leverandør"} kategorier`}
+      />
+      <View style={[styles.tabRow, { paddingTop: Spacing.sm }]}>
         {tabs.map((tab) => (
           <Pressable
             key={tab.key}
@@ -413,10 +418,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.25)",
   },
   modalOverlay: {
     flex: 1,

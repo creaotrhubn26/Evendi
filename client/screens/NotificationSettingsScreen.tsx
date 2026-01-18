@@ -147,8 +147,8 @@ export default function NotificationSettingsScreen() {
           <View style={[styles.card, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
-                <View style={[styles.iconContainer, { backgroundColor: Colors.dark.accent + "20" }]}>
-                  <Feather name="bell" size={20} color={Colors.dark.accent} />
+                <View style={[styles.iconContainer, { backgroundColor: theme.accent + "20" }]}>
+                  <Feather name="bell" size={20} color={theme.accent} />
                 </View>
                 <View style={styles.settingText}>
                   <ThemedText style={styles.settingTitle}>Varsler</ThemedText>
@@ -160,8 +160,8 @@ export default function NotificationSettingsScreen() {
               <Switch
                 value={settings.enabled}
                 onValueChange={handleToggleEnabled}
-                trackColor={{ false: theme.border, true: Colors.dark.accent }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: theme.border, true: theme.accent }}
+                thumbColor={theme.backgroundDefault}
               />
             </View>
 
@@ -198,8 +198,8 @@ export default function NotificationSettingsScreen() {
                   <Switch
                     value={settings.checklistReminders}
                     onValueChange={handleToggleChecklistReminders}
-                    trackColor={{ false: theme.border, true: Colors.dark.accent }}
-                    thumbColor="#FFFFFF"
+                    trackColor={{ false: theme.border, true: theme.accent }}
+                    thumbColor={theme.backgroundDefault}
                   />
                 </View>
 
@@ -220,8 +220,8 @@ export default function NotificationSettingsScreen() {
                   <Switch
                     value={settings.weddingCountdown}
                     onValueChange={handleToggleCountdown}
-                    trackColor={{ false: theme.border, true: Colors.dark.accent }}
-                    thumbColor="#FFFFFF"
+                    trackColor={{ false: theme.border, true: theme.accent }}
+                    thumbColor={theme.backgroundDefault}
                   />
                 </View>
               </View>
@@ -255,16 +255,16 @@ export default function NotificationSettingsScreen() {
                             styles.checkbox,
                             {
                               backgroundColor: settings.daysBefore.includes(option.days)
-                                ? Colors.dark.accent
+                                ? theme.accent
                                 : "transparent",
                               borderColor: settings.daysBefore.includes(option.days)
-                                ? Colors.dark.accent
+                                ? theme.accent
                                 : theme.border,
                             },
                           ]}
                         >
                           {settings.daysBefore.includes(option.days) ? (
-                            <Feather name="check" size={14} color="#FFFFFF" />
+                            <Feather name="check" size={14} color={theme.text} />
                           ) : null}
                         </View>
                       </Pressable>
