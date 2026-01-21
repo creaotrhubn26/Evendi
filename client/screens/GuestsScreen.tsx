@@ -37,13 +37,13 @@ import type { GuestInvitation, WeddingGuest } from "@shared/schema";
 
 type NavigationProp = NativeStackNavigationProp<GuestsStackParamList>;
 
-const STATUS_COLORS = {
+const STATUS_COLORS: { [key: string]: string } = {
   confirmed: "#4CAF50",
   pending: Colors.dark.accent,
   declined: "#EF5350",
 };
 
-const STATUS_LABELS = {
+const STATUS_LABELS: { [key: string]: string } = {
   confirmed: "Bekreftet",
   pending: "Venter",
   declined: "Avslått",
@@ -1413,5 +1413,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     marginTop: Spacing.md,
+  },
+  inviteCard: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+  },
+  inviteHeader: {
+    marginBottom: Spacing.md,
+  },
+  inviteTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: Spacing.sm,
+  },
+  inviteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+  },
+  inviteShareBtn: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+    marginLeft: Spacing.sm,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   View,
@@ -47,6 +47,8 @@ export default function MessagesScreen({ navigation }: Props) {
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const [wsConversations, setWsConversations] = useState<Conversation[]>([]);
 
   useEffect(() => {
     checkSession();
@@ -76,11 +78,71 @@ export default function MessagesScreen({ navigation }: Props) {
     enabled: !!sessionToken,
   });
 
+  // Merge fetched conversations with WebSocket updates
+  const displayConversations = React.useMemo(() => {
+    const base = [...conversations];
+    for (const ws of wsConversations) {
+      const idx = base.findIndex((c) => c.id === ws.id);
+      if (idx >= 0) {
+        base[idx] = ws;
+      }
+    }
+    return base.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+  }, [conversations, wsConversations]);
+
   const handleLogout = async () => {
     await AsyncStorage.removeItem(COUPLE_STORAGE_KEY);
     setSessionToken(null);
     setIsLoggedIn(false);
   };
+
+  // WebSocket subscription for list updates
+  useEffect(() => {
+    if (!sessionToken) return;
+    let closedByUs = false;
+    let reconnectTimer: any = null;
+
+    const connect = () => {
+      try {
+        const wsUrl = getApiUrl().replace(/^http/, "ws") + `/ws/couples-list?token=${encodeURIComponent(sessionToken)}`;
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse((event as any).data);
+            if (data?.type === "conv-update" && data.payload?.conversationId) {
+              const { conversationId, lastMessageAt, coupleUnreadCount } = data.payload as { conversationId: string; lastMessageAt?: string; coupleUnreadCount?: number };
+              setWsConversations((prev) => {
+                const idx = prev.findIndex((c) => c.id === conversationId);
+                const baseConv = conversations.find((c) => c.id === conversationId);
+                if (!baseConv) return prev; // unknown conversation
+                const updated = { ...baseConv, lastMessageAt: lastMessageAt || baseConv.lastMessageAt, coupleUnreadCount: typeof coupleUnreadCount === "number" ? coupleUnreadCount : baseConv.coupleUnreadCount };
+                if (idx >= 0) {
+                  const list = [...prev];
+                  list[idx] = updated;
+                  return list;
+                } else {
+                  return [...prev, updated];
+                }
+              });
+            }
+          } catch {}
+        };
+        ws.onclose = () => {
+          if (!closedByUs) reconnectTimer = setTimeout(connect, 3000);
+        };
+      } catch {
+        reconnectTimer = setTimeout(connect, 3000);
+      }
+    };
+
+    connect();
+    return () => {
+      closedByUs = true;
+      try { wsRef.current?.close(); } catch {}
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
+  }, [sessionToken, conversations]);
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -120,6 +182,9 @@ export default function MessagesScreen({ navigation }: Props) {
           </ThemedText>
           <Pressable
             onPress={() => navigation.navigate("CoupleLogin")}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="Logg inn for å se meldinger"
             style={[styles.loginBtn, { backgroundColor: theme.accent }]}
           >
             <ThemedText style={[styles.loginBtnText, { color: theme.buttonText }]}>Logg inn</ThemedText>
@@ -136,6 +201,9 @@ export default function MessagesScreen({ navigation }: Props) {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           navigation.navigate("Chat", { conversationId: item.id, vendorName: item.vendor.businessName });
         }}
+        accessible={true}
+        accessibilityRole="button"
+        accessibilityLabel={`Samtale med ${item.vendor.businessName}. ${item.coupleUnreadCount > 0 ? `${item.coupleUnreadCount} uleste meldinger.` : ''} Siste melding: ${item.lastMessage?.body || 'Ingen meldinger ennå'}`}
         style={[styles.conversationItem, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
       >
         <View style={[styles.avatar, { backgroundColor: theme.accent + "20" }]}>
@@ -189,7 +257,7 @@ export default function MessagesScreen({ navigation }: Props) {
         </View>
       ) : (
         <FlatList
-          data={conversations}
+          data={displayConversations}
           renderItem={renderConversation}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{

@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     marginBottom: Spacing.lg,
   },
-  yrText: { fontSize: 11, marginLeft: Spacing.xs, flex: 1 },
+  yrText: { fontSize: 12, marginLeft: Spacing.xs, flex: 1 },
   tipsGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.md },
   tipCard: {
     width: "48%",

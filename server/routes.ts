@@ -1,9 +1,11 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
+import { WebSocketServer, type WebSocket } from "ws";
 import crypto from "node:crypto";
 import { db } from "./db";
 import bcrypt from "bcryptjs";
-import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema } from "@shared/schema";
+import { registerSubscriptionRoutes } from "./subscription-routes";
+import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema } from "@shared/schema";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
 function generateAccessCode(): string {
@@ -108,6 +110,109 @@ async function fetchYrWeather(lat: number, lon: number): Promise<any> {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // --- Realtime (WebSocket) setup state ---
+  const adminConvClients: Map<string, Set<WebSocket>> = new Map();
+  const adminListClients: Set<WebSocket> = new Set();
+  const conversationClients: Map<string, Set<WebSocket>> = new Map();
+  const vendorListClients: Map<string, Set<WebSocket>> = new Map();
+  const coupleListClients: Map<string, Set<WebSocket>> = new Map();
+
+  async function checkVendorToken(token: string): Promise<string | null> {
+    const [vendorSession] = await db
+      .select({ vendorId: vendorSessions.vendorId })
+      .from(vendorSessions)
+      .where(and(eq(vendorSessions.token, token), sql`${vendorSessions.expiresAt} > NOW()`));
+    if (!vendorSession) return null;
+    const [vendor] = await db.select().from(vendors).where(eq(vendors.id, vendorSession.vendorId));
+    if (!vendor || vendor.status !== "approved") return null;
+    return vendorSession.vendorId;
+  }
+
+  async function getOrCreateAdminConversationId(vendorId: string): Promise<string> {
+    const existing = await db.select().from(adminConversations).where(eq(adminConversations.vendorId, vendorId));
+    if (existing[0]) return existing[0].id;
+    const [created] = await db.insert(adminConversations).values({ vendorId }).returning();
+    return created.id;
+  }
+
+  function broadcastAdminConv(conversationId: string, data: unknown) {
+    const set = adminConvClients.get(conversationId);
+    if (!set) return;
+    const payload = JSON.stringify(data);
+    for (const ws of Array.from(set)) {
+      try {
+        if ((ws as any).readyState === 1) ws.send(payload);
+        else set.delete(ws);
+      } catch {
+        set.delete(ws);
+      }
+    }
+  }
+
+  function broadcastAdminList(data: unknown) {
+    const payload = JSON.stringify(data);
+    for (const ws of Array.from(adminListClients)) {
+      try {
+        if ((ws as any).readyState === 1) ws.send(payload);
+        else adminListClients.delete(ws);
+      } catch {
+        adminListClients.delete(ws);
+      }
+    }
+  }
+
+  async function checkCoupleToken(token: string): Promise<string | null> {
+    const [sess] = await db
+      .select({ coupleId: coupleSessions.coupleId })
+      .from(coupleSessions)
+      .where(and(eq(coupleSessions.token, token), sql`${coupleSessions.expiresAt} > NOW()`));
+    if (!sess) return null;
+    const [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.id, sess.coupleId));
+    if (!couple) return null;
+    return sess.coupleId;
+  }
+
+  function broadcastConversation(conversationId: string, data: unknown) {
+    const set = conversationClients.get(conversationId);
+    if (!set) return;
+    const payload = JSON.stringify(data);
+    for (const ws of Array.from(set)) {
+      try {
+        if ((ws as any).readyState === 1) ws.send(payload);
+        else set.delete(ws);
+      } catch {
+        set.delete(ws);
+      }
+    }
+  }
+
+  function broadcastVendorList(vendorId: string, data: unknown) {
+    const set = vendorListClients.get(vendorId);
+    if (!set) return;
+    const payload = JSON.stringify(data);
+    for (const ws of Array.from(set)) {
+      try {
+        if ((ws as any).readyState === 1) ws.send(payload);
+        else set.delete(ws);
+      } catch {
+        set.delete(ws);
+      }
+    }
+  }
+
+  function broadcastCoupleList(coupleId: string, data: unknown) {
+    const set = coupleListClients.get(coupleId);
+    if (!set) return;
+    const payload = JSON.stringify(data);
+    for (const ws of Array.from(set)) {
+      try {
+        if ((ws as any).readyState === 1) ws.send(payload);
+        else set.delete(ws);
+      } catch {
+        set.delete(ws);
+      }
+    }
+  }
   app.get("/api/weather", async (req: Request, res: Response) => {
     try {
       const lat = parseFloat(req.query.lat as string);
@@ -1338,7 +1443,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return session.coupleId;
   }
 
-  // Couple login/register (simple email-based)
+  // Couple login/register (email + password)
   app.post("/api/couples/login", async (req: Request, res: Response) => {
     try {
       const validation = coupleLoginSchema.safeParse(req.body);
@@ -1346,17 +1451,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: validation.error.errors[0].message });
       }
 
-      const { email, displayName } = validation.data;
+      const { email, displayName, password } = validation.data;
 
       // Find or create couple profile
       let [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.email, email));
 
       if (!couple) {
+        // New registration - hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
         const [newCouple] = await db.insert(coupleProfiles)
-          .values({ email, displayName })
+          .values({ email, displayName, password: hashedPassword })
           .returning();
         couple = newCouple;
       } else {
+        // Existing couple - verify password
+        if (!couple.password) {
+          // Account exists but has no password (old account)
+          return res.status(401).json({ error: "Kontoen din har ingen passord. Kontakt support." });
+        }
+
+        const passwordMatch = await bcrypt.compare(password, couple.password);
+        if (!passwordMatch) {
+          return res.status(401).json({ error: "Ugyldig e-post eller passord" });
+        }
+
         // Update display name if changed
         if (couple.displayName !== displayName) {
           await db.update(coupleProfiles)
@@ -1493,6 +1611,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get a single conversation by ID (vendor)
+  app.get("/api/vendor/conversations/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+
+      const [conv] = await db.select().from(conversations)
+        .where(and(
+          eq(conversations.id, id),
+          eq(conversations.vendorId, vendorId)
+        ));
+
+      if (!conv) {
+        return res.status(404).json({ error: "Samtale ikke funnet" });
+      }
+
+      // Enrich with couple info
+      const [couple] = await db.select({ 
+        id: coupleProfiles.id, 
+        displayName: coupleProfiles.displayName, 
+        email: coupleProfiles.email 
+      })
+        .from(coupleProfiles)
+        .where(eq(coupleProfiles.id, conv.coupleId));
+
+      // Get inspiration if linked
+      let inspiration = null;
+      if (conv.inspirationId) {
+        const [insp] = await db.select({ id: inspirations.id, title: inspirations.title })
+          .from(inspirations).where(eq(inspirations.id, conv.inspirationId));
+        inspiration = insp;
+      }
+
+      // Get last message
+      const [lastMsg] = await db.select().from(messages)
+        .where(eq(messages.conversationId, conv.id))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+
+      res.json({ ...conv, couple, inspiration, lastMessage: lastMsg });
+    } catch (error) {
+      console.error("Error fetching conversation:", error);
+      res.status(500).json({ error: "Kunne ikke hente samtale" });
+    }
+  });
+
   // Get messages in a conversation (couple)
   app.get("/api/couples/conversations/:id/messages", async (req: Request, res: Response) => {
     const coupleId = await checkCoupleAuth(req, res);
@@ -1522,6 +1688,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching messages:", error);
       res.status(500).json({ error: "Kunne ikke hente meldinger" });
+    }
+  });
+
+  // Get conversation details with vendor info (couple)
+  app.get("/api/couples/conversations/:id/details", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, id));
+      if (!conv || conv.coupleId !== coupleId) {
+        return res.status(404).json({ error: "Samtale ikke funnet" });
+      }
+      
+      // Get vendor profile
+      const [vendor] = await db.select().from(vendors).where(eq(vendors.id, conv.vendorId));
+      
+      res.json({
+        conversation: conv,
+        vendor: vendor ? {
+          id: vendor.id,
+          businessName: vendor.businessName,
+          email: vendor.email,
+          phone: vendor.phone,
+        } : null,
+        vendorTypingAt: conv.vendorTypingAt,
+      });
+    } catch (error) {
+      console.error("Error fetching conversation details:", error);
+      res.status(500).json({ error: "Kunne ikke hente samtaledetaljer" });
     }
   });
 
@@ -1568,7 +1766,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: validation.error.errors[0].message });
       }
 
-      const { conversationId, vendorId, inspirationId, body } = validation.data;
+      const { conversationId, vendorId, inspirationId, body, attachmentUrl, attachmentType } = validation.data;
 
       let convId = conversationId;
 
@@ -1611,7 +1809,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           conversationId: convId,
           senderType: "couple",
           senderId: coupleId,
-          body,
+          body: body || "",
+          attachmentUrl: attachmentUrl || null,
+          attachmentType: attachmentType || null,
         })
         .returning();
 
@@ -1622,6 +1822,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           vendorUnreadCount: (conv.vendorUnreadCount || 0) + 1,
         })
         .where(eq(conversations.id, convId));
+
+      // Broadcast to listeners of this conversation
+      broadcastConversation(convId, { type: "message", payload: msg });
+
+      // Broadcast to vendor list listeners
+      const msgCreatedAt = msg.createdAt || new Date();
+      broadcastVendorList(conv.vendorId, { type: "conv-update", payload: { conversationId: convId, lastMessageAt: msgCreatedAt.toISOString(), vendorUnreadCount: (conv.vendorUnreadCount || 0) + 1 } });
 
       res.status(201).json(msg);
     } catch (error) {
@@ -1636,9 +1843,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!vendorId) return;
 
     try {
-      const { conversationId, body } = req.body;
+      const { conversationId, body, attachmentUrl, attachmentType } = req.body;
 
-      if (!conversationId || !body) {
+      if (!conversationId || (!body && !attachmentUrl)) {
         return res.status(400).json({ error: "Mangler samtale-ID eller melding" });
       }
 
@@ -1654,7 +1861,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           conversationId,
           senderType: "vendor",
           senderId: vendorId,
-          body,
+          body: body || "",
+          attachmentUrl: attachmentUrl || null,
+          attachmentType: attachmentType || null,
         })
         .returning();
 
@@ -1666,10 +1875,318 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .where(eq(conversations.id, conversationId));
 
+      // Broadcast to listeners of this conversation
+      broadcastConversation(conversationId, { type: "message", payload: msg });
+
+      // Broadcast to couple list listeners
+      const msgCreatedAt = msg.createdAt || new Date();
+      broadcastCoupleList(conv.coupleId, { type: "conv-update", payload: { conversationId, lastMessageAt: msgCreatedAt.toISOString(), coupleUnreadCount: (conv.coupleUnreadCount || 0) + 1 } });
+
       res.status(201).json(msg);
     } catch (error) {
       console.error("Error sending vendor message:", error);
       res.status(500).json({ error: "Kunne ikke sende melding" });
+    }
+  });
+
+  // --- Vendor ↔ Admin Chat ---
+
+  // Ensure a single admin conversation exists per vendor, create if missing
+  app.get("/api/vendor/admin/conversation", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const existing = await db.select().from(adminConversations).where(eq(adminConversations.vendorId, vendorId));
+      let conv = existing[0];
+      if (!conv) {
+        const [created] = await db.insert(adminConversations)
+          .values({ vendorId })
+          .returning();
+        conv = created;
+      }
+      res.json(conv);
+    } catch (error) {
+      console.error("Error fetching admin conversation:", error);
+      res.status(500).json({ error: "Kunne ikke hente admin-samtale" });
+    }
+  });
+
+  // List messages in vendor's admin conversation
+  app.get("/api/vendor/admin/messages", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const [conv] = await db.select().from(adminConversations).where(eq(adminConversations.vendorId, vendorId));
+      if (!conv) {
+        return res.json([]);
+      }
+
+      const msgs = await db.select().from(adminMessages)
+        .where(eq(adminMessages.conversationId, conv.id))
+        .orderBy(desc(adminMessages.createdAt));
+
+      // mark vendor unread as 0
+      await db.update(adminConversations)
+        .set({ vendorUnreadCount: 0 })
+        .where(eq(adminConversations.id, conv.id));
+
+      res.json(msgs);
+    } catch (error) {
+      console.error("Error fetching admin messages:", error);
+      res.status(500).json({ error: "Kunne ikke hente admin-meldinger" });
+    }
+  });
+
+  // Send message from vendor to admin
+  app.post("/api/vendor/admin/messages", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { body, attachmentUrl, attachmentType } = req.body as any;
+      const parse = sendAdminMessageSchema.safeParse({ body, attachmentUrl, attachmentType });
+      if (!parse.success) {
+        return res.status(400).json({ error: parse.error.errors[0]?.message || "Ugyldig melding" });
+      }
+
+      const [conv] = await db.select().from(adminConversations).where(eq(adminConversations.vendorId, vendorId));
+      let conversationId = conv?.id;
+      if (!conversationId) {
+        const [created] = await db.insert(adminConversations)
+          .values({ vendorId })
+          .returning();
+        conversationId = created.id;
+      }
+
+      const [msg] = await db.insert(adminMessages)
+        .values({
+          conversationId,
+          senderType: "vendor",
+          senderId: vendorId,
+          body,
+          attachmentUrl: attachmentUrl || null,
+          attachmentType: attachmentType || null,
+        })
+        .returning();
+
+      const newLast = new Date();
+      const newAdminUnread = (conv?.adminUnreadCount || 0) + 1;
+      await db.update(adminConversations)
+        .set({
+          lastMessageAt: newLast,
+          adminUnreadCount: newAdminUnread,
+        })
+        .where(eq(adminConversations.id, conversationId));
+
+      // broadcast to this conversation
+      broadcastAdminConv(conversationId, { type: "message", payload: msg });
+      // broadcast list update
+      broadcastAdminList({ type: "conv-update", payload: { conversationId, lastMessageAt: newLast.toISOString(), adminUnreadCount: newAdminUnread } });
+
+      res.status(201).json(msg);
+    } catch (error) {
+      console.error("Error sending admin message:", error);
+      res.status(500).json({ error: "Kunne ikke sende melding til admin" });
+    }
+  });
+
+  // Admin endpoints to read and reply
+  app.get("/api/admin/vendor-admin-conversations", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    try {
+      const rows = await db.select({
+        conv: adminConversations,
+        vendor: vendors,
+      })
+        .from(adminConversations)
+        .leftJoin(vendors, eq(adminConversations.vendorId, vendors.id))
+        .orderBy(desc(adminConversations.lastMessageAt));
+      res.json(rows);
+    } catch (error) {
+      console.error("Error listing admin convs:", error);
+      res.status(500).json({ error: "Kunne ikke liste admin-samtaler" });
+    }
+  });
+
+  app.get("/api/admin/vendor-admin-conversations/:id/messages", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    try {
+      const { id } = req.params;
+      const msgs = await db.select().from(adminMessages)
+        .where(eq(adminMessages.conversationId, id))
+        .orderBy(desc(adminMessages.createdAt));
+      // reset admin unread
+      await db.update(adminConversations)
+        .set({ adminUnreadCount: 0 })
+        .where(eq(adminConversations.id, id));
+      res.json(msgs);
+    } catch (error) {
+      console.error("Error fetching admin msgs:", error);
+      res.status(500).json({ error: "Kunne ikke hente meldinger" });
+    }
+  });
+
+  app.post("/api/admin/vendor-admin-conversations/:id/messages", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    try {
+      const { id } = req.params;
+      const { body, attachmentUrl, attachmentType } = req.body as any;
+      const parse = sendAdminMessageSchema.safeParse({ body, attachmentUrl, attachmentType });
+      if (!parse.success) {
+        return res.status(400).json({ error: parse.error.errors[0]?.message || "Ugyldig melding" });
+      }
+
+      const [msg] = await db.insert(adminMessages)
+        .values({
+          conversationId: id,
+          senderType: "admin",
+          senderId: "admin",
+          body,
+          attachmentUrl: attachmentUrl || null,
+          attachmentType: attachmentType || null,
+        })
+        .returning();
+
+      const newLast = new Date();
+      await db.update(adminConversations)
+        .set({
+          lastMessageAt: newLast,
+          vendorUnreadCount: sql`COALESCE(${adminConversations.vendorUnreadCount}, 0) + 1`,
+        })
+        .where(eq(adminConversations.id, id));
+
+      // broadcast to this conversation
+      broadcastAdminConv(id, { type: "message", payload: msg });
+      // broadcast list update (adminUnreadCount likely unchanged when admin sends)
+      broadcastAdminList({ type: "conv-update", payload: { conversationId: id, lastMessageAt: newLast.toISOString() } });
+
+      res.status(201).json(msg);
+    } catch (error) {
+      console.error("Error sending admin reply:", error);
+      res.status(500).json({ error: "Kunne ikke sende admin-svar" });
+    }
+  });
+
+  // Admin typing indicator for vendor-admin chat
+  app.post("/api/admin/vendor-admin-conversations/:id/typing", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    try {
+      const { id } = req.params;
+      broadcastAdminConv(id, { type: "typing", payload: { sender: "admin", at: new Date().toISOString() } });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Kunne ikke sende skrive-status" });
+    }
+  });
+
+  // Edit a message (couple)
+  app.patch("/api/couples/messages/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      const { body } = req.body;
+
+      // Validate body
+      if (!body || typeof body !== "string" || body.trim() === "") {
+        return res.status(400).json({ error: "Melding kan ikke være tom" });
+      }
+
+      // Verify message exists and belongs to this couple
+      const [msg] = await db.select().from(messages).where(eq(messages.id, id));
+      if (!msg) {
+        return res.status(404).json({ error: "Melding ikke funnet" });
+      }
+
+      // Verify sender is the couple
+      if (msg.senderType !== "couple" || msg.senderId !== coupleId) {
+        return res.status(403).json({ error: "Du kan bare redigere dine egne meldinger" });
+      }
+
+      // Verify couple has access to this conversation
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, msg.conversationId));
+      if (!conv || conv.coupleId !== coupleId) {
+        return res.status(403).json({ error: "Ingen tilgang til denne samtalen" });
+      }
+
+      // Update message
+      const [updated] = await db.update(messages)
+        .set({ 
+          body: body.trim(),
+          editedAt: new Date()
+        })
+        .where(eq(messages.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error editing message:", error);
+      res.status(500).json({ error: "Kunne ikke redigere melding" });
+    }
+  });
+
+  // Vendor typing indicator
+  app.post("/api/vendor/conversations/:id/typing", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+
+      // Verify vendor owns this conversation
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, id));
+      if (!conv || conv.vendorId !== vendorId) {
+        return res.status(403).json({ error: "Ingen tilgang til denne samtalen" });
+      }
+
+      // Update vendor typing timestamp
+      await db.update(conversations)
+        .set({
+          vendorTypingAt: new Date(),
+        })
+        .where(eq(conversations.id, id));
+
+      // Broadcast typing to couple client(s)
+      broadcastConversation(id, { type: "typing", payload: { sender: "vendor", at: new Date().toISOString() } });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating typing status:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere skrive-status" });
+    }
+  });
+
+  // Couple typing indicator
+  app.post("/api/couples/conversations/:id/typing", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+
+      // Verify couple owns this conversation
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, id));
+      if (!conv || conv.coupleId !== coupleId) {
+        return res.status(403).json({ error: "Ingen tilgang til denne samtalen" });
+      }
+
+      // Update couple typing timestamp
+      await db.update(conversations)
+        .set({
+          coupleTypingAt: new Date(),
+        })
+        .where(eq(conversations.id, id));
+
+      // Broadcast typing to vendor client(s)
+      broadcastConversation(id, { type: "typing", payload: { sender: "couple", at: new Date().toISOString() } });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating typing status:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere skrive-status" });
     }
   });
 
@@ -1760,6 +2277,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting vendor message:", error);
       res.status(500).json({ error: "Kunne ikke slette melding" });
+    }
+  });
+
+  // Edit a message (vendor)
+  app.patch("/api/vendor/messages/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+      const { body } = req.body;
+
+      if (!body || !body.trim()) {
+        return res.status(400).json({ error: "Melding kan ikke være tom" });
+      }
+
+      const [msg] = await db.select().from(messages).where(eq(messages.id, id));
+      if (!msg) {
+        return res.status(404).json({ error: "Melding ikke funnet" });
+      }
+
+      if (msg.senderType !== "vendor") {
+        return res.status(403).json({ error: "Du kan kun redigere dine egne meldinger" });
+      }
+
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, msg.conversationId));
+      if (!conv || conv.vendorId !== vendorId) {
+        return res.status(403).json({ error: "Ingen tilgang til denne meldingen" });
+      }
+
+      const [updated] = await db.update(messages)
+        .set({ 
+          body: body.trim(),
+          editedAt: new Date(),
+        })
+        .where(eq(messages.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error editing vendor message:", error);
+      res.status(500).json({ error: "Kunne ikke redigere melding" });
     }
   });
 
@@ -5141,7 +5700,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: "new_review",
         title: "Ny anmeldelse",
         body: `Du har mottatt en ${rating}-stjerners anmeldelse`,
-        data: JSON.stringify({ reviewId: review.id }),
+        payload: JSON.stringify({ reviewId: review.id }),
       });
 
       res.json(review);
@@ -5496,7 +6055,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: "review_reminder",
         title: "Gi en anmeldelse",
         body: `${vendor?.businessName} ønsker gjerne din tilbakemelding på tjenesten`,
-        data: JSON.stringify({ contractId, vendorId }),
+        payload: JSON.stringify({ contractId, vendorId }),
       });
 
       // Update reminder sent timestamp
@@ -5731,7 +6290,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: "contract_completed",
         title: "Avtale fullført",
         body: `${vendor?.businessName} har markert avtalen som fullført. Gi gjerne en anmeldelse!`,
-        data: JSON.stringify({ contractId: id, vendorId }),
+        payload: JSON.stringify({ contractId: id, vendorId }),
       });
 
       res.json(updated);
@@ -6068,7 +6627,635 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== FAQ ROUTES =====
+  
+  // Get FAQ items by category (public)
+  app.get("/api/faq/:category", async (req: Request, res: Response) => {
+    try {
+      const { category } = req.params;
+      
+      if (category !== "couple" && category !== "vendor") {
+        return res.status(400).json({ error: "Ugyldig kategori" });
+      }
+
+      const items = await db.select()
+        .from(faqItems)
+        .where(and(
+          eq(faqItems.category, category),
+          eq(faqItems.isActive, true)
+        ))
+        .orderBy(faqItems.sortOrder);
+
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching FAQ:", error);
+      res.status(500).json({ error: "Kunne ikke hente FAQ" });
+    }
+  });
+
+  // Admin: Get all FAQ items by category
+  app.get("/api/admin/faq/:category", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const { category } = req.params;
+      
+      if (category !== "couple" && category !== "vendor") {
+        return res.status(400).json({ error: "Ugyldig kategori" });
+      }
+
+      const items = await db.select()
+        .from(faqItems)
+        .where(eq(faqItems.category, category))
+        .orderBy(faqItems.sortOrder);
+
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching FAQ:", error);
+      res.status(500).json({ error: "Kunne ikke hente FAQ" });
+    }
+  });
+
+  // Admin: Create FAQ item
+  app.post("/api/admin/faq", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const parsed = insertFaqItemSchema.parse(req.body);
+      const [item] = await db.insert(faqItems).values(parsed).returning();
+      res.json(item);
+    } catch (error: any) {
+      console.error("Error creating FAQ:", error);
+      res.status(400).json({ error: error.message || "Kunne ikke opprette FAQ" });
+    }
+  });
+
+  // Admin: Update FAQ item
+  app.patch("/api/admin/faq/:id", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const { id } = req.params;
+      const parsed = updateFaqItemSchema.parse(req.body);
+      
+      const [item] = await db.update(faqItems)
+        .set(parsed)
+        .where(eq(faqItems.id, id))
+        .returning();
+
+      if (!item) {
+        return res.status(404).json({ error: "FAQ ikke funnet" });
+      }
+
+      res.json(item);
+    } catch (error: any) {
+      console.error("Error updating FAQ:", error);
+      res.status(400).json({ error: error.message || "Kunne ikke oppdatere FAQ" });
+    }
+  });
+
+  // Admin: Delete FAQ item
+  app.delete("/api/admin/faq/:id", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const { id } = req.params;
+      
+      await db.delete(faqItems).where(eq(faqItems.id, id));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting FAQ:", error);
+      res.status(500).json({ error: "Kunne ikke slette FAQ" });
+    }
+  });
+
+  // ===== APP SETTINGS ROUTES =====
+
+  // Get app settings (public)
+  app.get("/api/app-settings", async (req: Request, res: Response) => {
+    try {
+      const settings = await db.select().from(appSettings);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching app settings:", error);
+      res.status(500).json({ error: "Kunne ikke hente innstillinger" });
+    }
+  });
+
+  // Get app setting by key (public)
+  app.get("/api/app-settings/:key", async (req: Request, res: Response) => {
+    try {
+      const { key } = req.params;
+      const [setting] = await db.select()
+        .from(appSettings)
+        .where(eq(appSettings.key, key));
+
+      if (!setting) {
+        return res.status(404).json({ error: "Innstilling ikke funnet" });
+      }
+
+      res.json(setting);
+    } catch (error) {
+      console.error("Error fetching app setting:", error);
+      res.status(500).json({ error: "Kunne ikke hente innstilling" });
+    }
+  });
+
+  // Admin: Get all app settings
+  app.get("/api/admin/app-settings", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const settings = await db.select().from(appSettings);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching app settings:", error);
+      res.status(500).json({ error: "Kunne ikke hente innstillinger" });
+    }
+  });
+
+  // Admin: Update app setting
+  app.patch("/api/admin/app-settings/:key", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const { key } = req.params;
+      const parsed = updateAppSettingSchema.parse(req.body);
+      
+      // Try to update existing
+      const [existing] = await db.select()
+        .from(appSettings)
+        .where(eq(appSettings.key, key));
+
+      let setting;
+      if (existing) {
+        [setting] = await db.update(appSettings)
+          .set({ value: parsed.value, updatedAt: new Date() })
+          .where(eq(appSettings.key, key))
+          .returning();
+      } else {
+        // Create if doesn't exist
+        [setting] = await db.insert(appSettings)
+          .values({ key, value: parsed.value })
+          .returning();
+      }
+
+      res.json(setting);
+    } catch (error: any) {
+      console.error("Error updating app setting:", error);
+      res.status(400).json({ error: error.message || "Kunne ikke oppdatere innstilling" });
+    }
+  });
+
+  // ===== WHAT'S NEW ROUTES =====
+
+  // Get active What's New items by category (public)
+  app.get("/api/whats-new/:category", async (req: Request, res: Response) => {
+    try {
+      const { category } = req.params;
+      if (!["vendor", "couple"].includes(category)) {
+        return res.status(400).json({ error: "Ugyldig kategori" });
+      }
+
+      const items = await db.select()
+        .from(whatsNewItems)
+        .where(and(
+          eq(whatsNewItems.category, category),
+          eq(whatsNewItems.isActive, true)
+        ))
+        .orderBy(whatsNewItems.sortOrder);
+
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching what's new:", error);
+      res.status(500).json({ error: "Kunne ikke hente hva som er nytt" });
+    }
+  });
+
+  // Admin: Get all What's New items by category
+  app.get("/api/admin/whats-new/:category", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const { category } = req.params;
+      if (!["vendor", "couple"].includes(category)) {
+        return res.status(400).json({ error: "Ugyldig kategori" });
+      }
+
+      const items = await db.select()
+        .from(whatsNewItems)
+        .where(eq(whatsNewItems.category, category))
+        .orderBy(whatsNewItems.sortOrder);
+
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching what's new:", error);
+      res.status(500).json({ error: "Kunne ikke hente hva som er nytt" });
+    }
+  });
+
+  // Admin: Create What's New item
+  app.post("/api/admin/whats-new", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const parsed = insertWhatsNewSchema.parse(req.body);
+      const [item] = await db.insert(whatsNewItems)
+        .values(parsed)
+        .returning();
+
+      res.json(item);
+    } catch (error: any) {
+      console.error("Error creating what's new:", error);
+      res.status(400).json({ error: error.message || "Kunne ikke opprette hva som er nytt" });
+    }
+  });
+
+  // Admin: Update What's New item
+  app.patch("/api/admin/whats-new/:id", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const { id } = req.params;
+      const parsed = updateWhatsNewSchema.parse(req.body);
+
+      const [item] = await db.update(whatsNewItems)
+        .set({ ...parsed, updatedAt: new Date() })
+        .where(eq(whatsNewItems.id, id))
+        .returning();
+
+      if (!item) {
+        return res.status(404).json({ error: "Hva som er nytt ikke funnet" });
+      }
+
+      res.json(item);
+    } catch (error: any) {
+      console.error("Error updating what's new:", error);
+      res.status(400).json({ error: error.message || "Kunne ikke oppdatere hva som er nytt" });
+    }
+  });
+
+  // Admin: Delete What's New item
+  app.delete("/api/admin/whats-new/:id", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const { id } = req.params;
+      await db.delete(whatsNewItems).where(eq(whatsNewItems.id, id));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting what's new:", error);
+      res.status(500).json({ error: "Kunne ikke slette hva som er nytt" });
+    }
+  });
+
+  // ===== VIDEO GUIDES ROUTES =====
+
+  // Get active video guides by category (public)
+  app.get("/api/video-guides/:category", async (req: Request, res: Response) => {
+    try {
+      const { category } = req.params;
+      const guides = await db
+        .select()
+        .from(videoGuides)
+        .where(
+          and(
+            eq(videoGuides.category, category as any),
+            eq(videoGuides.isActive, true)
+          )
+        )
+        .orderBy(videoGuides.sortOrder);
+
+      res.json(guides);
+    } catch (error) {
+      console.error("Error fetching video guides:", error);
+      res.status(500).json({ error: "Kunne ikke hente videoguider" });
+    }
+  });
+
+  // Admin: Get all video guides by category
+  app.get("/api/admin/video-guides/:category", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const { category } = req.params;
+      const guides = await db
+        .select()
+        .from(videoGuides)
+        .where(eq(videoGuides.category, category as any))
+        .orderBy(videoGuides.sortOrder);
+
+      res.json(guides);
+    } catch (error) {
+      console.error("Error fetching video guides:", error);
+      res.status(500).json({ error: "Kunne ikke hente videoguider" });
+    }
+  });
+
+  // Admin: Create video guide
+  app.post("/api/admin/video-guides", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const parsed = insertVideoGuideSchema.parse(req.body);
+      const [guide] = await db
+        .insert(videoGuides)
+        .values(parsed)
+        .returning();
+
+      res.json(guide);
+    } catch (error: any) {
+      console.error("Error creating video guide:", error);
+      res.status(400).json({ error: error.message || "Kunne ikke opprette videoguide" });
+    }
+  });
+
+  // Admin: Update video guide
+  app.patch("/api/admin/video-guides/:id", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const { id } = req.params;
+      const parsed = updateVideoGuideSchema.parse(req.body);
+
+      const [guide] = await db
+        .update(videoGuides)
+        .set({ ...parsed, updatedAt: new Date() })
+        .where(eq(videoGuides.id, id))
+        .returning();
+
+      res.json(guide);
+    } catch (error: any) {
+      console.error("Error updating video guide:", error);
+      res.status(400).json({ error: error.message || "Kunne ikke oppdatere videoguide" });
+    }
+  });
+
+  // Admin: Delete video guide
+  app.delete("/api/admin/video-guides/:id", async (req: Request, res: Response) => {
+    const adminKey = await checkAdminAuth(req, res);
+    if (!adminKey) return;
+
+    try {
+      const { id } = req.params;
+      await db.delete(videoGuides).where(eq(videoGuides.id, id));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting video guide:", error);
+      res.status(500).json({ error: "Kunne ikke slette videoguide" });
+    }
+  });
+
   const httpServer = createServer(app);
+
+  // Attach WebSocket server for vendor-admin chat
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws/vendor-admin" });
+
+  wss.on("connection", async (ws, req) => {
+    try {
+      const url = new URL(req.url || "", `http://${req.headers.host}`);
+      const token = url.searchParams.get("token") || "";
+      const vendorId = await checkVendorToken(token);
+      if (!vendorId) {
+        ws.close(1008, "unauthorized");
+        return;
+      }
+      const conversationId = await getOrCreateAdminConversationId(vendorId);
+      let set = adminConvClients.get(conversationId);
+      if (!set) {
+        set = new Set();
+        adminConvClients.set(conversationId, set);
+      }
+      set.add(ws);
+
+      ws.on("close", () => {
+        const current = adminConvClients.get(conversationId);
+        if (current) {
+          current.delete(ws);
+          if (current.size === 0) adminConvClients.delete(conversationId);
+        }
+      });
+    } catch {
+      try { ws.close(); } catch {}
+    }
+  });
+
+  // Attach WebSocket server for admin subscriptions to vendor-admin conversations
+  const wssAdminVendorAdmin = new WebSocketServer({ server: httpServer, path: "/ws/admin/vendor-admin" });
+
+  wssAdminVendorAdmin.on("connection", async (ws, req) => {
+    try {
+      const url = new URL(req.url || "", `http://${req.headers.host}`);
+      const adminKey = url.searchParams.get("adminKey") || "";
+      const conversationId = url.searchParams.get("conversationId") || "";
+      // Auth using admin secret
+      if (!process.env.ADMIN_SECRET || `Bearer ${process.env.ADMIN_SECRET}` !== `Bearer ${adminKey}`) {
+        ws.close(1008, "unauthorized");
+        return;
+      }
+      if (!conversationId) {
+        ws.close(1008, "bad-request");
+        return;
+      }
+      // Ensure conversation exists
+      const [conv] = await db.select().from(adminConversations).where(eq(adminConversations.id, conversationId));
+      if (!conv) {
+        ws.close(1008, "not-found");
+        return;
+      }
+      let set = adminConvClients.get(conversationId);
+      if (!set) {
+        set = new Set();
+        adminConvClients.set(conversationId, set);
+      }
+      set.add(ws);
+
+      ws.on("close", () => {
+        const current = adminConvClients.get(conversationId);
+        if (current) {
+          current.delete(ws);
+          if (current.size === 0) adminConvClients.delete(conversationId);
+        }
+      });
+    } catch {
+      try { ws.close(); } catch {}
+    }
+  });
+
+  // Admin-wide list subscription for vendor-admin conversations
+  const wssAdminVendorList = new WebSocketServer({ server: httpServer, path: "/ws/admin/vendor-admin-list" });
+
+  wssAdminVendorList.on("connection", (ws, req) => {
+    try {
+      const url = new URL(req.url || "", `http://${req.headers.host}`);
+      const adminKey = url.searchParams.get("adminKey") || "";
+      if (!process.env.ADMIN_SECRET || `Bearer ${process.env.ADMIN_SECRET}` !== `Bearer ${adminKey}`) {
+        ws.close(1008, "unauthorized");
+        return;
+      }
+      adminListClients.add(ws);
+      ws.on("close", () => {
+        adminListClients.delete(ws);
+      });
+    } catch {
+      try { ws.close(); } catch {}
+    }
+  });
+
+  // Attach WebSocket server for couple-vendor conversations
+  const wssCouples = new WebSocketServer({ server: httpServer, path: "/ws/couples" });
+
+  wssCouples.on("connection", async (ws, req) => {
+    try {
+      const url = new URL(req.url || "", `http://${req.headers.host}`);
+      const token = url.searchParams.get("token") || "";
+      const conversationId = url.searchParams.get("conversationId") || "";
+      const coupleId = await checkCoupleToken(token);
+      if (!coupleId || !conversationId) {
+        ws.close(1008, "unauthorized");
+        return;
+      }
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+      if (!conv || conv.coupleId !== coupleId) {
+        ws.close(1008, "forbidden");
+        return;
+      }
+      let set = conversationClients.get(conversationId);
+      if (!set) {
+        set = new Set();
+        conversationClients.set(conversationId, set);
+      }
+      set.add(ws);
+
+      ws.on("close", () => {
+        const current = conversationClients.get(conversationId);
+        if (current) {
+          current.delete(ws);
+          if (current.size === 0) conversationClients.delete(conversationId);
+        }
+      });
+    } catch {
+      try { ws.close(); } catch {}
+    }
+  });
+
+  // Attach WebSocket server for vendor-side conversation subscriptions
+  const wssVendors = new WebSocketServer({ server: httpServer, path: "/ws/vendor" });
+
+  wssVendors.on("connection", async (ws, req) => {
+    try {
+      const url = new URL(req.url || "", `http://${req.headers.host}`);
+      const token = url.searchParams.get("token") || "";
+      const conversationId = url.searchParams.get("conversationId") || "";
+      const vendorId = await checkVendorToken(token);
+      if (!vendorId || !conversationId) {
+        ws.close(1008, "unauthorized");
+        return;
+      }
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+      if (!conv || conv.vendorId !== vendorId) {
+        ws.close(1008, "forbidden");
+        return;
+      }
+      let set = conversationClients.get(conversationId);
+      if (!set) {
+        set = new Set();
+        conversationClients.set(conversationId, set);
+      }
+      set.add(ws);
+
+      ws.on("close", () => {
+        const current = conversationClients.get(conversationId);
+        if (current) {
+          current.delete(ws);
+          if (current.size === 0) conversationClients.delete(conversationId);
+        }
+      });
+    } catch {
+      try { ws.close(); } catch {}
+    }
+  });
+
+  // Attach WebSocket server for vendor list (all conversations)
+  const wssVendorList = new WebSocketServer({ server: httpServer, path: "/ws/vendor-list" });
+
+  wssVendorList.on("connection", async (ws, req) => {
+    try {
+      const url = new URL(req.url || "", `http://${req.headers.host}`);
+      const token = url.searchParams.get("token") || "";
+      const vendorId = await checkVendorToken(token);
+      if (!vendorId) {
+        ws.close(1008, "unauthorized");
+        return;
+      }
+      let set = vendorListClients.get(vendorId);
+      if (!set) {
+        set = new Set();
+        vendorListClients.set(vendorId, set);
+      }
+      set.add(ws);
+
+      ws.on("close", () => {
+        const current = vendorListClients.get(vendorId);
+        if (current) {
+          current.delete(ws);
+          if (current.size === 0) vendorListClients.delete(vendorId);
+        }
+      });
+    } catch {
+      try { ws.close(); } catch {}
+    }
+  });
+
+  // Attach WebSocket server for couple list (all conversations)
+  const wssCoupleList = new WebSocketServer({ server: httpServer, path: "/ws/couples-list" });
+
+  wssCoupleList.on("connection", async (ws, req) => {
+    try {
+      const url = new URL(req.url || "", `http://${req.headers.host}`);
+      const token = url.searchParams.get("token") || "";
+      const coupleId = await checkCoupleToken(token);
+      if (!coupleId) {
+        ws.close(1008, "unauthorized");
+        return;
+      }
+      let set = coupleListClients.get(coupleId);
+      if (!set) {
+        set = new Set();
+        coupleListClients.set(coupleId, set);
+      }
+      set.add(ws);
+
+      ws.on("close", () => {
+        const current = coupleListClients.get(coupleId);
+        if (current) {
+          current.delete(ws);
+          if (current.size === 0) coupleListClients.delete(coupleId);
+        }
+      });
+    } catch {
+      try { ws.close(); } catch {}
+    }
+  });
+
+  // Register subscription routes
+  registerSubscriptionRoutes(app);
 
   return httpServer;
 }

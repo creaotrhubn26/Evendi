@@ -65,7 +65,10 @@ export default function TimelineScreen() {
           getScheduleEvents(session.token),
           getCoupleProfile(session.token),
         ]);
-        fetchedSchedule = serverSchedule;
+        fetchedSchedule = serverSchedule.map(event => ({
+          ...event,
+          icon: (event.icon || 'star') as 'heart' | 'camera' | 'music' | 'users' | 'coffee' | 'sun' | 'moon' | 'star',
+        }));
         fetchedWeddingDate = coupleProfile.weddingDate || "";
       } catch (err) {
         // fall back to empty on error
@@ -614,7 +617,7 @@ export default function TimelineScreen() {
 
                 {getTraditionInsight(editingInterval.from) && (
                   <View style={[styles.modalTip, { backgroundColor: Colors.dark.accent + "15", borderColor: Colors.dark.accent }]}>
-                    <Feather name="lightbulb" size={16} color={Colors.dark.accent} />
+                    <Feather name="info" size={16} color={Colors.dark.accent} />
                     <ThemedText style={[styles.modalTipText, { color: Colors.dark.accent }]}>
                       {getTraditionInsight(editingInterval.from)}
                     </ThemedText>
@@ -625,7 +628,6 @@ export default function TimelineScreen() {
                   <Button
                     onPress={() => setEditingInterval(null)}
                     style={styles.cancelButton}
-                    textColor={Colors.dark.accent}
                   >
                     Avbryt
                   </Button>
@@ -678,7 +680,7 @@ export default function TimelineScreen() {
                   </View>
                 </View>
             <View style={styles.modalButtonGroup}>
-              <Button onPress={() => setShowAddModal(false)} style={styles.cancelButton} textColor={Colors.dark.accent}>Avbryt</Button>
+              <Button onPress={() => setShowAddModal(false)} style={styles.cancelButton}>Avbryt</Button>
               <Button onPress={handleCreateEvent} style={styles.saveButton}>Legg til</Button>
             </View>
           </View>
@@ -739,7 +741,7 @@ const styles = StyleSheet.create({
     marginLeft: Spacing.sm,
   },
   bufferText: { fontSize: 12, fontWeight: "500", flex: 1 },
-  bufferSuggestion: { fontSize: 11, marginTop: Spacing.xs, fontStyle: "italic", lineHeight: 16 },
+  bufferSuggestion: { fontSize: 12, marginTop: Spacing.xs, fontStyle: "italic", lineHeight: 16 },
   iconRow: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.xs },
   iconChip: { padding: Spacing.sm, borderRadius: BorderRadius.full, borderWidth: 1 },
   emptyState: { alignItems: "center", paddingVertical: Spacing["5xl"] },
@@ -762,16 +764,16 @@ const styles = StyleSheet.create({
   optimizationContent: { gap: Spacing.sm },
   eventPair: { flexDirection: "row", alignItems: "center", gap: Spacing.xs },
   eventName: { fontSize: 12, fontWeight: "500", flex: 1 },
-  traditionTip: { fontSize: 11, fontStyle: "italic", lineHeight: 16, marginVertical: Spacing.xs },
+  traditionTip: { fontSize: 12, fontStyle: "italic", lineHeight: 16, marginVertical: Spacing.xs },
   timingInfo: { flexDirection: "row", alignItems: "center", gap: Spacing.md, marginTop: Spacing.xs },
   currentTime: { alignItems: "center" },
   recommendedTime: { alignItems: "center" },
-  timeLabel: { fontSize: 10, marginBottom: 2 },
+  timeLabel: { fontSize: 12, marginBottom: 2 },
   timeBold: { fontSize: 13, fontWeight: "700" },
   addBadge: { paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: BorderRadius.sm },
-  addText: { fontSize: 11, fontWeight: "600" },
+  addText: { fontSize: 12, fontWeight: "600" },
   editHint: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm, marginTop: Spacing.sm, gap: Spacing.xs },
-  editHintText: { fontSize: 11, fontWeight: "500" },
+  editHintText: { fontSize: 12, fontWeight: "500" },
   modalOverlay: { flex: 1, justifyContent: "center", alignItems: "center" },
   modalContent: { borderRadius: BorderRadius.lg, padding: Spacing.lg, width: "85%", maxWidth: 400 },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.lg },

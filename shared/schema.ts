@@ -345,6 +345,7 @@ export const coupleProfiles = pgTable("couple_profiles", {
     .default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
   displayName: text("display_name").notNull(),
+  password: text("password").notNull(),
   partnerEmail: text("partner_email"),
   weddingDate: text("wedding_date"),
   lastActiveAt: timestamp("last_active_at").defaultNow(),
@@ -375,6 +376,8 @@ export const conversations = pgTable("conversations", {
   lastMessageAt: timestamp("last_message_at").defaultNow(),
   coupleUnreadCount: integer("couple_unread_count").default(0),
   vendorUnreadCount: integer("vendor_unread_count").default(0),
+  coupleTypingAt: timestamp("couple_typing_at"),
+  vendorTypingAt: timestamp("vendor_typing_at"),
   createdAt: timestamp("created_at").defaultNow(),
   deletedByCouple: boolean("deleted_by_couple").default(false),
   deletedByVendor: boolean("deleted_by_vendor").default(false),
@@ -392,11 +395,53 @@ export const messages = pgTable("messages", {
   body: text("body").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   readAt: timestamp("read_at"),
+  editedAt: timestamp("edited_at"),
+  attachmentUrl: text("attachment_url"),
+  attachmentType: text("attachment_type"),
   deletedByCouple: boolean("deleted_by_couple").default(false),
   deletedByVendor: boolean("deleted_by_vendor").default(false),
   coupleDeletedAt: timestamp("couple_deleted_at"),
   vendorDeletedAt: timestamp("vendor_deleted_at"),
 });
+
+// Admin conversations with vendors
+export const adminConversations = pgTable("admin_conversations", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("active"),
+  lastMessageAt: timestamp("last_message_at").defaultNow(),
+  vendorUnreadCount: integer("vendor_unread_count").default(0),
+  adminUnreadCount: integer("admin_unread_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const adminMessages = pgTable("admin_messages", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => adminConversations.id, { onDelete: "cascade" }),
+  senderType: text("sender_type").notNull(), // 'vendor' or 'admin'
+  senderId: varchar("sender_id").notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  readAt: timestamp("read_at"),
+  editedAt: timestamp("edited_at"),
+  attachmentUrl: text("attachment_url"),
+  attachmentType: text("attachment_type"),
+});
+
+export const sendAdminMessageSchema = z.object({
+  conversationId: z.string().optional(),
+  body: z.string().min(1, "Melding er påkrevd"),
+  attachmentUrl: z.string().optional(),
+  attachmentType: z.string().optional(),
+});
+
+export type AdminConversation = typeof adminConversations.$inferSelect;
+export type AdminMessage = typeof adminMessages.$inferSelect;
+export type SendAdminMessage = z.infer<typeof sendAdminMessageSchema>;
 
 export const insertCoupleProfileSchema = createInsertSchema(coupleProfiles).omit({
   id: true,
@@ -407,14 +452,17 @@ export const insertCoupleProfileSchema = createInsertSchema(coupleProfiles).omit
 export const coupleLoginSchema = z.object({
   email: z.string().email("Ugyldig e-postadresse"),
   displayName: z.string().min(2, "Navn må være minst 2 tegn"),
+  password: z.string().min(8, "Passord må være minst 8 tegn"),
 });
 
 export const sendMessageSchema = z.object({
   conversationId: z.string().optional(),
   vendorId: z.string().optional(),
   inspirationId: z.string().optional(),
-  body: z.string().min(1, "Melding kan ikke være tom"),
-});
+  body: z.string().optional(),
+  attachmentUrl: z.string().optional(),
+  attachmentType: z.string().optional(),
+}).refine(data => data.body || data.attachmentUrl, "Melding eller vedlegg er påkrevd");
 
 export type CoupleProfile = typeof coupleProfiles.$inferSelect;
 export type CoupleSession = typeof coupleSessions.$inferSelect;
@@ -638,8 +686,51 @@ export const insertAppSettingSchema = createInsertSchema(appSettings).omit({
   updatedAt: true,
 });
 
+export const updateAppSettingSchema = z.object({
+  value: z.string().min(1, "Verdi er påkrevd"),
+});
+
 export type AppSetting = typeof appSettings.$inferSelect;
 export type InsertAppSetting = z.infer<typeof insertAppSettingSchema>;
+export type UpdateAppSetting = z.infer<typeof updateAppSettingSchema>;
+
+// What's New items for announcing features/updates
+export const whatsNewItems = pgTable("whats_new_items", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  category: text("category").notNull().default("vendor"), // vendor or couple
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  icon: text("icon").notNull().default("star"),
+  minAppVersion: text("min_app_version").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWhatsNewSchema = createInsertSchema(whatsNewItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  category: z.enum(["vendor", "couple"]).default("vendor"),
+});
+
+export const updateWhatsNewSchema = z.object({
+  category: z.enum(["vendor", "couple"]).default("vendor"),
+  title: z.string().min(1, "Tittel er påkrevd"),
+  description: z.string().min(1, "Beskrivelse er påkrevd"),
+  icon: z.string().default("star"),
+  minAppVersion: z.string().min(1, "Minimumversjon er påkrevd"),
+  isActive: z.boolean(),
+  sortOrder: z.number().int(),
+});
+
+export type WhatsNewItem = typeof whatsNewItems.$inferSelect;
+export type InsertWhatsNewItem = z.infer<typeof insertWhatsNewSchema>;
+export type UpdateWhatsNewItem = z.infer<typeof updateWhatsNewSchema>;
 
 // Schedule Events - Server-side storage for sharing with coordinators
 export const scheduleEvents = pgTable("schedule_events", {
@@ -1034,3 +1125,245 @@ export const insertVendorReviewResponseSchema = createInsertSchema(vendorReviewR
 
 export type VendorReviewResponse = typeof vendorReviewResponses.$inferSelect;
 export type InsertVendorReviewResponse = z.infer<typeof insertVendorReviewResponseSchema>;
+
+// FAQ Items - Admin editable FAQ for both couples and vendors
+export const faqItems = pgTable("faq_items", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  category: text("category").notNull(), // 'couple' or 'vendor'
+  icon: text("icon").notNull(), // Feather icon name
+  question: text("question").notNull(),
+  answer: text("answer").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertFaqItemSchema = createInsertSchema(faqItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateFaqItemSchema = z.object({
+  category: z.enum(["couple", "vendor"]).optional(),
+  icon: z.string().optional(),
+  question: z.string().optional(),
+  answer: z.string().optional(),
+  sortOrder: z.number().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type FaqItem = typeof faqItems.$inferSelect;
+export type InsertFaqItem = z.infer<typeof insertFaqItemSchema>;
+export type UpdateFaqItem = z.infer<typeof updateFaqItemSchema>;
+// Video Guides - Admin-managed video guides for vendors
+export const videoGuides = pgTable("video_guides", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  videoUrl: text("video_url").notNull(),
+  thumbnail: text("thumbnail"),
+  duration: text("duration"), // HH:mm:ss format
+  category: text("category").notNull().default("vendor"), // vendor or couple
+  icon: text("icon").notNull().default("video"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertVideoGuideSchema = createInsertSchema(videoGuides).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  category: z.enum(["vendor", "couple"]).default("vendor"),
+});
+
+export const updateVideoGuideSchema = z.object({
+  title: z.string().min(1, "Tittel er påkrevd"),
+  description: z.string().min(1, "Beskrivelse er påkrevd"),
+  videoUrl: z.string().url("Gyldig video-URL er påkrevd"),
+  thumbnail: z.string().optional(),
+  duration: z.string().optional(),
+  category: z.enum(["vendor", "couple"]).default("vendor"),
+  icon: z.string().default("video"),
+  sortOrder: z.number().int(),
+  isActive: z.boolean(),
+});
+
+export type VideoGuide = typeof videoGuides.$inferSelect;
+export type InsertVideoGuide = z.infer<typeof insertVideoGuideSchema>;
+export type UpdateVideoGuide = z.infer<typeof updateVideoGuideSchema>;
+
+// ===== SUBSCRIPTION & PRICING =====
+
+// Subscription Tiers
+export const subscriptionTiers = pgTable("subscription_tiers", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  name: text("name").notNull(), // "Starter", "Professional", "Enterprise"
+  displayName: text("display_name").notNull(),
+  description: text("description"),
+  priceNok: integer("price_nok").notNull(), // Price in NOK per month
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  
+  // Feature limits per tier
+  maxInspirationPhotos: integer("max_inspiration_photos").notNull().default(10), // -1 = unlimited
+  maxMonthlyVideoMinutes: integer("max_monthly_video_minutes").notNull().default(0),
+  maxStorageGb: integer("max_storage_gb").notNull().default(5),
+  
+  // Features
+  hasAdvancedAnalytics: boolean("has_advanced_analytics").notNull().default(false),
+  hasPrioritizedSearch: boolean("has_prioritized_search").notNull().default(false),
+  hasCustomLandingPage: boolean("has_custom_landing_page").notNull().default(false),
+  hasApiAccess: boolean("has_api_access").notNull().default(false),
+  hasVippsPaymentLink: boolean("has_vipps_payment_link").notNull().default(false),
+  hasCustomBranding: boolean("has_custom_branding").notNull().default(false),
+  
+  // Pricing adjustments
+  commissionPercentage: integer("commission_percentage").notNull().default(3), // 3% = 300 basis points
+  stripeFeePercentage: integer("stripe_fee_percentage").notNull().default(0), // Extra fee if any
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Vendor Subscriptions
+export const vendorSubscriptions = pgTable("vendor_subscriptions", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  tierId: varchar("tier_id").notNull().references(() => subscriptionTiers.id),
+  
+  // Stripe subscription info
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeCustomerId: text("stripe_customer_id"),
+  
+  // Status
+  status: text("status").notNull().default("active"), // active, cancelled, past_due, paused
+  currentPeriodStart: timestamp("current_period_start").notNull(),
+  currentPeriodEnd: timestamp("current_period_end").notNull(),
+  cancelledAt: timestamp("cancelled_at"),
+  pausedUntil: timestamp("paused_until"),
+  
+  // Auto-renewal
+  autoRenew: boolean("auto_renew").notNull().default(true),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Usage tracking per month
+export const vendorUsageMetrics = pgTable("vendor_usage_metrics", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(), // 1-12
+  
+  // Usage counts
+  inspirationPhotosUploaded: integer("inspiration_photos_uploaded").notNull().default(0),
+  videoMinutesUsed: integer("video_minutes_used").notNull().default(0),
+  storageUsedGb: integer("storage_used_gb").notNull().default(0),
+  profileViewsCount: integer("profile_views_count").notNull().default(0),
+  messagesSent: integer("messages_sent").notNull().default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Invoice/Payment records
+export const vendorPayments = pgTable("vendor_payments", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  subscriptionId: varchar("subscription_id").references(() => vendorSubscriptions.id),
+  
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  stripeInvoiceId: text("stripe_invoice_id"),
+  
+  amountNok: integer("amount_nok").notNull(), // Amount in øre (cents)
+  currency: text("currency").notNull().default("NOK"),
+  
+  status: text("status").notNull().default("pending"), // pending, succeeded, failed, refunded
+  description: text("description"),
+  
+  billingPeriodStart: timestamp("billing_period_start"),
+  billingPeriodEnd: timestamp("billing_period_end"),
+  
+  paidAt: timestamp("paid_at"),
+  failureReason: text("failure_reason"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Zod schemas for validation
+export const insertSubscriptionTierSchema = createInsertSchema(subscriptionTiers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateSubscriptionTierSchema = z.object({
+  name: z.string().optional(),
+  displayName: z.string().optional(),
+  description: z.string().optional(),
+  priceNok: z.number().int().positive().optional(),
+  sortOrder: z.number().int().optional(),
+  isActive: z.boolean().optional(),
+  maxInspirationPhotos: z.number().int().optional(),
+  maxMonthlyVideoMinutes: z.number().int().optional(),
+  maxStorageGb: z.number().int().optional(),
+  hasAdvancedAnalytics: z.boolean().optional(),
+  hasPrioritizedSearch: z.boolean().optional(),
+  hasCustomLandingPage: z.boolean().optional(),
+  hasApiAccess: z.boolean().optional(),
+  hasVippsPaymentLink: z.boolean().optional(),
+  hasCustomBranding: z.boolean().optional(),
+  commissionPercentage: z.number().int().optional(),
+  stripeFeePercentage: z.number().int().optional(),
+});
+
+export const insertVendorSubscriptionSchema = createInsertSchema(vendorSubscriptions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVendorUsageSchema = createInsertSchema(vendorUsageMetrics).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVendorPaymentSchema = createInsertSchema(vendorPayments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types
+export type SubscriptionTier = typeof subscriptionTiers.$inferSelect;
+export type InsertSubscriptionTier = z.infer<typeof insertSubscriptionTierSchema>;
+export type UpdateSubscriptionTier = z.infer<typeof updateSubscriptionTierSchema>;
+
+export type VendorSubscription = typeof vendorSubscriptions.$inferSelect;
+export type InsertVendorSubscription = z.infer<typeof insertVendorSubscriptionSchema>;
+
+export type VendorUsageMetrics = typeof vendorUsageMetrics.$inferSelect;
+export type InsertVendorUsageMetrics = z.infer<typeof insertVendorUsageSchema>;
+
+export type VendorPayment = typeof vendorPayments.$inferSelect;
+export type InsertVendorPayment = z.infer<typeof insertVendorPaymentSchema>;

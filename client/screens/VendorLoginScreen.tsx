@@ -19,6 +19,7 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { signInWithGoogle } from "@/lib/supabase-auth";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
@@ -43,6 +44,7 @@ export default function VendorLoginScreen({ navigation }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const validateField = useCallback((field: string, value: string): string => {
     switch (field) {
@@ -138,6 +140,26 @@ export default function VendorLoginScreen({ navigation }: Props) {
     loginMutation.mutate();
   };
 
+  const handleGoogleLogin = async () => {
+    try {
+      setIsGoogleLoading(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      const session = await signInWithGoogle();
+      
+      if (session && session.user) {
+        // For vendors, Google OAuth would need additional verification
+        // For now, store the session but vendor still needs approval
+        Alert.alert("Google konto koblet", "Du har logget inn med Google. Hvis du har en eksisterende leverandørkonto, vil den bli koblet automatisk.");
+      }
+    } catch (error) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Feil", error instanceof Error ? error.message : "Kunne ikke logge inn med Google");
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <KeyboardAwareScrollViewCompat
@@ -171,6 +193,9 @@ export default function VendorLoginScreen({ navigation }: Props) {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
+                accessible={true}
+                accessibilityLabel="E-postadresse"
+                accessibilityHint="Skriv inn din e-postadresse for å logge inn"
               />
             </View>
             {touched.email && errors.email ? (
@@ -190,8 +215,16 @@ export default function VendorLoginScreen({ navigation }: Props) {
                 onBlur={() => handleBlur("password", password)}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
+                accessible={true}
+                accessibilityLabel="Passord"
+                accessibilityHint="Skriv inn ditt passord for å logge inn"
               />
-              <Pressable onPress={() => setShowPassword(!showPassword)}>
+              <Pressable 
+                onPress={() => setShowPassword(!showPassword)}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? "Skjul passord" : "Vis passord"}
+              >
                 <Feather name={showPassword ? "eye-off" : "eye"} size={18} color={theme.textMuted} />
               </Pressable>
             </View>
@@ -211,6 +244,36 @@ export default function VendorLoginScreen({ navigation }: Props) {
               <ThemedText style={styles.loginBtnText}>Logg inn</ThemedText>
             )}
           </Pressable>
+
+          <View style={styles.dividerContainer}>
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <ThemedText style={[styles.dividerText, { color: theme.textMuted }]}>ELLER</ThemedText>
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          </View>
+
+          <Pressable
+            onPress={handleGoogleLogin}
+            disabled={isGoogleLoading}
+            style={[
+              styles.googleBtn,
+              { 
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+                opacity: isGoogleLoading ? 0.7 : 1 
+              },
+            ]}
+          >
+            {isGoogleLoading ? (
+              <ActivityIndicator size="small" color={Colors.dark.accent} />
+            ) : (
+              <>
+                <Feather name="globe" size={18} color={Colors.dark.accent} />
+                <ThemedText style={[styles.googleBtnText, { color: Colors.dark.accent }]}>
+                  Logg inn med Google
+                </ThemedText>
+              </>
+            )}
+          </Pressable>
         </View>
 
         <ThemedText style={[styles.registerText, { color: theme.textSecondary }]}>
@@ -218,6 +281,9 @@ export default function VendorLoginScreen({ navigation }: Props) {
         </ThemedText>
         <Pressable
           onPress={() => navigation.navigate("VendorRegistration")}
+          accessible={true}
+          accessibilityRole="link"
+          accessibilityLabel="Registrer ny leverandør"
           style={styles.registerLink}
         >
           <ThemedText style={[styles.registerLinkText, { color: Colors.dark.accent }]}>
@@ -278,6 +344,35 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600",
     color: "#1A1A1A",
+  },
+  dividerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    marginVertical: Spacing.lg,
+    width: "100%",
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  googleBtn: {
+    height: 50,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: Spacing.sm,
+    width: "100%",
+  },
+  googleBtnText: {
+    fontSize: 16,
+    fontWeight: "600",
   },
   registerText: {
     fontSize: 14,

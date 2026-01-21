@@ -1,21 +1,43 @@
-import React, { useLayoutEffect } from "react";
+import React, { useLayoutEffect, useMemo } from "react";
 import { ScrollView, StyleSheet, View, Pressable, Linking, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { useQuery } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import type { AppSetting } from "../../shared/schema";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { getApiUrl } from "@/lib/query-client";
 
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  // Fetch app settings to check for active status messages
+  const { data: appSettings } = useQuery<AppSetting[]>({
+    queryKey: ["app-settings"],
+    queryFn: async () => {
+      const res = await fetch(`${getApiUrl()}/api/app-settings`);
+      if (!res.ok) throw new Error("Failed to fetch app settings");
+      return res.json();
+    },
+  });
+
+  const hasActiveStatus = useMemo(() => {
+    if (!appSettings) return false;
+    const maintenanceMode = appSettings.find((s) => s.key === "maintenance_mode")?.value === "true";
+    const statusMessage = appSettings.find((s) => s.key === "status_message")?.value;
+    return maintenanceMode || !!statusMessage;
+  }, [appSettings]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -43,6 +65,51 @@ export default function AboutScreen() {
         paddingHorizontal: Spacing.lg,
       }}
     >
+      {hasActiveStatus && (
+        <View style={[styles.statusNotice, { 
+          backgroundColor: appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" 
+            ? theme.error + "15" 
+            : appSettings?.find(s => s.key === "status_type")?.value === "warning"
+            ? "#FF8C00" + "15"
+            : theme.accent + "15",
+          borderColor: appSettings?.find(s => s.key === "maintenance_mode")?.value === "true"
+            ? theme.error
+            : appSettings?.find(s => s.key === "status_type")?.value === "warning"
+            ? "#FF8C00"
+            : theme.accent,
+        }]}>
+          <Feather 
+            name={appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" ? "tool" : "info"} 
+            size={20} 
+            color={appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" 
+              ? theme.error 
+              : appSettings?.find(s => s.key === "status_type")?.value === "warning"
+              ? "#FF8C00"
+              : theme.accent
+            } 
+          />
+          <View style={{ flex: 1 }}>
+            <ThemedText style={[styles.statusNoticeTitle, { color: theme.text, fontWeight: "600" }]}>
+              {appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" 
+                ? "⚠️ Vedlikeholdsmodus"
+                : "Systemmelding"}
+            </ThemedText>
+            <ThemedText style={[styles.statusNoticeText, { color: theme.text }]}>
+              {appSettings?.find(s => s.key === "maintenance_mode")?.value === "true"
+                ? appSettings?.find(s => s.key === "maintenance_message")?.value || "Wedflow er for øyeblikket under vedlikehold. Noen funksjoner kan være utilgjengelige."
+                : appSettings?.find(s => s.key === "status_message")?.value || ""}
+            </ThemedText>
+            <Pressable 
+              onPress={() => navigation.navigate("Status")}
+              style={{ marginTop: 8 }}
+            >
+              <ThemedText style={[styles.statusNoticeLink, { color: theme.accent }]}>
+                Se full status →
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      )}
       <Animated.View entering={FadeInDown.duration(400)}>
         <View style={[styles.logoSection, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <Image
@@ -236,5 +303,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: "center",
     marginTop: Spacing.md,
+  },
+  statusNotice: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+    alignItems: "flex-start",
+  },
+  statusNoticeTitle: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  statusNoticeText: {
+    fontSize: 13,
+    lineHeight: 18,
+    opacity: 0.9,
+  },
+  statusNoticeLink: {
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

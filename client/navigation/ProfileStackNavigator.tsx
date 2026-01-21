@@ -18,6 +18,8 @@ import SharePartnerScreen from "@/screens/SharePartnerScreen";
 import VendorReviewsScreen from "@/screens/VendorReviewsScreen";
 import VendorProfileScreen from "@/screens/VendorProfileScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
+import StatusScreen from "@/screens/StatusScreen";
+import WhatsNewScreen from "@/screens/WhatsNewScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
 export type ProfileStackParamList = {
@@ -38,6 +40,8 @@ export type ProfileStackParamList = {
   SharePartner: undefined;
   VendorReviews: undefined;
   Feedback: undefined;
+  Status: undefined;
+  WhatsNew: { category?: "vendor" | "couple" };
 };
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -84,7 +88,7 @@ export default function ProfileStackNavigator() {
       />
       <Stack.Screen
         name="DeliveryCreate"
-        component={DeliveryCreateScreen}
+        component={DeliveryCreateScreen as any}
         options={{
           headerShown: false,
         }}
@@ -98,7 +102,7 @@ export default function ProfileStackNavigator() {
       />
       <Stack.Screen
         name="ProductCreate"
-        component={ProductCreateScreen}
+        component={ProductCreateScreen as any}
         options={{
           headerShown: false,
         }}
@@ -122,6 +126,7 @@ export default function ProfileStackNavigator() {
         component={VendorChatScreen}
         options={({ route }) => ({
           title: route.params.coupleName,
+          headerBackVisible: false,
         })}
       />
       <Stack.Screen
@@ -164,6 +169,20 @@ export default function ProfileStackNavigator() {
         component={FeedbackScreen}
         options={{
           title: "Tilbakemelding",
+        }}
+      />
+      <Stack.Screen
+        name="Status"
+        component={StatusScreen}
+        options={{
+          title: "Status",
+        }}
+      />
+      <Stack.Screen
+        name="WhatsNew"
+        component={WhatsNewScreen}
+        options={{
+          title: "Hva er nytt",
         }}
       />
     </Stack.Navigator>

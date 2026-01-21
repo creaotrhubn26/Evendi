@@ -492,7 +492,7 @@ export default function SpeechListScreen() {
             {["ready", "speaking", "done"].map((status) => (
               <Pressable
                 key={status}
-                onPress={() => setNewStatus(status as Speech["status"])}
+                onPress={() => setNewStatus(status as NonNullable<Speech["status"]>)}
                 style={[
                   styles.statusOption,
                   {

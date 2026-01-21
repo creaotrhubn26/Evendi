@@ -26,6 +26,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -37,8 +38,8 @@ interface DeliveryItemInput {
 }
 
 interface Props {
-  navigation: NativeStackNavigationProp<any>;
-  route: RouteProp<{ params: { delivery?: any } }, "params">;
+  navigation: NativeStackNavigationProp<RootStackParamList, "DeliveryCreate">;
+  route: RouteProp<RootStackParamList, "DeliveryCreate">;
 }
 
 const ITEM_TYPES = [

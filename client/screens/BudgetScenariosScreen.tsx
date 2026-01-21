@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   altName: { fontSize: 12, fontWeight: "500" },
-  altCost: { fontSize: 11 },
+  altCost: { fontSize: 12 },
   tipsCard: { padding: Spacing.lg, borderRadius: BorderRadius.md, borderWidth: 1 },
   tipsTitle: { marginBottom: Spacing.md },
   tipItem: { flexDirection: "row", alignItems: "center", marginBottom: Spacing.sm },

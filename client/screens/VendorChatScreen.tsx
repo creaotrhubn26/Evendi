@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight, HeaderButton } from "@react-navigation/elements";
@@ -15,12 +16,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeIn } from "react-native-reanimated";
+import * as ImagePicker from "expo-image-picker";
+import { uploadChatImage, isSupabaseConfigured } from "@/lib/supabase-storage";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -32,6 +36,9 @@ interface Message {
   body: string;
   createdAt: string;
   readAt: string | null;
+  editedAt: string | null;
+  attachmentUrl?: string | null;
+  attachmentType?: string | null;
 }
 
 interface ConversationDetails {
@@ -42,9 +49,10 @@ interface ConversationDetails {
     email: string;
     lastActiveAt: string | null;
   };
+  coupleTypingAt?: string | null;
 }
 
-type Props = NativeStackScreenProps<any, "VendorChat">;
+type Props = NativeStackScreenProps<RootStackParamList, "VendorChat">;
 
 export default function VendorChatScreen({ route, navigation }: Props) {
   const { conversationId } = route.params as { conversationId: string; coupleName: string };
@@ -56,6 +64,17 @@ export default function VendorChatScreen({ route, navigation }: Props) {
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+  const [showCoupleInfo, setShowCoupleInfo] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const wsTypingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [coupleTypingWs, setCoupleTypingWs] = useState(false);
 
   const deleteMessageMutation = useMutation({
     mutationFn: async (messageId: string) => {
@@ -68,6 +87,27 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/conversations", conversationId, "messages"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+  });
+
+  const editMessageMutation = useMutation({
+    mutationFn: async ({ messageId, body }: { messageId: string; body: string }) => {
+      const response = await fetch(new URL(`/api/vendor/messages/${messageId}`, getApiUrl()).toString(), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionToken}`,
+        },
+        body: JSON.stringify({ body }),
+      });
+      if (!response.ok) throw new Error("Failed to edit message");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vendor/conversations", conversationId, "messages"] });
+      setEditingMessage(null);
+      setMessageText("");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
   });
@@ -103,6 +143,35 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     );
   };
 
+  const handleEditMessage = (message: Message) => {
+    setEditingMessage(message);
+    setMessageText(message.body);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessage(null);
+    setMessageText("");
+  };
+
+  const handleMessageAction = (message: Message) => {
+    Alert.alert(
+      "Meldingshandlinger",
+      message.body,
+      [
+        {
+          text: "Rediger",
+          onPress: () => handleEditMessage(message),
+        },
+        {
+          text: "Slett",
+          style: "destructive",
+          onPress: () => handleDeleteMessage(message.id),
+        },
+        { text: "Avbryt", style: "cancel" },
+      ]
+    );
+  };
+
   const handleDeleteConversation = () => {
     Alert.alert(
       "Slett samtale",
@@ -120,16 +189,30 @@ export default function VendorChatScreen({ route, navigation }: Props) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
+      headerLeft: () => (
         <HeaderButton onPress={handleDeleteConversation}>
           <Feather name="trash-2" size={20} color={theme.textSecondary} />
         </HeaderButton>
       ),
+      headerRight: () => (
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <HeaderButton onPress={() => setShowSearch(!showSearch)}>
+            <Feather name="search" size={20} color={theme.text} />
+          </HeaderButton>
+          <HeaderButton onPress={() => setShowCoupleInfo(!showCoupleInfo)}>
+            <Feather name="user" size={20} color={theme.text} />
+          </HeaderButton>
+          <HeaderButton onPress={() => navigation.goBack()}>
+            <Feather name="x" size={24} color={theme.text} />
+          </HeaderButton>
+        </View>
+      ),
     });
-  }, [navigation, sessionToken, theme]);
+  }, [navigation, sessionToken, theme, showSearch, showCoupleInfo]);
 
   useEffect(() => {
     loadSession();
+    loadDraft();
   }, []);
 
   const loadSession = async () => {
@@ -137,6 +220,94 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     if (session) {
       const parsed = JSON.parse(session);
       setSessionToken(parsed.sessionToken);
+    }
+  };
+
+  const loadDraft = async () => {
+    const draftKey = `vendor_draft_${conversationId}`;
+    const draft = await AsyncStorage.getItem(draftKey);
+    if (draft) {
+      setMessageText(draft);
+    }
+  };
+
+  const saveDraft = async (text: string) => {
+    const draftKey = `vendor_draft_${conversationId}`;
+    if (text.trim()) {
+      await AsyncStorage.setItem(draftKey, text);
+    } else {
+      await AsyncStorage.removeItem(draftKey);
+    }
+  };
+
+  const clearDraft = async () => {
+    const draftKey = `vendor_draft_${conversationId}`;
+    await AsyncStorage.removeItem(draftKey);
+  };
+
+  const updateTypingStatus = async () => {
+    if (!sessionToken) return;
+    try {
+      await fetch(
+        new URL(`/api/vendor/conversations/${conversationId}/typing`, getApiUrl()).toString(),
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        }
+      );
+    } catch (error) {
+      // Silently fail - typing indicator is not critical
+    }
+  };
+
+  const handleTextChange = (text: string) => {
+    setMessageText(text);
+    saveDraft(text);
+    
+    // Send typing indicator
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    updateTypingStatus();
+    typingTimeoutRef.current = setTimeout(() => {
+      // Stop typing after 3 seconds of inactivity
+    }, 3000) as unknown as NodeJS.Timeout;
+  };
+
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Tillatelse nødvendig", "Vi trenger tilgang til bildene dine for å kunne sende bilder.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setSelectedImage(result.assets[0].uri);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  };
+
+  const uploadImage = async (imageUri: string): Promise<string> => {
+    // Use Supabase Storage if configured, otherwise use base64
+    if (isSupabaseConfigured()) {
+      return uploadChatImage(imageUri, conversationId, "vendor");
+    } else {
+      // Fallback to base64 for development
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
     }
   };
 
@@ -167,7 +338,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       return response.json();
     },
     enabled: !!sessionToken && !!conversationId,
-    refetchInterval: 5000,
+    refetchInterval: false,
   });
 
   const formatLastActive = (dateStr: string | null): string => {
@@ -187,15 +358,24 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     return date.toLocaleDateString("nb-NO", { day: "numeric", month: "short" });
   };
 
+  const quickReplies = [
+    "Takk for meldingen! Jeg kommer tilbake til deg snart.",
+    "Selvfølgelig! Det ordner vi.",
+    "La meg sjekke og komme tilbake til deg.",
+    "Det høres bra ut! Kan vi avtale et møte?",
+    "Jeg har sendt deg et tilbud. Sjekk meldingene dine.",
+    "Perfekt! Jeg gleder meg til å jobbe med dere.",
+  ];
+
   const sendMutation = useMutation({
-    mutationFn: async (body: string) => {
+    mutationFn: async (messageData: { body: string; attachmentUrl?: string; attachmentType?: string }) => {
       const response = await fetch(new URL("/api/vendor/messages", getApiUrl()).toString(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${sessionToken}`,
         },
-        body: JSON.stringify({ conversationId, body }),
+        body: JSON.stringify({ conversationId, ...messageData }),
       });
       if (!response.ok) throw new Error("Failed to send message");
       return response.json();
@@ -204,13 +384,73 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/conversations", conversationId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/conversations"] });
       setMessageText("");
+      setSelectedImage(null);
+      clearDraft();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
   });
 
-  const handleSend = () => {
-    if (!messageText.trim()) return;
-    sendMutation.mutate(messageText.trim());
+  const handleSend = async () => {
+    if (!messageText.trim() && !selectedImage) return;
+    
+    setIsUploading(true);
+    try {
+      let attachmentUrl: string | undefined;
+      let attachmentType: string | undefined;
+      
+      if (selectedImage) {
+        attachmentUrl = await uploadImage(selectedImage);
+        attachmentType = "image/jpeg";
+      }
+      
+      if (editingMessage) {
+        editMessageMutation.mutate({ 
+          messageId: editingMessage.id, 
+          body: messageText.trim() 
+        });
+      } else {
+        sendMutation.mutate({ 
+          body: messageText.trim() || "📷 Bilde",
+          attachmentUrl,
+          attachmentType
+        });
+      }
+    } catch (error) {
+      Alert.alert("Feil", "Kunne ikke laste opp bildet. Prøv igjen.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleQuickReply = (reply: string) => {
+    setMessageText(reply);
+    setShowQuickReplies(false);
+    saveDraft(reply);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const renderAttachment = (item: Message) => {
+    if (!item.attachmentUrl) return null;
+    
+    if (item.attachmentType?.startsWith("image")) {
+      return (
+        <Image 
+          source={{ uri: item.attachmentUrl }} 
+          style={styles.attachmentImage}
+          resizeMode="cover"
+        />
+      );
+    }
+    
+    return null;
+  };
+
+  const isCoupleTyping = () => {
+    if (coupleTypingWs) return true;
+    if (!conversationDetails?.coupleTypingAt) return false;
+    const typingTime = new Date(conversationDetails.coupleTypingAt).getTime();
+    const now = new Date().getTime();
+    return (now - typingTime) < 5000; // Show if typed within last 5 seconds
   };
 
   const formatTime = (dateString: string) => {
@@ -247,10 +487,16 @@ export default function VendorChatScreen({ route, navigation }: Props) {
         <View style={[styles.messageRow, isFromMe && styles.messageRowMine]}>
           <Pressable
             onLongPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              handleDeleteMessage(item.id);
+              if (isFromMe) {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                handleMessageAction(item);
+              }
             }}
             delayLongPress={500}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel={`Melding fra ${isFromMe ? 'deg' : conversationDetails?.couple?.displayName || 'par'}. ${item.body}`}
+            accessibilityHint={isFromMe ? "Trykk og hold for å redigere eller slette" : undefined}
             style={[
               styles.messageBubble,
               isFromMe
@@ -261,16 +507,27 @@ export default function VendorChatScreen({ route, navigation }: Props) {
             <ThemedText
               style={[
                 styles.messageText,
-                { color: isFromMe ? "#1A1A1A" : theme.text },
+                { color: isFromMe ? "#000000" : theme.text },
               ]}
             >
               {item.body}
             </ThemedText>
+            {renderAttachment(item)}
             <View style={styles.messageFooter}>
+              {item.editedAt && (
+                <ThemedText
+                  style={[
+                    styles.editedLabel,
+                    { color: isFromMe ? "rgba(0,0,0,0.7)" : theme.textMuted },
+                  ]}
+                >
+                  redigert
+                </ThemedText>
+              )}
               <ThemedText
                 style={[
                   styles.messageTime,
-                  { color: isFromMe ? "rgba(0,0,0,0.6)" : theme.textMuted },
+                  { color: isFromMe ? "rgba(0,0,0,0.75)" : theme.textMuted },
                 ]}
               >
                 {formatTime(item.createdAt)}
@@ -278,9 +535,9 @@ export default function VendorChatScreen({ route, navigation }: Props) {
               {isFromMe ? (
                 <View style={styles.readReceipt}>
                   {item.readAt ? (
-                    <Feather name="check-circle" size={12} color="rgba(0,0,0,0.7)" />
+                    <Feather name="check-circle" size={13} color="rgba(0,0,0,0.8)" />
                   ) : (
-                    <Feather name="check" size={12} color="rgba(0,0,0,0.4)" />
+                    <Feather name="check" size={13} color="rgba(0,0,0,0.65)" />
                   )}
                 </View>
               ) : null}
@@ -304,11 +561,55 @@ export default function VendorChatScreen({ route, navigation }: Props) {
   const lastActiveText = formatLastActive(conversationDetails?.couple?.lastActiveAt ?? null);
   const isActive = lastActiveText === "Aktiv nå";
 
+  const filteredMessages = searchQuery
+    ? messages.filter(msg => msg.body.toLowerCase().includes(searchQuery.toLowerCase()))
+    : messages;
+
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+      {showSearch && (
+        <View style={[styles.searchBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+          <Feather name="search" size={18} color={theme.textMuted} />
+          <TextInput
+            style={[styles.searchInput, { color: theme.text }]}
+            placeholder="Søk i meldinger..."
+            placeholderTextColor={theme.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoFocus
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery("")}>
+              <Feather name="x" size={18} color={theme.textMuted} />
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {showCoupleInfo && conversationDetails?.couple && (
+        <View style={[styles.coupleInfoCard, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+          <View style={styles.coupleInfoRow}>
+            <Feather name="user" size={16} color={Colors.dark.accent} />
+            <ThemedText style={styles.coupleInfoText}>{conversationDetails.couple.displayName}</ThemedText>
+          </View>
+          <View style={styles.coupleInfoRow}>
+            <Feather name="mail" size={16} color={theme.textMuted} />
+            <ThemedText style={[styles.coupleInfoText, { color: theme.textSecondary }]}>
+              {conversationDetails.couple.email}
+            </ThemedText>
+          </View>
+          <Pressable 
+            onPress={() => setShowCoupleInfo(false)}
+            style={styles.closeInfoBtn}
+          >
+            <Feather name="x" size={16} color={theme.textMuted} />
+          </Pressable>
+        </View>
+      )}
+
       <FlatList
         ref={flatListRef}
-        data={messages}
+        data={filteredMessages}
         renderItem={renderMessage}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{
@@ -326,7 +627,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
         }
         inverted={false}
         onContentSizeChange={() => {
-          if (messages.length > 0) {
+          if (filteredMessages.length > 0) {
             flatListRef.current?.scrollToEnd({ animated: false });
           }
         }}
@@ -342,38 +643,127 @@ export default function VendorChatScreen({ route, navigation }: Props) {
           },
         ]}
       >
-        <TextInput
-          style={[
-            styles.textInput,
-            { backgroundColor: theme.backgroundRoot, color: theme.text },
-          ]}
-          placeholder="Skriv en melding..."
-          placeholderTextColor={theme.textMuted}
-          value={messageText}
-          onChangeText={setMessageText}
-          multiline
-          maxLength={2000}
-        />
-        <Pressable
-          onPress={handleSend}
-          disabled={!messageText.trim() || sendMutation.isPending}
-          style={[
-            styles.sendButton,
-            {
-              backgroundColor: messageText.trim() ? Colors.dark.accent : theme.backgroundRoot,
-            },
-          ]}
-        >
-          {sendMutation.isPending ? (
-            <ActivityIndicator size="small" color="#1A1A1A" />
-          ) : (
-            <Feather
-              name="send"
-              size={20}
-              color={messageText.trim() ? "#1A1A1A" : theme.textMuted}
-            />
-          )}
-        </Pressable>
+        {editingMessage && (
+          <View style={[styles.editingBanner, { backgroundColor: theme.backgroundElevated, borderBottomColor: theme.border }]}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={[styles.editingLabel, { color: Colors.dark.accent }]}>
+                Redigerer melding
+              </ThemedText>
+              <ThemedText numberOfLines={1} style={[styles.editingPreview, { color: theme.textMuted }]}>
+                {editingMessage.body}
+              </ThemedText>
+            </View>
+            <Pressable onPress={handleCancelEdit} hitSlop={8}>
+              <Feather name="x" size={20} color={theme.textSecondary} />
+            </Pressable>
+          </View>
+        )}
+
+        {showQuickReplies && (
+          <View style={[styles.quickRepliesContainer, { backgroundColor: theme.backgroundRoot, borderBottomColor: theme.border }]}>
+            <View style={styles.quickRepliesHeader}>
+              <ThemedText style={[styles.quickRepliesTitle, { color: theme.textSecondary }]}>
+                Hurtigsvar
+              </ThemedText>
+              <Pressable onPress={() => setShowQuickReplies(false)}>
+                <Feather name="x" size={16} color={theme.textMuted} />
+              </Pressable>
+            </View>
+            <View style={styles.quickRepliesGrid}>
+              {quickReplies.map((reply, index) => (
+                <Pressable
+                  key={index}
+                  onPress={() => handleQuickReply(reply)}
+                  style={[styles.quickReplyChip, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+                >
+                  <ThemedText style={styles.quickReplyText}>{reply}</ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {isCoupleTyping() && (
+          <View style={[styles.typingIndicator, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.typingDots}>
+              <View style={[styles.typingDot, { backgroundColor: theme.textMuted }]} />
+              <View style={[styles.typingDot, { backgroundColor: theme.textMuted }]} />
+              <View style={[styles.typingDot, { backgroundColor: theme.textMuted }]} />
+            </View>
+            <ThemedText style={[styles.typingText, { color: theme.textMuted }]}>
+              {conversationDetails?.couple.displayName} skriver...
+            </ThemedText>
+          </View>
+        )}
+
+        {selectedImage && (
+          <View style={[styles.imagePreview, { backgroundColor: theme.backgroundRoot, borderTopColor: theme.border }]}>
+            <Image source={{ uri: selectedImage }} style={styles.previewImage} resizeMode="cover" />
+            <Pressable 
+              onPress={() => setSelectedImage(null)}
+              style={styles.removeImageBtn}
+            >
+              <Feather name="x-circle" size={24} color="#fff" />
+            </Pressable>
+          </View>
+        )}
+
+        <View style={styles.inputRow}>
+          <Pressable 
+            onPress={() => {
+              setShowQuickReplies(!showQuickReplies);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+            style={styles.quickReplyBtn}
+          >
+            <Feather name="zap" size={20} color={showQuickReplies ? Colors.dark.accent : theme.textMuted} />
+          </Pressable>
+          <Pressable 
+            onPress={pickImage}
+            style={styles.imagePickerBtn}
+          >
+            <Feather name="image" size={20} color={selectedImage ? Colors.dark.accent : theme.textMuted} />
+          </Pressable>
+          <TextInput
+            style={[
+              styles.textInput,
+              { backgroundColor: theme.backgroundRoot, color: theme.text },
+            ]}
+            placeholder="Skriv en melding..."
+            placeholderTextColor={theme.textMuted}
+            value={messageText}
+            onChangeText={handleTextChange}
+            multiline
+            maxLength={2000}
+            accessible={true}
+            accessibilityLabel="Meldingstekst"
+            accessibilityHint={editingMessage ? "Rediger melding" : "Skriv en ny melding til paret"}
+          />
+          <Pressable
+            onPress={handleSend}
+            disabled={(!messageText.trim() && !selectedImage) || sendMutation.isPending || editMessageMutation.isPending || isUploading}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel={editingMessage ? "Lagre endringer" : "Send melding"}
+            accessibilityState={{ disabled: (!messageText.trim() && !selectedImage) || sendMutation.isPending || editMessageMutation.isPending || isUploading }}
+            style={[
+              styles.sendButton,
+              {
+                backgroundColor: (messageText.trim() || selectedImage) ? Colors.dark.accent : theme.backgroundRoot,
+              },
+            ]}
+          >
+            {sendMutation.isPending || editMessageMutation.isPending || isUploading ? (
+              <ActivityIndicator size="small" color="#1A1A1A" />
+            ) : (
+              <Feather
+                name={editingMessage ? "check" : "send"}
+                size={20}
+                color={messageText.trim() ? "#1A1A1A" : theme.textMuted}
+              />
+            )}
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -388,41 +778,61 @@ const styles = StyleSheet.create({
   },
   dateSeparator: {
     alignItems: "center",
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.lg,
+    paddingTop: Spacing.md,
   },
   dateSeparatorText: {
-    fontSize: 13,
-    fontWeight: "500",
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    opacity: 0.6,
   },
   messageRow: {
     flexDirection: "row",
-    marginBottom: Spacing.sm,
+    marginBottom: 2,
+    paddingHorizontal: Spacing.md,
   },
   messageRowMine: {
     justifyContent: "flex-end",
   },
   messageBubble: {
-    maxWidth: "80%",
-    padding: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.md,
+    maxWidth: "75%",
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+    justifyContent: "center",
   },
   messageText: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: 0.1,
   },
   messageFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-    gap: 4,
-    marginTop: 4,
+    gap: 5,
+    marginTop: 3,
+  },
+  editedLabel: {
+    fontSize: 12,
+    fontStyle: "italic",
+    marginRight: -1,
+    fontWeight: "500",
   },
   messageTime: {
-    fontSize: 11,
+    fontSize: 12,
+    fontWeight: "500",
   },
   readReceipt: {
-    marginLeft: 2,
+    marginLeft: 1,
   },
   lastActiveBar: {
     flexDirection: "row",
@@ -443,16 +853,44 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   inputContainer: {
-    flexDirection: "row",
-    alignItems: "flex-end",
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.sm,
     borderTopWidth: 1,
+  },
+  editingBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
     gap: Spacing.sm,
+  },
+  editingLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  editingPreview: {
+    fontSize: 13,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: Spacing.sm,
+    paddingBottom: Spacing.sm,
+  },
+  quickReplyBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
   },
   textInput: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 44,
     maxHeight: 120,
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
@@ -460,10 +898,120 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    minWidth: 44,
+    minHeight: 44,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: Spacing.xs,
+  },
+  coupleInfoCard: {
+    padding: Spacing.md,
+    borderBottomWidth: 1,
+    gap: Spacing.xs,
+  },
+  coupleInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  coupleInfoText: {
+    fontSize: 14,
+  },
+  closeInfoBtn: {
+    position: "absolute",
+    top: Spacing.sm,
+    right: Spacing.sm,
+    padding: Spacing.xs,
+  },
+  quickRepliesContainer: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  quickRepliesHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: Spacing.sm,
+  },
+  quickRepliesTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  quickRepliesGrid: {
+    gap: Spacing.xs,
+  },
+  quickReplyChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+  },
+  quickReplyText: {
+    fontSize: 14,
+  },
+  attachmentImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.xs,
+  },
+  typingIndicator: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  typingDots: {
+    flexDirection: "row",
+    gap: 4,
+  },
+  typingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    opacity: 0.6,
+  },
+  typingText: {
+    fontSize: 13,
+    fontStyle: "italic",
+  },
+  imagePreview: {
+    padding: Spacing.md,
+    borderTopWidth: 1,
+  },
+  previewImage: {
+    width: "100%",
+    height: 150,
+    borderRadius: BorderRadius.md,
+  },
+  removeImageBtn: {
+    position: "absolute",
+    top: Spacing.md + 8,
+    right: Spacing.md + 8,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 12,
+  },
+  imagePickerBtn: {
+    padding: Spacing.sm,
+    marginRight: Spacing.xs,
   },
 });

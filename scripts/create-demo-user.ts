@@ -9,7 +9,8 @@ async function createDemoUser() {
 
   const [couple] = await db.insert(coupleProfiles).values({
     email: 'qazifotoreel@gmail.com',
-    displayName: 'Demo Brudepar'
+    displayName: 'Demo Brudepar',
+    password: 'not-used'
   }).onConflictDoNothing().returning();
 
   console.log('Demo couple created:', couple || 'Already exists');

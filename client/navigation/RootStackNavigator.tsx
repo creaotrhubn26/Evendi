@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { Image } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import MainTabNavigator from "@/navigation/MainTabNavigator";
@@ -8,6 +9,7 @@ import CoupleLoginScreen from "@/screens/CoupleLoginScreen";
 import VendorLoginScreen from "@/screens/VendorLoginScreen";
 import VendorRegistrationScreen from "@/screens/VendorRegistrationScreen";
 import VendorDashboardScreen from "@/screens/VendorDashboardScreen";
+import VendorAdminChatScreen from "@/screens/VendorAdminChatScreen";
 import VendorProfileScreen from "@/screens/VendorProfileScreen";
 import DeliveryCreateScreen from "@/screens/DeliveryCreateScreen";
 import InspirationCreateScreen from "@/screens/InspirationCreateScreen";
@@ -22,6 +24,16 @@ import AdminInspirationsScreen from "@/screens/AdminInspirationsScreen";
 import AdminCategoriesScreen from "@/screens/AdminCategoriesScreen";
 import AdminSettingsScreen from "@/screens/AdminSettingsScreen";
 import AdminChecklistsScreen from "@/screens/AdminChecklistsScreen";
+import AdminVendorChatsScreen from "@/screens/AdminVendorChatsScreen";
+import AdminVendorMessagesScreen from "@/screens/AdminVendorMessagesScreen";
+import AdminFAQScreen from "@/screens/AdminFAQScreen";
+import AdminAppSettingsScreen from "@/screens/AdminAppSettingsScreen";
+import AdminWhatsNewScreen from "@/screens/AdminWhatsNewScreen";
+import AdminVideoGuidesScreen from "@/screens/AdminVideoGuidesScreen";
+import StatusScreen from "@/screens/StatusScreen";
+import VendorHelpScreen from "@/screens/VendorHelpScreen";
+import WhatsNewScreen from "@/screens/WhatsNewScreen";
+import DocumentationScreen from "@/screens/DocumentationScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
 export type RootStackParamList = {
@@ -31,11 +43,13 @@ export type RootStackParamList = {
   VendorDashboard: undefined;
   VendorProfile: undefined;
   VendorRegistration: undefined;
-  DeliveryCreate: undefined;
+  DeliveryCreate: { delivery?: any };
   InspirationCreate: undefined;
-  ProductCreate: undefined;
+  ProductCreate: { product?: any };
   OfferCreate: undefined;
   VendorChat: { conversationId: string; coupleName: string };
+  VendorAdminChat: undefined;
+  VendorHelp: undefined;
   AdminLogin: undefined;
   AdminMain: { adminKey: string };
   AdminVendors: { adminKey: string };
@@ -44,6 +58,15 @@ export type RootStackParamList = {
   AdminCategories: { adminKey: string };
   AdminSettings: { adminKey: string };
   AdminChecklists: { adminKey: string };
+  AdminFAQ: { adminKey: string };
+  AdminAppSettings: { adminKey: string };
+  AdminWhatsNew: { adminKey: string };
+  AdminVideoGuides: { adminKey: string };
+  AdminVendorChats: { adminKey: string };
+  AdminVendorMessages: { conversationId: string; vendorName: string; adminKey: string };
+  Status: undefined;
+  WhatsNew: { category?: "vendor" | "couple" };
+  Documentation: undefined;
   Main: undefined;
 };
 
@@ -173,11 +196,12 @@ export default function RootStackNavigator() {
           />
           <Stack.Screen
             name="VendorChat"
-            component={VendorChatScreen}
-            options={{
-              headerShown: false,
+            component={VendorChatScreen as any}
+            options={({ route }) => ({
+              title: route.params?.coupleName || "Chat",
+              headerBackVisible: false,
               presentation: "modal",
-            }}
+            })}
           />
           <Stack.Screen
             name="AdminLogin"
@@ -198,7 +222,13 @@ export default function RootStackNavigator() {
             component={AdminDashboardScreen}
             options={{
               headerShown: true,
-              title: "Admin Dashboard",
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
             }}
           />
           <Stack.Screen
@@ -241,6 +271,137 @@ export default function RootStackNavigator() {
             component={AdminChecklistsScreen}
             options={{
               headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="AdminFAQ"
+            component={AdminFAQScreen}
+            options={{
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
+            }}
+          />
+          <Stack.Screen
+            name="AdminAppSettings"
+            component={AdminAppSettingsScreen}
+            options={{
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
+            }}
+          />
+          <Stack.Screen
+            name="AdminWhatsNew"
+            component={AdminWhatsNewScreen}
+            options={{
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
+            }}
+          />
+          <Stack.Screen
+            name="AdminVideoGuides"
+            component={AdminVideoGuidesScreen}
+            options={{
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
+            }}
+          />
+          <Stack.Screen
+            name="WhatsNew"
+            component={WhatsNewScreen}
+            options={{
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
+            }}
+          />
+          <Stack.Screen
+            name="AdminVendorChats"
+            component={AdminVendorChatsScreen as any}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="AdminVendorMessages"
+            component={AdminVendorMessagesScreen as any}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorAdminChat"
+            component={VendorAdminChatScreen}
+            options={{
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
+            }}
+          />
+          <Stack.Screen
+            name="VendorHelp"
+            component={VendorHelpScreen}
+            options={{
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
+            }}
+          />
+          <Stack.Screen
+            name="Status"
+            component={StatusScreen}
+            options={{
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
+            }}
+          />
+          <Stack.Screen
+            name="Documentation"
+            component={DocumentationScreen}
+            options={{
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
             }}
           />
         </>

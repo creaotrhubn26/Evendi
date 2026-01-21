@@ -645,7 +645,7 @@ const styles = StyleSheet.create({
   itemCompleted: { textDecorationLine: "line-through" },
   itemMeta: { flexDirection: "row", alignItems: "center", marginTop: Spacing.xs },
   categoryBadge: { paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: BorderRadius.sm, marginRight: Spacing.sm },
-  categoryBadgeText: { fontSize: 11, fontWeight: "500" },
+  categoryBadgeText: { fontSize: 12, fontWeight: "500" },
   monthsText: { fontSize: 12 },
   notesText: { fontSize: 12, marginTop: 4, fontStyle: "italic" },
   assignedBadge: { width: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center" },

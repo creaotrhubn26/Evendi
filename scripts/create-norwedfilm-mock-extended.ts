@@ -108,11 +108,11 @@ async function createExtendedMockData() {
   console.log('\n👫 Creating test couples...');
   
   const testCouples = [
-    { email: 'emma.olsen@example.com', displayName: 'Emma & Lars', weddingDate: '2026-06-15' },
-    { email: 'sofia.berg@example.com', displayName: 'Sofia & Anders', weddingDate: '2026-08-22' },
-    { email: 'ida.hansen@example.com', displayName: 'Ida & Jonas', weddingDate: '2026-05-30' },
-    { email: 'nora.nilsen@example.com', displayName: 'Nora & Henrik', weddingDate: '2025-09-10' },
-    { email: 'maja.pedersen@example.com', displayName: 'Maja & Oscar', weddingDate: '2025-07-20' },
+    { email: 'emma.olsen@example.com', displayName: 'Emma & Lars', weddingDate: '2026-06-15', password: 'not-used' },
+    { email: 'sofia.berg@example.com', displayName: 'Sofia & Anders', weddingDate: '2026-08-22', password: 'not-used' },
+    { email: 'ida.hansen@example.com', displayName: 'Ida & Jonas', weddingDate: '2026-05-30', password: 'not-used' },
+    { email: 'nora.nilsen@example.com', displayName: 'Nora & Henrik', weddingDate: '2025-09-10', password: 'not-used' },
+    { email: 'maja.pedersen@example.com', displayName: 'Maja & Oscar', weddingDate: '2025-07-20', password: 'not-used' },
   ];
 
   const coupleIds: string[] = [];

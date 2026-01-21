@@ -25,13 +25,16 @@ function setupCors(app: express.Application) {
   app.use((req, res, next) => {
     const origin = req.header("origin");
 
+    // In development, allow all origins for easier testing
+    const isDev = process.env.NODE_ENV === "development";
+
     // Allow localhost origins for Expo web development (any port)
     const isLocalhost =
       origin?.startsWith("http://localhost:") ||
       origin?.startsWith("http://127.0.0.1:");
 
     // Allow GitHub Codespaces preview URLs
-    const isGitHubCodespaces = origin?.includes(".app.github.dev");
+    const isGitHubCodespaces = origin?.includes(".app.github.dev") || origin?.includes(".github.dev");
 
     // Allow Cloudflare tunnel
     const isCloudflare = origin?.includes(".trycloudflare.com");
@@ -39,16 +42,18 @@ function setupCors(app: express.Application) {
     // Allow Replit domains
     const isReplit = origin?.includes(".replit.dev") || origin?.includes(".repl.co");
 
-    // For GitHub Codespaces, always allow the origin
-    if (origin && (isLocalhost || isGitHubCodespaces || isCloudflare || isReplit)) {
+    // Allow origin if it matches any known development domain, or in dev mode allow all
+    const shouldAllowOrigin = isDev || isLocalhost || isGitHubCodespaces || isCloudflare || isReplit;
+
+    if (origin && shouldAllowOrigin) {
       res.header("Access-Control-Allow-Origin", origin);
       res.header(
         "Access-Control-Allow-Methods",
-        "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+        "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD",
       );
       res.header(
         "Access-Control-Allow-Headers",
-        "Content-Type, x-session-token, x-admin-secret, authorization, Authorization",
+        "Content-Type, x-session-token, x-admin-secret, authorization, Authorization, Accept, Origin, X-Requested-With",
       );
       res.header("Access-Control-Allow-Credentials", "true");
       res.header("Access-Control-Max-Age", "86400");

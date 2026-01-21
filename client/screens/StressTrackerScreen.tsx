@@ -179,7 +179,7 @@ export default function StressTrackerScreen() {
           </View>
 
           {isBreathing ? (
-            <Button onPress={stopBreathing} variant="outline" style={styles.breathButton}>
+            <Button onPress={stopBreathing} style={styles.breathButton}>
               Stopp
             </Button>
           ) : (

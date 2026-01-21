@@ -30,7 +30,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getSchedule, saveSchedule, generateId, getWeddingDetails, getSpeeches } from "@/lib/storage";
 import { ScheduleEvent, Speech } from "@/lib/types";
-import emptyScheduleImage from "../../assets/images/empty-schedule.png";
+
+const emptyScheduleImage = require("../../assets/images/empty-schedule.png");
 
 const ICON_OPTIONS: ScheduleEvent["icon"][] = [
   "heart",

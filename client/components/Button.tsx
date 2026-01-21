@@ -16,6 +16,8 @@ interface ButtonProps {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
   disabled?: boolean;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 const springConfig: WithSpringConfig = {
@@ -33,6 +35,8 @@ export function Button({
   children,
   style,
   disabled = false,
+  accessibilityLabel,
+  accessibilityHint,
 }: ButtonProps) {
   const { theme, designSettings } = useTheme();
   const scale = useSharedValue(1);
@@ -60,6 +64,11 @@ export function Button({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={disabled}
+      accessible={true}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || (typeof children === 'string' ? children : undefined)}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled }}
       style={[
         styles.button,
         {

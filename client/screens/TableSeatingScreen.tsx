@@ -41,9 +41,9 @@ export default function TableSeatingScreen() {
 
   const loadGuests = useCallback(async () => {
     if (!sessionToken) {
-      const token = await getCoupleSession();
-      if (token) {
-        setSessionToken(token);
+      const session = await getCoupleSession();
+      if (session) {
+        setSessionToken(session.token);
       } else {
         return;
       }

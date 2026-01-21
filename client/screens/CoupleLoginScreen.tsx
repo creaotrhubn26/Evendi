@@ -21,6 +21,7 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
+import { signInWithGoogle } from "@/lib/supabase-auth";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 const COUPLE_STORAGE_KEY = "wedflow_couple_session";
@@ -48,6 +49,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
   const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const validateField = useCallback((field: string, value: string): string => {
     switch (field) {
@@ -57,7 +59,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
         return "";
       case "password":
         if (!value) return "Passord er påkrevd";
-        if (isRegistering && value.length < 8) return "Passord må være minst 8 tegn";
+        if (value.length < 8) return "Passord må være minst 8 tegn";
         return "";
       case "displayName":
         if (isRegistering) {
@@ -88,7 +90,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
       const response = await apiRequest("POST", "/api/couples/login", { 
         email, 
         password,
-        displayName: isRegistering ? displayName : undefined
+        displayName: isRegistering ? displayName : email.split("@")[0]
       });
       return response.json();
     },
@@ -133,6 +135,39 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     loginMutation.mutate();
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setIsGoogleLoading(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      const session = await signInWithGoogle();
+      
+      if (session && session.user) {
+        // Extract user info from Google OAuth
+        const googleEmail = session.user.email || "";
+        const googleName = session.user.user_metadata?.full_name || googleEmail.split("@")[0];
+        
+        // Save session
+        const coupleSession: CoupleSession = {
+          sessionToken: session.access_token,
+          coupleId: session.user.id,
+          email: googleEmail,
+          displayName: googleName,
+        };
+        
+        await AsyncStorage.setItem(COUPLE_STORAGE_KEY, JSON.stringify(coupleSession));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onLoginSuccess?.();
+        navigation.replace("Messages");
+      }
+    } catch (error) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Feil", error instanceof Error ? error.message : "Kunne ikke logge inn med Google");
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   return (
@@ -226,7 +261,39 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
             {loginMutation.isPending ? (
               <ActivityIndicator color="#1A1A1A" />
             ) : (
-              <ThemedText style={styles.loginBtnText}>Logg inn</ThemedText>
+              <ThemedText style={styles.loginBtnText}>
+                {isRegistering ? "Registrer deg" : "Logg inn"}
+              </ThemedText>
+            )}
+          </Pressable>
+
+          <View style={styles.dividerContainer}>
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <ThemedText style={[styles.dividerText, { color: theme.textMuted }]}>ELLER</ThemedText>
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          </View>
+
+          <Pressable
+            onPress={handleGoogleLogin}
+            disabled={isGoogleLoading}
+            style={[
+              styles.googleBtn,
+              { 
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+                opacity: isGoogleLoading ? 0.7 : 1 
+              },
+            ]}
+          >
+            {isGoogleLoading ? (
+              <ActivityIndicator size="small" color={Colors.dark.accent} />
+            ) : (
+              <>
+                <Feather name="globe" size={18} color={Colors.dark.accent} />
+                <ThemedText style={[styles.googleBtnText, { color: Colors.dark.accent }]}>
+                  Logg inn med Google
+                </ThemedText>
+              </>
             )}
           </Pressable>
         </View>
@@ -343,6 +410,35 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600",
     color: "#1A1A1A",
+  },
+  dividerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    marginVertical: Spacing.lg,
+    width: "100%",
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  googleBtn: {
+    height: 50,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: Spacing.sm,
+    width: "100%",
+  },
+  googleBtnText: {
+    fontSize: 16,
+    fontWeight: "600",
   },
   toggleContainer: {
     flexDirection: "row",

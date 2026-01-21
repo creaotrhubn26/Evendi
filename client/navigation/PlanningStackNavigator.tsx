@@ -168,7 +168,10 @@ export default function PlanningStackNavigator() {
       <Stack.Screen
         name="Chat"
         component={ChatScreen}
-        options={({ route }) => ({ title: route.params.vendorName })}
+        options={({ route }) => ({ 
+          title: route.params.vendorName,
+          headerBackVisible: false,
+        })}
       />
       <Stack.Screen
         name="CoupleOffers"

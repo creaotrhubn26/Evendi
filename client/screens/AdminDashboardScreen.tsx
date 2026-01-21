@@ -95,6 +95,12 @@ export default function AdminDashboardScreen() {
       badge: stats?.vendors.pending || 0,
     },
     {
+      title: "Support-meldinger",
+      icon: "message-circle" as const,
+      description: "Svar på Wedflow Support-meldinger fra leverandører",
+      screen: "AdminVendorChats" as const,
+    },
+    {
       title: "Showcases",
       icon: "image" as const,
       description: "Moderer showcase-galleri",
@@ -112,6 +118,30 @@ export default function AdminDashboardScreen() {
       icon: "tag" as const,
       description: "Administrer kategorier",
       screen: "AdminCategories" as const,
+    },
+    {
+      title: "FAQ & Hjelp",
+      icon: "help-circle" as const,
+      description: "Rediger FAQ for par og leverandører",
+      screen: "AdminFAQ" as const,
+    },
+    {
+      title: "App-innstillinger",
+      icon: "smartphone" as const,
+      description: "Versjon og globale innstillinger",
+      screen: "AdminAppSettings" as const,
+    },
+    {
+      title: "Hva er nytt",
+      icon: "star" as const,
+      description: "Publiser oppdateringer og nye funksjoner",
+      screen: "AdminWhatsNew" as const,
+    },
+    {
+      title: "Videoguider",
+      icon: "video" as const,
+      description: "Administrer videoguider for leverandører",
+      screen: "AdminVideoGuides" as const,
     },
     {
       title: "Design",

@@ -104,6 +104,9 @@ function QuickButton({ icon, label, color, theme, onPress }: QuickButtonProps) {
         onPress();
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }}
+      accessible={true}
+      accessibilityRole="button"
+      accessibilityLabel={label}
       style={[styles.quickButton, { backgroundColor: theme.backgroundDefault }]}
     >
       <View style={[styles.quickButtonIcon, { backgroundColor: (color || Colors.dark.accent) + "15" }]}>

@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
   },
   statusText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   vendorName: {

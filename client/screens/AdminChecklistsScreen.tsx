@@ -235,12 +235,12 @@ export default function AdminChecklistsScreen() {
                                 ]}
                               >
                                 <ThemedText
-                                  style={{ fontSize: 10, fontWeight: "500", color: catInfo.color }}
+                                  style={{ fontSize: 12, fontWeight: "500", color: catInfo.color }}
                                 >
                                   {catInfo.name}
                                 </ThemedText>
                               </View>
-                              <ThemedText style={{ color: theme.textSecondary, fontSize: 11 }}>
+                              <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
                                 {task.taskMonthsBefore} mnd før
                               </ThemedText>
                               {task.taskIsDefault && (

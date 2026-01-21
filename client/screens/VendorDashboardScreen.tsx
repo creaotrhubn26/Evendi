@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   StyleSheet,
   View,
@@ -169,9 +169,15 @@ export default function VendorDashboardScreen({ navigation }: Props) {
   const [session, setSession] = useState<VendorSession | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("deliveries");
+  const [conversationFilter, setConversationFilter] = useState<"all" | "unread" | "favorites">("all");
+  const [conversationSort, setConversationSort] = useState<"recent" | "name" | "unread">("recent");
+  const [favoriteConversations, setFavoriteConversations] = useState<Set<string>>(new Set());
+  const wsRef = useRef<WebSocket | null>(null);
+  const [wsConversations, setWsConversations] = useState<Conversation[]>([]);
 
   useEffect(() => {
     loadSession();
+    loadFavorites();
   }, []);
 
   const loadSession = async () => {
@@ -181,6 +187,29 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     } else {
       navigation.replace("VendorLogin");
     }
+  };
+
+  const loadFavorites = async () => {
+    try {
+      const favoritesData = await AsyncStorage.getItem("vendor_favorite_conversations");
+      if (favoritesData) {
+        setFavoriteConversations(new Set(JSON.parse(favoritesData)));
+      }
+    } catch (error) {
+      console.error("Error loading favorites:", error);
+    }
+  };
+
+  const toggleFavorite = async (conversationId: string) => {
+    const newFavorites = new Set(favoriteConversations);
+    if (newFavorites.has(conversationId)) {
+      newFavorites.delete(conversationId);
+    } else {
+      newFavorites.add(conversationId);
+    }
+    setFavoriteConversations(newFavorites);
+    await AsyncStorage.setItem("vendor_favorite_conversations", JSON.stringify(Array.from(newFavorites)));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const { data: deliveries = [], isLoading: deliveriesLoading, refetch: refetchDeliveries } = useQuery<Delivery[]>({
@@ -227,6 +256,41 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     },
     enabled: !!session?.sessionToken,
   });
+
+  // Merge fetched conversations with WebSocket updates
+  const mergedConversationsData = React.useMemo(() => {
+    const base = [...conversationsData];
+    for (const ws of wsConversations) {
+      const idx = base.findIndex((c) => c.id === ws.id);
+      if (idx >= 0) {
+        base[idx] = ws;
+      }
+    }
+    return base;
+  }, [conversationsData, wsConversations]);
+
+  // Filter and sort conversations
+  const filteredAndSortedConversations = React.useMemo(() => {
+    let filtered = [...mergedConversationsData];
+
+    // Apply filter
+    if (conversationFilter === "unread") {
+      filtered = filtered.filter(conv => conv.vendorUnreadCount > 0);
+    } else if (conversationFilter === "favorites") {
+      filtered = filtered.filter(conv => favoriteConversations.has(conv.id));
+    }
+
+    // Apply sort
+    if (conversationSort === "recent") {
+      filtered.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+    } else if (conversationSort === "name") {
+      filtered.sort((a, b) => a.couple.displayName.localeCompare(b.couple.displayName));
+    } else if (conversationSort === "unread") {
+      filtered.sort((a, b) => b.vendorUnreadCount - a.vendorUnreadCount);
+    }
+
+    return filtered;
+  }, [mergedConversationsData, conversationFilter, conversationSort, favoriteConversations]);
 
   const { data: productsData = [], isLoading: productsLoading, refetch: refetchProducts } = useQuery<VendorProduct[]>({
     queryKey: ["/api/vendor/products"],
@@ -335,7 +399,55 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     },
   });
 
-  const totalUnread = conversationsData.reduce((sum, c) => sum + (c.vendorUnreadCount || 0), 0);
+  const totalUnread = mergedConversationsData.reduce((sum, c) => sum + (c.vendorUnreadCount || 0), 0);
+
+  // WebSocket subscription for vendor list updates
+  useEffect(() => {
+    if (!session?.sessionToken) return;
+    let closedByUs = false;
+    let reconnectTimer: any = null;
+
+    const connect = () => {
+      try {
+        const wsUrl = getApiUrl().replace(/^http/, "ws") + `/ws/vendor-list?token=${encodeURIComponent(session.sessionToken)}`;
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse((event as any).data);
+            if (data?.type === "conv-update" && data.payload?.conversationId) {
+              const { conversationId, lastMessageAt, vendorUnreadCount } = data.payload as { conversationId: string; lastMessageAt?: string; vendorUnreadCount?: number };
+              setWsConversations((prev) => {
+                const idx = prev.findIndex((c) => c.id === conversationId);
+                const baseConv = conversationsData.find((c) => c.id === conversationId);
+                if (!baseConv) return prev; // unknown conversation
+                const updated = { ...baseConv, lastMessageAt: lastMessageAt || baseConv.lastMessageAt, vendorUnreadCount: typeof vendorUnreadCount === "number" ? vendorUnreadCount : baseConv.vendorUnreadCount };
+                if (idx >= 0) {
+                  const list = [...prev];
+                  list[idx] = updated;
+                  return list;
+                } else {
+                  return [...prev, updated];
+                }
+              });
+            }
+          } catch {}
+        };
+        ws.onclose = () => {
+          if (!closedByUs) reconnectTimer = setTimeout(connect, 3000);
+        };
+      } catch {
+        reconnectTimer = setTimeout(connect, 3000);
+      }
+    };
+
+    connect();
+    return () => {
+      closedByUs = true;
+      try { wsRef.current?.close(); } catch {}
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
+  }, [session?.sessionToken, conversationsData]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -826,46 +938,67 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     return date.toLocaleDateString("no-NO", { day: "numeric", month: "short" });
   };
 
-  const renderConversationItem = ({ item, index }: { item: Conversation; index: number }) => (
-    <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
-      <Pressable
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          navigation.navigate("VendorChat", { conversationId: item.id, coupleName: item.couple.displayName });
-        }}
-        style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
-      >
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleRow}>
-            <ThemedText style={styles.cardTitle}>{item.couple.displayName}</ThemedText>
-            {item.vendorUnreadCount > 0 ? (
-              <View style={[styles.unreadBadge, { backgroundColor: theme.accent }]}>
-                <ThemedText style={styles.unreadText}>{item.vendorUnreadCount}</ThemedText>
+  const renderConversationItem = ({ item, index }: { item: Conversation; index: number }) => {
+    const isFavorite = favoriteConversations.has(item.id);
+    
+    return (
+      <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            navigation.navigate("VendorChat", { conversationId: item.id, coupleName: item.couple.displayName });
+          }}
+          style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <ThemedText style={styles.cardTitle}>{item.couple.displayName}</ThemedText>
+              <View style={styles.conversationBadges}>
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    toggleFavorite(item.id);
+                  }}
+                  style={styles.favoriteBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Feather 
+                    name={isFavorite ? "star" : "star"} 
+                    size={18} 
+                    color={isFavorite ? "#FFD700" : theme.textMuted}
+                    fill={isFavorite ? "#FFD700" : "none"}
+                  />
+                </Pressable>
+                {item.vendorUnreadCount > 0 ? (
+                  <View style={[styles.unreadBadge, { backgroundColor: theme.accent }]}>
+                    <ThemedText style={styles.unreadText}>{item.vendorUnreadCount}</ThemedText>
+                  </View>
+                ) : null}
               </View>
+            </View>
+            <ThemedText style={[styles.coupleName, { color: theme.textSecondary }]}>
+              {item.couple.email}
+            </ThemedText>
+            {item.inspiration ? (
+              <ThemedText style={[styles.dateText, { color: theme.accent, marginTop: 4 }]}>
+                {item.inspiration.title}
+              </ThemedText>
             ) : null}
           </View>
-          <ThemedText style={[styles.coupleName, { color: theme.textSecondary }]}>
-            {item.couple.email}
-          </ThemedText>
-          {item.inspiration ? (
-            <ThemedText style={[styles.dateText, { color: theme.accent, marginTop: 4 }]}>
-              {item.inspiration.title}
-            </ThemedText>
+          {item.lastMessage ? (
+            <View style={styles.lastMessageContainer}>
+              <ThemedText style={[styles.lastMessage, { color: theme.textSecondary }]} numberOfLines={2}>
+                {item.lastMessage.senderType === "vendor" ? "Du: " : ""}{item.lastMessage.body}
+              </ThemedText>
+              <ThemedText style={[styles.messageTime, { color: theme.textMuted }]}>
+                {formatConversationTime(item.lastMessage.createdAt)}
+              </ThemedText>
+            </View>
           ) : null}
-        </View>
-        {item.lastMessage ? (
-          <View style={styles.lastMessageContainer}>
-            <ThemedText style={[styles.lastMessage, { color: theme.textSecondary }]} numberOfLines={2}>
-              {item.lastMessage.senderType === "vendor" ? "Du: " : ""}{item.lastMessage.body}
-            </ThemedText>
-            <ThemedText style={[styles.messageTime, { color: theme.textMuted }]}>
-              {formatConversationTime(item.lastMessage.createdAt)}
-            </ThemedText>
-          </View>
-        ) : null}
-      </Pressable>
-    </Animated.View>
-  );
+        </Pressable>
+      </Animated.View>
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -896,6 +1029,26 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             ]}
           >
             <Feather name="log-out" size={18} color={theme.textSecondary} />
+          </Pressable>
+          <Pressable 
+            onPress={() => navigation.navigate("VendorHelp")}
+            style={({ pressed }) => [
+              styles.logoutBtn,
+              { backgroundColor: pressed ? theme.backgroundTertiary : theme.backgroundSecondary }
+            ]}
+            accessibilityLabel="Hjelp & FAQ"
+          >
+            <Feather name="help-circle" size={18} color={theme.accent} />
+          </Pressable>
+          <Pressable 
+            onPress={() => navigation.navigate("VendorAdminChat")}
+            style={({ pressed }) => [
+              styles.logoutBtn,
+              { backgroundColor: pressed ? theme.backgroundTertiary : theme.backgroundSecondary }
+            ]}
+            accessibilityLabel="Wedflow Support"
+          >
+            <Feather name="message-circle" size={18} color={theme.accent} />
           </Pressable>
         </View>
       </View>
@@ -1365,17 +1518,169 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           )}
         />
       ) : activeTab === "messages" ? (
-        <FlatList
-          style={{ zIndex: 1, flex: 1 }}
-          data={conversationsData}
-          renderItem={renderConversationItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{
-            paddingHorizontal: Spacing.lg,
-            paddingBottom: insets.bottom + Spacing.xl,
-          }}
-          ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
-          refreshControl={
+        <>
+          <View style={[styles.filterControls, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+            <View style={styles.filterRow}>
+              <ThemedText style={[styles.filterLabel, { color: theme.textSecondary }]}>Filter:</ThemedText>
+              <View style={styles.filterButtons}>
+                <Pressable
+                  onPress={() => {
+                    setConversationFilter("all");
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={[
+                    styles.filterChip,
+                    conversationFilter === "all" && { backgroundColor: theme.accent },
+                    { borderColor: theme.border }
+                  ]}
+                >
+                  <ThemedText style={[
+                    styles.filterChipText,
+                    conversationFilter === "all" && { color: "#1A1A1A" },
+                    { color: theme.text }
+                  ]}>
+                    Alle
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setConversationFilter("unread");
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={[
+                    styles.filterChip,
+                    conversationFilter === "unread" && { backgroundColor: theme.accent },
+                    { borderColor: theme.border }
+                  ]}
+                >
+                  <Feather 
+                    name="message-circle" 
+                    size={14} 
+                    color={conversationFilter === "unread" ? "#1A1A1A" : theme.text} 
+                  />
+                  <ThemedText style={[
+                    styles.filterChipText,
+                    conversationFilter === "unread" && { color: "#1A1A1A" },
+                    { color: theme.text }
+                  ]}>
+                    Ulest
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setConversationFilter("favorites");
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={[
+                    styles.filterChip,
+                    conversationFilter === "favorites" && { backgroundColor: theme.accent },
+                    { borderColor: theme.border }
+                  ]}
+                >
+                  <Feather 
+                    name="star" 
+                    size={14} 
+                    color={conversationFilter === "favorites" ? "#1A1A1A" : theme.text} 
+                  />
+                  <ThemedText style={[
+                    styles.filterChipText,
+                    conversationFilter === "favorites" && { color: "#1A1A1A" },
+                    { color: theme.text }
+                  ]}>
+                    Favoritter
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+            <View style={styles.filterRow}>
+              <ThemedText style={[styles.filterLabel, { color: theme.textSecondary }]}>Sorter:</ThemedText>
+              <View style={styles.filterButtons}>
+                <Pressable
+                  onPress={() => {
+                    setConversationSort("recent");
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={[
+                    styles.filterChip,
+                    conversationSort === "recent" && { backgroundColor: theme.accent },
+                    { borderColor: theme.border }
+                  ]}
+                >
+                  <Feather 
+                    name="clock" 
+                    size={14} 
+                    color={conversationSort === "recent" ? "#1A1A1A" : theme.text} 
+                  />
+                  <ThemedText style={[
+                    styles.filterChipText,
+                    conversationSort === "recent" && { color: "#1A1A1A" },
+                    { color: theme.text }
+                  ]}>
+                    Nylig
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setConversationSort("name");
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={[
+                    styles.filterChip,
+                    conversationSort === "name" && { backgroundColor: theme.accent },
+                    { borderColor: theme.border }
+                  ]}
+                >
+                  <Feather 
+                    name="user" 
+                    size={14} 
+                    color={conversationSort === "name" ? "#1A1A1A" : theme.text} 
+                  />
+                  <ThemedText style={[
+                    styles.filterChipText,
+                    conversationSort === "name" && { color: "#1A1A1A" },
+                    { color: theme.text }
+                  ]}>
+                    Navn
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setConversationSort("unread");
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={[
+                    styles.filterChip,
+                    conversationSort === "unread" && { backgroundColor: theme.accent },
+                    { borderColor: theme.border }
+                  ]}
+                >
+                  <Feather 
+                    name="message-square" 
+                    size={14} 
+                    color={conversationSort === "unread" ? "#1A1A1A" : theme.text} 
+                  />
+                  <ThemedText style={[
+                    styles.filterChipText,
+                    conversationSort === "unread" && { color: "#1A1A1A" },
+                    { color: theme.text }
+                  ]}>
+                    Uleste
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+          <FlatList
+            style={{ zIndex: 1, flex: 1 }}
+            data={filteredAndSortedConversations}
+            renderItem={renderConversationItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{
+              paddingHorizontal: Spacing.lg,
+              paddingBottom: insets.bottom + Spacing.xl,
+            }}
+            ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
+            refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
@@ -1396,6 +1701,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             </View>
           )}
         />
+        </>
       ) : null}
     </View>
   );
@@ -1505,7 +1811,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   tabText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
     letterSpacing: 0.1,
   },
@@ -2108,5 +2414,48 @@ const styles = StyleSheet.create({
   },
   showcaseDate: {
     fontSize: 11,
+  },
+  filterControls: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    gap: Spacing.sm,
+  },
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    minWidth: 50,
+  },
+  filterButtons: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    flexWrap: "wrap",
+    flex: 1,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  conversationBadges: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  favoriteBtn: {
+    padding: 4,
   },
 });

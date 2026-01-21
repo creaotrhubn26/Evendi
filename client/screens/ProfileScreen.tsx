@@ -342,7 +342,7 @@ export default function ProfileScreen() {
             icon="shield"
             label="Admin"
             theme={theme}
-            onPress={() => navigation.navigate("AdminDashboard")}
+            onPress={() => (navigation as any).navigate("AdminDashboard")}
           />
           <MenuItem
             icon="star"
