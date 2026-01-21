@@ -1,10 +1,39 @@
 import { Request, Response, Express } from "express";
 import { db } from "./db";
 import { eq, and, sql } from "drizzle-orm";
-import { subscriptionTiers, vendorSubscriptions, vendorUsageMetrics, vendorPayments, vendors } from "@shared/schema";
-import { checkVendorAuth } from "./routes";
+import { subscriptionTiers, vendorSubscriptions, vendorUsageMetrics, vendorPayments, vendors, vendorSessions } from "@shared/schema";
 import * as vippsService from "./vipps-service";
 import crypto from "crypto";
+
+// Helper to check vendor authentication
+async function checkVendorAuth(req: Request, res: Response): Promise<string | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Ikke autorisert" });
+    return null;
+  }
+  const token = authHeader.replace("Bearer ", "");
+  
+  const [vendorSession] = await db.select({ vendorId: vendorSessions.vendorId })
+    .from(vendorSessions)
+    .where(and(
+      eq(vendorSessions.token, token),
+      sql`${vendorSessions.expiresAt} > NOW()`
+    ));
+  
+  if (!vendorSession) {
+    res.status(401).json({ error: "Økt utløpt. Vennligst logg inn på nytt." });
+    return null;
+  }
+
+  const [vendor] = await db.select().from(vendors).where(eq(vendors.id, vendorSession.vendorId));
+  if (!vendor || vendor.status !== "approved") {
+    res.status(401).json({ error: "Ikke autorisert" });
+    return null;
+  }
+
+  return vendorSession.vendorId;
+}
 
 // Helper function to get vendor's current subscription
 export async function getVendorSubscription(vendorId: string) {
