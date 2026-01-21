@@ -42,8 +42,13 @@ function setupCors(app: express.Application) {
     // Allow Replit domains
     const isReplit = origin?.includes(".replit.dev") || origin?.includes(".repl.co");
 
-    // Allow origin if it matches any known development domain, or in dev mode allow all
-    const shouldAllowOrigin = isDev || isLocalhost || isGitHubCodespaces || isCloudflare || isReplit;
+    // Allow production domains
+    const isProductionDomain = 
+      origin === "https://wedflow.no" ||
+      origin?.includes(".vercel.app");
+
+    // Allow origin if it matches any known development domain, production domain, or in dev mode allow all
+    const shouldAllowOrigin = isDev || isLocalhost || isGitHubCodespaces || isCloudflare || isReplit || isProductionDomain;
 
     if (origin && shouldAllowOrigin) {
       res.header("Access-Control-Allow-Origin", origin);
