@@ -148,9 +148,48 @@ export default function VendorLoginScreen({ navigation }: Props) {
       const session = await signInWithGoogle();
       
       if (session && session.user) {
-        // For vendors, Google OAuth would need additional verification
-        // For now, store the session but vendor still needs approval
-        Alert.alert("Google konto koblet", "Du har logget inn med Google. Hvis du har en eksisterende leverandørkonto, vil den bli koblet automatisk.");
+        const googleEmail = session.user.email || "";
+        const googleName = session.user.user_metadata?.full_name || googleEmail.split("@")[0];
+
+        // Send Google info to backend
+        const url = new URL("/api/vendors/google-login", getApiUrl());
+        const response = await fetch(url.toString(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            googleEmail,
+            googleName,
+            googleId: session.user.id,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.status === 201 || response.status === 200) {
+          // Vendor exists and is approved
+          if (data.status === "approved" && data.sessionToken) {
+            const vendorSession: VendorSession = {
+              sessionToken: data.sessionToken,
+              vendorId: data.vendor.id,
+              email: data.vendor.email,
+              businessName: data.vendor.businessName,
+            };
+            await AsyncStorage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(vendorSession));
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            navigation.replace("VendorDashboard");
+          } else if (data.status === "pending") {
+            Alert.alert("Søknad mottatt", "Takk for din registrering! Din søknad venter på godkjenning. Du vil motta en e-post når den er behandlet.");
+          }
+        } else if (response.status === 403) {
+          // Vendor exists but not approved
+          if (data.status === "pending") {
+            Alert.alert("Søknad venter", data.message || "Din søknad venter på godkjenning.");
+          } else if (data.status === "rejected") {
+            Alert.alert("Søknad avvist", data.message || "Din søknad ble avvist.");
+          }
+        } else {
+          Alert.alert("Feil", data.error || "Kunne ikke logge inn med Google");
+        }
       }
     } catch (error) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

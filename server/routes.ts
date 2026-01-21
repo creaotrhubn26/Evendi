@@ -409,6 +409,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Google OAuth vendor login/registration
+  app.post("/api/vendors/google-login", async (req: Request, res: Response) => {
+    try {
+      const { googleEmail, googleName, googleId } = req.body;
+
+      if (!googleEmail || !googleName) {
+        return res.status(400).json({ error: "Google informasjon mangler" });
+      }
+
+      // Check if vendor with this email exists
+      const [existingVendor] = await db.select().from(vendors).where(eq(vendors.email, googleEmail));
+
+      if (existingVendor) {
+        // Vendor exists - check status
+        if (existingVendor.status === "approved") {
+          // Create session for approved vendor
+          const sessionToken = generateSessionToken();
+          const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+          
+          await db.insert(vendorSessions).values({
+            vendorId: existingVendor.id,
+            token: sessionToken,
+            expiresAt,
+          });
+
+          const { password: _, ...vendorWithoutPassword } = existingVendor;
+          return res.json({ 
+            vendor: vendorWithoutPassword, 
+            sessionToken,
+            status: "approved",
+            message: "Velkommen tilbake!" 
+          });
+        } else if (existingVendor.status === "pending") {
+          return res.status(403).json({ 
+            status: "pending",
+            message: "Din søknad venter på godkjenning. Du vil motta en e-post når den er behandlet." 
+          });
+        } else if (existingVendor.status === "rejected") {
+          return res.status(403).json({ 
+            status: "rejected",
+            message: `Din søknad ble avvist. Årsak: ${existingVendor.rejectionReason || "Ikke spesifisert"}`,
+            rejectionReason: existingVendor.rejectionReason 
+          });
+        }
+      }
+
+      // New vendor - create account with pending status
+      const newVendorId = generateSessionToken().substring(0, 21); // Use part of token as ID
+      const [newVendor] = await db.insert(vendors).values({
+        id: newVendorId,
+        email: googleEmail,
+        password: generateSessionToken(), // Random password since using OAuth
+        businessName: googleName || "Min Bedrift",
+        status: "pending",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }).returning();
+
+      res.status(201).json({
+        vendor: {
+          id: newVendor.id,
+          email: newVendor.email,
+          businessName: newVendor.businessName,
+          status: newVendor.status,
+        },
+        status: "pending",
+        message: "Konto opprettet! Din søknad venter på godkjenning.",
+      });
+    } catch (error) {
+      console.error("Error with Google vendor login:", error);
+      res.status(500).json({ error: "Kunne ikke logge inn med Google" });
+    }
+  });
+
   app.post("/api/vendors/logout", async (req: Request, res: Response) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
