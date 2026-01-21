@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: wedflow-api
+    runtime: node
+    buildCommand: npm install && npm run server:build
+    startCommand: npm run server:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_SECRET
+        sync: false
+      - key: VIPPS_CLIENT_ID
+        sync: false
+      - key: VIPPS_CLIENT_SECRET
+        sync: false
+      - key: VIPPS_MERCHANT_SERIAL_NUMBER
+        sync: false
+      - key: VIPPS_AUTH_TOKEN
+        sync: false
+      - key: VIPPS_CALLBACK_URL
+        value: https://api.wedflow.no/api/vipps/callback
+      - key: VIPPS_REDIRECT_URL
+        value: https://app.wedflow.no/subscription/return
