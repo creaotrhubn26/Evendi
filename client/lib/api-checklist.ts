@@ -1,8 +1,6 @@
 import type { ChecklistTask, CreateChecklistTask } from "@shared/schema";
 
-const API_URL = process.env.EXPO_PUBLIC_DOMAIN 
-  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` 
-  : "http://localhost:5000";
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000";
 
 export async function getChecklistTasks(sessionToken: string): Promise<ChecklistTask[]> {
   const response = await fetch(`${API_URL}/api/checklist`, {

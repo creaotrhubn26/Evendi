@@ -5,9 +5,7 @@ export interface CoupleProfile {
   weddingDate?: string | null;
 }
 
-const API_URL = process.env.EXPO_PUBLIC_DOMAIN
-  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-  : "http://localhost:5000";
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000";
 
 function authHeader(token: string) {
   return { Authorization: `Bearer ${token}` };
