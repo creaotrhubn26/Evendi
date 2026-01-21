@@ -7101,12 +7101,24 @@ var log = console.log;
 function setupCors(app2) {
   app2.use((req, res, next) => {
     const origin = req.header("origin");
+    const allowedProdOrigins = [
+      "https://wedflow.no",
+      "https://www.wedflow.no",
+      "https://api.wedflow.no",
+      "https://wedflow-api.onrender.com",
+      "https://wedflow-wedflow.vercel.app"
+    ];
+    const envAllowedOrigins = (process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean);
     const isDev = process.env.NODE_ENV === "development";
     const isLocalhost = origin?.startsWith("http://localhost:") || origin?.startsWith("http://127.0.0.1:");
     const isGitHubCodespaces = origin?.includes(".app.github.dev") || origin?.includes(".github.dev");
     const isCloudflare = origin?.includes(".trycloudflare.com");
     const isReplit = origin?.includes(".replit.dev") || origin?.includes(".repl.co");
-    const isProductionDomain = origin === "https://wedflow.no" || origin?.includes(".vercel.app");
+    const allAllowedOrigins = /* @__PURE__ */ new Set([
+      ...allowedProdOrigins,
+      ...envAllowedOrigins
+    ]);
+    const isProductionDomain = origin ? allAllowedOrigins.has(origin) : false;
     const shouldAllowOrigin = isDev || isLocalhost || isGitHubCodespaces || isCloudflare || isReplit || isProductionDomain;
     if (origin && shouldAllowOrigin) {
       res.header("Access-Control-Allow-Origin", origin);

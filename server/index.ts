@@ -25,6 +25,21 @@ function setupCors(app: express.Application) {
   app.use((req, res, next) => {
     const origin = req.header("origin");
 
+    // Allowlist production origins (including current domains and render host)
+    const allowedProdOrigins = [
+      "https://wedflow.no",
+      "https://www.wedflow.no",
+      "https://api.wedflow.no",
+      "https://wedflow-api.onrender.com",
+      "https://wedflow-wedflow.vercel.app",
+    ];
+
+    // Allow custom list via env (comma-separated)
+    const envAllowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
     // In development, allow all origins for easier testing
     const isDev = process.env.NODE_ENV === "development";
 
@@ -42,10 +57,13 @@ function setupCors(app: express.Application) {
     // Allow Replit domains
     const isReplit = origin?.includes(".replit.dev") || origin?.includes(".repl.co");
 
-    // Allow production domains
-    const isProductionDomain = 
-      origin === "https://wedflow.no" ||
-      origin?.includes(".vercel.app");
+    const allAllowedOrigins = new Set([
+      ...allowedProdOrigins,
+      ...envAllowedOrigins,
+    ]);
+
+    // Allow production domains (explicit allowlist)
+    const isProductionDomain = origin ? allAllowedOrigins.has(origin) : false;
 
     // Allow origin if it matches any known development domain, production domain, or in dev mode allow all
     const shouldAllowOrigin = isDev || isLocalhost || isGitHubCodespaces || isCloudflare || isReplit || isProductionDomain;
