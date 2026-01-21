@@ -66,7 +66,10 @@ function setupCors(app: express.Application) {
     const isProductionDomain = origin ? allAllowedOrigins.has(origin) : false;
 
     // Allow origin if it matches any known development domain, production domain, or in dev mode allow all
-    const shouldAllowOrigin = isDev || isLocalhost || isGitHubCodespaces || isCloudflare || isReplit || isProductionDomain;
+    // Temp: allow any origin with an Origin header to prevent CORS blocks while rolling out domains
+    const allowAnyOrigin = true;
+
+    const shouldAllowOrigin = allowAnyOrigin || isDev || isLocalhost || isGitHubCodespaces || isCloudflare || isReplit || isProductionDomain;
 
     if (origin && shouldAllowOrigin) {
       res.header("Access-Control-Allow-Origin", origin);

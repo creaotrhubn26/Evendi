@@ -7119,7 +7119,8 @@ function setupCors(app2) {
       ...envAllowedOrigins
     ]);
     const isProductionDomain = origin ? allAllowedOrigins.has(origin) : false;
-    const shouldAllowOrigin = isDev || isLocalhost || isGitHubCodespaces || isCloudflare || isReplit || isProductionDomain;
+    const allowAnyOrigin = true;
+    const shouldAllowOrigin = allowAnyOrigin || isDev || isLocalhost || isGitHubCodespaces || isCloudflare || isReplit || isProductionDomain;
     if (origin && shouldAllowOrigin) {
       res.header("Access-Control-Allow-Origin", origin);
       res.header(
