@@ -32,6 +32,7 @@ import AdminAppSettingsScreen from "@/screens/AdminAppSettingsScreen";
 import AdminWhatsNewScreen from "@/screens/AdminWhatsNewScreen";
 import AdminVideoGuidesScreen from "@/screens/AdminVideoGuidesScreen";
 import AdminSubscriptionsScreen from "@/screens/AdminSubscriptionsScreen";
+import AdminPreviewScreen from "@/screens/AdminPreviewScreen";
 import StatusScreen from "@/screens/StatusScreen";
 import VendorHelpScreen from "@/screens/VendorHelpScreen";
 import WhatsNewScreen from "@/screens/WhatsNewScreen";
@@ -87,6 +88,7 @@ export type RootStackParamList = {
   AdminWhatsNew: { adminKey: string };
   AdminVideoGuides: { adminKey: string };
   AdminSubscriptions: { adminKey: string };
+  AdminPreview: { adminKey: string };
   AdminVendorChats: { adminKey: string };
   AdminVendorMessages: { conversationId: string; vendorName: string; adminKey: string };
   Status: undefined;
@@ -434,6 +436,19 @@ export default function RootStackNavigator() {
           <Stack.Screen
             name="AdminSubscriptions"
             component={AdminSubscriptionsScreen}
+            options={{
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
+            }}
+          />
+          <Stack.Screen
+            name="AdminPreview"
+            component={AdminPreviewScreen}
             options={{
               headerTitle: () => (
                 <Image

@@ -150,6 +150,12 @@ export default function AdminDashboardScreen() {
       screen: "AdminSubscriptions" as const,
     },
     {
+      title: "Preview-modus",
+      icon: "eye" as const,
+      description: "Se appen fra brudepar og leverandør-perspektivet",
+      screen: "AdminPreview" as const,
+    },
+    {
       title: "Design",
       icon: "layout" as const,
       description: "Tilpass farger, logo og utseende",

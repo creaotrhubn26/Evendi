@@ -4037,6 +4037,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin Preview Routes - Allow admin to see the app from couple/vendor perspective
+  app.get("/api/admin/preview/couple", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    
+    try {
+      // Get sample couple data
+      const coupleSample = await db.select()
+        .from(coupleProfiles)
+        .limit(1);
+      
+      // Get vendors to show
+      const vendorsSample = await db.select()
+        .from(vendors)
+        .where(eq(vendors.status, "approved"))
+        .limit(10);
+      
+      // Get inspirations
+      const inspirationsSample = await db.select()
+        .from(inspirations)
+        .where(eq(inspirations.status, "approved"))
+        .limit(10);
+      
+      res.json({
+        role: "couple",
+        description: "Brudepar-visning",
+        context: {
+          sampleCouple: coupleSample[0] || null,
+          availableVendors: vendorsSample.length,
+          availableInspirations: inspirationsSample.length,
+        },
+        tips: [
+          "Du ser nå appen som et brudepar ville sett det",
+          "Du kan søke etter leverandører i din kategori",
+          "Du kan browsere inspirasjon fra andre bryllup",
+          "Du kan lage tilbud-forespørsler til leverandører",
+          "Du kan administrere sjekklister og planlegging",
+        ],
+      });
+    } catch (error) {
+      console.error("Error generating couple preview:", error);
+      res.status(500).json({ error: "Kunne ikke generere brudepar-preview" });
+    }
+  });
+
+  app.get("/api/admin/preview/vendor", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    
+    try {
+      // Get sample vendor data
+      const vendorSample = await db.select()
+        .from(vendors)
+        .where(eq(vendors.status, "approved"))
+        .limit(1);
+      
+      // Get vendor statistics
+      const [inspirationCount] = await db.select({ count: sql<number>`count(*)` })
+        .from(inspirations)
+        .where(vendorSample[0] ? eq(inspirations.vendorId, vendorSample[0].id) : sql`false`);
+      
+      const [offerCount] = await db.select({ count: sql<number>`count(*)` })
+        .from(vendorOffers)
+        .where(vendorSample[0] ? eq(vendorOffers.vendorId, vendorSample[0].id) : sql`false`);
+      
+      const [messageCount] = await db.select({ count: sql<number>`count(*)` })
+        .from(messages)
+        .where(vendorSample[0] ? eq(messages.vendorId, vendorSample[0].id) : sql`false`);
+      
+      res.json({
+        role: "vendor",
+        description: "Leverandør-visning",
+        context: {
+          sampleVendor: vendorSample[0] || null,
+          vendorInspirations: Number(inspirationCount?.count || 0),
+          vendorOffers: Number(offerCount?.count || 0),
+          vendorMessages: Number(messageCount?.count || 0),
+        },
+        tips: [
+          "Du ser nå appen som en leverandør ville sett det",
+          "Du kan oppdatere profilen og inspirasjon-galleriet",
+          "Du kan sende tilbud til interesserte brudepar",
+          "Du kan administrere produkter og priser",
+          "Du kan se meldinger og henvendelser fra par",
+          "Du kan se dine abonnement-funksjoner",
+        ],
+      });
+    } catch (error) {
+      console.error("Error generating vendor preview:", error);
+      res.status(500).json({ error: "Kunne ikke generere leverandør-preview" });
+    }
+  });
+
   // Background job: Expire old offers and notify couples
   app.post("/api/admin/jobs/expire-offers", async (req: Request, res: Response) => {
     if (!checkAdminAuth(req, res)) return;
