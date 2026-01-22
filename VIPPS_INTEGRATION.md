@@ -383,7 +383,7 @@ ADD COLUMN next_charge_date TIMESTAMP;
 - ✅ Skygge for dybde
 
 ### Logo
-- ✅ Bruker offisiell SVG: `Vipps MobilePay_Logo_Primary_RGB_Black.svg`
+- ✅ Bruker offisiell SVG: `VippsMobilePay_Logo_Primary_RGB_Black.svg`
 - ✅ Vises i hvit container
 - ✅ Ikke modifisert eller re-skapt
 - ✅ Respektive minimum størrelse

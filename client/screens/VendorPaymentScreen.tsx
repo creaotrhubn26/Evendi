@@ -340,7 +340,7 @@ export default function VendorPaymentScreen() {
               {/* Vipps MobilePay Official Logo */}
               <View style={styles.vippsLogoContainer}>
                 <Image
-                  source={require('@/assets/images/Vipps MobilePay_Logo_Primary_RGB_Black.svg')}
+                  source={require('@/assets/images/VippsMobilePay_Logo_Primary_RGB_Black.svg')}
                   style={{ width: 90, height: 24 }}
                   resizeMode="contain"
                 />
