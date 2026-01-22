@@ -44,6 +44,14 @@ interface InspirationCategory {
   icon: string;
 }
 
+interface SubscriptionTier {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string | null;
+  priceNok: number;
+}
+
 export default function AdminVendorsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -62,6 +70,8 @@ export default function AdminVendorsScreen() {
     inspirations: true,
   });
   const [vendorCategories, setVendorCategories] = useState<string[]>([]);
+  const [approvingVendor, setApprovingVendor] = useState<PendingVendor | null>(null);
+  const [selectedTierId, setSelectedTierId] = useState<string>("");
 
   const { data: vendors = [], isLoading, refetch } = useQuery<PendingVendor[]>({
     queryKey: ["/api/admin/vendors", selectedTab, storedKey],
@@ -83,30 +93,28 @@ export default function AdminVendorsScreen() {
     enabled: storedKey.length > 0,
   });
 
+  const { data: subscriptionTiers = [] } = useQuery<SubscriptionTier[]>({
+    queryKey: ["/api/admin/subscription/tiers", storedKey],
+    queryFn: async () => {
+      const url = new URL("/api/admin/subscription/tiers", getApiUrl());
+      const response = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${storedKey}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error("Kunne ikke hente abonnementstier");
+      }
+      return response.json();
+    },
+    enabled: storedKey.length > 0,
+  });
+
   const { data: inspirationCats = [] } = useQuery<InspirationCategory[]>({
     queryKey: ["/api/inspiration-categories"],
   });
 
   const isAuthenticated = storedKey.length > 0;
-
-  const approveMutation = useMutation({
-    mutationFn: async (vendorId: string) => {
-      const url = new URL(`/api/admin/vendors/${vendorId}/approve`, getApiUrl());
-      const response = await fetch(url.toString(), {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${storedKey}`,
-          "Content-Type": "application/json",
-        },
-      });
-      if (!response.ok) throw new Error("Kunne ikke godkjenne");
-      return response.json();
-    },
-    onSuccess: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/vendors"] });
-    },
-  });
 
   const rejectMutation = useMutation({
     mutationFn: async ({ vendorId, reason }: { vendorId: string; reason: string }) => {
@@ -202,17 +210,39 @@ export default function AdminVendorsScreen() {
   };
 
   const handleApprove = (vendor: PendingVendor) => {
-    Alert.alert(
-      "Godkjenn leverandør",
-      `Er du sikker på at du vil godkjenne "${vendor.businessName}"?`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Godkjenn",
-          onPress: () => approveMutation.mutate(vendor.id),
+    if (subscriptionTiers.length === 0) {
+      Alert.alert("Feil", "Ingen abonnementstier konfigurert. Konfigurer tiers først.");
+      return;
+    }
+    setApprovingVendor(vendor);
+    setSelectedTierId(subscriptionTiers[0]?.id || "");
+  };
+
+  const confirmApproval = async () => {
+    if (!approvingVendor || !selectedTierId) return;
+    
+    try {
+      const url = new URL(`/api/admin/vendors/${approvingVendor.id}/approve`, getApiUrl());
+      const response = await fetch(url.toString(), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${storedKey}`,
+          "Content-Type": "application/json",
         },
-      ]
-    );
+        body: JSON.stringify({ tierId: selectedTierId }),
+      });
+      
+      if (!response.ok) {
+        Alert.alert("Feil", "Kunne ikke godkjenne leverandør");
+        return;
+      }
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setApprovingVendor(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vendors"] });
+    } catch (error) {
+      Alert.alert("Feil", "Nettverksfeil. Prøv igjen.");
+    }
   };
 
   const handleReject = (vendor: PendingVendor) => {
@@ -588,6 +618,72 @@ export default function AdminVendorsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Subscription Tier Selection Modal */}
+      <Modal
+        visible={approvingVendor !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setApprovingVendor(null)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.5)" }]}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+            <ThemedText style={styles.modalTitle}>
+              Velg abonnement for {approvingVendor?.businessName}
+            </ThemedText>
+            
+            <ScrollView style={styles.tierList}>
+              {subscriptionTiers.map((tier) => (
+                <Pressable
+                  key={tier.id}
+                  onPress={() => setSelectedTierId(tier.id)}
+                  style={[
+                    styles.tierOption,
+                    {
+                      backgroundColor: selectedTierId === tier.id ? Colors.dark.accent + "20" : theme.backgroundRoot,
+                      borderColor: selectedTierId === tier.id ? Colors.dark.accent : theme.border,
+                      borderWidth: 2,
+                    }
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={styles.tierName}>{tier.displayName}</ThemedText>
+                    {tier.description && (
+                      <ThemedText style={[styles.tierDescription, { color: theme.textSecondary }]}>
+                        {tier.description}
+                      </ThemedText>
+                    )}
+                    <ThemedText style={[styles.tierPrice, { color: Colors.dark.accent }]}>
+                      {tier.priceNok} NOK/mnd
+                    </ThemedText>
+                  </View>
+                  {selectedTierId === tier.id && (
+                    <Feather name="check-circle" size={24} color={Colors.dark.accent} />
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <Pressable
+                onPress={() => setApprovingVendor(null)}
+                style={[styles.modalBtn, { backgroundColor: theme.backgroundRoot, borderColor: theme.border, borderWidth: 1 }]}
+              >
+                <ThemedText style={{ color: theme.text }}>Avbryt</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={confirmApproval}
+                style={[styles.modalBtn, { backgroundColor: Colors.dark.accent }]}
+              >
+                <Feather name="check" size={18} color="#1A1A1A" />
+                <ThemedText style={{ color: "#1A1A1A", fontWeight: "600", marginLeft: 8 }}>
+                  Godkjenn
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -834,5 +930,31 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+  },
+  tierList: {
+    maxHeight: 300,
+    marginBottom: Spacing.lg,
+  },
+  tierOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.lg,
+    marginHorizontal: Spacing.lg,
+    marginVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  tierName: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: Spacing.xs,
+  },
+  tierDescription: {
+    fontSize: 14,
+    marginBottom: Spacing.sm,
+  },
+  tierPrice: {
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

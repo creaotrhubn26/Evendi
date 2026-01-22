@@ -257,6 +257,23 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     enabled: !!session?.sessionToken,
   });
 
+  // Query subscription status
+  const { data: subscriptionStatus } = useQuery({
+    queryKey: ["/api/vendor/subscription/status", session?.sessionToken],
+    queryFn: async () => {
+      if (!session?.sessionToken) return null;
+      const response = await fetch(new URL("/api/vendor/subscription/status", getApiUrl()).toString(), {
+        headers: {
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+      });
+      if (!response.ok) return null;
+      return response.json();
+    },
+    enabled: !!session?.sessionToken,
+    refetchInterval: 60000, // Refetch every minute
+  });
+
   // Merge fetched conversations with WebSocket updates
   const mergedConversationsData = React.useMemo(() => {
     const base = [...conversationsData];
@@ -1052,6 +1069,120 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           </Pressable>
         </View>
       </View>
+
+      {/* Payment Reminder Banner - FOMO messaging */}
+      {subscriptionStatus?.needsPayment && (
+        <View style={[styles.paymentBanner, { backgroundColor: subscriptionStatus.isPaused ? "#EF5350" : "#FFA726" }]}>
+          <Feather name={subscriptionStatus.isPaused ? "lock" : "alert-triangle"} size={24} color="#1A1A1A" />
+          <View style={{ flex: 1, marginLeft: Spacing.md }}>
+            <ThemedText style={styles.paymentBannerTitle}>
+              {subscriptionStatus.isPaused 
+                ? "Tilgangen din er satt på pause" 
+                : `Kun ${subscriptionStatus.daysRemaining} dager igjen!`}
+            </ThemedText>
+            <ThemedText style={styles.paymentBannerText}>
+              {subscriptionStatus.isPaused 
+                ? "Du går glipp av nye henvendelser, showcase-visninger og potensielle kunder" 
+                : "Sikre din plass og fortsett å motta henvendelser fra brudepar"}
+            </ThemedText>
+            {subscriptionStatus.isPaused && (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <Feather name="x-circle" size={14} color="#1A1A1A" />
+                  <ThemedText style={[styles.paymentBannerText, { fontSize: 13, fontWeight: "600" }]}>Ingen showcase</ThemedText>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <Feather name="mail" size={14} color="#1A1A1A" />
+                  <ThemedText style={[styles.paymentBannerText, { fontSize: 13, fontWeight: "600" }]}>Meldinger deaktivert</ThemedText>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <Feather name="slash" size={14} color="#1A1A1A" />
+                  <ThemedText style={[styles.paymentBannerText, { fontSize: 13, fontWeight: "600" }]}>Henvendelser blokkert</ThemedText>
+                </View>
+              </View>
+            )}
+          </View>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              navigation.navigate("VendorPayment");
+            }}
+            style={[styles.paymentBtn, { backgroundColor: "#1A1A1A" }]}
+          >
+            <ThemedText style={styles.paymentBtnText}>
+              {subscriptionStatus.isPaused ? "Reaktiver" : "Sikre plass"}
+            </ThemedText>
+            <Feather name="arrow-right" size={16} color={subscriptionStatus.isPaused ? "#EF5350" : "#FFA726"} />
+          </Pressable>
+        </View>
+      )}
+
+      {/* Trial Info Banner - Progressive scarcity */}
+      {subscriptionStatus?.isTrialing && !subscriptionStatus.needsPayment && (
+        <Pressable
+          onPress={() => {
+            const days = subscriptionStatus.daysRemaining;
+            let message = "Du har full tilgang til alle funksjoner i prøveperioden.";
+            
+            if (days <= 7) {
+              // Navigate to payment screen instead of just showing alert
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              navigation.navigate("VendorPayment");
+              return;
+            } else if (days <= 14) {
+              message = `${days} dager til prøveperioden utløper. Ikke gå glipp av potensielle kunder!`;
+            }
+            
+            Alert.alert(
+              days <= 7 ? "Prøveperioden går snart ut!" : "Prøveperiode aktiv",
+              message,
+              [
+                { text: "OK" },
+                ...(days <= 14 ? [{ text: "Betal nå", onPress: () => navigation.navigate("VendorPayment") }] : [])
+              ]
+            );
+          }}
+          style={[
+            styles.trialBanner, 
+            { 
+              backgroundColor: subscriptionStatus.daysRemaining <= 7 
+                ? "#FFA726" + "20" 
+                : Colors.dark.accent + "20", 
+              borderColor: subscriptionStatus.daysRemaining <= 7 
+                ? "#FFA726" 
+                : Colors.dark.accent 
+            }
+          ]}
+        >
+          <Feather 
+            name={subscriptionStatus.daysRemaining <= 7 ? "alert-circle" : "star"} 
+            size={18} 
+            color={subscriptionStatus.daysRemaining <= 7 ? "#FFA726" : Colors.dark.accent} 
+          />
+          <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+            <ThemedText 
+              style={[
+                styles.trialBannerText, 
+                { color: subscriptionStatus.daysRemaining <= 7 ? "#FFA726" : Colors.dark.accent }
+              ]}
+            >
+              {subscriptionStatus.daysRemaining <= 3 
+                ? `${subscriptionStatus.daysRemaining} dager igjen av prøveperioden` 
+                : subscriptionStatus.daysRemaining <= 7
+                ? `${subscriptionStatus.daysRemaining} dager igjen - sikre din plass nå`
+                : `Prøveperiode: ${subscriptionStatus.daysRemaining} dager gjenstår`}
+            </ThemedText>
+            {subscriptionStatus.daysRemaining <= 7 && (
+              <ThemedText style={[styles.trialBannerSubtext, { color: "#FFA726" }]}>
+                Trykk for å se hva du mister
+              </ThemedText>
+            )}
+          </View>
+          {subscriptionStatus.daysRemaining <= 7 && (
+            <Feather name="chevron-right" size={18} color="#FFA726" />
+          )}
+        </Pressable>
+      )}
 
       <ScrollView 
         horizontal 
@@ -2457,5 +2588,54 @@ const styles = StyleSheet.create({
   },
   favoriteBtn: {
     padding: 4,
+  },
+  paymentBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.lg,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.sm,
+  },
+  paymentBannerTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 2,
+  },
+  paymentBannerText: {
+    fontSize: 13,
+    color: "#1A1A1A",
+  },
+  paymentBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    gap: Spacing.xs,
+  },
+  paymentBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#FFA726",
+  },
+  trialBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+  },
+  trialBannerText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  trialBannerSubtext: {
+    fontSize: 12,
+    marginTop: 2,
+    fontWeight: "500",
   },
 });

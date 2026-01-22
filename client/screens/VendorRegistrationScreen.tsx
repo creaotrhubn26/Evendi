@@ -41,6 +41,19 @@ interface VendorCategory {
   description: string | null;
 }
 
+interface SubscriptionTier {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string | null;
+  priceNok: number;
+  maxInspirationPhotos: number;
+  maxMonthlyVideoMinutes: number;
+  hasAdvancedAnalytics: boolean;
+  hasPrioritizedSearch: boolean;
+  hasCustomLandingPage: boolean;
+}
+
 export default function VendorRegistrationScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -58,6 +71,7 @@ export default function VendorRegistrationScreen() {
     phone: "",
     website: "",
     priceRange: "",
+    tierId: "",
   });
 
   const [showPassword, setShowPassword] = useState(false);
@@ -90,6 +104,9 @@ export default function VendorRegistrationScreen() {
         return "";
       case "categoryId":
         if (!value) return "Velg en kategori";
+        return "";
+      case "tierId":
+        if (!value) return "Velg et abonnement";
         return "";
       case "phone":
         if (value && !/^[+]?[\d\s-]{8,}$/.test(value)) return "Ugyldig telefonnummer";
@@ -197,6 +214,18 @@ export default function VendorRegistrationScreen() {
 
   const { data: categories = [], isLoading: categoriesLoading } = useQuery<VendorCategory[]>({
     queryKey: ["/api/vendor-categories"],
+  });
+
+  const { data: subscriptionTiers = [], isLoading: tiersLoading } = useQuery<SubscriptionTier[]>({
+    queryKey: ["/api/subscription/tiers"],
+    queryFn: async () => {
+      const url = new URL("/api/subscription/tiers", getApiUrl());
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        throw new Error("Kunne ikke hente abonnement");
+      }
+      return response.json();
+    },
   });
 
   const registerMutation = useMutation({
@@ -429,6 +458,86 @@ export default function VendorRegistrationScreen() {
             ))}
           </ScrollView>
         )}
+
+        {/* Subscription Tier Selection */}
+        <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.lg }]}>
+          Velg hvilket abonnement som passer deg *
+        </ThemedText>
+        <ThemedText style={[styles.trialInfo, { color: Colors.dark.accent }]}>
+          🎉 30 dager gratis prøveperiode - ingen binding!
+        </ThemedText>
+        {tiersLoading ? (
+          <ActivityIndicator color={Colors.dark.accent} />
+        ) : (
+          <View style={styles.tiersContainer}>
+            {subscriptionTiers.map((tier) => (
+              <Pressable
+                key={tier.id}
+                onPress={() => {
+                  updateField("tierId", tier.id);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                style={[
+                  styles.tierCard,
+                  {
+                    backgroundColor: formData.tierId === tier.id ? Colors.dark.accent + "15" : theme.backgroundDefault,
+                    borderColor: formData.tierId === tier.id ? Colors.dark.accent : theme.border,
+                    borderWidth: 2,
+                  },
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <View style={styles.tierHeader}>
+                    <ThemedText style={styles.tierName}>{tier.displayName}</ThemedText>
+                    {formData.tierId === tier.id && (
+                      <Feather name="check-circle" size={20} color={Colors.dark.accent} />
+                    )}
+                  </View>
+                  {tier.description && (
+                    <ThemedText style={[styles.tierDescription, { color: theme.textSecondary }]}>
+                      {tier.description}
+                    </ThemedText>
+                  )}
+                  <ThemedText style={[styles.tierPrice, { color: Colors.dark.accent }]}>
+                    {tier.priceNok} NOK/mnd
+                  </ThemedText>
+                  <View style={styles.tierFeatures}>
+                    {tier.maxInspirationPhotos > 0 && (
+                      <View style={styles.featureRow}>
+                        <Feather name="image" size={14} color={theme.textSecondary} />
+                        <ThemedText style={[styles.featureText, { color: theme.textSecondary }]}>
+                          {tier.maxInspirationPhotos === -1 ? "Ubegrensede" : tier.maxInspirationPhotos} bilder
+                        </ThemedText>
+                      </View>
+                    )}
+                    {tier.hasAdvancedAnalytics && (
+                      <View style={styles.featureRow}>
+                        <Feather name="bar-chart-2" size={14} color={theme.textSecondary} />
+                        <ThemedText style={[styles.featureText, { color: theme.textSecondary }]}>
+                          Avansert analyse
+                        </ThemedText>
+                      </View>
+                    )}
+                    {tier.hasPrioritizedSearch && (
+                      <View style={styles.featureRow}>
+                        <Feather name="star" size={14} color={theme.textSecondary} />
+                        <ThemedText style={[styles.featureText, { color: theme.textSecondary }]}>
+                          Prioritert søk
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
+        {touched.tierId && errors.tierId ? (
+          <View style={styles.errorContainer}>
+            <Feather name="alert-circle" size={14} color="#EF5350" />
+            <ThemedText style={styles.errorText}>{errors.tierId}</ThemedText>
+          </View>
+        ) : null}
 
         <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <Feather name="map-pin" size={18} color={theme.textMuted} />
@@ -704,5 +813,50 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: Spacing.sm,
     marginLeft: Spacing.sm,
+  },
+  trialInfo: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: Spacing.md,
+    textAlign: "center",
+  },
+  tiersContainer: {
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  tierCard: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.sm,
+  },
+  tierHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.xs,
+  },
+  tierName: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  tierDescription: {
+    fontSize: 14,
+    marginBottom: Spacing.sm,
+  },
+  tierPrice: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: Spacing.md,
+  },
+  tierFeatures: {
+    gap: Spacing.xs,
+  },
+  featureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  featureText: {
+    fontSize: 13,
   },
 });

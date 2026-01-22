@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import { db } from "./db";
 import bcrypt from "bcryptjs";
 import { registerSubscriptionRoutes } from "./subscription-routes";
-import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema } from "@shared/schema";
+import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers } from "@shared/schema";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
 function generateAccessCode(): string {
@@ -332,9 +332,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Public endpoint to get subscription tiers (for vendor registration)
+  app.get("/api/subscription/tiers", async (_req: Request, res: Response) => {
+    try {
+      const { subscriptionTiers } = await import("@shared/schema");
+      const tiers = await db.select()
+        .from(subscriptionTiers)
+        .where(eq(subscriptionTiers.isActive, true))
+        .orderBy(subscriptionTiers.sortOrder);
+      res.json(tiers);
+    } catch (error) {
+      console.error("Error fetching subscription tiers:", error);
+      res.status(500).json({ error: "Kunne ikke hente abonnement" });
+    }
+  });
+
+  // Endpoint to check and update expired trials (should be called by cron job)
+  app.post("/api/admin/subscriptions/check-expired-trials", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    
+    try {
+      const { vendorSubscriptions } = await import("@shared/schema");
+      const now = new Date();
+      
+      // Find all trialing subscriptions that have expired
+      const expiredTrials = await db.select()
+        .from(vendorSubscriptions)
+        .where(
+          and(
+            eq(vendorSubscriptions.status, "trialing"),
+            sql`${vendorSubscriptions.currentPeriodEnd} < ${now}`
+          )
+        );
+
+      // Update expired trials to paused status
+      if (expiredTrials.length > 0) {
+        await db.update(vendorSubscriptions)
+          .set({ 
+            status: "paused",
+            pausedUntil: sql`${vendorSubscriptions.currentPeriodEnd} + interval '365 days'`, // Pause for 1 year
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(vendorSubscriptions.status, "trialing"),
+              sql`${vendorSubscriptions.currentPeriodEnd} < ${now}`
+            )
+          );
+
+        // Send payment reminder notifications to vendors
+        for (const sub of expiredTrials) {
+          // Get vendor info
+          const [vendor] = await db.select().from(vendors).where(eq(vendors.id, sub.vendorId));
+          if (!vendor) continue;
+
+          // Create in-app notification
+          await db.insert(notifications).values({
+            recipientType: "vendor",
+            recipientId: sub.vendorId,
+            type: "payment_required",
+            title: "Betaling påkrevd",
+            body: "Din 30-dagers prøveperiode har utløpt. Betal for å fortsette å bruke Wedflow og motta henvendelser fra brudepar.",
+            sentVia: "in_app",
+          });
+
+          // TODO: Send email notification
+          console.log(`Trial expired for vendor ${vendor.email} - notification created`);
+        }
+      }
+
+      res.json({ 
+        message: "Sjekket utløpte prøveperioder",
+        expiredCount: expiredTrials.length 
+      });
+    } catch (error) {
+      console.error("Error checking expired trials:", error);
+      res.status(500).json({ error: "Kunne ikke sjekke utløpte prøveperioder" });
+    }
+  });
+
+  // Endpoint to send trial reminder emails (7, 3, 1 days before expiry)
+  app.post("/api/admin/subscriptions/send-trial-reminders", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    
+    try {
+      const { vendorSubscriptions, subscriptionTiers } = await import("@shared/schema");
+      const now = new Date();
+      const reminderDays = [7, 3, 1]; // Days before expiry to send reminders
+      
+      let sentCount = 0;
+
+      for (const days of reminderDays) {
+        const targetDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+        const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
+        const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
+
+        // Find trials expiring on this target date
+        const expiringTrials = await db.select({
+          subscription: vendorSubscriptions,
+          tier: subscriptionTiers,
+          vendor: vendors,
+        })
+        .from(vendorSubscriptions)
+        .innerJoin(subscriptionTiers, eq(vendorSubscriptions.tierId, subscriptionTiers.id))
+        .innerJoin(vendors, eq(vendorSubscriptions.vendorId, vendors.id))
+        .where(
+          and(
+            eq(vendorSubscriptions.status, "trialing"),
+            sql`${vendorSubscriptions.currentPeriodEnd}::date = ${startOfDay}::date`
+          )
+        );
+
+        for (const { subscription, tier, vendor } of expiringTrials) {
+          // Create notification with FOMO messaging
+          let title = "";
+          let body = "";
+          
+          if (days === 7) {
+            title = "7 dager til prøveperioden utløper";
+            body = `Ikke gå glipp av henvendelser! Showcase-galleriet, meldinger og nye leads deaktiveres om en uke.\n\nSikre din plass for kun ${tier.priceNok} NOK/mnd.`;
+          } else if (days === 3) {
+            title = "Siste sjanse - 3 dager igjen!";
+            body = `Om 3 dager mister du tilgang til alle funksjoner:\n• Showcase-galleriet\n• Aktive samtaler\n• Nye henvendelser\n• Statistikk\n\nBetal nå: ${tier.priceNok} NOK/mnd`;
+          } else if (days === 1) {
+            title = "SISTE DAG - Prøveperioden utløper i morgen!";
+            body = `I morgen går du glipp av potensielle kunder!\n\nSikre tilgang nå for ${tier.priceNok} NOK/mnd og fortsett å motta henvendelser.`;
+          }
+
+          await db.insert(notifications).values({
+            recipientType: "vendor",
+            recipientId: vendor.id,
+            type: "trial_reminder",
+            title,
+            body,
+            sentVia: "in_app",
+          });
+
+          // TODO: Send email
+          console.log(`Sent ${days}-day reminder to ${vendor.email}`);
+          sentCount++;
+        }
+      }
+
+      res.json({ 
+        message: "Sendte prøveperiode-påminnelser",
+        sentCount 
+      });
+    } catch (error) {
+      console.error("Error sending trial reminders:", error);
+      res.status(500).json({ error: "Kunne ikke sende påminnelser" });
+    }
+  });
+
   app.post("/api/vendors/register", async (req: Request, res: Response) => {
     try {
-      const validation = vendorRegistrationSchema.safeParse(req.body);
+      const { tierId, ...restData } = req.body;
+      const validation = vendorRegistrationSchema.safeParse(restData);
       if (!validation.success) {
         return res.status(400).json({ 
           error: "Ugyldig data", 
@@ -364,9 +517,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         priceRange: profileData.priceRange || null,
       }).returning();
 
+      // Create trial subscription if tierId is provided
+      if (tierId) {
+        const now = new Date();
+        const trialEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days trial
+        
+        await db.insert(vendorSubscriptions)
+          .values({
+            vendorId: newVendor.id,
+            tierId: tierId,
+            status: "trialing",
+            currentPeriodStart: now,
+            currentPeriodEnd: trialEnd,
+            autoRenew: true,
+          })
+          .onConflictDoNothing();
+      }
+
       const { password: _, ...vendorWithoutPassword } = newVendor;
       res.status(201).json({ 
-        message: "Registrering vellykket! Din søknad er under behandling.",
+        message: "Registrering vellykket! Din søknad er under behandling. Du får 30 dager gratis prøveperiode.",
         vendor: vendorWithoutPassword 
       });
     } catch (error) {
@@ -603,10 +773,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       const { id } = req.params;
+      const { tierId } = req.body;
       
+      // Update vendor status
       await db.update(vendors)
         .set({ status: "approved", updatedAt: new Date() })
         .where(eq(vendors.id, id));
+
+      // Check if vendor already has a trial subscription
+      const { vendorSubscriptions } = await import("@shared/schema");
+      const [existingSubscription] = await db.select()
+        .from(vendorSubscriptions)
+        .where(eq(vendorSubscriptions.vendorId, id))
+        .limit(1);
+
+      if (existingSubscription) {
+        // Keep trial subscription in "trialing" status - will activate after payment
+        // Only update tier if admin changed it
+        if (tierId && existingSubscription.tierId !== tierId) {
+          await db.update(vendorSubscriptions)
+            .set({ 
+              tierId: tierId,
+              updatedAt: new Date(),
+            })
+            .where(eq(vendorSubscriptions.vendorId, id));
+        }
+      } else if (tierId) {
+        // Create trial subscription if none exists (payment required to activate)
+        const now = new Date();
+        const trialEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days trial
+        
+        await db.insert(vendorSubscriptions)
+          .values({
+            vendorId: id,
+            tierId: tierId,
+            status: "trialing", // Trial - requires payment
+            currentPeriodStart: now,
+            currentPeriodEnd: trialEnd,
+            autoRenew: true,
+          });
+      }
 
       res.json({ message: "Leverandør godkjent" });
     } catch (error) {
@@ -666,6 +872,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return vendorSession.vendorId;
   };
 
+  // Check if vendor has active subscription (not paused)
+  const checkVendorSubscriptionAccess = async (vendorId: string, res: Response): Promise<boolean> => {
+    try {
+      const { vendorSubscriptions } = await import("@shared/schema");
+      
+      const [subscription] = await db.select()
+        .from(vendorSubscriptions)
+        .where(eq(vendorSubscriptions.vendorId, vendorId))
+        .limit(1);
+
+      if (!subscription) {
+        res.status(403).json({ 
+          error: "Ingen aktivt abonnement",
+          message: "Du må ha et aktivt abonnement for å bruke denne funksjonen.",
+          requiresPayment: true
+        });
+        return false;
+      }
+
+      if (subscription.status === "paused") {
+        res.status(403).json({ 
+          error: "Abonnement satt på pause",
+          message: "Ditt abonnement er satt på pause. Betal for å fortsette å bruke Wedflow og motta henvendelser.",
+          requiresPayment: true,
+          isPaused: true
+        });
+        return false;
+      }
+
+      // Check if trial has expired
+      if (subscription.status === "trialing") {
+        const now = new Date();
+        if (subscription.currentPeriodEnd < now) {
+          // Update to paused if trial expired
+          await db.update(vendorSubscriptions)
+            .set({ 
+              status: "paused",
+              updatedAt: now,
+            })
+            .where(eq(vendorSubscriptions.id, subscription.id));
+
+          res.status(403).json({ 
+            error: "Prøveperiode utløpt",
+            message: "Din 30-dagers prøveperiode har utløpt. Betal for å fortsette.",
+            requiresPayment: true,
+            trialExpired: true
+          });
+          return false;
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error checking subscription access:", error);
+      return true; // Allow access on error to avoid breaking functionality
+    }
+  };
+
   // Get vendor profile
   app.get("/api/vendor/profile", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
@@ -702,6 +966,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching vendor profile:", error);
       res.status(500).json({ error: "Kunne ikke hente profil" });
+    }
+  });
+
+  // Get vendor subscription status
+  app.get("/api/vendor/subscription/status", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { vendorSubscriptions, subscriptionTiers } = await import("@shared/schema");
+      
+      const [subscription] = await db.select({
+        id: vendorSubscriptions.id,
+        status: vendorSubscriptions.status,
+        currentPeriodStart: vendorSubscriptions.currentPeriodStart,
+        currentPeriodEnd: vendorSubscriptions.currentPeriodEnd,
+        autoRenew: vendorSubscriptions.autoRenew,
+        tier: {
+          id: subscriptionTiers.id,
+          name: subscriptionTiers.name,
+          displayName: subscriptionTiers.displayName,
+          priceNok: subscriptionTiers.priceNok,
+        },
+      })
+      .from(vendorSubscriptions)
+      .innerJoin(subscriptionTiers, eq(vendorSubscriptions.tierId, subscriptionTiers.id))
+      .where(eq(vendorSubscriptions.vendorId, vendorId))
+      .limit(1);
+
+      if (!subscription) {
+        return res.json({ hasSubscription: false });
+      }
+
+      const now = new Date();
+      const daysRemaining = Math.ceil(
+        (subscription.currentPeriodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      const needsPayment = 
+        subscription.status === "paused" || 
+        subscription.status === "past_due" ||
+        (subscription.status === "trialing" && daysRemaining <= 0);
+
+      res.json({
+        hasSubscription: true,
+        status: subscription.status,
+        tier: subscription.tier,
+        currentPeriodStart: subscription.currentPeriodStart,
+        currentPeriodEnd: subscription.currentPeriodEnd,
+        daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
+        needsPayment,
+        isTrialing: subscription.status === "trialing",
+        isPaused: subscription.status === "paused",
+        autoRenew: subscription.autoRenew,
+      });
+    } catch (error) {
+      console.error("Error fetching subscription status:", error);
+      res.status(500).json({ error: "Kunne ikke hente abonnementsstatus" });
     }
   });
 
@@ -763,6 +1085,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/vendor/deliveries", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
+
+    // Check subscription access
+    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const validation = createDeliverySchema.safeParse(req.body);
@@ -1000,6 +1325,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/vendor/inspirations", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
+
+    // Check subscription access
+    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const featureRows = await db.select().from(vendorFeatures)
@@ -3040,6 +3368,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
+    // Check subscription access
+    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
+
     try {
       const validatedData = createVendorProductSchema.parse(req.body);
       
@@ -3164,6 +3495,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/vendor/offers", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
+
+    // Check subscription access
+    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const validatedData = createOfferSchema.parse(req.body);

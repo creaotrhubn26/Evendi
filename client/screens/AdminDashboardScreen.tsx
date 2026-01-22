@@ -144,6 +144,12 @@ export default function AdminDashboardScreen() {
       screen: "AdminVideoGuides" as const,
     },
     {
+      title: "Abonnement & Pakker",
+      icon: "package" as const,
+      description: "Administrer abonnementstier og priser",
+      screen: "AdminSubscriptions" as const,
+    },
+    {
       title: "Design",
       icon: "layout" as const,
       description: "Tilpass farger, logo og utseende",

@@ -9,6 +9,7 @@ import CoupleLoginScreen from "@/screens/CoupleLoginScreen";
 import VendorLoginScreen from "@/screens/VendorLoginScreen";
 import VendorRegistrationScreen from "@/screens/VendorRegistrationScreen";
 import VendorDashboardScreen from "@/screens/VendorDashboardScreen";
+import VendorPaymentScreen from "@/screens/VendorPaymentScreen";
 import VendorAdminChatScreen from "@/screens/VendorAdminChatScreen";
 import VendorProfileScreen from "@/screens/VendorProfileScreen";
 import DeliveryCreateScreen from "@/screens/DeliveryCreateScreen";
@@ -30,6 +31,7 @@ import AdminFAQScreen from "@/screens/AdminFAQScreen";
 import AdminAppSettingsScreen from "@/screens/AdminAppSettingsScreen";
 import AdminWhatsNewScreen from "@/screens/AdminWhatsNewScreen";
 import AdminVideoGuidesScreen from "@/screens/AdminVideoGuidesScreen";
+import AdminSubscriptionsScreen from "@/screens/AdminSubscriptionsScreen";
 import StatusScreen from "@/screens/StatusScreen";
 import VendorHelpScreen from "@/screens/VendorHelpScreen";
 import WhatsNewScreen from "@/screens/WhatsNewScreen";
@@ -43,6 +45,7 @@ export type RootStackParamList = {
   VendorDashboard: undefined;
   VendorProfile: undefined;
   VendorRegistration: undefined;
+  VendorPayment: undefined;
   DeliveryCreate: { delivery?: any };
   InspirationCreate: undefined;
   ProductCreate: { product?: any };
@@ -62,6 +65,7 @@ export type RootStackParamList = {
   AdminAppSettings: { adminKey: string };
   AdminWhatsNew: { adminKey: string };
   AdminVideoGuides: { adminKey: string };
+  AdminSubscriptions: { adminKey: string };
   AdminVendorChats: { adminKey: string };
   AdminVendorMessages: { conversationId: string; vendorName: string; adminKey: string };
   Status: undefined;
@@ -152,6 +156,14 @@ export default function RootStackNavigator() {
             component={VendorDashboardScreen}
             options={{
               headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorPayment"
+            component={VendorPaymentScreen}
+            options={{
+              headerShown: false,
+              presentation: "modal",
             }}
           />
           <Stack.Screen
@@ -315,6 +327,19 @@ export default function RootStackNavigator() {
           <Stack.Screen
             name="AdminVideoGuides"
             component={AdminVideoGuidesScreen}
+            options={{
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
+            }}
+          />
+          <Stack.Screen
+            name="AdminSubscriptions"
+            component={AdminSubscriptionsScreen}
             options={{
               headerTitle: () => (
                 <Image

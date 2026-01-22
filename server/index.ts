@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { initializeSubscriptionCrons } from "./cron-subscriptions";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -270,6 +271,23 @@ function setupErrorHandler(app: express.Application) {
 
   const server = await registerRoutes(app);
 
+  // Serve Terms of Sale page
+  app.get("/terms-of-sale", (_req: Request, res: Response) => {
+    const termsPath = path.resolve(
+      process.cwd(),
+      "server",
+      "templates",
+      "terms-of-sale.html"
+    );
+    try {
+      const termsHtml = fs.readFileSync(termsPath, "utf-8");
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.status(200).send(termsHtml);
+    } catch (err) {
+      res.status(404).json({ error: "Terms of sale not found" });
+    }
+  });
+
   // Configure Expo AFTER routes so /api endpoints are not caught by landing page middleware
   configureExpoAndLanding(app);
 
@@ -284,6 +302,9 @@ function setupErrorHandler(app: express.Application) {
     },
     () => {
       log(`express server serving on port ${port}`);
+      
+      // Initialize subscription cron jobs
+      initializeSubscriptionCrons();
     },
   );
 })();

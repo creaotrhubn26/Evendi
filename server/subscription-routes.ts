@@ -431,6 +431,12 @@ export function registerSubscriptionRoutes(app: Express) {
         return res.status(404).json({ error: "Tier ikke funnet" });
       }
 
+      // Find existing subscription for this vendor
+      const [subscription] = await db.select()
+        .from(vendorSubscriptions)
+        .where(eq(vendorSubscriptions.vendorId, vendorId))
+        .limit(1);
+
       // Generate order ID
       const orderId = `WF-${vendorId.substring(0, 8)}-${Date.now()}`;
       const now = new Date();
@@ -441,6 +447,7 @@ export function registerSubscriptionRoutes(app: Express) {
         .insert(vendorPayments)
         .values({
           vendorId,
+          subscriptionId: subscription?.id, // Link to subscription
           amountNok: tier.priceNok * 100, // Convert to øre
           currency: "NOK",
           status: "pending",
@@ -569,8 +576,23 @@ export function registerSubscriptionRoutes(app: Express) {
           })
           .where(eq(vendorPayments.id, payment.id));
 
-        // Find subscription tier from payment details and create/update subscription
-        // For now we'll just mark payment as successful
+        // Activate subscription if payment successful
+        if (payment.subscriptionId) {
+          const now = new Date();
+          const nextBilling = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
+          
+          await db.update(vendorSubscriptions)
+            .set({
+              status: "active", // Activate subscription after successful payment
+              currentPeriodStart: now,
+              currentPeriodEnd: nextBilling,
+              updatedAt: new Date(),
+            })
+            .where(eq(vendorSubscriptions.id, payment.subscriptionId));
+          
+          console.log(`Subscription ${payment.subscriptionId} activated for vendor ${payment.vendorId}`);
+        }
+        
         console.log(`Payment ${orderId} captured successfully`);
       } else if (status === "FAILED" || status === "ABORTED") {
         await db.update(vendorPayments)
