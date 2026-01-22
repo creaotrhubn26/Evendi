@@ -13,6 +13,7 @@ import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
+import { renderIcon } from "@/lib/custom-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -321,7 +322,7 @@ export default function BudgetScreen() {
           <View style={styles.categorySection}>
             <View style={styles.categoryHeader}>
               <View style={[styles.categoryIcon, { backgroundColor: category.color + "20" }]}>
-                <Feather name={category.icon as any} size={16} color={category.color} />
+                {renderIcon(category.icon, category.color, 16)}
               </View>
               <ThemedText type="h4" style={styles.categoryName}>{category.name}</ThemedText>
               <ThemedText style={[styles.categoryTotal, { color: theme.textSecondary }]}>
@@ -413,11 +414,11 @@ export default function BudgetScreen() {
                   },
                 ]}
               >
-                <Feather
-                  name={cat.icon as any}
-                  size={14}
-                  color={selectedCategory === cat.id ? "#FFFFFF" : theme.textSecondary}
-                />
+                {renderIcon(
+                  cat.icon,
+                  selectedCategory === cat.id ? "#FFFFFF" : theme.textSecondary,
+                  14
+                )}
                 <ThemedText
                   style={[
                     styles.categoryChipText,

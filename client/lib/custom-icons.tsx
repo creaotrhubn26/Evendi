@@ -1,8 +1,8 @@
-import React from "react";
+import React, { ReactElement } from "react";
 import { Feather } from "@expo/vector-icons";
 import { Svg, Path, Rect, Polyline, Circle } from "react-native-svg";
 
-export type IconRenderer = (color: string, size?: number) => JSX.Element;
+export type IconRenderer = (color: string, size?: number) => ReactElement;
 
 // Custom wedding-specific icons
 const CUSTOM_ICONS: Record<string, IconRenderer> = {
