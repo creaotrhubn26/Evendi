@@ -348,6 +348,39 @@ export function registerSubscriptionRoutes(app: Express) {
     }
   });
 
+  // Admin: Delete subscription tier
+  app.delete("/api/admin/subscription/tiers/:id", async (req: Request, res: Response) => {
+    const authHeader = req.headers.authorization;
+    const adminKey = authHeader?.split(" ")[1];
+    
+    if (adminKey !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
+
+    try {
+      const { id } = req.params;
+      
+      // Check if any vendors are using this tier
+      const [vendorsUsing] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(vendorSubscriptions)
+        .where(eq(vendorSubscriptions.tierId, id));
+      
+      if (vendorsUsing && (vendorsUsing.count as any) > 0) {
+        return res.status(400).json({ 
+          error: "Kan ikke slette denne tieren fordi den er i bruk av leverandører" 
+        });
+      }
+
+      await db.delete(subscriptionTiers).where(eq(subscriptionTiers.id, id));
+      
+      res.json({ success: true, message: "Abonnementstier slettet" });
+    } catch (error: any) {
+      console.error("Error deleting tier:", error);
+      res.status(400).json({ error: error.message || "Kunne ikke slette abonnement" });
+    }
+  });
+
   // Admin: Get vendor subscriptions
   app.get("/api/admin/subscription/vendors", async (req: Request, res: Response) => {
     const authHeader = req.headers.authorization;
