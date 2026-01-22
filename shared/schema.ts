@@ -1218,21 +1218,27 @@ export const subscriptionTiers = pgTable("subscription_tiers", {
   isActive: boolean("is_active").notNull().default(true),
   
   // Feature limits per tier
-  maxInspirationPhotos: integer("max_inspiration_photos").notNull().default(10), // -1 = unlimited
-  maxMonthlyVideoMinutes: integer("max_monthly_video_minutes").notNull().default(0),
-  maxStorageGb: integer("max_storage_gb").notNull().default(5),
+  maxInspirationPhotos: integer("max_inspiration_photos").notNull().default(10), // Gallery/showcase photos
+  maxProducts: integer("max_products").notNull().default(5), // Product catalog items
+  maxMonthlyOffers: integer("max_monthly_offers").notNull().default(10), // Offers to couples per month
+  maxMonthlyDeliveries: integer("max_monthly_deliveries").notNull().default(5), // Deliveries per month
+  maxStorageGb: integer("max_storage_gb").notNull().default(5), // File storage limit
   
   // Features
+    canSendMessages: boolean("can_send_messages").notNull().default(true), // Chat with couples
+    canReceiveInquiries: boolean("can_receive_inquiries").notNull().default(true), // Get contacted by couples
+    canCreateOffers: boolean("can_create_offers").notNull().default(true), // Send quotes/offers
+    canCreateDeliveries: boolean("can_create_deliveries").notNull().default(true), // Upload deliveries
+    canShowcaseWork: boolean("can_showcase_work").notNull().default(true), // Post inspirations
   hasAdvancedAnalytics: boolean("has_advanced_analytics").notNull().default(false),
   hasPrioritizedSearch: boolean("has_prioritized_search").notNull().default(false),
-  hasCustomLandingPage: boolean("has_custom_landing_page").notNull().default(false),
-  hasApiAccess: boolean("has_api_access").notNull().default(false),
-  hasVippsPaymentLink: boolean("has_vipps_payment_link").notNull().default(false),
-  hasCustomBranding: boolean("has_custom_branding").notNull().default(false),
+  canHighlightProfile: boolean("can_highlight_profile").notNull().default(false), // Featured placement
+  canUseVideoGallery: boolean("can_use_video_gallery").notNull().default(false), // Video uploads
+  hasReviewBadge: boolean("has_review_badge").notNull().default(false), // Premium badge
+  hasMultipleCategories: boolean("has_multiple_categories").notNull().default(false), // List in multiple categories
   
   // Pricing adjustments
   commissionPercentage: integer("commission_percentage").notNull().default(3), // 3% = 300 basis points
-  stripeFeePercentage: integer("stripe_fee_percentage").notNull().default(0), // Extra fee if any
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
