@@ -22,6 +22,7 @@ import { AdminHeader } from "@/components/AdminHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { renderIcon, getAllIconOptions } from "@/lib/custom-icons";
 
 interface Category {
   id: string;
@@ -31,11 +32,7 @@ interface Category {
   description?: string;
 }
 
-const ICON_OPTIONS = [
-  "heart", "camera", "video", "image", "star", "gift", "home", "music",
-  "scissors", "car", "utensils", "flower", "cake", "clipboard", "mail",
-  "calendar", "users", "map-pin", "phone", "globe", "award", "bookmark"
-];
+const ICON_OPTIONS = getAllIconOptions();
 
 export default function AdminCategoriesScreen() {
   const insets = useSafeAreaInsets();
@@ -176,7 +173,7 @@ export default function AdminCategoriesScreen() {
     <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
       <View style={[styles.card, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={[styles.iconCircle, { backgroundColor: Colors.dark.accent + "20" }]}>
-          <Feather name={item.icon as any} size={20} color={Colors.dark.accent} />
+          {renderIcon(item.icon, Colors.dark.accent)}
         </View>
         <View style={styles.cardContent}>
           <ThemedText style={styles.cardTitle}>{item.name}</ThemedText>
@@ -300,11 +297,7 @@ export default function AdminCategoriesScreen() {
                   ]}
                   onPress={() => setIcon(iconName)}
                 >
-                  <Feather
-                    name={iconName as any}
-                    size={20}
-                    color={icon === iconName ? "#000" : theme.text}
-                  />
+                  {renderIcon(iconName, icon === iconName ? "#000" : theme.text)}
                 </Pressable>
               ))}
             </View>

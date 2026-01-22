@@ -26,6 +26,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
+import { renderIcon } from "@/lib/custom-icons";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const GRID_GAP = Spacing.sm;
@@ -71,22 +72,6 @@ interface InspirationItem {
   vendor: Vendor | null;
   category: InspirationCategory | null;
 }
-
-const getIconName = (iconName: string): keyof typeof Feather.glyphMap => {
-  const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
-    heart: "heart",
-    flower: "sun",
-    star: "star",
-    cake: "gift",
-    home: "home",
-    utensils: "coffee",
-    gift: "gift",
-    scissors: "scissors",
-    camera: "camera",
-    mail: "mail",
-  };
-  return iconMap[iconName] || "image";
-};
 
 export default function InspirationScreen() {
   const insets = useSafeAreaInsets();
@@ -269,14 +254,11 @@ export default function InspirationScreen() {
               },
             ]}
           >
-            <Feather
-              name={getIconName(category.icon)}
-              size={14}
-              color={
-                selectedCategory === category.id ? "#1A1A1A" : theme.textSecondary
-              }
-              style={styles.categoryIcon}
-            />
+            {renderIcon(
+              category.icon || "image",
+              selectedCategory === category.id ? "#1A1A1A" : theme.textSecondary,
+              14,
+            )}
             <ThemedText
               style={[
                 styles.categoryChipText,
@@ -419,7 +401,7 @@ export default function InspirationScreen() {
                       { backgroundColor: theme.backgroundSecondary },
                     ]}
                   >
-                    <Feather name={getIconName(category.icon)} size={18} color={Colors.dark.accent} />
+                    {renderIcon(category.icon || "image", Colors.dark.accent, 18)}
                   </View>
                   <ThemedText style={styles.categoryRowName}>
                     {category.name}

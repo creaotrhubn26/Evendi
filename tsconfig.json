@@ -3,11 +3,12 @@
   "compilerOptions": {
     "strict": true,
     "esModuleInterop": true,
+    "typeRoots": ["./client/types", "./node_modules/@types"],
     "paths": {
       "@/*": ["./client/*"],
       "@shared/*": ["./shared/*"]
     },
-    "types": ["node"]
+    "types": ["node", "react-native-svg"]
   },
   "include": ["**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],

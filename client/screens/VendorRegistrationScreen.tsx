@@ -14,6 +14,7 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
+import { renderIcon } from "@/lib/custom-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
@@ -229,22 +230,6 @@ export default function VendorRegistrationScreen() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const getIconName = (iconName: string): keyof typeof Feather.glyphMap => {
-    const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
-      camera: "camera",
-      video: "video",
-      flower: "sun",
-      utensils: "coffee",
-      music: "music",
-      home: "home",
-      cake: "gift",
-      clipboard: "clipboard",
-      scissors: "scissors",
-      car: "truck",
-    };
-    return iconMap[iconName] || "briefcase";
-  };
-
   if (submitted) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -427,11 +412,11 @@ export default function VendorRegistrationScreen() {
                   },
                 ]}
               >
-                <Feather
-                  name={getIconName(cat.icon)}
-                  size={16}
-                  color={formData.categoryId === cat.id ? "#1A1A1A" : theme.textSecondary}
-                />
+                {renderIcon(
+                  cat.icon || "briefcase",
+                  formData.categoryId === cat.id ? "#1A1A1A" : theme.textSecondary,
+                  16,
+                )}
                 <ThemedText
                   style={[
                     styles.categoryText,

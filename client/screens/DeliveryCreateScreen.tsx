@@ -18,6 +18,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
+import { renderIcon } from "@/lib/custom-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
@@ -251,17 +252,9 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
     saveMutation.mutate();
   };
 
-  const getIconName = (iconName: string): keyof typeof Feather.glyphMap => {
-    const map: Record<string, keyof typeof Feather.glyphMap> = {
-      image: "image",
-      video: "video",
-      globe: "globe",
-      download: "download",
-      "file-text": "file-text",
-      file: "file",
-      link: "link",
-    };
-    return map[iconName] || "link";
+  const getIconName = (iconName: string): string => {
+    // Just return the icon name; let renderIcon handle custom icons
+    return iconName;
   };
 
   return (
@@ -420,11 +413,11 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
                     borderColor: theme.border,
                   }]}
                 >
-                  <Feather
-                    name={getIconName(type.icon)}
-                    size={16}
-                    color={item.type === type.value ? "#FFFFFF" : theme.textSecondary}
-                  />
+                  {renderIcon(
+                    getIconName(type.icon),
+                    item.type === type.value ? "#FFFFFF" : theme.textSecondary,
+                    16,
+                  )}
                 </Pressable>
               ))}
             </View>
