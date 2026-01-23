@@ -203,10 +203,18 @@ export default function VendorLoginScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.headerBar, { paddingTop: headerHeight }]}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <Feather name="arrow-left" size={24} color={theme.text} />
+        </Pressable>
+      </View>
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={[
           styles.content,
-          { paddingTop: headerHeight + Spacing.xl },
+          { paddingTop: Spacing.xl },
         ]}
       >
         <Image
@@ -342,6 +350,16 @@ export default function VendorLoginScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  headerBar: {
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   content: {
     paddingHorizontal: Spacing.xl,
     alignItems: "center",

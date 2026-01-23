@@ -269,9 +269,17 @@ export default function VendorAdminChatScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={["top","bottom"]}>
-      <View style={styles.header}>
-        <ThemedText style={styles.title}>Wedflow Support</ThemedText>
-        <ThemedText style={styles.subtitle}>Kommunikasjon med Wedflow-teamet</ThemedText>
+      <View style={[styles.header, { borderBottomColor: theme.border }]}>
+        <View style={styles.headerContent}>
+          <ThemedText style={styles.title}>Wedflow Support</ThemedText>
+          <ThemedText style={styles.subtitle}>Kommunikasjon med Wedflow-teamet</ThemedText>
+        </View>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={styles.closeButton}
+        >
+          <Feather name="x" size={24} color={theme.text} />
+        </Pressable>
       </View>
       {loading && <ActivityIndicator style={{ marginTop: Spacing.lg }} color={theme.accent} />}
       {!loading && (
@@ -471,7 +479,25 @@ function renderAutolinkedText(text: string, color: string) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: Spacing.md, paddingTop: Spacing.md, paddingBottom: Spacing.sm },
+  header: { 
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.md, 
+    paddingTop: Spacing.md, 
+    paddingBottom: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  headerContent: {
+    flex: 1,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: Spacing.sm,
+  },
   title: { fontSize: 20, fontWeight: "600" },
   subtitle: { fontSize: 12, opacity: 0.7, marginTop: 2 },
   welcomeBox: { 
