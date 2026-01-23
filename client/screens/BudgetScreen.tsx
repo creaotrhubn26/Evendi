@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -7,6 +7,7 @@ import {
   Pressable,
   Alert,
   RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -39,16 +40,16 @@ const useFieldValidation = () => {
 
   const validateField = useCallback((field: string, value: string): string => {
     switch (field) {
-      case "newName":
+      case "newLabel":
         if (!value.trim()) return "Navn er påkrevd";
         return "";
       case "newCost":
         if (!value.trim()) return "Beløp er påkrevd";
-        if (!/^\d+$/.test(value.trim())) return "Bruk kun tall";
+        if (!/^\d+$/.test(value.replace(/[^\d]/g, ""))) return "Bruk kun tall";
         return "";
       case "budgetInput":
         if (!value.trim()) return "Budsjett er påkrevd";
-        if (!/^\d+$/.test(value.trim())) return "Bruk kun tall";
+        if (!/^\d+$/.test(value.replace(/[^\d]/g, ""))) return "Bruk kun tall";
         return "";
       default:
         return "";
@@ -87,15 +88,15 @@ const CATEGORIES = [
   { id: "other", name: "Annet", icon: "more-horizontal", color: "#90A4AE" },
 ];
 
-const DEFAULT_ITEMS: BudgetItem[] = [
-  { id: "1", category: "venue", name: "Lokale leie", estimatedCost: 80000, actualCost: 0, paid: false },
-  { id: "2", category: "catering", name: "Middag for gjester", estimatedCost: 60000, actualCost: 0, paid: false },
-  { id: "3", category: "photo", name: "Fotograf", estimatedCost: 25000, actualCost: 0, paid: false },
-  { id: "4", category: "photo", name: "Videograf", estimatedCost: 20000, actualCost: 0, paid: false },
-  { id: "5", category: "music", name: "DJ", estimatedCost: 15000, actualCost: 0, paid: false },
-  { id: "6", category: "flowers", name: "Brudebukett", estimatedCost: 3000, actualCost: 0, paid: false },
-  { id: "7", category: "attire", name: "Brudekjole", estimatedCost: 20000, actualCost: 0, paid: false },
-  { id: "8", category: "rings", name: "Gifteringer", estimatedCost: 15000, actualCost: 0, paid: false },
+const DEFAULT_ITEMS: Omit<BudgetItem, "id" | "coupleId" | "createdAt" | "updatedAt">[] = [
+  { category: "venue", label: "Lokale leie", estimatedCost: 80000, actualCost: 0, isPaid: false },
+  { category: "catering", label: "Middag for gjester", estimatedCost: 60000, actualCost: 0, isPaid: false },
+  { category: "photo", label: "Fotograf", estimatedCost: 25000, actualCost: 0, isPaid: false },
+  { category: "photo", label: "Videograf", estimatedCost: 20000, actualCost: 0, isPaid: false },
+  { category: "music", label: "DJ", estimatedCost: 15000, actualCost: 0, isPaid: false },
+  { category: "flowers", label: "Brudebukett", estimatedCost: 3000, actualCost: 0, isPaid: false },
+  { category: "attire", label: "Brudekjole", estimatedCost: 20000, actualCost: 0, isPaid: false },
+  { category: "rings", label: "Gifteringer", estimatedCost: 15000, actualCost: 0, isPaid: false },
 ];
 
 export default function BudgetScreen() {
@@ -107,13 +108,13 @@ export default function BudgetScreen() {
   const queryClient = useQueryClient();
 
   // Query for budget settings
-  const { data: budgetSettings, isLoading: loadingSettings } = useQuery({
+  const { data: budgetSettings, isLoading: loadingSettings, isError: isSettingsError, error: settingsError, refetch: refetchSettings } = useQuery({
     queryKey: ["budget-settings"],
     queryFn: getBudgetSettings,
   });
 
   // Query for budget items
-  const { data: budgetItemsData, isLoading: loadingItems, refetch } = useQuery({
+  const { data: budgetItemsData, isLoading: loadingItems, isError: isItemsError, error: itemsError, refetch: refetchItems } = useQuery({
     queryKey: ["budget-items"],
     queryFn: getBudgetItems,
   });
@@ -121,15 +122,17 @@ export default function BudgetScreen() {
   const items = budgetItemsData ?? [];
   const totalBudget = budgetSettings?.totalBudget ?? 300000;
   const loading = loadingSettings || loadingItems;
+  const isError = isSettingsError || isItemsError;
+  const error = settingsError || itemsError;
 
   // State for refreshing
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refetch();
-    await queryClient.invalidateQueries({ queryKey: ["budget-settings"] });
+    await refetchItems();
+    await refetchSettings();
     setRefreshing(false);
-  }, [refetch, queryClient]);
+  }, [refetchItems, refetchSettings]);
 
   // Mutations
   const updateSettingsMutation = useMutation({
@@ -153,62 +156,98 @@ export default function BudgetScreen() {
   });
 
   const [showForm, setShowForm] = useState(false);
-  const [newName, setNewName] = useState("");
+  const [newLabel, setNewLabel] = useState("");
   const [newCost, setNewCost] = useState("");
+  const [newActualCost, setNewActualCost] = useState("");
+  const [newIsPaid, setNewIsPaid] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("other");
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState(totalBudget.toString());
   const [editingItem, setEditingItem] = useState<BudgetItem | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Sync budgetInput when settings load or change
+  useEffect(() => {
+    if (budgetSettings?.totalBudget !== undefined) {
+      setBudgetInput(budgetSettings.totalBudget.toString());
+    }
+  }, [budgetSettings?.totalBudget]);
+
+  // Helper to parse Norwegian number format (strips spaces and non-numeric chars)
+  const parseNumber = (value: string): number => {
+    const cleaned = value.replace(/[^\d]/g, "");
+    return parseInt(cleaned) || 0;
+  };
 
   const totalEstimated = items.reduce((sum, item) => sum + (item.estimatedCost || 0), 0);
   const totalActual = items.reduce((sum, item) => sum + (item.actualCost || 0), 0);
-  const totalPaid = items.filter((i) => i.paid).reduce((sum, item) => sum + (item.actualCost || 0), 0);
-  const remaining = totalBudget - totalEstimated;
+  const totalPaid = items.filter((i) => i.isPaid).reduce((sum, item) => sum + (item.actualCost || item.estimatedCost || 0), 0);
+  const remainingEstimated = totalBudget - totalEstimated;
+  const remainingActual = totalBudget - totalActual;
+  // Use actual if available, otherwise estimated
+  const effectiveSpent = totalActual > 0 ? totalActual : totalEstimated;
+  const remaining = totalBudget - effectiveSpent;
 
   const handleAddItem = async () => {
-    if (!newName.trim() || !newCost.trim()) {
+    if (!newLabel.trim() || !newCost.trim()) {
       Alert.alert("Feil", "Fyll ut navn og beløp");
       return;
     }
 
+    setIsSaving(true);
     try {
       if (editingItem) {
+        // Update with all fields including actualCost and isPaid
         await updateItemMutation.mutateAsync({
           id: editingItem.id,
-          data: { name: newName.trim(), estimatedCost: parseInt(newCost) || 0, category: selectedCategory },
+          data: {
+            label: newLabel.trim(),
+            estimatedCost: parseNumber(newCost),
+            actualCost: newActualCost.trim() ? parseNumber(newActualCost) : 0,
+            category: selectedCategory,
+            isPaid: newIsPaid,
+          },
         });
       } else {
         await createItemMutation.mutateAsync({
           category: selectedCategory,
-          name: newName.trim(),
-          estimatedCost: parseInt(newCost) || 0,
+          label: newLabel.trim(),
+          estimatedCost: parseNumber(newCost),
           actualCost: 0,
-          paid: false,
+          isPaid: false,
         });
       }
 
-      setNewName("");
+      setNewLabel("");
       setNewCost("");
+      setNewActualCost("");
+      setNewIsPaid(false);
       setEditingItem(null);
       setShowForm(false);
+      resetValidation();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
       Alert.alert("Feil", "Kunne ikke lagre utgift");
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleEditItem = (item: BudgetItem) => {
     setEditingItem(item);
-    setNewName(item.name);
+    setNewLabel(item.label);
     setNewCost((item.estimatedCost || 0).toString());
+    setNewActualCost((item.actualCost || 0).toString());
+    setNewIsPaid(item.isPaid || false);
     setSelectedCategory(item.category);
     setShowForm(true);
+    resetValidation();
   };
 
   const handleTogglePaid = async (id: string) => {
     const item = items.find((i) => i.id === id);
     if (item) {
-      await updateItemMutation.mutateAsync({ id, data: { paid: !item.paid } });
+      await updateItemMutation.mutateAsync({ id, data: { isPaid: !item.isPaid } });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
@@ -229,7 +268,7 @@ export default function BudgetScreen() {
 
   const handleSaveBudget = async () => {
     try {
-      const newBudget = parseInt(budgetInput) || 300000;
+      const newBudget = parseNumber(budgetInput) || 300000;
       await updateSettingsMutation.mutateAsync({ totalBudget: newBudget });
       setEditingBudget(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -252,12 +291,59 @@ export default function BudgetScreen() {
     total: items.filter((i) => i.category === cat.id).reduce((sum, i) => sum + i.estimatedCost, 0),
   })).filter((cat) => cat.items.length > 0);
 
+  // Function to add all default items
+  const handleImportDefaults = async () => {
+    try {
+      setIsSaving(true);
+      for (const item of DEFAULT_ITEMS) {
+        await createItemMutation.mutateAsync({
+          category: item.category,
+          label: item.label,
+          estimatedCost: item.estimatedCost,
+          actualCost: 0,
+          isPaid: false,
+        });
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert("Feil", "Kunne ikke importere standardbudsjettet");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <View
         style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}
       >
-        <ThemedText style={{ color: theme.textSecondary }}>Laster...</ThemedText>
+        <ActivityIndicator size="large" color={Colors.dark.accent} />
+        <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
+          Laster budsjett...
+        </ThemedText>
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
+        <Feather name="alert-circle" size={48} color={theme.error} />
+        <ThemedText style={{ color: theme.error, marginTop: Spacing.md, textAlign: "center" }}>
+          Kunne ikke laste budsjett
+        </ThemedText>
+        <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.xs, textAlign: "center", paddingHorizontal: Spacing.xl }}>
+          {error instanceof Error ? error.message : "Ukjent feil"}
+        </ThemedText>
+        <Button
+          onPress={() => {
+            refetchSettings();
+            refetchItems();
+          }}
+          style={{ marginTop: Spacing.lg }}
+        >
+          Prøv igjen
+        </Button>
       </View>
     );
   }
@@ -323,11 +409,19 @@ export default function BudgetScreen() {
               </ThemedText>
             </View>
             <View style={styles.statItem}>
+              <ThemedText style={[styles.statValue, { color: totalActual > 0 ? Colors.dark.accent : theme.textMuted }]}>
+                {formatCurrency(totalActual)}
+              </ThemedText>
+              <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+                Faktisk
+              </ThemedText>
+            </View>
+            <View style={styles.statItem}>
               <ThemedText style={[styles.statValue, { color: remaining >= 0 ? theme.success : theme.error }]}>
                 {formatCurrency(Math.abs(remaining))}
               </ThemedText>
               <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
-                {remaining >= 0 ? "Gjenstår" : "Over budsjett"}
+                {remaining >= 0 ? "Gjenstår" : "Over"}
               </ThemedText>
             </View>
             <View style={styles.statItem}>
@@ -342,9 +436,33 @@ export default function BudgetScreen() {
         </View>
       </Animated.View>
 
-      <ThemedText style={[styles.swipeHint, { color: theme.textMuted }]}>
-        Sveip til venstre for å endre eller slette
-      </ThemedText>
+      {items.length > 0 && (
+        <ThemedText style={[styles.swipeHint, { color: theme.textMuted }]}>
+          Sveip til venstre for å endre eller slette
+        </ThemedText>
+      )}
+
+      {/* Empty state with import defaults CTA */}
+      {items.length === 0 && !showForm && (
+        <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+          <View style={[styles.emptyState, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+            <Feather name="clipboard" size={48} color={theme.textMuted} />
+            <ThemedText type="h4" style={{ color: theme.text, marginTop: Spacing.md, textAlign: "center" }}>
+              Ingen utgifter ennå
+            </ThemedText>
+            <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.xs, textAlign: "center" }}>
+              Start med et standardbudsjett eller legg til dine egne utgifter
+            </ThemedText>
+            <Button
+              onPress={handleImportDefaults}
+              style={{ marginTop: Spacing.lg }}
+              disabled={isSaving}
+            >
+              {isSaving ? "Importerer..." : "Importer standardbudsjett"}
+            </Button>
+          </View>
+        </Animated.View>
+      )}
 
       {groupedItems.map((category, catIndex) => (
         <Animated.View key={category.id} entering={FadeInDown.delay(200 + catIndex * 100).duration(400)}>
@@ -374,18 +492,25 @@ export default function BudgetScreen() {
                       style={[
                         styles.checkbox,
                         {
-                          backgroundColor: item.paid ? Colors.dark.accent : "transparent",
-                          borderColor: item.paid ? Colors.dark.accent : theme.border,
+                          backgroundColor: item.isPaid ? Colors.dark.accent : "transparent",
+                          borderColor: item.isPaid ? Colors.dark.accent : theme.border,
                         },
                       ]}
                     >
-                      {item.paid ? <Feather name="check" size={12} color="#1A1A1A" /> : null}
+                      {item.isPaid ? <Feather name="check" size={12} color="#1A1A1A" /> : null}
                     </View>
-                    <ThemedText style={[styles.itemName, item.paid && styles.itemPaid]}>
-                      {item.name}
-                    </ThemedText>
+                    <View style={styles.itemNameContainer}>
+                      <ThemedText style={[styles.itemName, item.isPaid && styles.itemPaid]}>
+                        {item.label}
+                      </ThemedText>
+                      {(item.actualCost ?? 0) > 0 && item.actualCost !== item.estimatedCost && (
+                        <ThemedText style={[styles.itemActualLabel, { color: theme.textMuted }]}>
+                          Est: {formatCurrency(item.estimatedCost)}
+                        </ThemedText>
+                      )}
+                    </View>
                     <ThemedText style={[styles.itemCost, { color: Colors.dark.accent }]}>
-                      {formatCurrency(item.estimatedCost)}
+                      {formatCurrency((item.actualCost ?? 0) > 0 ? (item.actualCost ?? 0) : item.estimatedCost)}
                     </ThemedText>
                   </Pressable>
                 </SwipeableRow>
@@ -404,22 +529,22 @@ export default function BudgetScreen() {
 
           <View>
             <TextInput
-              style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("newName")]}
+              style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("newLabel")]}
               placeholder="Navn"
               placeholderTextColor={theme.textMuted}
-              value={newName}
-              onChangeText={setNewName}
-              onBlur={() => handleBlur("newName", newName)}
+              value={newLabel}
+              onChangeText={setNewLabel}
+              onBlur={() => handleBlur("newLabel", newLabel)}
             />
-            {touched.newName && errors.newName ? (
-              <ThemedText style={styles.errorText}>{errors.newName}</ThemedText>
+            {touched.newLabel && errors.newLabel ? (
+              <ThemedText style={styles.errorText}>{errors.newLabel}</ThemedText>
             ) : null}
           </View>
 
           <View>
             <TextInput
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("newCost")]}
-              placeholder="Beløp (kr)"
+              placeholder="Estimert beløp (kr)"
               placeholderTextColor={theme.textMuted}
               value={newCost}
               onChangeText={setNewCost}
@@ -430,6 +555,40 @@ export default function BudgetScreen() {
               <ThemedText style={styles.errorText}>{errors.newCost}</ThemedText>
             ) : null}
           </View>
+
+          {/* Show actual cost and paid toggle only when editing */}
+          {editingItem && (
+            <>
+              <View>
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+                  placeholder="Faktisk beløp (kr)"
+                  placeholderTextColor={theme.textMuted}
+                  value={newActualCost}
+                  onChangeText={setNewActualCost}
+                  keyboardType="numeric"
+                />
+              </View>
+
+              <Pressable
+                onPress={() => setNewIsPaid(!newIsPaid)}
+                style={[styles.paidToggle, { borderColor: theme.border }]}
+              >
+                <View
+                  style={[
+                    styles.checkbox,
+                    {
+                      backgroundColor: newIsPaid ? Colors.dark.accent : "transparent",
+                      borderColor: newIsPaid ? Colors.dark.accent : theme.border,
+                    },
+                  ]}
+                >
+                  {newIsPaid ? <Feather name="check" size={12} color="#1A1A1A" /> : null}
+                </View>
+                <ThemedText style={{ color: theme.text }}>Betalt</ThemedText>
+              </Pressable>
+            </>
+          )}
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryPicker}>
             {CATEGORIES.map((cat) => (
@@ -465,8 +624,10 @@ export default function BudgetScreen() {
               onPress={() => {
                 setShowForm(false);
                 setEditingItem(null);
-                setNewName("");
+                setNewLabel("");
                 setNewCost("");
+                setNewActualCost("");
+                setNewIsPaid(false);
                 setSelectedCategory("other");
                 resetValidation();
               }}
@@ -474,7 +635,9 @@ export default function BudgetScreen() {
             >
               <ThemedText style={{ color: theme.textSecondary }}>Avbryt</ThemedText>
             </Pressable>
-            <Button onPress={handleAddItem} style={styles.saveButton}>{editingItem ? "Oppdater" : "Lagre"}</Button>
+            <Button onPress={handleAddItem} style={styles.saveButton} disabled={isSaving}>
+              {isSaving ? "Lagrer..." : (editingItem ? "Oppdater" : "Lagre")}
+            </Button>
           </View>
         </Animated.View>
       ) : (
@@ -544,9 +707,25 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   checkbox: { width: 20, height: 20, borderRadius: 4, borderWidth: 2, justifyContent: "center", alignItems: "center", marginRight: Spacing.md },
-  itemName: { flex: 1, fontSize: 15 },
+  itemNameContainer: { flex: 1 },
+  itemName: { fontSize: 15 },
+  itemActualLabel: { fontSize: 11, marginTop: 2 },
   itemPaid: { textDecorationLine: "line-through", opacity: 0.6 },
   itemCost: { fontSize: 14, fontWeight: "600" },
+  emptyState: {
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    alignItems: "center",
+    marginBottom: Spacing.xl,
+  },
+  paidToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.md,
+    marginBottom: Spacing.md,
+    gap: Spacing.md,
+  },
   formCard: { padding: Spacing.xl, borderRadius: BorderRadius.md, borderWidth: 1, marginTop: Spacing.lg },
   formTitle: { marginBottom: Spacing.lg },
   input: { height: Spacing.inputHeight, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.md, borderWidth: 1, fontSize: 16, marginBottom: Spacing.md },
