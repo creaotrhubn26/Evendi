@@ -62,6 +62,8 @@ interface ApiVendor {
   website: string | null;
   priceRange: string | null;
   imageUrl: string | null;
+  isFeatured?: boolean;
+  isPrioritized?: boolean;
 }
 
 export default function VendorsScreen() {
@@ -146,15 +148,26 @@ export default function VendorsScreen() {
         style={[
           styles.vendorCard,
           { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+          (item as any).isFeatured && { borderColor: Colors.dark.accent, borderWidth: 2 },
         ]}
         onPress={() => handleVendorPress(item)}
       >
         <View style={[styles.vendorImage, { backgroundColor: theme.backgroundSecondary }]}>
           <Feather name={getCategoryIcon(item.category)} size={24} color={Colors.dark.accent} />
+          {(item as any).isFeatured && (
+            <View style={[styles.featuredBadge, { backgroundColor: Colors.dark.accent }]}>
+              <Feather name="star" size={10} color="#FFFFFF" />
+            </View>
+          )}
         </View>
         <View style={styles.vendorInfo}>
           <View style={styles.vendorHeader}>
-            <ThemedText style={styles.vendorName}>{item.name}</ThemedText>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.xs, flex: 1 }}>
+              <ThemedText style={styles.vendorName}>{item.name}</ThemedText>
+              {(item as any).isPrioritized && !((item as any).isFeatured) && (
+                <Feather name="zap" size={14} color={Colors.dark.accent} />
+              )}
+            </View>
             <Pressable onPress={() => handleToggleSave(item.id)} style={styles.saveBtn}>
               <Feather
                 name={item.saved ? "heart" : "heart"}
@@ -369,6 +382,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: Spacing.md,
+    position: "relative",
+  },
+  featuredBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   vendorInfo: { flex: 1 },
   vendorHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },

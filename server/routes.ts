@@ -700,7 +700,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const categoryId = req.query.categoryId as string | undefined;
       
-      let query = db.select({
+      // Fetch vendors with their subscription info for prioritization
+      const vendorsWithSubs = await db.select({
         id: vendors.id,
         businessName: vendors.businessName,
         categoryId: vendors.categoryId,
@@ -710,15 +711,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         website: vendors.website,
         priceRange: vendors.priceRange,
         imageUrl: vendors.imageUrl,
-      }).from(vendors).where(eq(vendors.status, "approved"));
+        subscriptionId: vendorSubscriptions.id,
+        tierId: vendorSubscriptions.tierId,
+        hasPrioritizedSearch: subscriptionTiers.hasPrioritizedSearch,
+        canHighlightProfile: subscriptionTiers.canHighlightProfile,
+      })
+        .from(vendors)
+        .leftJoin(vendorSubscriptions, 
+          and(
+            eq(vendorSubscriptions.vendorId, vendors.id),
+            eq(vendorSubscriptions.status, "active")
+          )
+        )
+        .leftJoin(subscriptionTiers, eq(subscriptionTiers.id, vendorSubscriptions.tierId))
+        .where(eq(vendors.status, "approved"));
 
-      const approvedVendors = await query;
-      
-      const filtered = categoryId 
-        ? approvedVendors.filter(v => v.categoryId === categoryId)
-        : approvedVendors;
+      // Filter by category if specified
+      let filtered = categoryId 
+        ? vendorsWithSubs.filter(v => v.categoryId === categoryId)
+        : vendorsWithSubs;
 
-      res.json(filtered);
+      // Sort: Featured first, then prioritized, then alphabetically
+      filtered.sort((a, b) => {
+        // 1. Featured profiles first
+        if (a.canHighlightProfile && !b.canHighlightProfile) return -1;
+        if (!a.canHighlightProfile && b.canHighlightProfile) return 1;
+        
+        // 2. Prioritized search second
+        if (a.hasPrioritizedSearch && !b.hasPrioritizedSearch) return -1;
+        if (!a.hasPrioritizedSearch && b.hasPrioritizedSearch) return 1;
+        
+        // 3. Alphabetically by business name
+        return (a.businessName || "").localeCompare(b.businessName || "");
+      });
+
+      // Map to clean response (remove subscription fields from public API)
+      const response = filtered.map(v => ({
+        id: v.id,
+        businessName: v.businessName,
+        categoryId: v.categoryId,
+        description: v.description,
+        location: v.location,
+        phone: v.phone,
+        website: v.website,
+        priceRange: v.priceRange,
+        imageUrl: v.imageUrl,
+        isFeatured: v.canHighlightProfile || false,
+        isPrioritized: v.hasPrioritizedSearch || false,
+      }));
+
+      res.json(response);
     } catch (error) {
       console.error("Error fetching vendors:", error);
       res.status(500).json({ error: "Kunne ikke hente leverandører" });
@@ -731,8 +773,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { category, guestCount, location } = req.query;
       const guestCountNum = guestCount ? parseInt(guestCount as string) : undefined;
 
-      // Fetch approved vendors with their category details
-      const approvedVendors = await db.select({
+      // Fetch approved vendors with their subscription details for prioritization
+      const vendorsWithSubs = await db.select({
         id: vendors.id,
         businessName: vendors.businessName,
         categoryId: vendors.categoryId,
@@ -742,12 +784,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         website: vendors.website,
         priceRange: vendors.priceRange,
         imageUrl: vendors.imageUrl,
-      }).from(vendors).where(eq(vendors.status, "approved"));
+        hasPrioritizedSearch: subscriptionTiers.hasPrioritizedSearch,
+        canHighlightProfile: subscriptionTiers.canHighlightProfile,
+      })
+        .from(vendors)
+        .leftJoin(vendorSubscriptions, 
+          and(
+            eq(vendorSubscriptions.vendorId, vendors.id),
+            eq(vendorSubscriptions.status, "active")
+          )
+        )
+        .leftJoin(subscriptionTiers, eq(subscriptionTiers.id, vendorSubscriptions.tierId))
+        .where(eq(vendors.status, "approved"));
 
       // Filter by category if specified
       let filtered = category 
-        ? approvedVendors.filter(v => v.categoryId === category)
-        : approvedVendors;
+        ? vendorsWithSubs.filter(v => v.categoryId === category)
+        : vendorsWithSubs;
 
       // Fetch category details for capacity matching
       const vendorIds = filtered.map(v => v.id);
@@ -801,7 +854,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
-      res.json(result);
+      // Sort: Featured first, then prioritized, then alphabetically
+      result.sort((a, b) => {
+        // 1. Featured profiles first
+        if (a.canHighlightProfile && !b.canHighlightProfile) return -1;
+        if (!a.canHighlightProfile && b.canHighlightProfile) return 1;
+        
+        // 2. Prioritized search second
+        if (a.hasPrioritizedSearch && !b.hasPrioritizedSearch) return -1;
+        if (!a.hasPrioritizedSearch && b.hasPrioritizedSearch) return 1;
+        
+        // 3. Alphabetically by business name
+        return (a.businessName || "").localeCompare(b.businessName || "");
+      });
+
+      // Add featured/prioritized flags to response
+      const response = result.map(v => ({
+        ...v,
+        isFeatured: v.canHighlightProfile || false,
+        isPrioritized: v.hasPrioritizedSearch || false,
+      }));
+
+      res.json(response);
     } catch (error) {
       console.error("Error fetching matching vendors:", error);
       res.status(500).json({ error: "Kunne ikke hente matchende leverandører" });
