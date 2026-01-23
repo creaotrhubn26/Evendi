@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, date, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -541,8 +541,47 @@ export const vendorProducts = pgTable("vendor_products", {
   imageUrl: text("image_url"),
   isArchived: boolean("is_archived").default(false),
   sortOrder: integer("sort_order").default(0),
+  // Inventory tracking fields
+  trackInventory: boolean("track_inventory").default(false),
+  availableQuantity: integer("available_quantity"),
+  reservedQuantity: integer("reserved_quantity").default(0),
+  bookingBuffer: integer("booking_buffer").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const vendorAvailability = pgTable(
+  "vendor_availability",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    vendorId: varchar("vendor_id")
+      .notNull()
+      .references(() => vendors.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    status: text("status").notNull().default("available"), // 'available', 'blocked', 'limited'
+    maxBookings: integer("max_bookings"), // null means unlimited
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    vendorDateIdx: uniqueIndex("idx_vendor_availability_vendor_date").on(
+      table.vendorId,
+      table.date
+    ),
+    vendorIdx: index("idx_vendor_availability_vendor").on(table.vendorId),
+    dateIdx: index("idx_vendor_availability_date").on(table.date),
+  })
+);
+
+export const insertVendorAvailabilitySchema = createInsertSchema(
+  vendorAvailability
+).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 export const insertVendorProductSchema = createInsertSchema(vendorProducts).omit({
@@ -562,11 +601,27 @@ export const createVendorProductSchema = z.object({
   categoryTag: z.string().optional(),
   imageUrl: z.string().url("Ugyldig URL").optional().or(z.literal("")),
   sortOrder: z.number().default(0),
+  trackInventory: z.boolean().default(false),
+  availableQuantity: z.number().int().optional(),
+  reservedQuantity: z.number().int().min(0).default(0),
+  bookingBuffer: z.number().int().min(0).default(0),
+});
+
+export const createVendorAvailabilitySchema = z.object({
+  vendorId: z.string().uuid("Ugyldig vendor ID"),
+  date: z.string().date("Ugyldig dato"),
+  status: z.enum(["available", "blocked", "limited"]).default("available"),
+  maxBookings: z.number().int().positive().optional(),
+  notes: z.string().optional(),
 });
 
 export type VendorProduct = typeof vendorProducts.$inferSelect;
 export type InsertVendorProduct = z.infer<typeof insertVendorProductSchema>;
 export type CreateVendorProduct = z.infer<typeof createVendorProductSchema>;
+
+export type VendorAvailability = typeof vendorAvailability.$inferSelect;
+export type InsertVendorAvailability = z.infer<typeof insertVendorAvailabilitySchema>;
+export type CreateVendorAvailability = z.infer<typeof createVendorAvailabilitySchema>;
 
 // Vendor Offers to Couples
 export const vendorOffers = pgTable("vendor_offers", {
