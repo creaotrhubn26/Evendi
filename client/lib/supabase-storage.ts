@@ -1,18 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import * as FileSystem from "expo-file-system";
-
-// Initialize Supabase client
-// Note: Set these environment variables in your .env.local file:
-// EXPO_PUBLIC_SUPABASE_URL=your-project-url
-// EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
-
-let supabase: ReturnType<typeof createClient> | null = null;
-
-if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-}
+import { supabase } from "./supabase-auth";
 
 const BUCKET_NAME = "chat-attachments";
 
@@ -21,12 +8,6 @@ export const uploadChatImage = async (
   conversationId: string,
   senderType: "couple" | "vendor"
 ): Promise<string> => {
-  if (!supabase) {
-    throw new Error(
-      "Supabase is not configured. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env.local file."
-    );
-  }
-
   try {
     // Read file as base64
     const base64 = await FileSystem.readAsStringAsync(imageUri, {
@@ -69,11 +50,6 @@ export const uploadChatImage = async (
 };
 
 export const deleteChatImage = async (imageUrl: string): Promise<void> => {
-  if (!supabase) {
-    console.warn("Supabase is not configured");
-    return;
-  }
-
   try {
     // Extract file path from URL
     const filePath = imageUrl.split("/storage/v1/object/public/chat-attachments/")[1];
