@@ -116,6 +116,27 @@ export default function AdminVendorsScreen() {
 
   const isAuthenticated = storedKey.length > 0;
 
+  const approveMutation = useMutation({
+    mutationFn: async ({ vendorId, tierId }: { vendorId: string; tierId: string }) => {
+      const url = new URL(`/api/admin/vendors/${vendorId}/approve`, getApiUrl());
+      const response = await fetch(url.toString(), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${storedKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ tierId }),
+      });
+      if (!response.ok) throw new Error("Kunne ikke godkjenne");
+      return response.json();
+    },
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vendors"] });
+      setApprovingVendor(null);
+    },
+  });
+
   const rejectMutation = useMutation({
     mutationFn: async ({ vendorId, reason }: { vendorId: string; reason: string }) => {
       const url = new URL(`/api/admin/vendors/${vendorId}/reject`, getApiUrl());
@@ -218,31 +239,9 @@ export default function AdminVendorsScreen() {
     setSelectedTierId(subscriptionTiers[0]?.id || "");
   };
 
-  const confirmApproval = async () => {
+  const confirmApproval = () => {
     if (!approvingVendor || !selectedTierId) return;
-    
-    try {
-      const url = new URL(`/api/admin/vendors/${approvingVendor.id}/approve`, getApiUrl());
-      const response = await fetch(url.toString(), {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${storedKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ tierId: selectedTierId }),
-      });
-      
-      if (!response.ok) {
-        Alert.alert("Feil", "Kunne ikke godkjenne leverandør");
-        return;
-      }
-      
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setApprovingVendor(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/vendors"] });
-    } catch (error) {
-      Alert.alert("Feil", "Nettverksfeil. Prøv igjen.");
-    }
+    approveMutation.mutate({ vendorId: approvingVendor.id, tierId: selectedTierId });
   };
 
   const handleReject = (vendor: PendingVendor) => {
