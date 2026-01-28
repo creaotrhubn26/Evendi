@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   View,
@@ -10,6 +10,7 @@ import {
   Image,
   ScrollView,
   Linking,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -32,10 +33,12 @@ import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
 interface DeliveryItemInput {
+  id: string; // Stable ID for lists
   type: "gallery" | "video" | "website" | "download" | "contract" | "document" | "other";
   label: string;
   url: string;
   description: string;
+  urlError?: string; // Validation error state
 }
 
 interface Props {
@@ -69,9 +72,91 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
   const [description, setDescription] = useState("");
   const [weddingDate, setWeddingDate] = useState("");
   const [items, setItems] = useState<DeliveryItemInput[]>([
-    { type: "gallery", label: "", url: "", description: "" },
+    { id: `item-${Date.now()}`, type: "gallery", label: "", url: "", description: "" },
   ]);
   const [showGoogleDriveHelp, setShowGoogleDriveHelp] = useState(false);
+  const [showSuccessSheet, setShowSuccessSheet] = useState(false);
+  const [accessCode, setAccessCode] = useState("");
+  const [showTemplates, setShowTemplates] = useState(!isEditMode);
+
+  // Delivery templates
+  const getDeliveryTemplates = () => {
+    return [
+      {
+        title: "Fotogalleri",
+        description: "Del alle dine profesjonelle bryllupsbilder",
+        items: [
+          { type: "gallery" as const, label: "Bryllupsbilder", description: "Høyoppløselige bilder fra dagen" },
+        ],
+      },
+      {
+        title: "Video + Bilder",
+        description: "Komplett multimedia-pakke",
+        items: [
+          { type: "gallery" as const, label: "Bryllupsbilder", description: "Høyoppløselige bilder" },
+          { type: "video" as const, label: "Bryllupsvideo", description: "Full lengde video" },
+        ],
+      },
+      {
+        title: "Kontrakt + Dokumenter",
+        description: "Alle juridiske dokumenter og kontrakter",
+        items: [
+          { type: "contract" as const, label: "Signert kontrakt", description: "Avtale og betingelser" },
+          { type: "document" as const, label: "Faktura", description: "Betalingsdokumenter" },
+        ],
+      },
+    ];
+  };
+
+  const applyDeliveryTemplate = (template: any) => {
+    setTitle(template.title);
+    setDescription(template.description);
+    setItems(template.items.map((item: any, idx: number) => ({
+      id: `item-${Date.now()}-${idx}`,
+      type: item.type,
+      label: item.label,
+      url: "",
+      description: item.description,
+    })));
+    setShowTemplates(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  // Validation helpers
+  const isValidUrl = useCallback((url: string): boolean => {
+    if (!url.trim()) return false;
+    try {
+      new URL(url.startsWith("http") ? url : `https://${url}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const isValidDateString = useCallback((dateStr: string): boolean => {
+    // Format: ISO 8601 or DD.MM.YYYY
+    if (!dateStr.trim()) return true; // Optional field
+    const isoRegex = /^\d{4}-\d{2}-\d{2}$/;
+    const dotRegex = /^\d{2}\.\d{2}\.\d{4}$/;
+    return isoRegex.test(dateStr) || dotRegex.test(dateStr);
+  }, []);
+
+  // Load session token from storage
+  const loadSession = useCallback(async () => {
+    try {
+      const session = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
+      if (!session) return;
+      const parsed = JSON.parse(session);
+      if (!parsed.sessionToken) {
+        console.warn("Session token missing from storage");
+        return;
+      }
+      setSessionToken(parsed.sessionToken);
+    } catch (error) {
+      console.error("Failed to parse session:", error);
+      Alert.alert("Sesjonsfeil", "Vennligst logg inn på nytt.");
+    }
+  }, []);
 
   // Convert Google Drive share links to direct image URLs
   const convertGoogleDriveUrl = (url: string): string => {
@@ -86,7 +171,7 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     loadSession();
-  }, []);
+  }, [loadSession]);
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -97,7 +182,8 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
       setDescription(editingDelivery.description || "");
       setWeddingDate(editingDelivery.weddingDate || "");
       if (editingDelivery.items && editingDelivery.items.length > 0) {
-        setItems(editingDelivery.items.map((item: any) => ({
+        setItems(editingDelivery.items.map((item: any, idx: number) => ({
+          id: item.id || `item-${idx}`,
           type: item.type || "gallery",
           label: item.label || "",
           url: item.url || "",
@@ -106,13 +192,6 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
       }
     }
   }, [editingDelivery]);
-
-  const loadSession = async () => {
-    const session = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
-    if (session) {
-      setSessionToken(JSON.parse(session).sessionToken);
-    }
-  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -123,7 +202,6 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
       const url = isEditMode 
         ? new URL(`/api/vendor/deliveries/${editingDelivery.id}`, getApiUrl()).toString()
         : new URL("/api/vendor/deliveries", getApiUrl()).toString();
-        
       const response = await fetch(url, {
         method: isEditMode ? "PATCH" : "POST",
         headers: {
@@ -136,24 +214,34 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           title,
           description: description || undefined,
           weddingDate: weddingDate || undefined,
-          items: items.filter((i) => i.label && i.url),
+          items: items.filter((i) => i.label && i.url).map(({ id, ...rest }) => rest),
         }),
       });
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("401:Autentisering kreves");
+        }
         const error = await response.json();
         throw new Error(error.error || (isEditMode ? "Kunne ikke oppdatere leveranse" : "Kunne ikke opprette leveranse"));
       }
       return response.json();
     },
-    onSuccess: async (data) => {
+    onSuccess: async (data: any) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (!isEditMode) {
-        await Clipboard.setStringAsync(data.delivery.accessCode);
-        Alert.alert(
-          "Leveranse opprettet!",
-          `Tilgangskode: ${data.delivery.accessCode}\n\nKoden er kopiert til utklippstavlen. Del denne med brudeparet.`,
-          [{ text: "OK", onPress: () => navigation.goBack() }]
-        );
+        try {
+          await Clipboard.setStringAsync(data.delivery.accessCode);
+        } catch (error) {
+          console.warn("Failed to copy access code", error);
+        }
+        // Show non-blocking success feedback
+        setAccessCode(data.delivery.accessCode);
+        setShowSuccessSheet(true);
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+          setShowSuccessSheet(false);
+          navigation.goBack();
+        }, 5000);
       } else {
         Alert.alert("Oppdatert!", "Leveransen er oppdatert.", [
           { text: "OK", onPress: () => navigation.goBack() }
@@ -163,7 +251,12 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
     },
     onError: (error: any) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Feil", error.message);
+      const errorMsg = error.message || "En feil oppstod";
+      if (errorMsg.includes("401")) {
+        Alert.alert("Autentisering kreves", "Vennligst logg inn på nytt.");
+        return;
+      }
+      Alert.alert("Feil", errorMsg);
     },
   });
 
@@ -210,7 +303,8 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
   };
 
   const addItem = () => {
-    setItems([...items, { type: "gallery", label: "", url: "", description: "" }]);
+    const newId = `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    setItems([...items, { id: newId, type: "gallery", label: "", url: "", description: "" }]);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -223,15 +317,55 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
 
   const updateItem = (index: number, field: keyof DeliveryItemInput, value: string) => {
     const newItems = [...items];
-    // Auto-convert Google Drive URLs when updating URL field for gallery type
-    if (field === "url" && newItems[index].type === "gallery") {
-      value = convertGoogleDriveUrl(value);
-    }
     newItems[index] = { ...newItems[index], [field]: value };
+    // Clear URL error when user edits
+    if (field === "url") {
+      newItems[index].urlError = undefined;
+    }
     setItems(newItems);
   };
 
-  const handleSubmit = () => {
+  const handleUrlBlur = useCallback((index: number) => {
+    const item = items[index];
+    if (!item.url) return; // Empty URLs are OK
+
+    let convertedUrl = item.url;
+    if (item.type === "gallery" && item.url.includes("drive.google.com")) {
+      convertedUrl = convertGoogleDriveUrl(item.url);
+    }
+
+    // Validate URL
+    if (!isValidUrl(convertedUrl)) {
+      const newItems = [...items];
+      newItems[index].urlError = "Ugyldig URL";
+      setItems(newItems);
+      return;
+    }
+
+    // Update with converted URL
+    const newItems = [...items];
+    newItems[index].url = convertedUrl;
+    newItems[index].urlError = undefined;
+    setItems(newItems);
+  }, [items, isValidUrl]);
+
+  const handleTestLink = useCallback((url: string, itemType: string) => {
+    if (!url.trim()) {
+      Alert.alert("Tom URL", "Legg inn en URL først.");
+      return;
+    }
+    const testUrl = itemType === "gallery" ? convertGoogleDriveUrl(url) : url;
+    if (isValidUrl(testUrl)) {
+      const finalUrl = testUrl.startsWith("http") ? testUrl : `https://${testUrl}`;
+      Linking.openURL(finalUrl).catch(() => {
+        Alert.alert("Feil", "Kunne ikke åpne lenken.");
+      });
+    } else {
+      Alert.alert("Ugyldig URL", "Lenken er ikke gyldig.");
+    }
+  }, [isValidUrl]);
+
+  const handleSubmit = useCallback(() => {
     if (!sessionToken) {
       Alert.alert("Feil", "Vennligst logg inn på nytt.");
       return;
@@ -242,20 +376,34 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
       return;
     }
 
-    const validItems = items.filter((i) => i.label && i.url);
-    if (validItems.length === 0) {
-      Alert.alert("Mangler lenker", "Legg til minst én lenke med etikett og URL.");
+    if (!isValidDateString(weddingDate)) {
+      Alert.alert("Ugyldig dato", "Bruk format YYYY-MM-DD eller DD.MM.YYYY.");
+      return;
+    }
+
+    // Validate all items with labels
+    const itemsWithLabels = items.filter((i) => i.label?.trim());
+    if (itemsWithLabels.length === 0) {
+      Alert.alert("Mangler lenker", "Legg til minst én lenke med etikett.");
+      return;
+    }
+
+    // Check URLs on items with labels
+    const invalidUrls = itemsWithLabels.filter((i) => i.url?.trim() && !isValidUrl(i.url));
+    if (invalidUrls.length > 0) {
+      Alert.alert("Ugyldige URLer", "Sjekk at alle lenker er gyldige.");
+      return;
+    }
+
+    const itemsWithValidUrl = itemsWithLabels.filter((i) => i.url?.trim());
+    if (itemsWithValidUrl.length === 0) {
+      Alert.alert("Mangler URLer", "Legg til minst én URL for en lenke med etikett.");
       return;
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     saveMutation.mutate();
-  };
-
-  const getIconName = (iconName: string): string => {
-    // Just return the icon name; let renderIcon handle custom icons
-    return iconName;
-  };
+  }, [sessionToken, coupleName, title, weddingDate, items, isValidDateString, isValidUrl, saveMutation]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -290,6 +438,41 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl },
         ]}
       >
+        {/* Template Selection */}
+        {showTemplates && !isEditMode && (
+          <View style={[styles.templatesCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.accent }]}>
+            <View style={styles.templatesHeader}>
+              <View style={styles.templatesHeaderLeft}>
+                <Feather name="zap" size={18} color={theme.accent} />
+                <ThemedText style={[styles.templatesTitle, { color: theme.accent }]}>Hurtigstart</ThemedText>
+              </View>
+              <Pressable onPress={() => setShowTemplates(false)} style={styles.templatesClose}>
+                <Feather name="x" size={16} color={theme.textMuted} />
+              </Pressable>
+            </View>
+            <ThemedText style={[styles.templatesSubtitle, { color: theme.textSecondary }]}>
+              Velg en mal for å komme raskt i gang
+            </ThemedText>
+            <View style={styles.templatesGrid}>
+              {getDeliveryTemplates().map((template, index) => (
+                <Pressable
+                  key={index}
+                  onPress={() => applyDeliveryTemplate(template)}
+                  style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                >
+                  <Feather name="copy" size={14} color={theme.accent} />
+                  <View style={styles.templateChipContent}>
+                    <ThemedText style={[styles.templateChipTitle, { color: theme.text }]}>{template.title}</ThemedText>
+                    <ThemedText style={[styles.templateChipSubtitle, { color: theme.textSecondary }]}>
+                      {template.description}
+                    </ThemedText>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
         <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
@@ -385,7 +568,7 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
         </View>
 
         {items.map((item, index) => (
-          <View key={index} style={[styles.itemCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <View key={item.id} style={[styles.itemCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <View style={styles.itemHeader}>
               <ThemedText style={[styles.itemNumber, { color: theme.textMuted }]}>Lenke {index + 1}</ThemedText>
               {items.length > 1 ? (
@@ -414,7 +597,7 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
                   }]}
                 >
                   {renderIcon(
-                    getIconName(type.icon),
+                    type.icon,
                     item.type === type.value ? "#FFFFFF" : theme.textSecondary,
                     16,
                   )}
@@ -432,17 +615,41 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
               />
             </View>
 
-            <View style={[styles.itemInput, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}>
+            <View style={[styles.itemInput, { backgroundColor: theme.backgroundRoot, borderColor: item.urlError ? "#EF5350" : theme.border }]}>
               <TextInput
                 style={[styles.input, { color: theme.text }]}
                 placeholder={item.type === "gallery" ? "Google Drive eller bilde-URL" : "URL (https://...)"}
                 placeholderTextColor={theme.textMuted}
                 value={item.url}
                 onChangeText={(v) => updateItem(index, "url", v)}
+                onBlur={() => handleUrlBlur(index)}
                 keyboardType="url"
                 autoCapitalize="none"
               />
             </View>
+
+            {/* URL error display */}
+            {item.urlError && (
+              <ThemedText style={[styles.urlError, { color: "#EF5350" }]}>
+                {item.urlError}
+              </ThemedText>
+            )}
+
+            {/* Test link button when URL is present */}
+            {item.url && !item.urlError && (
+              <Pressable
+                onPress={() => handleTestLink(item.url, item.type)}
+                style={({ pressed }) => [
+                  styles.testLinkBtn,
+                  { backgroundColor: pressed ? theme.accent + "20" : theme.accent + "10" }
+                ]}
+              >
+                <Feather name="external-link" size={14} color={theme.accent} />
+                <ThemedText style={[styles.testLinkText, { color: theme.accent }]}>
+                  Test lenke
+                </ThemedText>
+              </Pressable>
+            )}
             
             {/* Google Drive hint for gallery type */}
             {item.type === "gallery" && !item.url ? (
@@ -513,6 +720,60 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           </Pressable>
         )}
       </KeyboardAwareScrollViewCompat>
+
+      {/* Success Sheet Modal (Non-blocking feedback) */}
+      <Modal
+        visible={showSuccessSheet}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowSuccessSheet(false)}
+      >
+        <View style={[styles.successSheetOverlay, { backgroundColor: "rgba(0,0,0,0.3)" }]}>
+          <View style={[styles.successSheet, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+            <View style={[styles.successIcon, { backgroundColor: theme.accent + "20" }]}>
+              <Feather name="check-circle" size={44} color={theme.accent} />
+            </View>
+            <ThemedText style={[styles.successTitle, { color: theme.text }]}>
+              Leveranse opprettet!
+            </ThemedText>
+            <ThemedText style={[styles.successSubtitle, { color: theme.textSecondary }]}>
+              Tilgangskode:
+            </ThemedText>
+            <View style={[styles.codeBox, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}>
+              <ThemedText style={[styles.codeText, { color: theme.text, fontFamily: "monospace" }]}>
+                {accessCode}
+              </ThemedText>
+              <Pressable
+                onPress={() => {
+                  Clipboard.setStringAsync(accessCode);
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }}
+                style={({ pressed }) => [
+                  styles.copyCodeBtn,
+                  { backgroundColor: pressed ? theme.accent : theme.accent + "15" }
+                ]}
+              >
+                <Feather name="copy" size={16} color={theme.accent} />
+              </Pressable>
+            </View>
+            <ThemedText style={[styles.codeHint, { color: theme.textMuted }]}>
+              Koden er kopiert til utklippstavlen. Del denne med brudeparet.
+            </ThemedText>
+            <Pressable
+              onPress={() => {
+                setShowSuccessSheet(false);
+                navigation.goBack();
+              }}
+              style={({ pressed }) => [
+                styles.doneBtn,
+                { backgroundColor: pressed ? theme.accent : theme.accent, opacity: pressed ? 0.8 : 1 }
+              ]}
+            >
+              <ThemedText style={styles.doneBtnText}>Ferdig</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* Google Drive Help Modal */}
       <Modal
@@ -872,6 +1133,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
+  // URL error display
+  urlError: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginBottom: Spacing.sm,
+  },
+  // Test link button styles
+  testLinkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.md,
+  },
+  testLinkText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
   // URL hint and help button styles
   urlHintRow: {
     flexDirection: "row",
@@ -1019,5 +1300,128 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "600",
+  },
+  // Success sheet styles
+  successSheetOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  successSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xl,
+    paddingBottom: Spacing.xl + Spacing.lg,
+    alignItems: "center",
+    borderTopWidth: 1,
+  },
+  successIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.lg,
+  },
+  successTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: Spacing.sm,
+    letterSpacing: -0.3,
+  },
+  successSubtitle: {
+    fontSize: 14,
+    marginBottom: Spacing.md,
+  },
+  codeBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.lg,
+    width: "100%",
+  },
+  codeText: {
+    fontSize: 18,
+    fontWeight: "600",
+    letterSpacing: 1,
+  },
+  copyCodeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  codeHint: {
+    fontSize: 13,
+    textAlign: "center",
+    marginBottom: Spacing.lg,
+    lineHeight: 20,
+  },
+  doneBtn: {
+    width: "100%",
+    height: 48,
+    borderRadius: BorderRadius.lg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  doneBtnText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  templatesCard: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  templatesHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.xs,
+  },
+  templatesHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  templatesTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  templatesClose: {
+    padding: Spacing.xs,
+  },
+  templatesSubtitle: {
+    fontSize: 13,
+    marginBottom: Spacing.md,
+  },
+  templatesGrid: {
+    gap: Spacing.sm,
+  },
+  templateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    gap: Spacing.sm,
+  },
+  templateChipContent: {
+    flex: 1,
+  },
+  templateChipTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  templateChipSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
   },
 });

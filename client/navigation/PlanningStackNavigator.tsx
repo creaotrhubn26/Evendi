@@ -35,6 +35,12 @@ import { TransportScreen } from "@/screens/TransportScreen";
 import { BlomsterScreen } from "@/screens/BlomsterScreen";
 import { CateringScreen } from "@/screens/CateringScreen";
 import { KakeScreen } from "@/screens/KakeScreen";
+import { FotografScreen } from "@/screens/FotografScreen";
+import { VideografScreen } from "@/screens/VideografScreen";
+import { MusikkScreen } from "@/screens/MusikkScreen";
+import { VenueScreen } from "@/screens/VenueScreen";
+import { PlanleggerScreen } from "@/screens/PlanleggerScreen";
+import { FotoVideografScreen } from "@/screens/FotoVideografScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -45,7 +51,12 @@ export type PlanningStackParamList = {
   Budget: undefined;
   AITime: undefined;
   Vendors: undefined;
-  VendorMatching: { category?: string; guestCount?: number; cuisineTypes?: string[] };
+  VendorMatching: { 
+    category?: string; 
+    guestCount?: number; 
+    cuisineTypes?: string[];
+    selectedTraditions?: string[];
+  };
   Timeline: undefined;
   StressTracker: undefined;
   BudgetScenarios: undefined;
@@ -72,6 +83,12 @@ export type PlanningStackParamList = {
   Blomster: undefined;
   Catering: undefined;
   Kake: undefined;
+  Fotograf: undefined;
+  Videograf: undefined;
+  Musikk: undefined;
+  Venue: undefined;
+  Planlegger: undefined;
+  FotoVideograf: undefined;
   VendorDetail: {
     vendorId: string;
     vendorName: string;
@@ -258,6 +275,36 @@ export default function PlanningStackNavigator() {
         name="Kake"
         component={KakeScreen}
         options={{ title: "Bryllupskake" }}
+      />
+      <Stack.Screen
+        name="Fotograf"
+        component={FotografScreen}
+        options={{ title: "Fotograf" }}
+      />
+      <Stack.Screen
+        name="Videograf"
+        component={VideografScreen}
+        options={{ title: "Videograf" }}
+      />
+      <Stack.Screen
+        name="Musikk"
+        component={MusikkScreen}
+        options={{ title: "Musikk & DJ" }}
+      />
+      <Stack.Screen
+        name="Venue"
+        component={VenueScreen}
+        options={{ title: "Lokale" }}
+      />
+      <Stack.Screen
+        name="Planlegger"
+        component={PlanleggerScreen}
+        options={{ title: "Bryllupsplanlegger" }}
+      />
+      <Stack.Screen
+        name="FotoVideograf"
+        component={FotoVideografScreen}
+        options={{ title: "Foto & Video" }}
       />
       <Stack.Screen
         name="VendorDetail"

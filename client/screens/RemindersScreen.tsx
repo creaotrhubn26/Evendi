@@ -176,6 +176,59 @@ export default function RemindersScreen() {
   const completedCount = reminders.filter((r) => r.isCompleted).length;
   const totalCount = reminders.length;
 
+  // Helper: Get reminders by urgency
+  const now = new Date();
+  const overdueReminders = upcomingReminders.filter((r) => {
+    const reminderDate = new Date(r.reminderDate);
+    return reminderDate < now;
+  });
+  const dueThisWeekReminders = upcomingReminders.filter((r) => {
+    const reminderDate = new Date(r.reminderDate);
+    const diffDays = Math.ceil((reminderDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 && diffDays <= 7;
+  });
+  const dueNextWeekReminders = upcomingReminders.filter((r) => {
+    const reminderDate = new Date(r.reminderDate);
+    const diffDays = Math.ceil((reminderDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return diffDays > 7 && diffDays <= 14;
+  });
+
+  // Helper: Get category breakdown
+  const getCategoryCount = (category: string) => {
+    return upcomingReminders.filter((r) => r.category === category).length;
+  };
+
+  // Helper: Smart reminder suggestions
+  const getSmartSuggestions = () => {
+    const suggestions = [];
+    if (overdueReminders.length > 0) {
+      suggestions.push({
+        icon: "alert-circle" as const,
+        label: `${overdueReminders.length} forfalt${overdueReminders.length > 1 ? 'e' : ''}`,
+        color: "#FF3B30",
+        priority: "urgent",
+        action: () => {
+          setFilterCategory(null);
+          // Scroll to overdue section would happen here
+        },
+      });
+    }
+    if (dueThisWeekReminders.length > 0) {
+      suggestions.push({
+        icon: "clock" as const,
+        label: `${dueThisWeekReminders.length} denne uken`,
+        color: "#FFB74D",
+        priority: "high",
+        action: () => {
+          // Filter to this week
+        },
+      });
+    }
+    return suggestions;
+  };
+
+  const smartSuggestions = getSmartSuggestions();
+
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -198,33 +251,62 @@ export default function RemindersScreen() {
         <Animated.View entering={FadeInDown.duration(300)} style={styles.header}>
           <View style={[styles.summaryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <View style={styles.summaryRow}>
-              <View style={[styles.iconContainer, { backgroundColor: Colors.dark.accent + "20" }]}>
-                <Feather name="bell" size={24} color={Colors.dark.accent} />
+              <View style={[styles.iconContainer, { backgroundColor: theme.accent + "20" }]}>
+                <Feather name="bell" size={24} color={theme.accent} />
               </View>
               <View style={styles.summaryText}>
-                <ThemedText style={styles.summaryTitle}>Påminnelser</ThemedText>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.sm }}>
+                  <ThemedText style={styles.summaryTitle}>Påminnelser</ThemedText>
+                  {overdueReminders.length > 0 && (
+                    <View style={[styles.urgencyBadge, { backgroundColor: "#FF3B30" }]}>
+                      <ThemedText style={styles.urgencyBadgeText}>{overdueReminders.length}</ThemedText>
+                    </View>
+                  )}
+                </View>
                 <ThemedText style={[styles.summarySubtitle, { color: theme.textMuted }]}>
                   {totalCount > 0 ? `${completedCount} av ${totalCount} fullført` : "Ingen påminnelser ennå"}
                 </ThemedText>
               </View>
             </View>
             {totalCount > 0 ? (
-              <View style={styles.progressContainer}>
-                <View style={[styles.progressBar, { backgroundColor: theme.border }]}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        backgroundColor: Colors.dark.accent,
-                        width: `${(completedCount / totalCount) * 100}%`,
-                      },
-                    ]}
-                  />
+              <>
+                <View style={styles.progressContainer}>
+                  <View style={[styles.progressBar, { backgroundColor: theme.border }]}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          backgroundColor: theme.accent,
+                          width: `${(completedCount / totalCount) * 100}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <ThemedText style={[styles.progressText, { color: theme.textMuted }]}>
+                    {Math.round((completedCount / totalCount) * 100)}%
+                  </ThemedText>
                 </View>
-                <ThemedText style={[styles.progressText, { color: theme.textMuted }]}>
-                  {Math.round((completedCount / totalCount) * 100)}%
-                </ThemedText>
-              </View>
+                {upcomingReminders.length > 0 && (
+                  <View style={styles.statsRow}>
+                    {dueThisWeekReminders.length > 0 && (
+                      <View style={styles.statItem}>
+                        <Feather name="clock" size={12} color="#FFB74D" />
+                        <ThemedText style={[styles.statText, { color: theme.textMuted }]}>
+                          {dueThisWeekReminders.length} denne uken
+                        </ThemedText>
+                      </View>
+                    )}
+                    {overdueReminders.length > 0 && (
+                      <View style={styles.statItem}>
+                        <Feather name="alert-circle" size={12} color="#FF3B30" />
+                        <ThemedText style={[styles.statText, { color: "#FF3B30" }]}>
+                          {overdueReminders.length} forfalt
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </>
             ) : null}
           </View>
         </Animated.View>
@@ -291,10 +373,122 @@ export default function RemindersScreen() {
           </ScrollView>
         </Animated.View>
 
+        {/* Contextual CTAs */}
+        {overdueReminders.length > 0 && !showForm && (
+          <Animated.View entering={FadeInDown.duration(300).delay(150)}>
+            <Pressable
+              style={[styles.ctaCard, { backgroundColor: "#FF3B3015", borderColor: "#FF3B30" }]}
+              onPress={() => {
+                // Mark all overdue as complete or snooze
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+            >
+              <View style={[styles.ctaIcon, { backgroundColor: "#FF3B30" }]}>
+                <Feather name="alert-triangle" size={20} color="#FFFFFF" />
+              </View>
+              <View style={styles.ctaContent}>
+                <ThemedText style={[styles.ctaTitle, { color: "#FF3B30" }]}>
+                  {overdueReminders.length} forfalt{overdueReminders.length > 1 ? 'e' : ''} påminnelse{overdueReminders.length > 1 ? 'r' : ''}
+                </ThemedText>
+                <ThemedText style={[styles.ctaSubtitle, { color: theme.textMuted }]}>
+                  Marker som fullført eller utsett
+                </ThemedText>
+              </View>
+              <Feather name="arrow-right" size={20} color="#FF3B30" />
+            </Pressable>
+          </Animated.View>
+        )}
+
+        {upcomingReminders.length === 0 && completedReminders.length > 0 && !showForm && (
+          <Animated.View entering={FadeInDown.duration(300).delay(150)}>
+            <Pressable
+              style={[styles.ctaCard, { backgroundColor: theme.accent + "15", borderColor: theme.accent }]}
+              onPress={() => {
+                setShowForm(true);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+            >
+              <View style={[styles.ctaIcon, { backgroundColor: theme.accent }]}>
+                <Feather name="plus" size={20} color="#FFFFFF" />
+              </View>
+              <View style={styles.ctaContent}>
+                <ThemedText style={[styles.ctaTitle, { color: theme.text }]}>Legg til ny påminnelse</ThemedText>
+                <ThemedText style={[styles.ctaSubtitle, { color: theme.textMuted }]}>
+                  Alle påminnelser er fullført
+                </ThemedText>
+              </View>
+              <Feather name="arrow-right" size={20} color={theme.accent} />
+            </Pressable>
+          </Animated.View>
+        )}
+
         {showForm ? (
           <Animated.View entering={FadeInUp.duration(300)} style={styles.formSection}>
             <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
               <ThemedText style={styles.formTitle}>Ny påminnelse</ThemedText>
+
+              {/* Quick templates */}
+              <View style={styles.templateRow}>
+                <ThemedText style={[styles.templateLabel, { color: theme.textMuted }]}>Hurtigvalg:</ThemedText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.templateScroll}>
+                  <Pressable
+                    style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                    onPress={() => {
+                      setTitle("Betal leverandør");
+                      setSelectedCategory("vendor");
+                      const tomorrow = new Date();
+                      tomorrow.setDate(tomorrow.getDate() + 7);
+                      setSelectedDate(tomorrow);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <Feather name="dollar-sign" size={12} color={CATEGORY_COLORS.vendor} />
+                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>Betal leverandør</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                    onPress={() => {
+                      setTitle("Møte med leverandør");
+                      setSelectedCategory("vendor");
+                      const nextWeek = new Date();
+                      nextWeek.setDate(nextWeek.getDate() + 7);
+                      setSelectedDate(nextWeek);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <Feather name="calendar" size={12} color={CATEGORY_COLORS.vendor} />
+                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>Møte leverandør</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                    onPress={() => {
+                      setTitle("Send RSVP til gjester");
+                      setSelectedCategory("guest");
+                      const twoWeeks = new Date();
+                      twoWeeks.setDate(twoWeeks.getDate() + 14);
+                      setSelectedDate(twoWeeks);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <Feather name="users" size={12} color={CATEGORY_COLORS.guest} />
+                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>Send RSVP</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                    onPress={() => {
+                      setTitle("Sjekk budsjett");
+                      setSelectedCategory("budget");
+                      const tomorrow = new Date();
+                      tomorrow.setDate(tomorrow.getDate() + 1);
+                      setSelectedDate(tomorrow);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <Feather name="trending-up" size={12} color={CATEGORY_COLORS.budget} />
+                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>Sjekk budsjett</ThemedText>
+                  </Pressable>
+                </ScrollView>
+              </View>
 
               <View style={styles.inputGroup}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Tittel</ThemedText>
@@ -441,14 +635,14 @@ export default function RemindersScreen() {
           <Animated.View entering={FadeInDown.duration(300).delay(200)}>
             <Pressable
               testID="button-add-reminder"
-              style={[styles.addButton, { backgroundColor: theme.backgroundDefault, borderColor: Colors.dark.accent }]}
+              style={[styles.addButton, { backgroundColor: theme.backgroundDefault, borderColor: theme.accent }]}
               onPress={() => {
                 setShowForm(true);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
             >
-              <Feather name="plus" size={20} color={Colors.dark.accent} />
-              <ThemedText style={[styles.addButtonText, { color: Colors.dark.accent }]}>
+              <Feather name="plus" size={20} color={theme.accent} />
+              <ThemedText style={[styles.addButtonText, { color: theme.accent }]}>
                 Legg til påminnelse
               </ThemedText>
             </Pressable>
@@ -500,8 +694,8 @@ export default function RemindersScreen() {
 
         {reminders.length === 0 ? (
           <Animated.View entering={FadeInDown.duration(300).delay(300)} style={styles.emptyState}>
-            <View style={[styles.emptyIcon, { backgroundColor: Colors.dark.accent + "20" }]}>
-              <Feather name="bell-off" size={32} color={Colors.dark.accent} />
+            <View style={[styles.emptyIcon, { backgroundColor: theme.accent + "20" }]}>
+              <Feather name="bell-off" size={32} color={theme.accent} />
             </View>
             <ThemedText style={styles.emptyTitle}>Ingen påminnelser</ThemedText>
             <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
@@ -551,8 +745,8 @@ function ReminderItem({
           style={[
             styles.checkbox,
             {
-              borderColor: completed ? Colors.dark.accent : theme.border,
-              backgroundColor: completed ? Colors.dark.accent : "transparent",
+              borderColor: completed ? theme.accent : theme.border,
+              backgroundColor: completed ? theme.accent : "transparent",
             },
           ]}
         >
@@ -613,7 +807,7 @@ function ReminderItem({
             <ThemedText
               style={[
                 styles.timeUntilText,
-                { color: isOverdue && !completed ? "#FF6B6B" : Colors.dark.accent },
+                { color: isOverdue && !completed ? "#FF6B6B" : theme.accent },
               ]}
             >
               ({timeUntil})
@@ -900,5 +1094,85 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     maxWidth: 280,
+  },
+  urgencyBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  urgencyBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+    flexWrap: "wrap",
+  },
+  statItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  statText: {
+    fontSize: 12,
+  },
+  ctaCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+  },
+  ctaIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: Spacing.md,
+  },
+  ctaContent: {
+    flex: 1,
+  },
+  ctaTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  ctaSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  templateRow: {
+    marginBottom: Spacing.lg,
+  },
+  templateLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginBottom: Spacing.xs,
+  },
+  templateScroll: {
+    marginHorizontal: -Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+  },
+  templateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginRight: Spacing.sm,
+    gap: 4,
+  },
+  templateText: {
+    fontSize: 12,
+    fontWeight: "500",
   },
 });

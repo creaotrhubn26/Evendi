@@ -8,6 +8,7 @@ import {
   Alert,
   Modal,
   RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -18,6 +19,7 @@ import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { getCoupleProfile } from '@/lib/api-couples';
 import { getGuests } from "@/lib/api-guests";
 import { getCoupleSession } from "@/lib/storage";
 import type { WeddingGuest } from "@shared/schema";
@@ -84,6 +86,8 @@ const CUISINE_TYPES = [
   { key: "mixed", label: "Blandet", emoji: "🍽️" },
 ];
 
+type TimelineStepKey = (typeof TIMELINE_STEPS)[number]["key"];
+
 export default function CateringScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
@@ -93,24 +97,47 @@ export default function CateringScreen() {
 
   const [activeTab, setActiveTab] = useState<"tastings" | "menu" | "dietary" | "timeline">("tastings");
   const [refreshing, setRefreshing] = useState(false);
+  // Guest list integration
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [guests, setGuests] = useState<WeddingGuest[]>([]);
+  const [showGuestPicker, setShowGuestPicker] = useState(false);
+  const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
+
+  // Fetch couple profile for selected traditions
+  const { data: coupleProfile } = useQuery({
+    queryKey: ['coupleProfile'],
+    queryFn: async () => {
+      if (!sessionToken) throw new Error('No session');
+      return getCoupleProfile(sessionToken);
+    },
+    enabled: !!sessionToken,
+  });
 
   // Query for catering data
-  const { data: cateringData, isLoading: loading, refetch } = useQuery({
-    queryKey: ["catering-data"],
+  const dataQueryKey = ["catering-data", sessionToken];
+
+  const { data: cateringData, isLoading: loading, isError, error, refetch } = useQuery({
+    queryKey: dataQueryKey,
     queryFn: getCateringData,
+    enabled: true,
   });
+
+  type ExtendedTimeline = CateringTimeline & { cuisineTypes?: string[] };
 
   const tastings = cateringData?.tastings ?? [];
   const menu = cateringData?.menu ?? [];
   const dietaryNeeds = cateringData?.dietaryNeeds ?? [];
-  const timeline = cateringData?.timeline ?? {
-    catererSelected: false,
-    tastingCompleted: false,
-    menuFinalized: false,
-    guestCountConfirmed: false,
-    guestCount: 0,
-    budget: 0,
-  };
+  const timeline: ExtendedTimeline = cateringData?.timeline
+    ? { ...cateringData.timeline }
+    : {
+        catererSelected: false,
+        tastingCompleted: false,
+        menuFinalized: false,
+        guestCountConfirmed: false,
+        guestCount: 0,
+        budget: 0,
+        cuisineTypes: [],
+      };
   const budget = timeline?.budget ?? 0;
   const guestCount = timeline?.guestCount ?? 0;
 
@@ -153,11 +180,6 @@ export default function CateringScreen() {
   const [showCuisineModal, setShowCuisineModal] = useState(false);
 
   // Guest list integration
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const [guests, setGuests] = useState<WeddingGuest[]>([]);
-  const [showGuestPicker, setShowGuestPicker] = useState(false);
-  const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
-
   // Load session token and guests
   useEffect(() => {
     const initSession = async () => {
@@ -165,9 +187,15 @@ export default function CateringScreen() {
       if (session?.token) {
         setSessionToken(session.token);
       }
-    };
+    }
     initSession();
   }, []);
+
+  // Sync cuisines from timeline when data loads
+  useEffect(() => {
+    const cuisines = timeline?.cuisineTypes ?? [];
+    setSelectedCuisines(cuisines);
+  }, [timeline?.cuisineTypes]);
 
   useEffect(() => {
     const loadGuests = async () => {
@@ -194,52 +222,52 @@ export default function CateringScreen() {
   // Mutations
   const createTastingMutation = useMutation({
     mutationFn: createCateringTasting,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catering-data"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: dataQueryKey }),
   });
 
   const updateTastingMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<CateringTasting> }) => updateCateringTasting(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catering-data"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: dataQueryKey }),
   });
 
   const deleteTastingMutation = useMutation({
     mutationFn: deleteCateringTasting,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catering-data"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: dataQueryKey }),
   });
 
   const createMenuMutation = useMutation({
     mutationFn: createCateringMenuItem,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catering-data"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: dataQueryKey }),
   });
 
   const updateMenuMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<CateringMenuItem> }) => updateCateringMenuItem(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catering-data"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: dataQueryKey }),
   });
 
   const deleteMenuMutation = useMutation({
     mutationFn: deleteCateringMenuItem,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catering-data"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: dataQueryKey }),
   });
 
   const createDietaryMutation = useMutation({
     mutationFn: createCateringDietaryNeed,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catering-data"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: dataQueryKey }),
   });
 
   const updateDietaryMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<CateringDietaryNeed> }) => updateCateringDietaryNeed(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catering-data"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: dataQueryKey }),
   });
 
   const deleteDietaryMutation = useMutation({
     mutationFn: deleteCateringDietaryNeed,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catering-data"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: dataQueryKey }),
   });
 
   const updateTimelineMutation = useMutation({
     mutationFn: updateCateringTimeline,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["catering-data"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: dataQueryKey }),
   });
 
   const onRefresh = useCallback(async () => {
@@ -272,8 +300,16 @@ export default function CateringScreen() {
   };
 
   const saveTasting = async () => {
-    if (!tastingCaterer.trim() || !tastingDate.trim()) {
-      Alert.alert("Feil", "Vennligst fyll inn caterer og dato");
+    if (!tastingCaterer.trim()) {
+      Alert.alert("Feil", "Vennligst fyll inn caterer");
+      return;
+    }
+    if (!tastingDate.trim() || !isValidDateString(tastingDate)) {
+      Alert.alert("Feil", "Dato må være på format DD.MM.ÅÅÅÅ");
+      return;
+    }
+    if (!isValidTimeString(tastingTime)) {
+      Alert.alert("Feil", "Tid må være på format HH:MM");
       return;
     }
 
@@ -317,8 +353,17 @@ export default function CateringScreen() {
   };
 
   const handleDeleteTasting = async (id: string) => {
-    await deleteTastingMutation.mutateAsync(id);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert("Slett smaksprøve", "Vil du slette denne smaksprøven?", [
+      { text: "Avbryt", style: "cancel" },
+      {
+        text: "Slett",
+        style: "destructive",
+        onPress: async () => {
+          await deleteTastingMutation.mutateAsync(id);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        },
+      },
+    ]);
   };
 
   // Menu handlers
@@ -383,15 +428,36 @@ export default function CateringScreen() {
 
   const toggleMenuSelected = async (id: string) => {
     const menuItem = menu.find((m) => m.id === id);
-    if (menuItem) {
-      await updateMenuMutation.mutateAsync({ id, data: { isSelected: !menuItem.isSelected } });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!menuItem) return;
+
+    const willSelect = !menuItem.isSelected;
+    const courseType = menuItem.courseType;
+
+    // Enforce one final choice per course: deselect others in same course when selecting
+    if (willSelect) {
+      const updates = menu
+        .filter((m) => m.courseType === courseType)
+        .map((m) => updateMenuMutation.mutateAsync({ id: m.id, data: { isSelected: m.id === id } }));
+      await Promise.all(updates);
+    } else {
+      await updateMenuMutation.mutateAsync({ id, data: { isSelected: false } });
     }
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleDeleteMenu = async (id: string) => {
-    await deleteMenuMutation.mutateAsync(id);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert("Slett rett", "Vil du slette denne retten?", [
+      { text: "Avbryt", style: "cancel" },
+      {
+        text: "Slett",
+        style: "destructive",
+        onPress: async () => {
+          await deleteMenuMutation.mutateAsync(id);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        },
+      },
+    ]);
   };
 
   // Dietary handlers
@@ -468,14 +534,74 @@ export default function CateringScreen() {
   };
 
   const handleDeleteDietary = async (id: string) => {
-    await deleteDietaryMutation.mutateAsync(id);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert("Slett kostbehov", "Vil du slette dette kostbehovet?", [
+      { text: "Avbryt", style: "cancel" },
+      {
+        text: "Slett",
+        style: "destructive",
+        onPress: async () => {
+          await deleteDietaryMutation.mutateAsync(id);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        },
+      },
+    ]);
+  };
+
+  const duplicateTasting = async (tasting: CateringTasting) => {
+    try {
+      await createTastingMutation.mutateAsync({
+        catererName: tasting.catererName,
+        date: tasting.date,
+        time: tasting.time,
+        location: tasting.location,
+        notes: tasting.notes,
+        rating: tasting.rating,
+        completed: false,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert("Feil", "Kunne ikke duplisere smaksprøve");
+    }
+  };
+
+  const duplicateMenuItem = async (menuItem: CateringMenuItem) => {
+    try {
+      await createMenuMutation.mutateAsync({
+        courseType: menuItem.courseType,
+        dishName: `Kopi av ${menuItem.dishName}`,
+        description: menuItem.description,
+        isVegetarian: menuItem.isVegetarian,
+        isVegan: menuItem.isVegan,
+        isGlutenFree: menuItem.isGlutenFree,
+        isDairyFree: menuItem.isDairyFree,
+        pricePerPerson: menuItem.pricePerPerson,
+        isSelected: false,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert("Feil", "Kunne ikke duplisere rett");
+    }
+  };
+
+  const duplicateDietaryNeed = async (dietary: CateringDietaryNeed) => {
+    try {
+      await createDietaryMutation.mutateAsync({
+        guestName: dietary.guestName,
+        dietaryType: dietary.dietaryType,
+        notes: dietary.notes,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert("Feil", "Kunne ikke duplisere kostbehov");
+    }
   };
 
   // Timeline handlers
-  const toggleTimelineStep = async (key: string) => {
-    const newValue = !timeline[key as keyof CateringTimeline];
-    await updateTimelineMutation.mutateAsync({ [key]: newValue });
+  const getTimelineValue = (key: TimelineStepKey) => Boolean((timeline as Record<string, any>)[key]);
+
+  const toggleTimelineStep = async (key: TimelineStepKey) => {
+    const newValue = !getTimelineValue(key);
+    await updateTimelineMutation.mutateAsync({ [key]: newValue } as Partial<CateringTimeline>);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -495,13 +621,17 @@ export default function CateringScreen() {
   };
 
   // Cuisine handlers
-  const toggleCuisine = (cuisineKey: string) => {
-    setSelectedCuisines((prev) =>
-      prev.includes(cuisineKey)
-        ? prev.filter((c) => c !== cuisineKey)
-        : [...prev, cuisineKey]
-    );
+  const toggleCuisine = async (cuisineKey: string) => {
+    const next = selectedCuisines.includes(cuisineKey)
+      ? selectedCuisines.filter((c) => c !== cuisineKey)
+      : [...selectedCuisines, cuisineKey];
+    setSelectedCuisines(next);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await updateTimelineMutation.mutateAsync({ cuisineTypes: next } as Partial<CateringTimeline> & { cuisineTypes: string[] });
+    } catch (e) {
+      Alert.alert("Feil", "Kunne ikke lagre mattype-valg");
+    }
   };
 
   const getCuisineLabels = () => {
@@ -512,6 +642,9 @@ export default function CateringScreen() {
       .join(", ");
   };
 
+  const isValidDateString = (value: string) => /^\d{2}\.\d{2}\.\d{4}$/.test(value.trim());
+  const isValidTimeString = (value: string) => value.trim() === "" || /^([01]\d|2[0-3]):[0-5]\d$/.test(value.trim());
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("nb-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 }).format(amount);
   };
@@ -521,11 +654,36 @@ export default function CateringScreen() {
     return course?.label || type;
   };
 
-  const completedSteps = TIMELINE_STEPS.filter((step) => timeline[step.key as keyof CateringTimeline]).length;
+  const completedSteps = TIMELINE_STEPS.filter((step) => getTimelineValue(step.key)).length;
   const progressPercentage = (completedSteps / TIMELINE_STEPS.length) * 100;
   const selectedMenuItems = menu.filter((m) => m.isSelected);
   const menuCostPerPerson = selectedMenuItems.reduce((sum, m) => sum + (m.pricePerPerson || 0), 0);
   const totalMenuCost = menuCostPerPerson * guestCount;
+  const budgetDiff = budget > 0 ? budget - totalMenuCost : null;
+
+  if (loading) {
+    return (
+      <View style={[styles.loaderContainer, { backgroundColor: theme.backgroundRoot }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.md }}>Laster cateringdata…</ThemedText>
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={[styles.loaderContainer, { backgroundColor: theme.backgroundRoot }]}>
+        <Feather name="alert-circle" size={48} color={theme.error} />
+        <ThemedText style={{ color: theme.error, marginTop: Spacing.sm }}>Kunne ikke laste</ThemedText>
+        <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.xs }}>
+          {error instanceof Error ? error.message : "Ukjent feil"}
+        </ThemedText>
+        <Button style={{ marginTop: Spacing.lg }} onPress={() => refetch()}>
+          Prøv igjen
+        </Button>
+      </View>
+    );
+  }
 
   const renderTastingsTab = () => (
     <View style={styles.tabContent}>
@@ -538,12 +696,12 @@ export default function CateringScreen() {
 
       {tastings.length === 0 ? (
         <View style={[styles.emptyState, { backgroundColor: theme.backgroundDefault }]}>
-          <Feather name="coffee" size={48} color={theme.textSecondary} />
-          <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-            Ingen smaksprøver planlagt
+          <Feather name="heart" size={48} color={theme.primary} style={{ opacity: 0.6 }} />
+          <ThemedText style={[styles.emptyText, { color: theme.text, fontWeight: '600', fontSize: 18 }]}>
+            Hva skal gjestene samles rundt?
           </ThemedText>
-          <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-            Book smaksprøver hos caterere
+          <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary, fontSize: 15 }]}>
+            La oss finne menyen som gjenspeiler dere.
           </ThemedText>
         </View>
       ) : (
@@ -552,6 +710,15 @@ export default function CateringScreen() {
             <SwipeableRow onDelete={() => handleDeleteTasting(tasting.id)}>
               <Pressable
                 onPress={() => openTastingModal(tasting)}
+                onLongPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  Alert.alert("Alternativer", tasting.catererName, [
+                    { text: "Avbryt", style: "cancel" },
+                    { text: "Rediger", onPress: () => openTastingModal(tasting) },
+                    { text: "Dupliser", onPress: () => duplicateTasting(tasting) },
+                    { text: "Slett", style: "destructive", onPress: () => handleDeleteTasting(tasting.id) },
+                  ]);
+                }}
                 style={[styles.tastingCard, { backgroundColor: theme.backgroundDefault }]}
               >
                 <Pressable
@@ -586,6 +753,15 @@ export default function CateringScreen() {
                     </View>
                   )}
                 </View>
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    duplicateTasting(tasting);
+                  }}
+                  style={styles.quickActionButton}
+                >
+                  <Feather name="copy" size={16} color={theme.textSecondary} />
+                </Pressable>
                 <Feather name="chevron-right" size={20} color={theme.textSecondary} />
               </Pressable>
             </SwipeableRow>
@@ -647,6 +823,15 @@ export default function CateringScreen() {
                   <SwipeableRow onDelete={() => handleDeleteMenu(menuItem.id)}>
                     <Pressable
                       onPress={() => openMenuModal(menuItem)}
+                      onLongPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        Alert.alert("Alternativer", menuItem.dishName, [
+                          { text: "Avbryt", style: "cancel" },
+                          { text: "Rediger", onPress: () => openMenuModal(menuItem) },
+                          { text: "Dupliser", onPress: () => duplicateMenuItem(menuItem) },
+                          { text: "Slett", style: "destructive", onPress: () => handleDeleteMenu(menuItem.id) },
+                        ]);
+                      }}
                       style={[
                         styles.menuCard,
                         { backgroundColor: theme.backgroundDefault },
@@ -689,6 +874,15 @@ export default function CateringScreen() {
                             {formatCurrency(menuItem.pricePerPerson)}
                           </ThemedText>
                         )}
+                        <Pressable
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            duplicateMenuItem(menuItem);
+                          }}
+                          style={[styles.quickActionButton, { marginRight: Spacing.xs }]}
+                        >
+                          <Feather name="copy" size={16} color={theme.textSecondary} />
+                        </Pressable>
                         <Pressable
                           onPress={() => toggleMenuSelected(menuItem.id)}
                           style={[
@@ -756,6 +950,15 @@ export default function CateringScreen() {
             <SwipeableRow onDelete={() => handleDeleteDietary(dietary.id)}>
               <Pressable
                 onPress={() => openDietaryModal(dietary)}
+                onLongPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  Alert.alert("Alternativer", dietary.guestName, [
+                    { text: "Avbryt", style: "cancel" },
+                    { text: "Rediger", onPress: () => openDietaryModal(dietary) },
+                    { text: "Dupliser", onPress: () => duplicateDietaryNeed(dietary) },
+                    { text: "Slett", style: "destructive", onPress: () => handleDeleteDietary(dietary.id) },
+                  ]);
+                }}
                 style={[styles.dietaryCard, { backgroundColor: theme.backgroundDefault }]}
               >
                 <View style={[styles.dietaryIcon, { backgroundColor: theme.primary + '20' }]}>
@@ -774,6 +977,15 @@ export default function CateringScreen() {
                     </ThemedText>
                   )}
                 </View>
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    duplicateDietaryNeed(dietary);
+                  }}
+                  style={[styles.quickActionButton, { marginRight: Spacing.xs }]}
+                >
+                  <Feather name="copy" size={16} color={theme.textSecondary} />
+                </Pressable>
                 <Feather name="chevron-right" size={20} color={theme.textSecondary} />
               </Pressable>
             </SwipeableRow>
@@ -807,9 +1019,16 @@ export default function CateringScreen() {
           </View>
         </View>
         {budget > 0 && totalMenuCost > 0 && (
-          <ThemedText style={[styles.budgetUsed, { color: totalMenuCost > budget ? Colors.light.error : theme.textSecondary }]}>
-            Estimert menykost: {formatCurrency(totalMenuCost)} ({Math.round((totalMenuCost / budget) * 100)}%)
-          </ThemedText>
+          <View style={{ gap: 4 }}>
+            <ThemedText style={[styles.budgetUsed, { color: totalMenuCost > budget ? Colors.light.error : theme.textSecondary }]}>
+              Estimert menykost: {formatCurrency(totalMenuCost)} ({Math.round((totalMenuCost / budget) * 100)}%)
+            </ThemedText>
+            {budgetDiff !== null && (
+              <ThemedText style={[styles.budgetUsed, { color: budgetDiff >= 0 ? theme.success : Colors.light.error }]}>
+                {budgetDiff >= 0 ? "Innenfor budsjett" : "Over budsjett"}: {budgetDiff >= 0 ? "+" : "-"}{formatCurrency(Math.abs(budgetDiff))}
+              </ThemedText>
+            )}
+          </View>
         )}
       </Pressable>
 
@@ -829,7 +1048,7 @@ export default function CateringScreen() {
               if (!cuisine) return null;
               return (
                 <View key={key} style={[styles.cuisineTag, { backgroundColor: theme.primary + '20' }]}>
-                  <ThemedText style={[styles.cuisineTagText, { color: theme.primary }]}>)
+                  <ThemedText style={[styles.cuisineTagText, { color: theme.primary }]}>
                     {cuisine.emoji} {cuisine.label}
                   </ThemedText>
                 </View>
@@ -851,6 +1070,7 @@ export default function CateringScreen() {
               category: "catering",
               guestCount: guestCount || undefined,
               cuisineTypes: selectedCuisines,
+              selectedTraditions: coupleProfile?.selectedTraditions || [],
             });
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           }}
@@ -903,7 +1123,7 @@ export default function CateringScreen() {
       <View style={[styles.timelineCard, { backgroundColor: theme.backgroundDefault }]}>
         <ThemedText style={styles.timelineTitle}>Sjekkliste</ThemedText>
         {TIMELINE_STEPS.map((step, index) => {
-          const isCompleted = timeline[step.key as keyof CateringTimeline];
+          const isCompleted = getTimelineValue(step.key);
           return (
             <Pressable
               key={step.key}
@@ -1408,6 +1628,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.xl,
+  },
   tabBar: {
     flexDirection: "row",
     borderBottomWidth: 1,
@@ -1567,6 +1793,12 @@ const styles = StyleSheet.create({
   menuPrice: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  quickActionButton: {
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    justifyContent: "center",
+    alignItems: "center",
   },
   selectButton: {
     width: 28,

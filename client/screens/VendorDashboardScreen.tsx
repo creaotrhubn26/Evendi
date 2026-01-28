@@ -2,60 +2,85 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   StyleSheet,
   View,
-  FlatList,
   Pressable,
   ActivityIndicator,
+  FlatList,
   Alert,
-  RefreshControl,
   ScrollView,
-  Linking,
-  Platform,
   Dimensions,
+  RefreshControl,
   Image,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import Animated, { FadeInDown } from "react-native-reanimated";
 import * as Clipboard from "expo-clipboard";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
+import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { getVendorConfig, getEnabledTabs, type VendorTab } from "@/lib/vendor-adapter";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
 interface VendorSession {
   sessionToken: string;
   vendorId: string;
-  email: string;
   businessName: string;
 }
 
-interface DeliveryItem {
-  id: string;
-  type: string;
-  label: string;
-  url: string;
-  description: string | null;
-}
-
+// Types (matching server schema)
 interface Delivery {
   id: string;
-  coupleName: string;
-  coupleEmail: string | null;
-  accessCode: string;
   title: string;
-  description: string | null;
-  weddingDate: string | null;
-  status: string;
+  link: string | null;
   createdAt: string;
-  items: DeliveryItem[];
+  description?: string;
+  accessCode: string;
+  status?: string;
+  coupleName?: string;
+  weddingDate?: string | null;
+  items?: any[]; // delivery items
+}
+
+interface UpcomingEvent {
+  id: string;
+  eventDate: string;
+  eventType: string;
+  notes: string | null;
+  couple?: {
+    id: string;
+    displayName: string;
+  };
+}
+
+interface VendorProfile {
+  id: string;
+  businessName: string;
+  description: string | null;
+  category: {
+    id: string;
+    name: string;
+  } | null;
+}
+
+interface VendorCoupleAccess {
+  id: string;
+  displayName: string;
+  weddingDate: string | null;
+  accessTypes: string[];
+}
+
+interface Props {
+  navigation: NativeStackNavigationProp<any>;
 }
 
 interface InspirationMedia {
@@ -90,9 +115,9 @@ interface Conversation {
   vendorId: string;
   inspirationId: string | null;
   status: string;
-  lastMessageAt: string;
+  lastMessageAt: string | null;
   vendorUnreadCount: number;
-  couple: { id: string; displayName: string; email: string };
+  couple?: { id: string; displayName: string; email: string; weddingDate: string | null };
   inspiration: { id: string; title: string } | null;
   lastMessage: { body: string; senderType: string; createdAt: string } | null;
 }
@@ -129,7 +154,7 @@ interface VendorOffer {
   currency: string | null;
   validUntil: string | null;
   createdAt: string;
-  couple: { id: string; displayName: string; email: string } | null;
+  couple?: { id: string; displayName: string; email: string };
   items: VendorOfferItem[];
 }
 
@@ -312,9 +337,9 @@ export default function VendorDashboardScreen({ navigation }: Props) {
 
     // Apply sort
     if (conversationSort === "recent") {
-      filtered.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+      filtered.sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime());
     } else if (conversationSort === "name") {
-      filtered.sort((a, b) => a.couple.displayName.localeCompare(b.couple.displayName));
+      filtered.sort((a, b) => (a.couple?.displayName || "").localeCompare(b.couple?.displayName || ""));
     } else if (conversationSort === "unread") {
       filtered.sort((a, b) => b.vendorUnreadCount - a.vendorUnreadCount);
     }
@@ -352,16 +377,19 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     enabled: !!session?.sessionToken,
   });
 
-  const { data: vendorProfile } = useQuery<{ googleReviewUrl: string | null }>({
+  const { data: vendorProfile } = useQuery<{ 
+    googleReviewUrl: string | null;
+    category: { id: string; name: string } | null;
+  }>({
     queryKey: ["/api/vendor/profile"],
     queryFn: async () => {
-      if (!session?.sessionToken) return { googleReviewUrl: null };
+      if (!session?.sessionToken) return { googleReviewUrl: null, category: null };
       const response = await fetch(new URL("/api/vendor/profile", getApiUrl()).toString(), {
         headers: {
           Authorization: `Bearer ${session.sessionToken}`,
         },
       });
-      if (!response.ok) return { googleReviewUrl: null };
+      if (!response.ok) return { googleReviewUrl: null, category: null };
       return response.json();
     },
     enabled: !!session?.sessionToken,
@@ -446,6 +474,95 @@ export default function VendorDashboardScreen({ navigation }: Props) {
   });
 
   const totalUnread = mergedConversationsData.reduce((sum, c) => sum + (c.vendorUnreadCount || 0), 0);
+
+  // Get vendor category configuration
+  const vendorConfig = getVendorConfig(
+    vendorProfile?.category?.id || null,
+    vendorProfile?.category?.name || null
+  );
+  const enabledTabs = getEnabledTabs(vendorConfig);
+
+  useEffect(() => {
+    const firstTab = enabledTabs[0]?.key;
+    const stillEnabled = enabledTabs.some((t) => t.key === activeTab);
+    if (!stillEnabled && firstTab) {
+      setActiveTab(firstTab);
+    }
+  }, [enabledTabs, activeTab]);
+
+  // Helper: Calculate business insights
+  const getBusinessInsights = () => {
+    const insights = [];
+    const pendingOffers = offersData.filter(o => o.status === "pending").length;
+    const unapprovedReviews = reviewsData.filter(r => !r.isApproved).length;
+    const emptyDeliveries = deliveries.filter(d => (d.items?.length || 0) === 0).length;
+    const draftShowcases = inspirationsData.filter(i => i.status === "draft").length;
+    const completedWithoutReview = contractsData.filter(c => c.status === "completed" && !c.hasReview && !c.reviewReminderSentAt);
+
+    if (totalUnread > 0) {
+      insights.push({
+        icon: "message-circle" as const,
+        label: `${totalUnread} ulest${totalUnread > 1 ? 'e' : ''} melding${totalUnread > 1 ? 'er' : ''}`,
+        color: "#FF3B30",
+        priority: "urgent",
+        action: () => setActiveTab("messages"),
+      });
+    }
+    if (vendorConfig.insights.showPendingOffers && pendingOffers > 0) {
+      insights.push({
+        icon: "clock" as const,
+        label: `${pendingOffers} tilbud venter svar`,
+        color: "#FFB74D",
+        priority: "high",
+        action: () => setActiveTab("offers"),
+      });
+    }
+    if (vendorConfig.insights.showReviewRequests && completedWithoutReview.length > 0) {
+      insights.push({
+        icon: "star" as const,
+        label: `${completedWithoutReview.length} kan anmeldes`,
+        color: theme.accent,
+        priority: "normal",
+        action: () => setActiveTab("reviews"),
+      });
+    }
+    if (vendorConfig.insights.showReviewRequests && unapprovedReviews > 0) {
+      insights.push({
+        icon: "eye" as const,
+        label: `${unapprovedReviews} nye anmeldelse${unapprovedReviews > 1 ? 'r' : ''}`,
+        color: "#64B5F6",
+        priority: "normal",
+        action: () => setActiveTab("reviews"),
+      });
+    }
+    return insights.slice(0, 3); // Max 3 insights
+  };
+
+  const businessInsights = getBusinessInsights();
+
+  // Helper: Get quick stats
+  const getQuickStats = () => {
+    const stats = [];
+    if (vendorConfig.quickStats.showDeliveryCount && deliveries.length > 0) {
+      const activeDeliveries = deliveries.filter(d => d.status === "active").length;
+      stats.push({ label: "Leveranser", value: activeDeliveries, total: deliveries.length, icon: "package" as const });
+    }
+    if (vendorConfig.quickStats.showShowcaseCount && inspirationsData.length > 0) {
+      const publishedShowcases = inspirationsData.filter(i => i.status === "published").length;
+      stats.push({ label: "Showcase", value: publishedShowcases, total: inspirationsData.length, icon: "image" as const });
+    }
+    if (vendorConfig.quickStats.showOfferAcceptance && offersData.length > 0) {
+      const acceptedOffers = offersData.filter(o => o.status === "accepted").length;
+      stats.push({ label: "Tilbud", value: acceptedOffers, total: offersData.length, icon: "file-text" as const });
+    }
+    if (vendorConfig.quickStats.showAverageRating && reviewsData.length > 0) {
+      const avgRating = reviewsResponse?.stats?.average || 0;
+      stats.push({ label: "Snitt rating", value: avgRating.toFixed(1), icon: "star" as const, isRating: true });
+    }
+    return stats;
+  };
+
+  const quickStats = getQuickStats();
 
   // WebSocket subscription for vendor list updates
   useEffect(() => {
@@ -715,9 +832,21 @@ export default function VendorDashboardScreen({ navigation }: Props) {
 
   const renderDeliveryItem = ({ item, index }: { item: Delivery; index: number }) => {
     // Get thumbnails from delivery items that are images
-    const imageThumbnails = item.items
-      .filter(i => i.type === "image" || i.type === "photo" || i.url.match(/\.(jpg|jpeg|png|gif|webp)$/i))
+    const imageThumbnails = (item.items || [])
+      .filter((i: any) => i.type === "image" || i.type === "photo" || i.url.match(/\.(jpg|jpeg|png|gif|webp)$/i))
       .slice(0, 4);
+
+    const duplicateDelivery = () => {
+      const duplicated = {
+        ...item,
+        id: undefined,
+        title: `Kopi av ${item.title}`,
+        accessCode: undefined,
+        createdAt: undefined,
+      };
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      navigation.navigate("DeliveryCreate", { delivery: duplicated });
+    };
     
     return (
       <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
@@ -725,6 +854,18 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             navigation.navigate("DeliveryCreate", { delivery: item });
+          }}
+          onLongPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            Alert.alert(
+              item.title,
+              "Velg handling",
+              [
+                { text: "Rediger", onPress: () => navigation.navigate("DeliveryCreate", { delivery: item }) },
+                { text: "Dupliser", onPress: duplicateDelivery },
+                { text: "Avbryt", style: "cancel" },
+              ]
+            );
           }}
           style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
@@ -763,10 +904,10 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                           style={styles.deliverySmallThumbnail}
                           resizeMode="cover"
                         />
-                        {i === 2 && item.items.filter(it => it.type === "image" || it.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)).length > 4 && (
+                        {i === 2 && (item.items || []).filter((it: any) => it.type === "image" || it.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)).length > 4 && (
                           <View style={styles.deliveryMoreOverlay}>
                             <ThemedText style={styles.deliveryMoreText}>
-                              +{item.items.filter(it => it.type === "image" || it.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)).length - 4}
+                              +{(item.items || []).filter((it: any) => it.type === "image" || it.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)).length - 4}
                             </ThemedText>
                           </View>
                         )}
@@ -820,7 +961,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           </View>
 
           <View style={styles.itemsList}>
-            {item.items.map((deliveryItem) => (
+            {(item.items || []).map((deliveryItem: any) => (
               <View key={deliveryItem.id} style={styles.itemRow}>
                 <Feather name={getTypeIcon(deliveryItem.type)} size={14} color={theme.textSecondary} />
                 <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]} numberOfLines={1}>
@@ -876,76 +1017,147 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     }
   };
 
-  const renderProductItem = ({ item, index }: { item: VendorProduct; index: number }) => (
-    <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
-      <Pressable
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          navigation.navigate("ProductCreate", { product: item });
-        }}
-        style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
-      >
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleRow}>
-            <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
-            <ThemedText style={[styles.priceTag, { color: theme.accent }]}>
-              {formatPrice(item.unitPrice)} / {item.unitType}
-            </ThemedText>
-          </View>
-          {item.description ? (
-            <ThemedText style={[styles.dateText, { color: theme.textMuted, marginTop: 4 }]} numberOfLines={2}>
-              {item.description}
-            </ThemedText>
-          ) : null}
-        </View>
-        <View style={styles.itemsList}>
-          {item.minQuantity && item.minQuantity > 1 ? (
-            <View style={styles.itemRow}>
-              <Feather name="hash" size={14} color={theme.textSecondary} />
-              <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
-                Min. antall: {item.minQuantity}
-              </ThemedText>
-            </View>
-          ) : null}
-          {item.leadTimeDays ? (
-            <View style={styles.itemRow}>
-              <Feather name="clock" size={14} color={theme.textSecondary} />
-              <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
-                Leveringstid: {item.leadTimeDays} dager
-              </ThemedText>
-            </View>
-          ) : null}
-          {item.categoryTag ? (
-            <View style={styles.itemRow}>
-              <Feather name="tag" size={14} color={theme.textSecondary} />
-              <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
-                {item.categoryTag}
-              </ThemedText>
-            </View>
-          ) : null}
-        </View>
-      </Pressable>
-    </Animated.View>
-  );
+  const renderProductItem = ({ item, index }: { item: VendorProduct; index: number }) => {
+    const duplicateProduct = () => {
+      const duplicated = {
+        ...item,
+        id: undefined,
+        title: `Kopi av ${item.title}`,
+      };
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      navigation.navigate("ProductCreate", { product: duplicated });
+    };
 
-  const renderOfferItem = ({ item, index }: { item: VendorOffer; index: number }) => (
-    <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
-      <Pressable
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          navigation.navigate("OfferCreate", { offer: item });
-        }}
-        style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
-      >
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleRow}>
-            <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
-            <View style={[styles.statusBadge, { backgroundColor: getOfferStatusColor(item.status) + "30" }]}>
-              <ThemedText style={[styles.statusText, { color: getOfferStatusColor(item.status) }]}>
-                {getOfferStatusLabel(item.status)}
-              </ThemedText>
+    return (
+      <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            navigation.navigate("ProductCreate", { product: item });
+          }}
+          onLongPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            Alert.alert(
+              item.title,
+              "Velg handling",
+              [
+                { text: "Rediger", onPress: () => navigation.navigate("ProductCreate", { product: item }) },
+                { text: "Dupliser", onPress: duplicateProduct },
+                { text: "Avbryt", style: "cancel" },
+              ]
+            );
+          }}
+          style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.xs }}>
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    duplicateProduct();
+                  }}
+                  style={[styles.quickActionBtn, { backgroundColor: theme.accent + "20" }]}
+                >
+                  <Feather name="copy" size={14} color={theme.accent} />
+                </Pressable>
+                <ThemedText style={[styles.priceTag, { color: theme.accent }]}>
+                  {formatPrice(item.unitPrice)} / {item.unitType}
+                </ThemedText>
+              </View>
             </View>
+            {item.description ? (
+              <ThemedText style={[styles.dateText, { color: theme.textMuted, marginTop: 4 }]} numberOfLines={2}>
+                {item.description}
+              </ThemedText>
+            ) : null}
           </View>
+          <View style={styles.itemsList}>
+            {item.minQuantity && item.minQuantity > 1 ? (
+              <View style={styles.itemRow}>
+                <Feather name="hash" size={14} color={theme.textSecondary} />
+                <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
+                  Min. antall: {item.minQuantity}
+                </ThemedText>
+              </View>
+            ) : null}
+            {item.leadTimeDays ? (
+              <View style={styles.itemRow}>
+                <Feather name="clock" size={14} color={theme.textSecondary} />
+                <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
+                  Leveringstid: {item.leadTimeDays} dager
+                </ThemedText>
+              </View>
+            ) : null}
+            {item.categoryTag ? (
+              <View style={styles.itemRow}>
+                <Feather name="tag" size={14} color={theme.textSecondary} />
+                <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
+                  {item.categoryTag}
+                </ThemedText>
+              </View>
+            ) : null}
+          </View>
+        </Pressable>
+      </Animated.View>
+    );
+  };
+
+  const renderOfferItem = ({ item, index }: { item: VendorOffer; index: number }) => {
+    const duplicateOffer = () => {
+      const duplicated = {
+        ...item,
+        id: undefined,
+        title: `Kopi av ${item.title}`,
+        status: "pending",
+        createdAt: undefined,
+      };
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      navigation.navigate("OfferCreate", { offer: duplicated });
+    };
+
+    return (
+      <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            navigation.navigate("OfferCreate", { offer: item });
+          }}
+          onLongPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            Alert.alert(
+              item.title,
+              "Velg handling",
+              [
+                { text: "Rediger", onPress: () => navigation.navigate("OfferCreate", { offer: item }) },
+                { text: "Dupliser", onPress: duplicateOffer },
+                { text: "Avbryt", style: "cancel" },
+              ]
+            );
+          }}
+          style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.xs }}>
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    duplicateOffer();
+                  }}
+                  style={[styles.quickActionBtn, { backgroundColor: theme.accent + "20" }]}
+                >
+                  <Feather name="copy" size={14} color={theme.accent} />
+                </Pressable>
+                <View style={[styles.statusBadge, { backgroundColor: getOfferStatusColor(item.status) + "30" }]}>
+                  <ThemedText style={[styles.statusText, { color: getOfferStatusColor(item.status) }]}>
+                    {getOfferStatusLabel(item.status)}
+                  </ThemedText>
+                </View>
+              </View>
+            </View>
           {item.couple ? (
             <ThemedText style={[styles.coupleName, { color: theme.textSecondary }]}>
               Til: {item.couple.displayName}
@@ -979,6 +1191,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       </Pressable>
     </Animated.View>
   );
+};
 
   const formatConversationTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -999,13 +1212,13 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.navigate("VendorChat", { conversationId: item.id, coupleName: item.couple.displayName });
+            navigation.navigate("VendorChat", { conversationId: item.id, coupleName: item.couple?.displayName || "Unknown" });
           }}
           style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
-              <ThemedText style={styles.cardTitle}>{item.couple.displayName}</ThemedText>
+              <ThemedText style={styles.cardTitle}>{item.couple?.displayName || "Unknown"}</ThemedText>
               <View style={styles.conversationBadges}>
                 <Pressable
                   onPress={(e) => {
@@ -1030,7 +1243,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               </View>
             </View>
             <ThemedText style={[styles.coupleName, { color: theme.textSecondary }]}>
-              {item.couple.email}
+              {item.couple?.email || "No email"}
             </ThemedText>
             {item.inspiration ? (
               <ThemedText style={[styles.dateText, { color: theme.accent, marginTop: 4 }]}>
@@ -1183,23 +1396,23 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             { 
               backgroundColor: subscriptionStatus.daysRemaining <= 7 
                 ? "#FFA726" + "20" 
-                : Colors.dark.accent + "20", 
+                : theme.accent + "20", 
               borderColor: subscriptionStatus.daysRemaining <= 7 
                 ? "#FFA726" 
-                : Colors.dark.accent 
+                : theme.accent 
             }
           ]}
         >
           <Feather 
             name={subscriptionStatus.daysRemaining <= 7 ? "alert-circle" : "star"} 
             size={18} 
-            color={subscriptionStatus.daysRemaining <= 7 ? "#FFA726" : Colors.dark.accent} 
+            color={subscriptionStatus.daysRemaining <= 7 ? "#FFA726" : theme.accent} 
           />
           <View style={{ flex: 1, marginLeft: Spacing.sm }}>
             <ThemedText 
               style={[
                 styles.trialBannerText, 
-                { color: subscriptionStatus.daysRemaining <= 7 ? "#FFA726" : Colors.dark.accent }
+                { color: subscriptionStatus.daysRemaining <= 7 ? "#FFA726" : theme.accent }
               ]}
             >
               {subscriptionStatus.daysRemaining <= 3 
@@ -1220,22 +1433,63 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         </Pressable>
       )}
 
+      {/* Business Insights */}
+      {businessInsights.length > 0 && (
+        <View style={styles.insightsContainer}>
+          {businessInsights.map((insight, idx) => (
+            <Pressable
+              key={idx}
+              onPress={() => {
+                insight.action();
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              style={[
+                styles.insightCard,
+                { 
+                  backgroundColor: insight.color + "15", 
+                  borderLeftColor: insight.color,
+                  borderLeftWidth: 3,
+                }
+              ]}
+            >
+              <Feather name={insight.icon} size={16} color={insight.color} />
+              <ThemedText style={[styles.insightText, { color: theme.text }]}>
+                {insight.label}
+              </ThemedText>
+              <Feather name="chevron-right" size={14} color={insight.color} />
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {/* Quick Stats */}
+      {quickStats.length > 0 && activeTab === "deliveries" && (
+        <View style={[styles.statsContainer, { backgroundColor: theme.backgroundDefault }]}>
+          {quickStats.map((stat, idx) => (
+            <View key={idx} style={styles.quickStatCard}>
+              <Feather name={stat.icon} size={16} color={theme.accent} />
+              <View style={styles.quickStatContent}>
+                <ThemedText style={[styles.quickStatValue, { color: theme.text }]}>
+                  {stat.isRating ? stat.value : `${stat.value}${stat.total ? `/${stat.total}` : ''}`}
+                </ThemedText>
+                <ThemedText style={[styles.quickStatLabel, { color: theme.textMuted }]}>
+                  {stat.label}
+                </ThemedText>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
       <ScrollView 
         horizontal 
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.tabContainer}
         style={[styles.tabScroll, { backgroundColor: theme.backgroundRoot }]}
       >
-        {[
-          { key: "deliveries" as TabType, icon: "package" as const, label: "Leveranser" },
-          { key: "inspirations" as TabType, icon: "image" as const, label: "Showcase" },
-          { key: "products" as TabType, icon: "shopping-bag" as const, label: "Produkter" },
-          { key: "offers" as TabType, icon: "file-text" as const, label: "Tilbud" },
-          { key: "couples" as TabType, icon: "users" as const, label: "Brudepar" },
-          { key: "messages" as TabType, icon: "message-circle" as const, label: "Meldinger", badge: totalUnread },
-          { key: "reviews" as TabType, icon: "star" as const, label: "Anmeldelser", badge: reviewsData.length },
-        ].map((tab) => {
+        {enabledTabs.map((tab) => {
           const isActive = activeTab === tab.key;
+          const badge = tab.key === "messages" ? totalUnread : tab.key === "reviews" ? reviewsData.length : undefined;
           return (
             <Pressable
               key={tab.key}
@@ -1256,10 +1510,10 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                   size={20} 
                   color={isActive ? "#FFFFFF" : theme.textSecondary} 
                 />
-                {tab.badge && tab.badge > 0 ? (
+                {badge && badge > 0 ? (
                   <View style={[styles.tabBadge, { backgroundColor: isActive ? "#FFFFFF" : theme.accent }]}>
                     <ThemedText style={[styles.tabBadgeText, { color: isActive ? theme.accent : "#FFFFFF" }]}>
-                      {tab.badge > 9 ? "9+" : tab.badge}
+                      {badge > 9 ? "9+" : badge}
                     </ThemedText>
                   </View>
                 ) : null}
@@ -1358,10 +1612,10 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                 <Feather name="package" size={32} color={theme.accent} />
               </View>
               <ThemedText style={[styles.emptyText, { color: theme.text }]}>
-                Ingen leveranser ennå
+                {vendorConfig.emptyStates.deliveries.title}
               </ThemedText>
               <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-                Opprett din første leveranse for å dele innhold med brudepar
+                {vendorConfig.emptyStates.deliveries.subtitle}
               </ThemedText>
             </View>
           )}
@@ -1390,10 +1644,10 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                 <Feather name="image" size={32} color={theme.accent} />
               </View>
               <ThemedText style={[styles.emptyText, { color: theme.text }]}>
-                Ingen showcases ennå
+                {vendorConfig.emptyStates.inspirations.title}
               </ThemedText>
               <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-                Del vakre bilder og videoer for å inspirere brudepar
+                {vendorConfig.emptyStates.inspirations.subtitle}
               </ThemedText>
             </View>
           )}
@@ -1422,10 +1676,10 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                 <Feather name="shopping-bag" size={32} color={theme.accent} />
               </View>
               <ThemedText style={[styles.emptyText, { color: theme.text }]}>
-                Ingen produkter ennå
+                {vendorConfig.emptyStates.products.title}
               </ThemedText>
               <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-                Opprett produkter og tjenester for å kunne sende tilbud
+                {vendorConfig.emptyStates.products.subtitle}
               </ThemedText>
             </View>
           )}
@@ -2828,6 +3082,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
+  quickActionBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   coupleInfoCard: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -2844,5 +3105,48 @@ const styles = StyleSheet.create({
   coupleInfoText: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  insightsContainer: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  insightCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
+  insightText: {
+    fontSize: 13,
+    fontWeight: "500",
+    flex: 1,
+  },
+  statsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    marginHorizontal: Spacing.lg,
+  },
+  quickStatCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingRight: Spacing.md,
+  },
+  quickStatContent: {
+    gap: 2,
+  },
+  quickStatValue: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  quickStatLabel: {
+    fontSize: 11,
   },
 });

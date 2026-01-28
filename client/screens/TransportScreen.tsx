@@ -265,6 +265,28 @@ export default function TransportScreen() {
     );
   };
 
+  const duplicateBooking = async (booking: TransportBooking) => {
+    try {
+      await createBookingMutation.mutateAsync({
+        vehicleType: booking.vehicleType,
+        providerName: booking.providerName ? `Kopi av ${booking.providerName}` : undefined,
+        vehicleDescription: booking.vehicleDescription,
+        pickupTime: booking.pickupTime,
+        pickupLocation: booking.pickupLocation,
+        dropoffTime: booking.dropoffTime,
+        dropoffLocation: booking.dropoffLocation,
+        driverName: booking.driverName,
+        driverPhone: booking.driverPhone,
+        price: booking.price,
+        notes: booking.notes,
+        confirmed: false,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert("Feil", "Kunne ikke duplisere booking");
+    }
+  };
+
   // Timeline handlers
   const toggleTimelineStep = async (key: string) => {
     const newValue = !timeline[key as keyof TransportTimeline];
@@ -341,12 +363,12 @@ export default function TransportScreen() {
 
       {bookings.length === 0 ? (
         <View style={[styles.emptyState, { backgroundColor: theme.backgroundDefault }]}>
-          <Feather name="truck" size={48} color={theme.textSecondary} />
-          <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-            Ingen transport booket ennå
+          <Feather name="heart" size={48} color={theme.primary} style={{ opacity: 0.6 }} />
+          <ThemedText style={[styles.emptyText, { color: theme.text, fontWeight: '600', fontSize: 18 }]}>
+            Hvordan starter dagen for dere?
           </ThemedText>
-          <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-            Legg til transport for bryllupsdagen
+          <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary, fontSize: 15 }]}>
+            La oss planlegge ankomsten.
           </ThemedText>
           <Pressable
             style={[styles.emptyStateCta, { backgroundColor: theme.primary }]}
@@ -365,6 +387,19 @@ export default function TransportScreen() {
             <SwipeableRow onDelete={() => handleDeleteBooking(booking.id)}>
               <Pressable
                 onPress={() => openBookingModal(booking)}
+                onLongPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  Alert.alert(
+                    getVehicleLabel(booking.vehicleType),
+                    "Velg en handling",
+                    [
+                      { text: "Avbryt", style: "cancel" },
+                      { text: "Rediger", onPress: () => openBookingModal(booking) },
+                      { text: "Dupliser", onPress: () => duplicateBooking(booking) },
+                      { text: "Slett", style: "destructive", onPress: () => handleDeleteBooking(booking.id) },
+                    ]
+                  );
+                }}
                 style={[styles.bookingCard, { backgroundColor: theme.backgroundDefault }]}
               >
                 <View style={[styles.bookingIcon, { backgroundColor: booking.confirmed ? theme.primary + '20' : theme.border }]}>
@@ -394,6 +429,15 @@ export default function TransportScreen() {
                     </ThemedText>
                   )}
                 </View>
+                <Pressable
+                  onPress={() => {
+                    duplicateBooking(booking);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={[styles.quickActionButton, { backgroundColor: theme.backgroundSecondary }]}
+                >
+                  <Feather name="copy" size={16} color={Colors.dark.accent} />
+                </Pressable>
                 <View style={styles.bookingActions}>
                   <Pressable
                     onPress={() => toggleBookingConfirmed(booking.id)}
@@ -1047,6 +1091,12 @@ const styles = StyleSheet.create({
   vehicleTypeLabel: {
     fontSize: 12,
     textAlign: "center",
+  },
+  quickActionButton: {
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    justifyContent: "center",
+    alignItems: "center",
   },
   deleteButton: {
     marginTop: Spacing.md,

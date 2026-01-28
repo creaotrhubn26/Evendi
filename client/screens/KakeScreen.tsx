@@ -389,6 +389,43 @@ export function KakeScreen() {
     ]);
   };
 
+  const duplicateTasting = async (tasting: CakeTasting) => {
+    try {
+      await createTastingMutation.mutateAsync({
+        bakeryName: `Kopi av ${tasting.bakeryName}`,
+        date: tasting.date,
+        time: tasting.time,
+        location: tasting.location || '',
+        flavorsToTry: tasting.flavorsToTry || '',
+        notes: tasting.notes || '',
+        completed: false,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert('Feil', 'Kunne ikke duplisere smaksprøve');
+    }
+  };
+
+  const duplicateDesign = async (design: CakeDesign) => {
+    try {
+      await createDesignMutation.mutateAsync({
+        name: `Kopi av ${design.name}`,
+        imageUrl: design.imageUrl,
+        tiers: design.tiers || 0,
+        flavor: design.flavor || '',
+        filling: design.filling || '',
+        frosting: design.frosting || '',
+        style: design.style,
+        estimatedPrice: design.estimatedPrice,
+        isFavorite: false,
+        isSelected: false,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert('Feil', 'Kunne ikke duplisere design');
+    }
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await refetch();
@@ -490,10 +527,10 @@ export function KakeScreen() {
 
       {(cakeData?.tastings || []).length === 0 ? (
         <View style={styles.emptyState}>
-          <Feather name="coffee" size={48} color={theme.textSecondary} />
-          <ThemedText style={styles.emptyStateText}>Ingen smaksprøver ennå</ThemedText>
+          <Feather name="heart" size={48} color={theme.primary} style={{ opacity: 0.6 }} />
+          <ThemedText style={[styles.emptyStateText, { fontWeight: '600' }]}>Hvilken kake avslutter dagen best?</ThemedText>
           <ThemedText style={[styles.emptyStateSubtext, { color: theme.textSecondary }]}>
-            Legg til smaksprøver hos ulike bakerier
+            La oss finne smaken dere husker.
           </ThemedText>
           <TouchableOpacity
             style={[styles.emptyStateCta, { backgroundColor: theme.primary }]}
@@ -516,6 +553,15 @@ export function KakeScreen() {
               <TouchableOpacity
                 style={[styles.card, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
                 onPress={() => openEditTasting(tasting)}
+                onLongPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  Alert.alert('Alternativer', tasting.bakeryName, [
+                    { text: 'Avbryt', style: 'cancel' },
+                    { text: 'Rediger', onPress: () => openEditTasting(tasting) },
+                    { text: 'Dupliser', onPress: () => duplicateTasting(tasting) },
+                    { text: 'Slett', style: 'destructive', onPress: () => handleDeleteTasting(tasting.id) },
+                  ]);
+                }}
                 activeOpacity={0.7}
               >
                 <View style={styles.cardHeader}>
@@ -572,6 +618,15 @@ export function KakeScreen() {
                     </ThemedText>
                   </View>
                 )}
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    duplicateTasting(tasting);
+                  }}
+                  style={styles.quickActionButton}
+                >
+                  <Feather name="copy" size={16} color={theme.textSecondary} />
+                </Pressable>
               </TouchableOpacity>
             </SwipeableRow>
           </Animated.View>
@@ -606,10 +661,10 @@ export function KakeScreen() {
 
       {(cakeData?.designs || []).length === 0 ? (
         <View style={styles.emptyState}>
-          <Feather name="image" size={48} color={theme.textSecondary} />
-          <ThemedText style={styles.emptyStateText}>Ingen design ennå</ThemedText>
+          <Feather name="heart" size={48} color={theme.primary} style={{ opacity: 0.6 }} />
+          <ThemedText style={[styles.emptyStateText, { fontWeight: '600' }]}>Hvilken kake avslutter dagen best?</ThemedText>
           <ThemedText style={[styles.emptyStateSubtext, { color: theme.textSecondary }]}>
-            Lagre kake-inspirasjon og design
+            Lagre inspirasjon for kaken deres.
           </ThemedText>
           <TouchableOpacity
             style={[styles.emptyStateCta, { backgroundColor: theme.primary }]}
@@ -632,6 +687,15 @@ export function KakeScreen() {
               <TouchableOpacity
                 style={[styles.card, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
                 onPress={() => openEditDesign(design)}
+                onLongPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  Alert.alert('Alternativer', design.name, [
+                    { text: 'Avbryt', style: 'cancel' },
+                    { text: 'Rediger', onPress: () => openEditDesign(design) },
+                    { text: 'Dupliser', onPress: () => duplicateDesign(design) },
+                    { text: 'Slett', style: 'destructive', onPress: () => handleDeleteDesign(design.id) },
+                  ]);
+                }}
                 activeOpacity={0.7}
               >
                 <View style={styles.cardHeader}>
@@ -724,6 +788,15 @@ export function KakeScreen() {
                     )}
                   </View>
                 )}
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    duplicateDesign(design);
+                  }}
+                  style={styles.quickActionButton}
+                >
+                  <Feather name="copy" size={16} color={theme.textSecondary} />
+                </Pressable>
               </TouchableOpacity>
             </SwipeableRow>
           </Animated.View>
@@ -1536,6 +1609,12 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: 8,
     marginVertical: 12,
+  },
+  quickActionButton: {
+    padding: 8,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   designDetails: {
     flexDirection: 'row',

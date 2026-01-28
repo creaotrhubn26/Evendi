@@ -10,6 +10,8 @@ import {
   TextInput,
   Switch,
   Modal,
+  Share,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -28,6 +30,30 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 
 const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+
+// Helper: Safe session retrieval with JSON.parse error handling
+async function getCoupleSession(): Promise<{ sessionToken: string; weddingId?: string } | null> {
+  try {
+    const sessionData = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
+    if (!sessionData) return null;
+    return JSON.parse(sessionData);
+  } catch (error) {
+    console.error("Failed to parse couple session:", error);
+    return null;
+  }
+}
+
+// Helper: Non-blocking toast notification
+function showToast(message: string) {
+  if (Platform.OS === "android") {
+    // Use ToastAndroid on Android for native toast
+    const ToastAndroid = require("react-native").ToastAndroid;
+    ToastAndroid.show(message, ToastAndroid.SHORT);
+  } else {
+    // Fallback to Alert on iOS (could use a custom toast library)
+    Alert.alert("", message, [{ text: "OK" }], { cancelable: true });
+  }
+}
 
 interface CoordinatorInvitation {
   id: string;
@@ -52,6 +78,7 @@ export default function CoordinatorSharingScreen() {
   const queryClient = useQueryClient();
 
   const [showModal, setShowModal] = useState(false);
+  const [editingCoordinator, setEditingCoordinator] = useState<CoordinatorInvitation | null>(null);
   const [newName, setNewName] = useState("");
   const [newRole, setNewRole] = useState("Toastmaster");
   const [canViewSpeeches, setCanViewSpeeches] = useState(true);
@@ -59,25 +86,28 @@ export default function CoordinatorSharingScreen() {
   const [canEditSpeeches, setCanEditSpeeches] = useState(false);
   const [canEditSchedule, setCanEditSchedule] = useState(false);
 
-  const { data: coordinators = [], isLoading, isRefetching, refetch } = useQuery<CoordinatorInvitation[]>({
-    queryKey: ["/api/couple/coordinators"],
+  const { data: coordinators = [], isLoading, isRefetching, error, refetch } = useQuery<CoordinatorInvitation[]>({
+    queryKey: ["coordinators", "couple"],
     queryFn: async () => {
-      const sessionData = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
-      if (!sessionData) return [];
-      const session = JSON.parse(sessionData);
+      const session = await getCoupleSession();
+      if (!session) throw new Error("Ikke innlogget. Vennligst logg inn på nytt.");
       const response = await fetch(new URL("/api/couple/coordinators", getApiUrl()).toString(), {
         headers: { Authorization: `Bearer ${session.sessionToken}` },
       });
-      if (!response.ok) throw new Error("Kunne ikke hente koordinatorer");
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Sesjon utløpt. Vennligst logg inn på nytt.");
+        }
+        throw new Error("Kunne ikke hente koordinatorer");
+      }
       return response.json();
     },
   });
 
   const createMutation = useMutation({
     mutationFn: async (data: { name: string; roleLabel: string; canViewSpeeches: boolean; canViewSchedule: boolean; canEditSpeeches: boolean; canEditSchedule: boolean }) => {
-      const sessionData = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
-      if (!sessionData) throw new Error("Ikke innlogget");
-      const session = JSON.parse(sessionData);
+      const session = await getCoupleSession();
+      if (!session) throw new Error("Ikke innlogget. Vennligst logg inn på nytt.");
 
       const response = await fetch(new URL("/api/couple/coordinators", getApiUrl()).toString(), {
         method: "POST",
@@ -88,53 +118,125 @@ export default function CoordinatorSharingScreen() {
         body: JSON.stringify(data),
       });
 
-      if (!response.ok) throw new Error("Kunne ikke opprette invitasjon");
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Sesjon utløpt. Vennligst logg inn på nytt.");
+        }
+        throw new Error("Kunne ikke opprette invitasjon");
+      }
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/couple/coordinators"] });
+      queryClient.invalidateQueries({ queryKey: ["coordinators", "couple"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowModal(false);
+      setEditingCoordinator(null);
       setNewName("");
       setNewRole("Toastmaster");
       setCanEditSpeeches(false);
       setCanEditSchedule(false);
+      showToast("Invitasjon opprettet");
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: { id: string; name: string; roleLabel: string; canViewSpeeches: boolean; canViewSchedule: boolean; canEditSpeeches: boolean; canEditSchedule: boolean }) => {
+      const session = await getCoupleSession();
+      if (!session) throw new Error("Ikke innlogget. Vennligst logg inn på nytt.");
+
+      const response = await fetch(new URL(`/api/couple/coordinators/${data.id}`, getApiUrl()).toString(), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({
+          name: data.name,
+          roleLabel: data.roleLabel,
+          canViewSpeeches: data.canViewSpeeches,
+          canViewSchedule: data.canViewSchedule,
+          canEditSpeeches: data.canEditSpeeches,
+          canEditSchedule: data.canEditSchedule,
+        }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Sesjon utløpt. Vennligst logg inn på nytt.");
+        }
+        throw new Error("Kunne ikke oppdatere koordinator");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coordinators", "couple"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowModal(false);
+      setEditingCoordinator(null);
+      setNewName("");
+      setNewRole("Toastmaster");
+      setCanEditSpeeches(false);
+      setCanEditSchedule(false);
+      showToast("Koordinator oppdatert");
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const sessionData = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
-      if (!sessionData) throw new Error("Ikke innlogget");
-      const session = JSON.parse(sessionData);
+      const session = await getCoupleSession();
+      if (!session) throw new Error("Ikke innlogget. Vennligst logg inn på nytt.");
 
       const response = await fetch(new URL(`/api/couple/coordinators/${id}`, getApiUrl()).toString(), {
         method: "DELETE",
         headers: { Authorization: `Bearer ${session.sessionToken}` },
       });
 
-      if (!response.ok) throw new Error("Kunne ikke slette invitasjon");
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Sesjon utløpt. Vennligst logg inn på nytt.");
+        }
+        throw new Error("Kunne ikke slette invitasjon");
+      }
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/couple/coordinators"] });
+      queryClient.invalidateQueries({ queryKey: ["coordinators", "couple"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast("Tilgang fjernet");
     },
   });
 
-  const handleCreate = () => {
+  const openEditModal = (coordinator: CoordinatorInvitation) => {
+    setEditingCoordinator(coordinator);
+    setNewName(coordinator.name);
+    setNewRole(coordinator.roleLabel);
+    setCanViewSpeeches(coordinator.canViewSpeeches);
+    setCanViewSchedule(coordinator.canViewSchedule);
+    setCanEditSpeeches(coordinator.canEditSpeeches);
+    setCanEditSchedule(coordinator.canEditSchedule);
+    setShowModal(true);
+  };
+
+  const handleSubmit = () => {
     if (!newName.trim()) {
       Alert.alert("Feil", "Navn er påkrevd");
       return;
     }
-    createMutation.mutate({
+
+    const data = {
       name: newName.trim(),
       roleLabel: newRole.trim() || "Toastmaster",
       canViewSpeeches,
       canViewSchedule,
       canEditSpeeches,
       canEditSchedule,
-    });
+    };
+
+    if (editingCoordinator) {
+      updateMutation.mutate({ ...data, id: editingCoordinator.id });
+    } else {
+      createMutation.mutate(data);
+    }
   };
 
   const handleDelete = (id: string, name: string) => {
@@ -157,14 +259,28 @@ export default function CoordinatorSharingScreen() {
     const link = `https://${domain}/coordinator/${token}`;
     await Clipboard.setStringAsync(link);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert("Kopiert!", "Delenke er kopiert til utklippstavlen");
+    showToast("Lenke kopiert");
+  };
+
+  const shareLink = async (token: string, name: string) => {
+    try {
+      const domain = process.env.EXPO_PUBLIC_DOMAIN || "wedflow.app";
+      const link = `https://${domain}/coordinator/${token}`;
+      await Share.share({
+        message: `Hei! Du er invitert som ${name || "koordinator"} for vårt bryllup. Åpne lenken for å se program og talerliste:\n\n${link}`,
+        title: "Invitasjon til bryllupskoordinator",
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error("Share failed:", error);
+    }
   };
 
   const copyCode = async (code: string | null) => {
     if (!code) return;
     await Clipboard.setStringAsync(code);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert("Kopiert!", "Tilgangskode er kopiert");
+    showToast("Tilgangskode kopiert");
   };
 
   const formatDate = (dateStr: string) => {
@@ -178,13 +294,13 @@ export default function CoordinatorSharingScreen() {
   const getStatusInfo = (status: string) => {
     switch (status) {
       case "active":
-        return { label: "Aktiv", color: "#4CAF50" };
+        return { label: "Aktiv", color: "#4CAF50" }; // Could use theme.success if available
       case "revoked":
-        return { label: "Tilbakekalt", color: "#F44336" };
+        return { label: "Tilbakekalt", color: "#FF3B30" }; // iOS red, could use theme.danger
       case "expired":
-        return { label: "Utløpt", color: "#9E9E9E" };
+        return { label: "Utløpt", color: theme.textMuted };
       default:
-        return { label: status, color: theme.textMuted };
+        return { label: "Ukjent", color: theme.textMuted };
     }
   };
 
@@ -196,8 +312,8 @@ export default function CoordinatorSharingScreen() {
         <Card style={styles.coordinatorCard}>
           <View style={styles.cardHeader}>
             <View style={styles.coordinatorInfo}>
-              <View style={[styles.roleIcon, { backgroundColor: Colors.dark.accent + "20" }]}>
-                <Feather name="user" size={20} color={Colors.dark.accent} />
+              <View style={[styles.roleIcon, { backgroundColor: theme.accent + "20" }]}>
+                <Feather name="user" size={20} color={theme.accent} />
               </View>
               <View style={styles.nameSection}>
                 <ThemedText style={styles.coordinatorName}>{item.name}</ThemedText>
@@ -239,16 +355,16 @@ export default function CoordinatorSharingScreen() {
             <View style={[styles.permissionsRow, { borderTopColor: theme.border, paddingTop: 0, marginTop: -Spacing.xs }]}>
               {item.canEditSpeeches ? (
                 <View style={styles.permission}>
-                  <Feather name="edit-3" size={14} color={Colors.dark.accent} />
-                  <ThemedText style={[styles.permissionText, { color: Colors.dark.accent }]}>
+                  <Feather name="edit-3" size={14} color={theme.accent} />
+                  <ThemedText style={[styles.permissionText, { color: theme.accent }]}>
                     Rediger taler
                   </ThemedText>
                 </View>
               ) : null}
               {item.canEditSchedule ? (
                 <View style={styles.permission}>
-                  <Feather name="edit-3" size={14} color={Colors.dark.accent} />
-                  <ThemedText style={[styles.permissionText, { color: Colors.dark.accent }]}>
+                  <Feather name="edit-3" size={14} color={theme.accent} />
+                  <ThemedText style={[styles.permissionText, { color: theme.accent }]}>
                     Rediger program
                   </ThemedText>
                 </View>
@@ -260,30 +376,48 @@ export default function CoordinatorSharingScreen() {
             <View style={styles.codeSection}>
               <ThemedText style={[styles.codeLabel, { color: theme.textMuted }]}>Tilgangskode:</ThemedText>
               <Pressable onPress={() => copyCode(item.accessCode)} style={styles.codeBox}>
-                <ThemedText style={[styles.codeText, { color: Colors.dark.accent }]}>
+                <ThemedText style={[styles.codeText, { color: theme.accent }]}>
                   {item.accessCode}
                 </ThemedText>
-                <Feather name="copy" size={14} color={Colors.dark.accent} />
+                <Feather name="copy" size={14} color={theme.accent} />
               </Pressable>
             </View>
           ) : null}
 
           <View style={[styles.cardActions, { borderTopColor: theme.border }]}>
             <Pressable
-              onPress={() => copyLink(item.accessToken)}
-              style={[styles.actionButton, { backgroundColor: Colors.dark.accent + "15" }]}
+              onPress={() => shareLink(item.accessToken, item.roleLabel)}
+              style={[styles.actionButton, { backgroundColor: theme.accent + "15" }]}
             >
-              <Feather name="link" size={16} color={Colors.dark.accent} />
-              <ThemedText style={[styles.actionButtonText, { color: Colors.dark.accent }]}>
-                Kopier lenke
+              <Feather name="share-2" size={16} color={theme.accent} />
+              <ThemedText style={[styles.actionButtonText, { color: theme.accent }]}>
+                Del
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => copyLink(item.accessToken)}
+              style={[styles.actionButton, { backgroundColor: theme.accent + "15" }]}
+            >
+              <Feather name="link" size={16} color={theme.accent} />
+              <ThemedText style={[styles.actionButtonText, { color: theme.accent }]}>
+                Kopier
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => openEditModal(item)}
+              style={[styles.actionButton, { backgroundColor: theme.accent + "15" }]}
+            >
+              <Feather name="edit" size={16} color={theme.accent} />
+              <ThemedText style={[styles.actionButtonText, { color: theme.accent }]}>
+                Rediger
               </ThemedText>
             </Pressable>
             <Pressable
               onPress={() => handleDelete(item.id, item.name)}
-              style={[styles.actionButton, { backgroundColor: "#F4433620" }]}
+              style={[styles.actionButton, { backgroundColor: "#FF3B3020" }]}
             >
-              <Feather name="trash-2" size={16} color="#F44336" />
-              <ThemedText style={[styles.actionButtonText, { color: "#F44336" }]}>
+              <Feather name="trash-2" size={16} color="#FF3B30" />
+              <ThemedText style={[styles.actionButtonText, { color: "#FF3B30" }]}>
                 Fjern
               </ThemedText>
             </Pressable>
@@ -302,7 +436,27 @@ export default function CoordinatorSharingScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
-        <ActivityIndicator size="large" color={Colors.dark.accent} />
+        <ActivityIndicator size="large" color={theme.accent} />
+      </View>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
+        <View style={styles.errorContainer}>
+          <Feather name="alert-circle" size={48} color="#FF3B30" />
+          <ThemedText style={[styles.errorTitle, { color: theme.text }]}>
+            Kunne ikke laste koordinatorer
+          </ThemedText>
+          <ThemedText style={[styles.errorMessage, { color: theme.textMuted }]}>
+            {(error as Error).message || "En feil oppstod"}
+          </ThemedText>
+          <Button onPress={() => refetch()} style={styles.retryButton}>
+            Prøv igjen
+          </Button>
+        </View>
       </View>
     );
   }
@@ -322,7 +476,7 @@ export default function CoordinatorSharingScreen() {
           <RefreshControl
             refreshing={isRefetching}
             onRefresh={refetch}
-            tintColor={Colors.dark.accent}
+            tintColor={theme.accent}
           />
         }
         ListHeaderComponent={
@@ -335,8 +489,8 @@ export default function CoordinatorSharingScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <View style={[styles.emptyIcon, { backgroundColor: Colors.dark.accent + "15" }]}>
-              <Feather name="users" size={40} color={Colors.dark.accent} />
+            <View style={[styles.emptyIcon, { backgroundColor: theme.accent + "15" }]}>
+              <Feather name="users" size={40} color={theme.accent} />
             </View>
             <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>
               Ingen koordinatorer lagt til
@@ -350,10 +504,19 @@ export default function CoordinatorSharingScreen() {
 
       <View style={[styles.fabContainer, { paddingBottom: insets.bottom + Spacing.md }]}>
         <Pressable
-          onPress={() => setShowModal(true)}
-          style={[styles.fab, { backgroundColor: Colors.dark.accent }]}
+          onPress={() => {
+            setEditingCoordinator(null);
+            setNewName("");
+            setNewRole("Toastmaster");
+            setCanViewSpeeches(true);
+            setCanViewSchedule(true);
+            setCanEditSpeeches(false);
+            setCanEditSchedule(false);
+            setShowModal(true);
+          }}
+          style={[styles.fab, { backgroundColor: theme.accent }]}
         >
-          <Feather name="plus" size={24} color="#1A1A1A" />
+          <Feather name="plus" size={24} color="#FFFFFF" />
         </Pressable>
       </View>
 
@@ -361,13 +524,21 @@ export default function CoordinatorSharingScreen() {
         visible={showModal}
         animationType="slide"
         transparent
-        onRequestClose={() => setShowModal(false)}
+        onRequestClose={() => {
+          setShowModal(false);
+          setEditingCoordinator(null);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
             <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Legg til koordinator</ThemedText>
-              <Pressable onPress={() => setShowModal(false)}>
+              <ThemedText style={styles.modalTitle}>
+                {editingCoordinator ? "Rediger koordinator" : "Legg til koordinator"}
+              </ThemedText>
+              <Pressable onPress={() => {
+                setShowModal(false);
+                setEditingCoordinator(null);
+              }}>
                 <Feather name="x" size={24} color={theme.textMuted} />
               </Pressable>
             </View>
@@ -381,17 +552,25 @@ export default function CoordinatorSharingScreen() {
                   placeholderTextColor={theme.textMuted}
                   value={newName}
                   onChangeText={setNewName}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  textContentType="name"
+                  returnKeyType="next"
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Rolle</ThemedText>
+                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Rolle (valgfritt)</ThemedText>
                 <TextInput
                   style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
-                  placeholder="F.eks. Toastmaster"
+                  placeholder="F.eks. Toastmaster, Fotograf, Seremonimester"
                   placeholderTextColor={theme.textMuted}
                   value={newRole}
                   onChangeText={setNewRole}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  onSubmitEditing={handleSubmit}
                 />
               </View>
 
@@ -403,7 +582,7 @@ export default function CoordinatorSharingScreen() {
                 <Switch
                   value={canViewSpeeches}
                   onValueChange={setCanViewSpeeches}
-                  trackColor={{ false: theme.border, true: Colors.dark.accent }}
+                  trackColor={{ false: theme.border, true: theme.accent }}
                   thumbColor="#fff"
                 />
               </View>
@@ -416,7 +595,7 @@ export default function CoordinatorSharingScreen() {
                 <Switch
                   value={canViewSchedule}
                   onValueChange={setCanViewSchedule}
-                  trackColor={{ false: theme.border, true: Colors.dark.accent }}
+                  trackColor={{ false: theme.border, true: theme.accent }}
                   thumbColor="#fff"
                 />
               </View>
@@ -427,7 +606,7 @@ export default function CoordinatorSharingScreen() {
 
               <View style={[styles.toggleRow, { borderBottomColor: theme.border }]}>
                 <View style={styles.toggleInfo}>
-                  <Feather name="edit-3" size={18} color={Colors.dark.accent} />
+                  <Feather name="edit-3" size={18} color={theme.accent} />
                   <View>
                     <ThemedText style={styles.toggleLabel}>Kan redigere taler</ThemedText>
                     <ThemedText style={[styles.toggleHint, { color: theme.textMuted }]}>
@@ -441,14 +620,14 @@ export default function CoordinatorSharingScreen() {
                     setCanEditSpeeches(value);
                     if (value) setCanViewSpeeches(true);
                   }}
-                  trackColor={{ false: theme.border, true: Colors.dark.accent }}
+                  trackColor={{ false: theme.border, true: theme.accent }}
                   thumbColor="#fff"
                 />
               </View>
 
               <View style={[styles.toggleRow, { borderBottomColor: theme.border }]}>
                 <View style={styles.toggleInfo}>
-                  <Feather name="edit-3" size={18} color={Colors.dark.accent} />
+                  <Feather name="edit-3" size={18} color={theme.accent} />
                   <View>
                     <ThemedText style={styles.toggleLabel}>Kan redigere program</ThemedText>
                     <ThemedText style={[styles.toggleHint, { color: theme.textMuted }]}>
@@ -462,7 +641,7 @@ export default function CoordinatorSharingScreen() {
                     setCanEditSchedule(value);
                     if (value) setCanViewSchedule(true);
                   }}
-                  trackColor={{ false: theme.border, true: Colors.dark.accent }}
+                  trackColor={{ false: theme.border, true: theme.accent }}
                   thumbColor="#fff"
                 />
               </View>
@@ -470,7 +649,10 @@ export default function CoordinatorSharingScreen() {
 
             <View style={styles.modalActions}>
               <Pressable
-                onPress={() => setShowModal(false)}
+                onPress={() => {
+                  setShowModal(false);
+                  setEditingCoordinator(null);
+                }}
                 style={[styles.cancelButton, { borderColor: theme.border }]}
               >
                 <ThemedText style={[styles.cancelButtonText, { color: theme.textMuted }]}>
@@ -478,11 +660,13 @@ export default function CoordinatorSharingScreen() {
                 </ThemedText>
               </Pressable>
               <Button
-                onPress={handleCreate}
+                onPress={handleSubmit}
                 style={styles.submitButton}
-                disabled={createMutation.isPending}
+                disabled={createMutation.isPending || updateMutation.isPending}
               >
-                {createMutation.isPending ? "Oppretter..." : "Opprett invitasjon"}
+                {createMutation.isPending || updateMutation.isPending
+                  ? (editingCoordinator ? "Oppdaterer..." : "Oppretter...")
+                  : (editingCoordinator ? "Oppdater" : "Opprett invitasjon")}
               </Button>
             </View>
           </View>
@@ -652,8 +836,37 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
-    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.25)",
-    elevation: 5,
+    // Shadow for iOS
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 5,
+      },
+    }),
+  },
+  errorContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.md,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  errorMessage: {
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: Spacing.sm,
+  },
+  retryButton: {
+    marginTop: Spacing.md,
   },
   modalOverlay: {
     flex: 1,

@@ -16,7 +16,7 @@ import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import Animated, { FadeInRight } from "react-native-reanimated";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -24,7 +24,8 @@ import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getSpeeches, saveSpeeches, generateId } from "@/lib/storage";
-import { Speech, Table } from "@/lib/types";
+import { Speech } from "@/lib/types";
+import { Table } from "@/components/SeatingChart";
 
 const DEFAULT_SPEECHES: Speech[] = [
   { id: "1", speakerName: "Mor til bruden", role: "Familie", time: "18:00", order: 1, status: "ready", tableId: null },
@@ -38,6 +39,7 @@ export default function SpeechListScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const queryClient = useQueryClient();
 
   const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,8 +50,37 @@ export default function SpeechListScreen() {
   const [newStatus, setNewStatus] = useState<NonNullable<Speech["status"]>>("ready");
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [editingSpeech, setEditingSpeech] = useState<Speech | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
 
-  const { data: tables = [] } = useQuery<Table[]>({ queryKey: ["/api/couple/tables"] });
+  // Load session token
+  useFocusEffect(
+    useCallback(() => {
+      const loadToken = async () => {
+        try {
+          const stored = await getSpeeches();
+          const parsed = JSON.parse(localStorage.getItem("session") || "{}");
+          setSessionToken(parsed?.sessionToken || null);
+        } catch {
+          setSessionToken(null);
+        }
+      };
+      loadToken();
+    }, [])
+  );
+
+  // Fetch seating chart tables directly
+  const { data: seatingData } = useQuery<{ tables: Table[]; guests: any[] }>({
+    queryKey: ["/api/couple/venue/seating", sessionToken],
+    enabled: !!sessionToken,
+    queryFn: async () => {
+      const response = await fetch("/api/couple/venue/seating", {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      return response.json();
+    },
+  });
+
+  const tables = seatingData?.tables ?? [];
 
   const loadData = useCallback(async () => {
     const data = await getSpeeches();
@@ -99,8 +130,7 @@ export default function SpeechListScreen() {
     if (!tableId) return "Uten bord";
     const table = tableLookup.get(tableId);
     if (!table) return "Uten bord";
-    const number = table.tableNumber ? ` ${table.tableNumber}` : "";
-    return table.name ? `${table.name}${number ? ` (bord${number})` : ""}` : `Bord${number}`;
+    return table.name || `Bord ${table.id}`;
   };
 
   const handleExportPdf = async () => {
@@ -213,6 +243,9 @@ export default function SpeechListScreen() {
 
     setSpeeches(updatedSpeeches);
     await saveSpeeches(updatedSpeeches);
+    
+    // Notify VenueScreen to refresh
+    queryClient.invalidateQueries({ queryKey: ['speeches'] });
 
     setNewName("");
     setNewRole("");
@@ -246,6 +279,7 @@ export default function SpeechListScreen() {
             .map((s, index) => ({ ...s, order: index + 1 }));
           setSpeeches(updatedSpeeches);
           await saveSpeeches(updatedSpeeches);
+          queryClient.invalidateQueries({ queryKey: ['speeches'] });
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         },
       },
@@ -264,6 +298,7 @@ export default function SpeechListScreen() {
     const updatedSpeeches = newSpeeches.map((s, i) => ({ ...s, order: i + 1 }));
     setSpeeches(updatedSpeeches);
     await saveSpeeches(updatedSpeeches);
+    queryClient.invalidateQueries({ queryKey: ['speeches'] });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -279,6 +314,7 @@ export default function SpeechListScreen() {
     const updatedSpeeches = newSpeeches.map((s, i) => ({ ...s, order: i + 1 }));
     setSpeeches(updatedSpeeches);
     await saveSpeeches(updatedSpeeches);
+    queryClient.invalidateQueries({ queryKey: ['speeches'] });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -549,7 +585,7 @@ export default function SpeechListScreen() {
                     },
                   ]}
                 >
-                  <ThemedText style={{ color: theme.text }}>{table.name || `Bord ${table.tableNumber}`}</ThemedText>
+                  <ThemedText style={{ color: theme.text }}>{table.name || `Bord`}</ThemedText>
                 </Pressable>
               ))}
             </ScrollView>

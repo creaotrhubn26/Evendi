@@ -1,15 +1,18 @@
-import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, Pressable } from "react-native";
+import React, { useState, useEffect } from "react";
+import { ScrollView, StyleSheet, View, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { getCoupleProfile, updateCoupleProfile } from "@/lib/api-couples";
+import { getCoupleSession } from "@/lib/storage";
 
 interface Tradition {
   id: string;
@@ -117,9 +120,62 @@ export default function TraditionsScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const queryClient = useQueryClient();
 
   const [selectedCulture, setSelectedCulture] = useState<string>("norway");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedTraditions, setSelectedTraditions] = useState<string[]>([]);
+
+  // Load couple profile to get selected traditions
+  const { data: session } = useQuery({
+    queryKey: ["coupleSession"],
+    queryFn: getCoupleSession,
+  });
+
+  const { data: profile } = useQuery({
+    queryKey: ["coupleProfile"],
+    queryFn: () => {
+      if (!session?.token) throw new Error("No session");
+      return getCoupleProfile(session.token);
+    },
+    enabled: !!session?.token,
+  });
+
+  // Update local state when profile loads
+  useEffect(() => {
+    if (profile?.selectedTraditions) {
+      setSelectedTraditions(profile.selectedTraditions);
+      // Auto-select first selected culture if available
+      if (profile.selectedTraditions.length > 0 && TRADITIONS[profile.selectedTraditions[0]]) {
+        setSelectedCulture(profile.selectedTraditions[0]);
+      }
+    }
+  }, [profile]);
+
+  // Mutation to update traditions
+  const updateTraditionsMutation = useMutation({
+    mutationFn: async (traditions: string[]) => {
+      if (!session?.token) throw new Error("No session");
+      return updateCoupleProfile(session.token, { selectedTraditions: traditions });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coupleProfile"] });
+    },
+    onError: (error) => {
+      Alert.alert("Feil", error instanceof Error ? error.message : "Kunne ikke lagre valg");
+    },
+  });
+
+  const toggleTraditionSelection = (cultureKey: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    const newSelection = selectedTraditions.includes(cultureKey)
+      ? selectedTraditions.filter((t) => t !== cultureKey)
+      : [...selectedTraditions, cultureKey];
+
+    setSelectedTraditions(newSelection);
+    updateTraditionsMutation.mutate(newSelection);
+  };
 
   const cultureData = TRADITIONS[selectedCulture];
 
@@ -143,40 +199,67 @@ export default function TraditionsScreen() {
           <Feather name="book-open" size={24} color={Colors.dark.accent} />
           <ThemedText type="h2" style={styles.headerTitle}>Bryllupstradisjoner</ThemedText>
           <ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-            Utforsk skikker fra ulike kulturer og religioner
+            Velg kulturer som passer for deres bryllup
           </ThemedText>
+          {selectedTraditions.length > 0 && (
+            <View style={[styles.selectedBadge, { backgroundColor: Colors.dark.accent + "15", borderColor: Colors.dark.accent }]}>
+              <Feather name="check-circle" size={16} color={Colors.dark.accent} />
+              <ThemedText style={[styles.selectedBadgeText, { color: Colors.dark.accent }]}>
+                {selectedTraditions.length} valgt
+              </ThemedText>
+            </View>
+          )}
         </View>
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(200).duration(400)}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cultureTabs}>
-          {Object.entries(TRADITIONS).map(([key, culture]) => (
-            <Pressable
-              key={key}
-              onPress={() => {
-                setSelectedCulture(key);
-                setExpandedId(null);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              style={[
-                styles.cultureTab,
-                {
-                  backgroundColor: selectedCulture === key ? culture.color : theme.backgroundDefault,
-                  borderColor: selectedCulture === key ? culture.color : theme.border,
-                },
-              ]}
-            >
-              <ThemedText
+          {Object.entries(TRADITIONS).map(([key, culture]) => {
+            const isSelected = selectedTraditions.includes(key);
+            const isViewing = selectedCulture === key;
+            return (
+              <Pressable
+                key={key}
+                onLongPress={() => {
+                  toggleTraditionSelection(key);
+                }}
+                onPress={() => {
+                  setSelectedCulture(key);
+                  setExpandedId(null);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
                 style={[
-                  styles.cultureTabText,
-                  { color: selectedCulture === key ? "#FFFFFF" : theme.text },
+                  styles.cultureTab,
+                  {
+                    backgroundColor: isViewing ? culture.color : theme.backgroundDefault,
+                    borderColor: isViewing ? culture.color : (isSelected ? culture.color : theme.border),
+                    borderWidth: isSelected ? 2 : 1,
+                  },
                 ]}
               >
-                {culture.name}
-              </ThemedText>
-            </Pressable>
-          ))}
+                {isSelected && (
+                  <Feather 
+                    name="check-circle" 
+                    size={14} 
+                    color={isViewing ? "#FFFFFF" : culture.color}
+                    style={styles.cultureCheckIcon}
+                  />
+                )}
+                <ThemedText
+                  style={[
+                    styles.cultureTabText,
+                    { color: isViewing ? "#FFFFFF" : theme.text },
+                  ]}
+                >
+                  {culture.name}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
         </ScrollView>
+        <ThemedText style={[styles.selectionHint, { color: theme.textSecondary }]}>
+          Trykk for å se detaljer • Hold inne for å velge
+        </ThemedText>
       </Animated.View>
 
       <View style={[styles.cultureHeader, { borderColor: cultureData.color }]}>
@@ -245,15 +328,39 @@ const styles = StyleSheet.create({
   },
   headerTitle: { marginTop: Spacing.sm, textAlign: "center" },
   headerSubtitle: { marginTop: Spacing.xs, fontSize: 14, textAlign: "center" },
-  cultureTabs: { marginBottom: Spacing.lg, marginHorizontal: -Spacing.lg, paddingHorizontal: Spacing.lg },
+  selectedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    marginTop: Spacing.md,
+  },
+  selectedBadgeText: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginLeft: Spacing.xs,
+  },
+  cultureTabs: { marginBottom: Spacing.xs, marginHorizontal: -Spacing.lg, paddingHorizontal: Spacing.lg },
   cultureTab: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.full,
-    borderWidth: 1,
     marginRight: Spacing.sm,
   },
+  cultureCheckIcon: {
+    marginRight: Spacing.xs,
+  },
   cultureTabText: { fontSize: 14, fontWeight: "600" },
+  selectionHint: {
+    fontSize: 12,
+    textAlign: "center",
+    marginBottom: Spacing.md,
+    marginTop: Spacing.xs,
+  },
   cultureHeader: {
     flexDirection: "row",
     alignItems: "center",

@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   Switch,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -21,6 +22,7 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { CateringFields, CakeFields, FlowerFields, TransportFields, HairMakeupFields } from "@/lib/product-category-fields";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
@@ -60,8 +62,119 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
   const [availableQuantity, setAvailableQuantity] = useState("");
   const [bookingBuffer, setBookingBuffer] = useState("0");
 
+  // Vendor category
+  const [vendorCategory, setVendorCategory] = useState<string | null>(null);
+
+  // Category-specific metadata
+  const [offersTasteSample, setOffersTasteSample] = useState(false);
+  const [cuisineType, setCuisineType] = useState("");
+  const [courseType, setCourseType] = useState("");
+  const [isVegetarian, setIsVegetarian] = useState(false);
+  const [isVegan, setIsVegan] = useState(false);
+  const [isGlutenFree, setIsGlutenFree] = useState(false);
+  const [isDairyFree, setIsDairyFree] = useState(false);
+  const [cakeStyle, setCakeStyle] = useState("");
+  const [flavors, setFlavors] = useState("");
+  const [servings, setServings] = useState("");
+  const [tiers, setTiers] = useState("");
+  const [flowerItemType, setFlowerItemType] = useState("");
+  const [flowerTypes, setFlowerTypes] = useState("");
+  const [seasonalAvailability, setSeasonalAvailability] = useState("");
+  const [isSeasonalOnly, setIsSeasonalOnly] = useState(false);
+  const [vehicleType, setVehicleType] = useState("");
+  const [passengerCapacity, setPassengerCapacity] = useState("");
+  const [includesDriver, setIncludesDriver] = useState(false);
+  const [vehicleDescription, setVehicleDescription] = useState("");
+  const [serviceType, setServiceType] = useState("");
+  const [includesTrialSession, setIncludesTrialSession] = useState(false);
+  const [lookType, setLookType] = useState("");
+  const [durationHours, setDurationHours] = useState("");
+  
+  // Fotograf metadata
+  const [photoPackageType, setPhotoPackageType] = useState("");
+  const [hoursIncluded, setHoursIncluded] = useState("");
+  const [photosDelivered, setPhotosDelivered] = useState("");
+  const [printRightsIncluded, setPrintRightsIncluded] = useState(false);
+  const [editedPhotosCount, setEditedPhotosCount] = useState("");
+  const [rawPhotosIncluded, setRawPhotosIncluded] = useState(false);
+  
+  // Videograf metadata
+  const [videoPackageType, setVideoPackageType] = useState("");
+  const [filmDurationMinutes, setFilmDurationMinutes] = useState("");
+  const [editingStyle, setEditingStyle] = useState("");
+  const [droneFootageIncluded, setDroneFootageIncluded] = useState(false);
+  const [rawFootageIncluded, setRawFootageIncluded] = useState(false);
+  const [highlightReelIncluded, setHighlightReelIncluded] = useState(false);
+  
+  // Musikk metadata
+  const [performanceType, setPerformanceType] = useState("");
+  const [musicGenre, setMusicGenre] = useState("");
+  const [equipmentIncluded, setEquipmentIncluded] = useState(false);
+  const [soundCheckIncluded, setSoundCheckIncluded] = useState(false);
+  const [setlistCustomizable, setSetlistCustomizable] = useState(false);
+  const [performanceDurationHours, setPerformanceDurationHours] = useState("");
+  
+  // Venue metadata
+  const [capacityMin, setCapacityMin] = useState("");
+  const [capacityMax, setCapacityMax] = useState("");
+  const [indoorOutdoor, setIndoorOutdoor] = useState("");
+  const [cateringIncluded, setCateringIncluded] = useState(false);
+  const [parkingSpaces, setParkingSpaces] = useState("");
+  const [accessibilityFeatures, setAccessibilityFeatures] = useState("");
+  
+  // Planlegger metadata
+  const [serviceLevelType, setServiceLevelType] = useState("");
+  const [monthsOfService, setMonthsOfService] = useState("");
+  const [numberOfMeetings, setNumberOfMeetings] = useState("");
+  const [vendorCoordinationIncluded, setVendorCoordinationIncluded] = useState(false);
+  
+  // FotoVideo combined metadata
+  const [combinedPackage, setCombinedPackage] = useState("");
+  const [totalHours, setTotalHours] = useState("");
+  const [photosIncluded, setPhotosIncluded] = useState(false);
+  const [videoIncluded, setVideoIncluded] = useState(false);
+  
+  const [metadata, setMetadata] = useState<any>({});
+  
+  // UX improvements
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(!isEditMode);
+
+  // Smart defaults based on category
+  const getSuggestedPrice = (category: string) => {
+    const suggestions: Record<string, number> = {
+      "Fotograf": 15000,
+      "Videograf": 18000,
+      "Musikk": 8000,
+      "Venue": 35000,
+      "Planlegger": 30000,
+      "Catering": 650,
+      "Kake": 4000,
+      "Blomster": 1200,
+      "Transport": 5500,
+      "Hår & Makeup": 2500,
+    };
+    return suggestions[category] || 0;
+  };
+
+  const loadVendorCategory = async () => {
+    const sessionData = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
+    if (sessionData) {
+      const session = JSON.parse(sessionData);
+      const category = session.vendorCategory || null;
+      setVendorCategory(category);
+      
+      // Auto-expand if editing or category has metadata
+      if (isEditMode || category) {
+        setShowAdvancedFields(true);
+      }
+    }
+  };
+
   // Pre-fill form when editing
   useEffect(() => {
+    loadVendorCategory();
+
     if (editingProduct) {
       setTitle(editingProduct.title || "");
       setDescription(editingProduct.description || "");
@@ -73,6 +186,18 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
       setTrackInventory(editingProduct.trackInventory || false);
       setAvailableQuantity(editingProduct.availableQuantity ? String(editingProduct.availableQuantity) : "");
       setBookingBuffer(editingProduct.bookingBuffer ? String(editingProduct.bookingBuffer) : "0");
+      
+      // Parse metadata if it exists
+      if (editingProduct.metadata) {
+        try {
+          const parsed = typeof editingProduct.metadata === 'string' 
+            ? JSON.parse(editingProduct.metadata) 
+            : editingProduct.metadata;
+          setMetadata(parsed || {});
+        } catch (e) {
+          setMetadata({});
+        }
+      }
     }
   }, [editingProduct]);
 
@@ -83,6 +208,77 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
       const session = JSON.parse(sessionData);
 
       const priceInOre = Math.round(parseFloat(unitPrice) * 100);
+      
+      // Build category-specific metadata
+      const productMetadata: any = {};
+      if (vendorCategory === "Catering") {
+        productMetadata.offersTasteSample = offersTasteSample;
+        if (cuisineType) productMetadata.cuisineType = cuisineType;
+        if (courseType) productMetadata.courseType = courseType;
+        productMetadata.isVegetarian = isVegetarian;
+        productMetadata.isVegan = isVegan;
+        productMetadata.isGlutenFree = isGlutenFree;
+        productMetadata.isDairyFree = isDairyFree;
+      } else if (vendorCategory === "Kake") {
+        productMetadata.offersTasteSample = offersTasteSample;
+        if (cakeStyle) productMetadata.cakeStyle = cakeStyle;
+        if (flavors) productMetadata.flavors = flavors;
+        if (servings) productMetadata.servings = parseInt(servings);
+        if (tiers) productMetadata.tiers = parseInt(tiers);
+      } else if (vendorCategory === "Blomster") {
+        if (flowerItemType) productMetadata.flowerItemType = flowerItemType;
+        if (flowerTypes) productMetadata.flowerTypes = flowerTypes;
+        if (seasonalAvailability) productMetadata.seasonalAvailability = seasonalAvailability;
+        productMetadata.isSeasonalOnly = isSeasonalOnly;
+      } else if (vendorCategory === "Transport") {
+        if (vehicleType) productMetadata.vehicleType = vehicleType;
+        if (passengerCapacity) productMetadata.passengerCapacity = parseInt(passengerCapacity);
+        productMetadata.includesDriver = includesDriver;
+        if (vehicleDescription) productMetadata.vehicleDescription = vehicleDescription;
+      } else if (vendorCategory === "Hår & Makeup") {
+        if (serviceType) productMetadata.serviceType = serviceType;
+        productMetadata.includesTrialSession = includesTrialSession;
+        if (lookType) productMetadata.lookType = lookType;
+        if (durationHours) productMetadata.durationHours = parseInt(durationHours);
+      } else if (vendorCategory === "Fotograf") {
+        if (photoPackageType) productMetadata.packageType = photoPackageType;
+        if (hoursIncluded) productMetadata.hoursIncluded = parseInt(hoursIncluded);
+        if (photosDelivered) productMetadata.photosDelivered = parseInt(photosDelivered);
+        productMetadata.printRightsIncluded = printRightsIncluded;
+        if (editedPhotosCount) productMetadata.editedPhotosCount = parseInt(editedPhotosCount);
+        productMetadata.rawPhotosIncluded = rawPhotosIncluded;
+      } else if (vendorCategory === "Videograf") {
+        if (videoPackageType) productMetadata.packageType = videoPackageType;
+        if (filmDurationMinutes) productMetadata.filmDurationMinutes = parseInt(filmDurationMinutes);
+        if (editingStyle) productMetadata.editingStyle = editingStyle;
+        productMetadata.droneFootageIncluded = droneFootageIncluded;
+        productMetadata.rawFootageIncluded = rawFootageIncluded;
+        productMetadata.highlightReelIncluded = highlightReelIncluded;
+      } else if (vendorCategory === "Musikk") {
+        if (performanceType) productMetadata.performanceType = performanceType;
+        if (musicGenre) productMetadata.genre = musicGenre;
+        productMetadata.equipmentIncluded = equipmentIncluded;
+        productMetadata.soundCheckIncluded = soundCheckIncluded;
+        productMetadata.setlistCustomizable = setlistCustomizable;
+        if (performanceDurationHours) productMetadata.performanceDurationHours = parseInt(performanceDurationHours);
+      } else if (vendorCategory === "Venue") {
+        if (capacityMin) productMetadata.capacityMin = parseInt(capacityMin);
+        if (capacityMax) productMetadata.capacityMax = parseInt(capacityMax);
+        if (indoorOutdoor) productMetadata.indoorOutdoor = indoorOutdoor;
+        productMetadata.cateringIncluded = cateringIncluded;
+        if (parkingSpaces) productMetadata.parkingSpaces = parseInt(parkingSpaces);
+        if (accessibilityFeatures) productMetadata.accessibilityFeatures = accessibilityFeatures;
+      } else if (vendorCategory === "Planlegger") {
+        if (serviceLevelType) productMetadata.serviceLevel = serviceLevelType;
+        if (monthsOfService) productMetadata.monthsOfService = parseInt(monthsOfService);
+        if (numberOfMeetings) productMetadata.numberOfMeetings = parseInt(numberOfMeetings);
+        productMetadata.vendorCoordinationIncluded = vendorCoordinationIncluded;
+      } else if (vendorCategory === "Fotograf og videograf") {
+        if (combinedPackage) productMetadata.combinedPackage = combinedPackage;
+        if (totalHours) productMetadata.totalHours = parseInt(totalHours);
+        productMetadata.photosIncluded = photosIncluded;
+        productMetadata.videoIncluded = videoIncluded;
+      }
       
       const url = isEditMode 
         ? new URL(`/api/vendor/products/${editingProduct.id}`, getApiUrl()).toString()
@@ -105,6 +301,7 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
           trackInventory,
           availableQuantity: trackInventory && availableQuantity ? parseInt(availableQuantity) : undefined,
           bookingBuffer: trackInventory && bookingBuffer ? parseInt(bookingBuffer) : 0,
+          metadata: productMetadata,
         }),
       });
 
@@ -169,6 +366,116 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
     );
   };
 
+  // Product templates based on category
+  const getTemplates = () => {
+    const templates: Record<string, any[]> = {
+      "Fotograf": [
+        { name: "Heldagspakke", title: "Heldagsfotografering", price: "15000", unitType: "pakke", hours: "8", photos: "500", printRights: true },
+        { name: "Timepakke", title: "Timesbasert fotografering", price: "2500", unitType: "time", hours: "1", photos: "50", printRights: false },
+        { name: "Premium pakke", title: "Premium bryllupspakke", price: "25000", unitType: "pakke", hours: "12", photos: "800", printRights: true, raw: true },
+      ],
+      "Videograf": [
+        { name: "Highlight reel", title: "Bryllups highlight", price: "12000", unitType: "pakke", duration: "10", style: "cinematic", drone: true },
+        { name: "Fullfilm", title: "Full bryllupsfilm", price: "20000", unitType: "pakke", duration: "60", style: "documentary", drone: true },
+        { name: "Kombinert pakke", title: "Highlight + Fullfilm", price: "28000", unitType: "pakke", duration: "70", style: "cinematic", drone: true, highlight: true },
+      ],
+      "Musikk": [
+        { name: "DJ 4 timer", title: "DJ-tjenester", price: "8000", unitType: "pakke", performanceType: "dj", genre: "pop", duration: "4", equipment: true },
+        { name: "Live band", title: "Live band opptreden", price: "15000", unitType: "pakke", performanceType: "band", genre: "pop", duration: "3", equipment: true },
+        { name: "Solo artist", title: "Solo artist", price: "5000", unitType: "pakke", performanceType: "solo", genre: "klassisk", duration: "2", equipment: false },
+      ],
+      "Venue": [
+        { name: "Liten sal", title: "Intim festsal", price: "25000", unitType: "dag", capacityMin: "20", capacityMax: "60", indoor: "innendørs", catering: true },
+        { name: "Mellomstor sal", title: "Bryllupslokale", price: "40000", unitType: "dag", capacityMin: "60", capacityMax: "120", indoor: "innendørs", catering: true },
+        { name: "Stor sal", title: "Grand ballroom", price: "65000", unitType: "dag", capacityMin: "120", capacityMax: "250", indoor: "begge", catering: true, parking: "100" },
+      ],
+      "Planlegger": [
+        { name: "Full planlegging", title: "Full bryllupsplanlegging", price: "45000", unitType: "pakke", serviceLevel: "full", months: "12", meetings: "10", coordination: true },
+        { name: "Dagskoordinering", title: "Bryllupsdagskoordinering", price: "12000", unitType: "dag", serviceLevel: "dagskoordinering", months: "1", meetings: "3", coordination: true },
+        { name: "Konsultasjon", title: "Planleggingskonsultasjon", price: "2500", unitType: "time", serviceLevel: "konsultasjon", months: "0", meetings: "1", coordination: false },
+      ],
+      "Catering": [
+        { name: "3-retters meny", title: "3-retters middag", price: "750", unitType: "stk", cuisine: "norsk", tasteSample: true },
+        { name: "Buffet", title: "Bryllupsbuffet", price: "550", unitType: "stk", cuisine: "blandet", tasteSample: true },
+        { name: "Dessertbord", title: "Dessertbord", price: "250", unitType: "stk", tasteSample: false },
+      ],
+      "Kake": [
+        { name: "3-etasjes kake", title: "Bryllupskake 3 etasjer", price: "4500", unitType: "stk", style: "elegant", tiers: "3", servings: "80", tasteSample: true },
+        { name: "Naked cake", title: "Naked bryllupskake", price: "3500", unitType: "stk", style: "rustic", tiers: "2", servings: "50", tasteSample: true },
+      ],
+      "Blomster": [
+        { name: "Brudebukett", title: "Brudebukett med roser", price: "1500", unitType: "stk", itemType: "brudebukett", flowers: "Roser, Peoner" },
+        { name: "Borddekorasjon", title: "Borddekorasjon per bord", price: "450", unitType: "stk", itemType: "borddekorasjon", flowers: "Sesongblomster" },
+      ],
+      "Transport": [
+        { name: "Vintage bil", title: "Vintage bryllupsbil", price: "5000", unitType: "dag", vehicleType: "vintage-car", capacity: "4", driver: true },
+        { name: "Limousin", title: "Limousin", price: "7000", unitType: "dag", vehicleType: "limousine", capacity: "8", driver: true },
+      ],
+      "Hår & Makeup": [
+        { name: "Brud pakke", title: "Brud hår og makeup", price: "3500", unitType: "pakke", serviceType: "both", trial: true, duration: "3" },
+        { name: "Kun makeup", title: "Brude makeup", price: "2000", unitType: "pakke", serviceType: "makeup", trial: true, duration: "2" },
+      ],
+    };
+    return templates[vendorCategory || ""] || [];
+  };
+
+  const applyTemplate = (template: any) => {
+    setTitle(template.title);
+    setUnitPrice(template.price);
+    setUnitType(template.unitType);
+    
+    // Apply category-specific metadata
+    if (vendorCategory === "Fotograf") {
+      setHoursIncluded(template.hours || "");
+      setPhotosDelivered(template.photos || "");
+      setPrintRightsIncluded(template.printRights || false);
+      setRawPhotosIncluded(template.raw || false);
+    } else if (vendorCategory === "Videograf") {
+      setFilmDurationMinutes(template.duration || "");
+      setEditingStyle(template.style || "");
+      setDroneFootageIncluded(template.drone || false);
+      setHighlightReelIncluded(template.highlight || false);
+    } else if (vendorCategory === "Musikk") {
+      setPerformanceType(template.performanceType || "");
+      setMusicGenre(template.genre || "");
+      setPerformanceDurationHours(template.duration || "");
+      setEquipmentIncluded(template.equipment || false);
+    } else if (vendorCategory === "Venue") {
+      setCapacityMin(template.capacityMin || "");
+      setCapacityMax(template.capacityMax || "");
+      setIndoorOutdoor(template.indoor || "");
+      setCateringIncluded(template.catering || false);
+      setParkingSpaces(template.parking || "");
+    } else if (vendorCategory === "Planlegger") {
+      setServiceLevelType(template.serviceLevel || "");
+      setMonthsOfService(template.months || "");
+      setNumberOfMeetings(template.meetings || "");
+      setVendorCoordinationIncluded(template.coordination || false);
+    } else if (vendorCategory === "Catering") {
+      setCuisineType(template.cuisine || "");
+      setOffersTasteSample(template.tasteSample || false);
+    } else if (vendorCategory === "Kake") {
+      setCakeStyle(template.style || "");
+      setTiers(template.tiers || "");
+      setServings(template.servings || "");
+      setOffersTasteSample(template.tasteSample || false);
+    } else if (vendorCategory === "Blomster") {
+      setFlowerItemType(template.itemType || "");
+      setFlowerTypes(template.flowers || "");
+    } else if (vendorCategory === "Transport") {
+      setVehicleType(template.vehicleType || "");
+      setPassengerCapacity(template.capacity || "");
+      setIncludesDriver(template.driver || false);
+    } else if (vendorCategory === "Hår & Makeup") {
+      setServiceType(template.serviceType || "");
+      setIncludesTrialSession(template.trial || false);
+      setDurationHours(template.duration || "");
+    }
+    
+    setShowTemplates(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
   const isValid = title.trim().length >= 2 && parseFloat(unitPrice) >= 0;
 
   return (
@@ -205,6 +512,41 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
         ]}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
       >
+        {/* Quick Templates Section */}
+        {!isEditMode && vendorCategory && showTemplates && getTemplates().length > 0 && (
+          <Animated.View entering={FadeInDown.duration(300)}>
+            <View style={[styles.templatesCard, { backgroundColor: theme.accent + "10", borderColor: theme.accent + "30" }]}>
+              <View style={styles.templatesHeader}>
+                <View style={styles.templatesHeaderLeft}>
+                  <Feather name="zap" size={18} color={theme.accent} />
+                  <ThemedText style={[styles.templatesTitle, { color: theme.accent }]}>Hurtigstart</ThemedText>
+                </View>
+                <Pressable onPress={() => setShowTemplates(false)} style={styles.templatesClose}>
+                  <Feather name="x" size={16} color={theme.textMuted} />
+                </Pressable>
+              </View>
+              <ThemedText style={[styles.templatesSubtitle, { color: theme.textSecondary }]}>
+                Velg en mal for å komme raskt i gang
+              </ThemedText>
+              <View style={styles.templatesGrid}>
+                {getTemplates().map((template, index) => (
+                  <Pressable
+                    key={index}
+                    onPress={() => applyTemplate(template)}
+                    style={[styles.templateChip, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+                  >
+                    <Feather name="copy" size={14} color={theme.accent} />
+                    <View style={styles.templateChipContent}>
+                      <ThemedText style={[styles.templateChipName, { color: theme.text }]}>{template.name}</ThemedText>
+                      <ThemedText style={[styles.templateChipPrice, { color: theme.textMuted }]}>{template.price} kr</ThemedText>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          </Animated.View>
+        )}
+        
         <Animated.View entering={FadeInDown.duration(300)}>
           <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <View style={styles.sectionHeader}>
@@ -262,6 +604,20 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   onChangeText={setUnitPrice}
                   keyboardType="numeric"
                 />
+                {!unitPrice && vendorCategory && getSuggestedPrice(vendorCategory) && (
+                  <Pressable
+                    onPress={() => {
+                      setUnitPrice(getSuggestedPrice(vendorCategory)?.toString() || '');
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={styles.suggestionChip}
+                  >
+                    <Feather name="zap" size={12} color="#f59e0b" />
+                    <ThemedText style={styles.suggestionText}>
+                      Foreslått: {getSuggestedPrice(vendorCategory)} kr
+                    </ThemedText>
+                  </Pressable>
+                )}
               </View>
 
               <View style={[styles.inputGroup, { flex: 1 }]}>
@@ -347,6 +703,594 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
               />
             </View>
           </View>
+
+          {/* Category-Specific Fields Section */}
+          {vendorCategory && (
+            <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, marginTop: Spacing.lg }]}>
+              <Pressable 
+                onPress={() => {
+                  setShowAdvancedFields(!showAdvancedFields);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                style={styles.sectionHeader}
+              >
+                <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
+                  <Feather name="sliders" size={16} color={theme.accent} />
+                </View>
+                <ThemedText style={[styles.formTitle, { color: theme.text }]}>
+                  {vendorCategory === "Catering" && "Catering-detaljer"}
+                  {vendorCategory === "Kake" && "Kake-detaljer"}
+                  {vendorCategory === "Blomster" && "Blomster-detaljer"}
+                  {vendorCategory === "Transport" && "Transport-detaljer"}
+                  {vendorCategory === "Hår & Makeup" && "Tjeneste-detaljer"}
+                  {vendorCategory === "Fotograf" && "Fotograf-detaljer"}
+                  {vendorCategory === "Videograf" && "Videograf-detaljer"}
+                  {vendorCategory === "Musikk" && "Musikk-detaljer"}
+                  {vendorCategory === "Venue" && "Lokale-detaljer"}
+                  {vendorCategory === "Planlegger" && "Planlegger-detaljer"}
+                  {vendorCategory === "Fotograf og videograf" && "Foto & Video-detaljer"}
+                </ThemedText>
+                <View style={{ marginLeft: "auto" }}>
+                  <Feather name={showAdvancedFields ? "chevron-up" : "chevron-down"} size={18} color={theme.textMuted} />
+                </View>
+              </Pressable>
+
+              {showAdvancedFields && (
+                <Animated.View entering={FadeInDown.duration(200)}>
+
+              {/* Catering Fields */}
+              {vendorCategory === "Catering" && (
+                <>
+                  <View style={[styles.switchRow, { borderBottomColor: theme.border }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Tilbyr smaksprøve</ThemedText>
+                    <Switch
+                      value={offersTasteSample}
+                      onValueChange={setOffersTasteSample}
+                      trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }}
+                      thumbColor={offersTasteSample ? theme.accent : theme.backgroundRoot}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Kjøkkentype</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Norsk, Italiensk, Asiatisk..."
+                      placeholderTextColor={theme.textMuted}
+                      value={cuisineType}
+                      onChangeText={setCuisineType}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Retttype</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Forrett, Hovedrett, Dessert..."
+                      placeholderTextColor={theme.textMuted}
+                      value={courseType}
+                      onChangeText={setCourseType}
+                    />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomColor: theme.border }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Vegetar</ThemedText>
+                    <Switch value={isVegetarian} onValueChange={setIsVegetarian} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={isVegetarian ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomColor: theme.border }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Vegan</ThemedText>
+                    <Switch value={isVegan} onValueChange={setIsVegan} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={isVegan ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomColor: theme.border }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Glutenfri</ThemedText>
+                    <Switch value={isGlutenFree} onValueChange={setIsGlutenFree} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={isGlutenFree ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Laktosefri</ThemedText>
+                    <Switch value={isDairyFree} onValueChange={setIsDairyFree} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={isDairyFree ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                </>
+              )}
+
+              {/* Cake Fields */}
+              {vendorCategory === "Kake" && (
+                <>
+                  <View style={[styles.switchRow, { borderBottomColor: theme.border }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Tilbyr smaksprøve</ThemedText>
+                    <Switch
+                      value={offersTasteSample}
+                      onValueChange={setOffersTasteSample}
+                      trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }}
+                      thumbColor={offersTasteSample ? theme.accent : theme.backgroundRoot}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Kakestil</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Tradisjonell, Naked, Drip..."
+                      placeholderTextColor={theme.textMuted}
+                      value={cakeStyle}
+                      onChangeText={setCakeStyle}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Smaker</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Sjokolade, Vanilje, Sitron..."
+                      placeholderTextColor={theme.textMuted}
+                      value={flavors}
+                      onChangeText={setFlavors}
+                    />
+                  </View>
+                  <View style={styles.rowInputs}>
+                    <View style={[styles.inputGroup, { flex: 1 }]}>
+                      <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Porsjoner</ThemedText>
+                      <TextInput
+                        style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                        placeholder="F.eks. 50"
+                        placeholderTextColor={theme.textMuted}
+                        value={servings}
+                        onChangeText={setServings}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={[styles.inputGroup, { flex: 1 }]}>
+                      <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Antall lag</ThemedText>
+                      <TextInput
+                        style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                        placeholder="F.eks. 3"
+                        placeholderTextColor={theme.textMuted}
+                        value={tiers}
+                        onChangeText={setTiers}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {/* Flower Fields */}
+              {vendorCategory === "Blomster" && (
+                <>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Blomstertype</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Brudebukett, Borddekorasjon..."
+                      placeholderTextColor={theme.textMuted}
+                      value={flowerItemType}
+                      onChangeText={setFlowerItemType}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Blomster inkludert</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Roser, Liljer, Peoner..."
+                      placeholderTextColor={theme.textMuted}
+                      value={flowerTypes}
+                      onChangeText={setFlowerTypes}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Sesong tilgjengelighet</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Vår, Sommer, Hele året..."
+                      placeholderTextColor={theme.textMuted}
+                      value={seasonalAvailability}
+                      onChangeText={setSeasonalAvailability}
+                    />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Kun sesongbasert</ThemedText>
+                    <Switch
+                      value={isSeasonalOnly}
+                      onValueChange={setIsSeasonalOnly}
+                      trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }}
+                      thumbColor={isSeasonalOnly ? theme.accent : theme.backgroundRoot}
+                    />
+                  </View>
+                </>
+              )}
+
+              {/* Transport Fields */}
+              {vendorCategory === "Transport" && (
+                <>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Kjøretøytype</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Limousin, Vintage bil, Buss..."
+                      placeholderTextColor={theme.textMuted}
+                      value={vehicleType}
+                      onChangeText={setVehicleType}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Passasjerkapasitet</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. 4"
+                      placeholderTextColor={theme.textMuted}
+                      value={passengerCapacity}
+                      onChangeText={setPassengerCapacity}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Kjøretøybeskrivelse</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="Detaljer om kjøretøyet..."
+                      placeholderTextColor={theme.textMuted}
+                      value={vehicleDescription}
+                      onChangeText={setVehicleDescription}
+                      multiline
+                      numberOfLines={3}
+                    />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Inkluderer sjåfør</ThemedText>
+                    <Switch
+                      value={includesDriver}
+                      onValueChange={setIncludesDriver}
+                      trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }}
+                      thumbColor={includesDriver ? theme.accent : theme.backgroundRoot}
+                    />
+                  </View>
+                </>
+              )}
+
+              {/* Hair & Makeup Fields */}
+              {vendorCategory === "Hår & Makeup" && (
+                <>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Tjenestetype</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Hår, Makeup, Begge..."
+                      placeholderTextColor={theme.textMuted}
+                      value={serviceType}
+                      onChangeText={setServiceType}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Look-type</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Naturlig, Glamorøs, Vintage..."
+                      placeholderTextColor={theme.textMuted}
+                      value={lookType}
+                      onChangeText={setLookType}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Varighet (timer)</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. 2"
+                      placeholderTextColor={theme.textMuted}
+                      value={durationHours}
+                      onChangeText={setDurationHours}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Inkluderer prøvetime</ThemedText>
+                    <Switch
+                      value={includesTrialSession}
+                      onValueChange={setIncludesTrialSession}
+                      trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }}
+                      thumbColor={includesTrialSession ? theme.accent : theme.backgroundRoot}
+                    />
+                  </View>
+                </>
+              )}
+
+              {/* Fotograf Fields */}
+              {vendorCategory === "Fotograf" && (
+                <>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Pakketype</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Timebasert, Heldag, Flerdag..."
+                      placeholderTextColor={theme.textMuted}
+                      value={photoPackageType}
+                      onChangeText={setPhotoPackageType}
+                    />
+                  </View>
+                  <View style={styles.rowInputs}>
+                    <View style={[styles.inputGroup, { flex: 1 }]}>
+                      <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Timer inkludert</ThemedText>
+                      <TextInput
+                        style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                        placeholder="F.eks. 8"
+                        placeholderTextColor={theme.textMuted}
+                        value={hoursIncluded}
+                        onChangeText={setHoursIncluded}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={[styles.inputGroup, { flex: 1 }]}>
+                      <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Bilder levert</ThemedText>
+                      <TextInput
+                        style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                        placeholder="F.eks. 500"
+                        placeholderTextColor={theme.textMuted}
+                        value={photosDelivered}
+                        onChangeText={setPhotosDelivered}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Redigerte bilder</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. 400"
+                      placeholderTextColor={theme.textMuted}
+                      value={editedPhotosCount}
+                      onChangeText={setEditedPhotosCount}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomColor: theme.border }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Trykkerettigheter inkludert</ThemedText>
+                    <Switch value={printRightsIncluded} onValueChange={setPrintRightsIncluded} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={printRightsIncluded ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>RAW-filer inkludert</ThemedText>
+                    <Switch value={rawPhotosIncluded} onValueChange={setRawPhotosIncluded} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={rawPhotosIncluded ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                </>
+              )}
+
+              {/* Videograf Fields */}
+              {vendorCategory === "Videograf" && (
+                <>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Pakketype</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Highlight, Fullfilm, Både..."
+                      placeholderTextColor={theme.textMuted}
+                      value={videoPackageType}
+                      onChangeText={setVideoPackageType}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Filmlengde (minutter)</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. 60"
+                      placeholderTextColor={theme.textMuted}
+                      value={filmDurationMinutes}
+                      onChangeText={setFilmDurationMinutes}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Redigeringsstil</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Cinematic, Documentary, Artistic..."
+                      placeholderTextColor={theme.textMuted}
+                      value={editingStyle}
+                      onChangeText={setEditingStyle}
+                    />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomColor: theme.border }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Droneopptak inkludert</ThemedText>
+                    <Switch value={droneFootageIncluded} onValueChange={setDroneFootageIncluded} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={droneFootageIncluded ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomColor: theme.border }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>RAW-opptak inkludert</ThemedText>
+                    <Switch value={rawFootageIncluded} onValueChange={setRawFootageIncluded} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={rawFootageIncluded ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Highlight reel inkludert</ThemedText>
+                    <Switch value={highlightReelIncluded} onValueChange={setHighlightReelIncluded} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={highlightReelIncluded ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                </>
+              )}
+
+              {/* Musikk Fields */}
+              {vendorCategory === "Musikk" && (
+                <>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Type opptreden</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Band, DJ, Solo, Duo..."
+                      placeholderTextColor={theme.textMuted}
+                      value={performanceType}
+                      onChangeText={setPerformanceType}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Sjanger</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Pop, Jazz, Rock, Klassisk..."
+                      placeholderTextColor={theme.textMuted}
+                      value={musicGenre}
+                      onChangeText={setMusicGenre}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Varighet (timer)</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. 4"
+                      placeholderTextColor={theme.textMuted}
+                      value={performanceDurationHours}
+                      onChangeText={setPerformanceDurationHours}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomColor: theme.border }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Utstyr inkludert</ThemedText>
+                    <Switch value={equipmentIncluded} onValueChange={setEquipmentIncluded} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={equipmentIncluded ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomColor: theme.border }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Lydsjekk inkludert</ThemedText>
+                    <Switch value={soundCheckIncluded} onValueChange={setSoundCheckIncluded} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={soundCheckIncluded ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Tilpassbar spilleliste</ThemedText>
+                    <Switch value={setlistCustomizable} onValueChange={setSetlistCustomizable} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={setlistCustomizable ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                </>
+              )}
+
+              {/* Venue Fields */}
+              {vendorCategory === "Venue" && (
+                <>
+                  <View style={styles.rowInputs}>
+                    <View style={[styles.inputGroup, { flex: 1 }]}>
+                      <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Min. kapasitet</ThemedText>
+                      <TextInput
+                        style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                        placeholder="F.eks. 50"
+                        placeholderTextColor={theme.textMuted}
+                        value={capacityMin}
+                        onChangeText={setCapacityMin}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={[styles.inputGroup, { flex: 1 }]}>
+                      <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Maks. kapasitet</ThemedText>
+                      <TextInput
+                        style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                        placeholder="F.eks. 200"
+                        placeholderTextColor={theme.textMuted}
+                        value={capacityMax}
+                        onChangeText={setCapacityMax}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Lokasjon</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Innendørs, Utendørs, Begge..."
+                      placeholderTextColor={theme.textMuted}
+                      value={indoorOutdoor}
+                      onChangeText={setIndoorOutdoor}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Parkeringsplasser</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. 50"
+                      placeholderTextColor={theme.textMuted}
+                      value={parkingSpaces}
+                      onChangeText={setParkingSpaces}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Tilgjengelighetsfunksjoner</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Rullestoladgang, Heis..."
+                      placeholderTextColor={theme.textMuted}
+                      value={accessibilityFeatures}
+                      onChangeText={setAccessibilityFeatures}
+                    />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Catering inkludert</ThemedText>
+                    <Switch value={cateringIncluded} onValueChange={setCateringIncluded} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={cateringIncluded ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                </>
+              )}
+
+              {/* Planlegger Fields */}
+              {vendorCategory === "Planlegger" && (
+                <>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Tjenestenivå</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Full, Delvis, Dagskoordinering..."
+                      placeholderTextColor={theme.textMuted}
+                      value={serviceLevelType}
+                      onChangeText={setServiceLevelType}
+                    />
+                  </View>
+                  <View style={styles.rowInputs}>
+                    <View style={[styles.inputGroup, { flex: 1 }]}>
+                      <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Måneder tjeneste</ThemedText>
+                      <TextInput
+                        style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                        placeholder="F.eks. 12"
+                        placeholderTextColor={theme.textMuted}
+                        value={monthsOfService}
+                        onChangeText={setMonthsOfService}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={[styles.inputGroup, { flex: 1 }]}>
+                      <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Antall møter</ThemedText>
+                      <TextInput
+                        style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                        placeholder="F.eks. 6"
+                        placeholderTextColor={theme.textMuted}
+                        value={numberOfMeetings}
+                        onChangeText={setNumberOfMeetings}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Leverandørkoordinering inkludert</ThemedText>
+                    <Switch value={vendorCoordinationIncluded} onValueChange={setVendorCoordinationIncluded} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={vendorCoordinationIncluded ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                </>
+              )}
+
+              {/* FotoVideo Combined Fields */}
+              {vendorCategory === "Fotograf og videograf" && (
+                <>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Kombinert pakke</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. Kun foto, Kun video, Begge..."
+                      placeholderTextColor={theme.textMuted}
+                      value={combinedPackage}
+                      onChangeText={setCombinedPackage}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Totale timer</ThemedText>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                      placeholder="F.eks. 10"
+                      placeholderTextColor={theme.textMuted}
+                      value={totalHours}
+                      onChangeText={setTotalHours}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomColor: theme.border }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Foto inkludert</ThemedText>
+                    <Switch value={photosIncluded} onValueChange={setPhotosIncluded} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={photosIncluded ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                  <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+                    <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Video inkludert</ThemedText>
+                    <Switch value={videoIncluded} onValueChange={setVideoIncluded} trackColor={{ false: theme.backgroundSecondary, true: theme.accent + "60" }} thumbColor={videoIncluded ? theme.accent : theme.backgroundRoot} />
+                  </View>
+                </>
+              )}
+                </Animated.View>
+              )}
+            </View>
+          )}
 
           {/* Inventory Tracking Section */}
           <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, marginTop: Spacing.lg }]}>
@@ -708,5 +1652,77 @@ const styles = StyleSheet.create({
   infoBoxSubtext: {
     fontSize: 12,
     marginTop: 2,
+  },
+  // Template styles
+  templatesCard: {
+    borderWidth: 1.5,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    marginHorizontal: Spacing.lg,
+  },
+  templatesHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: Spacing.xs,
+  },
+  templatesHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  templatesTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  templatesSubtitle: {
+    fontSize: 13,
+    marginBottom: Spacing.md,
+  },
+  templatesClose: {
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  templatesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+  },
+  templateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    gap: Spacing.xs,
+  },
+  templateChipContent: {
+    gap: 2,
+  },
+  templateChipName: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  templateChipPrice: {
+    fontSize: 11,
+  },
+  suggestionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: "#fef3c7",
+    borderRadius: 6,
+    marginTop: 4,
+    alignSelf: "flex-start",
+  },
+  suggestionText: {
+    fontSize: 11,
+    color: "#92400e",
   },
 });

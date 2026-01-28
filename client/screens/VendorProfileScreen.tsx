@@ -24,6 +24,17 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
+const CULTURAL_TRADITIONS = [
+  { key: "norway", name: "Norge", color: "#BA2020" },
+  { key: "sweden", name: "Sverige", color: "#006AA7" },
+  { key: "denmark", name: "Danmark", color: "#C60C30" },
+  { key: "hindu", name: "Hindu", color: "#FF6B35" },
+  { key: "sikh", name: "Sikh", color: "#FF9933" },
+  { key: "muslim", name: "Muslim", color: "#1B5E20" },
+  { key: "jewish", name: "Jødisk", color: "#1565C0" },
+  { key: "chinese", name: "Kinesisk", color: "#D32F2F" },
+];
+
 interface VendorProfile {
   id: string;
   email: string;
@@ -36,6 +47,7 @@ interface VendorProfile {
   priceRange: string | null;
   imageUrl: string | null;
   googleReviewUrl: string | null;
+  culturalExpertise: string[] | null;
   status: string;
   category: { id: string; name: string } | null;
 }
@@ -127,6 +139,7 @@ export default function VendorProfileScreen({ navigation }: Props) {
   const [website, setWebsite] = useState("");
   const [priceRange, setPriceRange] = useState("");
   const [googleReviewUrl, setGoogleReviewUrl] = useState("");
+  const [culturalExpertise, setCulturalExpertise] = useState<string[]>([]);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   
   // Category-specific details state
@@ -189,6 +202,7 @@ export default function VendorProfileScreen({ navigation }: Props) {
       setWebsite(profile.website || "");
       setPriceRange(profile.priceRange || "");
       setGoogleReviewUrl(profile.googleReviewUrl || "");
+      setCulturalExpertise(profile.culturalExpertise || []);
     }
   }, [profile]);
 
@@ -218,6 +232,7 @@ export default function VendorProfileScreen({ navigation }: Props) {
           website: website.trim() || null,
           priceRange: priceRange.trim() || null,
           googleReviewUrl: googleReviewUrl.trim() || null,
+          culturalExpertise,
         }),
       });
       
@@ -1150,6 +1165,58 @@ export default function VendorProfileScreen({ navigation }: Props) {
           </View>
         </View>
 
+        {/* Cultural Expertise */}
+        <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
+              <Feather name="globe" size={16} color={theme.accent} />
+            </View>
+            <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Kulturell ekspertise</ThemedText>
+          </View>
+
+          <ThemedText style={[styles.inputLabel, { color: theme.textSecondary, marginBottom: Spacing.md }]}>
+            Velg kulturer og tradisjoner du har erfaring med
+          </ThemedText>
+
+          <View style={styles.tagsContainer}>
+            {CULTURAL_TRADITIONS.map((tradition) => {
+              const isSelected = culturalExpertise.includes(tradition.key);
+              return (
+                <Pressable
+                  key={tradition.key}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setCulturalExpertise((prev) =>
+                      prev.includes(tradition.key)
+                        ? prev.filter((t) => t !== tradition.key)
+                        : [...prev, tradition.key]
+                    );
+                  }}
+                  style={[
+                    styles.tag,
+                    {
+                      backgroundColor: isSelected ? tradition.color : theme.backgroundRoot,
+                      borderColor: isSelected ? tradition.color : theme.border,
+                    },
+                  ]}
+                >
+                  {isSelected && (
+                    <Feather name="check-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  )}
+                  <ThemedText
+                    style={[
+                      styles.tagText,
+                      { color: isSelected ? "#FFFFFF" : theme.text },
+                    ]}
+                  >
+                    {tradition.name}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
         {/* Save Button */}
         <Pressable
           onPress={handleSave}
@@ -1508,5 +1575,22 @@ const styles = StyleSheet.create({
   },
   advancedDetailsSubtitle: {
     fontSize: 13,
+  },
+  tagsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+  },
+  tag: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1.5,
+  },
+  tagText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

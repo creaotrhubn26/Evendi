@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -9,6 +9,8 @@ import {
   Share,
   Modal,
   Linking,
+  Platform,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -30,23 +32,38 @@ import { GuestsStackParamList } from "@/navigation/GuestsStackNavigator";
 import { getCoupleSession } from "@/lib/storage";
 import { getGuests, createGuest, updateGuest, deleteGuest } from "@/lib/api-guests";
 import { GUEST_CATEGORIES } from "@/lib/types";
-import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { searchContacts, requestContactsPermission, ContactResult } from "@/lib/contacts";
 import { createGuestInvitation, getGuestInvitations } from "@/lib/api-guest-invitations";
 import type { GuestInvitation, WeddingGuest } from "@shared/schema";
 
 type NavigationProp = NativeStackNavigationProp<GuestsStackParamList>;
 
-const STATUS_COLORS: { [key: string]: string } = {
-  confirmed: "#4CAF50",
-  pending: Colors.dark.accent,
-  declined: "#EF5350",
+// Use theme tokens for status colors instead of hardcoded values
+const getStatusColor = (status: string, isDark: boolean): string => {
+  if (status === "confirmed") return "#4CAF50";
+  if (status === "declined") return "#EF5350";
+  return isDark ? Colors.dark.accent : Colors.light.accent;
 };
 
 const STATUS_LABELS: { [key: string]: string } = {
   confirmed: "Bekreftet",
   pending: "Venter",
   declined: "Avslått",
+};
+
+// Platform-safe URL builders for SMS and Email
+const buildSmsUrl = (phone: string, message: string): string => {
+  const encodedMessage = encodeURIComponent(message);
+  if (Platform.OS === "ios") {
+    return `sms:${phone}&body=${encodedMessage}`;
+  } else {
+    // Android uses ?body=
+    return `sms:${phone}?body=${encodedMessage}`;
+  }
+};
+
+const buildMailtoUrl = (email: string, subject: string, body: string): string => {
+  return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 };
 
 export default function GuestsScreen() {
@@ -69,9 +86,12 @@ export default function GuestsScreen() {
   const [invitationMessage, setInvitationMessage] = useState("");
   const [invitations, setInvitations] = useState<Array<GuestInvitation & { inviteUrl: string }>>([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
-  const [rsvpFilter, setRsvpFilter] = useState<"all" | "hasInvite" | "responded" | "declined" | "sent">("all");
+  const [rsvpFilter, setRsvpFilter] = useState<"all" | "hasInvite" | "responded" | "declined">("all");
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [selectedInvite, setSelectedInvite] = useState<GuestInvitation & { inviteUrl: string } | null>(null);
+  const [contactSearchDebounceTimer, setContactSearchDebounceTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [contactsPermissionGranted, setContactsPermissionGranted] = useState(false);
+  const [quickFilter, setQuickFilter] = useState<"all" | "confirmed" | "pending" | "dietary" | "plusOne" | "noContact">("all");
   
   const [formName, setFormName] = useState("");
   const [formCategory, setFormCategory] = useState<string>("other");
@@ -147,12 +167,29 @@ export default function GuestsScreen() {
   const handleSearchChange = async (query: string) => {
     setSearchQuery(query);
     
+    // Clear existing debounce timer
+    if (contactSearchDebounceTimer) {
+      clearTimeout(contactSearchDebounceTimer);
+    }
+
     if (query.trim().length > 0) {
-      const hasPermission = await requestContactsPermission();
-      if (hasPermission) {
+      // Debounce contact search by 300ms
+      const timer = setTimeout(async () => {
+        // Only request permission if not already granted
+        if (!contactsPermissionGranted) {
+          const hasPermission = await requestContactsPermission();
+          setContactsPermissionGranted(hasPermission);
+          if (!hasPermission) {
+            setContactResults([]);
+            return;
+          }
+        }
+        
         const results = await searchContacts(query);
         setContactResults(results);
-      }
+      }, 300);
+      
+      setContactSearchDebounceTimer(timer);
     } else {
       setContactResults([]);
     }
@@ -184,6 +221,7 @@ export default function GuestsScreen() {
         phone: formPhone.trim() || undefined,
         template: selectedTemplate,
         message: invitationMessage.trim() || undefined,
+        // Note: Link invitation to guest via email/phone matching on backend
       });
 
       await refreshInvitations();
@@ -229,15 +267,41 @@ export default function GuestsScreen() {
     if (rsvpFilter === "all") return true;
     const inv = getInviteForGuest(g);
     if (rsvpFilter === "hasInvite") return !!inv;
-    return inv?.status === rsvpFilter;
+    // Only match "responded" or "declined", not "sent"
+    return inv?.status === "responded" || inv?.status === "declined";
   };
-  const filteredGuests = guests.filter((g) => nameMatches(g)).filter((g) => rsvpMatches(g));
+  
+  const quickFilterMatches = (g: WeddingGuest) => {
+    switch (quickFilter) {
+      case "confirmed":
+        return g.status === "confirmed";
+      case "pending":
+        return g.status === "pending";
+      case "dietary":
+        return !!(g.dietaryRequirements || g.allergies);
+      case "plusOne":
+        return g.plusOne === true;
+      case "noContact":
+        return !g.phone && !g.email;
+      default:
+        return true;
+    }
+  };
+  
+  // Memoize filtered guests to prevent unnecessary recalculations
+  const filteredGuests = useMemo(() => {
+    return guests.filter((g) => nameMatches(g)).filter((g) => rsvpMatches(g)).filter((g) => quickFilterMatches(g));
+  }, [guests, searchQuery, rsvpFilter, invitations, quickFilter]);
 
-  const confirmedCount = guests.filter((g) => g.status === "confirmed").length;
-  const pendingCount = guests.filter((g) => g.status === "pending").length;
-  const respondedCount = invitations.filter((inv) => inv.status === "responded").length;
-  const declinedCountInv = invitations.filter((inv) => inv.status === "declined").length;
-  const sentCountInv = invitations.filter((inv) => inv.status === "sent").length;
+  // Memoize counts to prevent unnecessary recalculations
+  const { confirmedCount, pendingCount, respondedCount, declinedCount } = useMemo(() => {
+    return {
+      confirmedCount: guests.filter((g) => g.status === "confirmed").length,
+      pendingCount: guests.filter((g) => g.status === "pending").length,
+      respondedCount: invitations.filter((inv) => inv.status === "responded").length,
+      declinedCount: invitations.filter((inv) => inv.status === "declined").length,
+    };
+  }, [guests, invitations]);
 
   const handleAddGuest = async () => {
     if (!formName.trim()) {
@@ -308,22 +372,38 @@ export default function GuestsScreen() {
   };
 
   const handleToggleStatus = async (guest: WeddingGuest) => {
-    if (!sessionToken) return;
-
-    const statusOrder: WeddingGuest["status"][] = ["pending", "confirmed", "declined"];
-    const currentIndex = statusOrder.indexOf(guest.status);
-    const nextStatus = statusOrder[(currentIndex + 1) % statusOrder.length];
-
-    setIsSaving(true);
-    try {
-      await updateGuest(sessionToken, guest.id, { status: nextStatus });
-      await loadData();
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch (error) {
-      Alert.alert("Feil", "Kunne ikke oppdatere status");
-    } finally {
-      setIsSaving(false);
-    }
+    // Show menu instead of immediately toggling
+    const statusOptions = [
+      { label: "Venter", value: "pending" },
+      { label: "Bekreftet", value: "confirmed" },
+      { label: "Avslått", value: "declined" },
+    ];
+    
+    Alert.alert(
+      "Endre status",
+      `Hva er status for ${guest.name}?`,
+      [
+        ...statusOptions.map((opt) => ({
+          text: opt.label,
+          onPress: async () => {
+            if (opt.value === guest.status) return; // No change
+            if (!sessionToken) return;
+            
+            setIsSaving(true);
+            try {
+              await updateGuest(sessionToken, guest.id, { status: opt.value as WeddingGuest["status"] });
+              await loadData();
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (error) {
+              Alert.alert("Feil", "Kunne ikke oppdatere status");
+            } finally {
+              setIsSaving(false);
+            }
+          },
+        })),
+        { text: "Avbryt", style: "cancel" },
+      ]
+    );
   };
 
   const handleDeleteGuest = async (id: string) => {
@@ -359,9 +439,19 @@ export default function GuestsScreen() {
   const getInviteForGuest = (guest: WeddingGuest) => {
     const gEmail = normalize(guest.email);
     const gPhone = normalize(guest.phone);
-    return invitations.find(
-      (inv) => normalize(inv.email) === gEmail || normalize(inv.phone) === gPhone
-    );
+    
+    // Return null if both email and phone are empty - don't match on empty strings
+    if (!gEmail && !gPhone) return null;
+    
+    return invitations.find((inv) => {
+      const invEmail = normalize(inv.email);
+      const invPhone = normalize(inv.phone);
+      
+      // Don't match on empty strings
+      if (invEmail && gEmail && invEmail === gEmail) return true;
+      if (invPhone && gPhone && invPhone === gPhone) return true;
+      return false;
+    });
   };
 
   const renderRsvpBadge = (guest: WeddingGuest) => {
@@ -389,7 +479,7 @@ export default function GuestsScreen() {
         backgroundColor={theme.backgroundDefault}
       >
         <Pressable
-          onPress={() => handleToggleStatus(item)}
+          onPress={() => handleEditGuest(item)}
           style={({ pressed }) => [
             styles.guestItem,
             { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
@@ -453,24 +543,25 @@ export default function GuestsScreen() {
               </View>
             ) : null}
           </View>
-          <View
+          <Pressable
+            onPress={() => handleToggleStatus(item)}
             style={[
               styles.statusBadge,
-              { backgroundColor: STATUS_COLORS[item.status] + "20" },
+              { backgroundColor: getStatusColor(item.status, false) + "20" },
             ]}
           >
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: STATUS_COLORS[item.status] },
+                { backgroundColor: getStatusColor(item.status, false) },
               ]}
             />
             <ThemedText
-              style={[styles.statusText, { color: STATUS_COLORS[item.status] }]}
+              style={[styles.statusText, { color: getStatusColor(item.status, false) }]}
             >
               {STATUS_LABELS[item.status]}
             </ThemedText>
-          </View>
+          </Pressable>
         </Pressable>
       </SwipeableRow>
     </Animated.View>
@@ -538,13 +629,56 @@ export default function GuestsScreen() {
         </Animated.View>
       )}
 
+      {/* Quick Filter Presets */}
+      <View style={styles.quickFiltersSection}>
+        <ThemedText style={[styles.quickFiltersLabel, { color: theme.textMuted }]}>Hurtigfilter</ThemedText>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFiltersScroll}>
+          {[
+            { value: "all" as const, label: "Alle", icon: "users" as const },
+            { value: "confirmed" as const, label: "Bekreftet", icon: "check-circle" as const },
+            { value: "pending" as const, label: "Venter svar", icon: "clock" as const },
+            { value: "dietary" as const, label: "Matbehov", icon: "alert-circle" as const },
+            { value: "plusOne" as const, label: "Med følge", icon: "plus-circle" as const },
+            { value: "noContact" as const, label: "Mangler info", icon: "alert-triangle" as const },
+          ].map((filter) => (
+            <Pressable
+              key={filter.value}
+              onPress={() => {
+                setQuickFilter(filter.value);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              style={[
+                styles.quickFilterChip,
+                {
+                  backgroundColor: quickFilter === filter.value ? Colors.dark.accent : theme.backgroundSecondary,
+                  borderColor: quickFilter === filter.value ? Colors.dark.accent : theme.border,
+                },
+              ]}
+            >
+              <Feather
+                name={filter.icon}
+                size={14}
+                color={quickFilter === filter.value ? "#1A1A1A" : theme.textMuted}
+              />
+              <ThemedText
+                style={[
+                  styles.quickFilterText,
+                  { color: quickFilter === filter.value ? "#1A1A1A" : theme.textSecondary },
+                ]}
+              >
+                {filter.label}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
       <View style={styles.filterRow}>
         {[
           { value: "all", label: "Alle" },
           { value: "hasInvite", label: "Har invitasjon" },
           { value: "responded", label: "Svar" },
           { value: "declined", label: "Avslått" },
-          { value: "sent", label: "Sendt" },
         ].map((f) => (
           <Pressable
             key={f.value}
@@ -909,6 +1043,15 @@ export default function GuestsScreen() {
       <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
         Legg til din første gjest
       </ThemedText>
+      <Button 
+        onPress={() => {
+          setShowAddForm(true);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }}
+        style={{ marginTop: Spacing.lg, maxWidth: 200, alignSelf: "center" }}
+      >
+        Legg til gjest
+      </Button>
     </View>
   );
 
@@ -942,6 +1085,10 @@ export default function GuestsScreen() {
         ListHeaderComponent={ListHeader}
         ListEmptyComponent={searchQuery ? null : ListEmpty}
         ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
+        initialNumToRender={10}
+        windowSize={5}
+        removeClippedSubviews
+        maxToRenderPerBatch={10}
       />
 
       <Modal
@@ -1013,7 +1160,7 @@ export default function GuestsScreen() {
                   <Button
                     onPress={() => {
                       if (selectedInvite?.phone && selectedInvite?.inviteUrl) {
-                        const smsUrl = `sms:${selectedInvite.phone}?body=${encodeURIComponent(selectedInvite.inviteUrl)}`;
+                        const smsUrl = buildSmsUrl(selectedInvite.phone, selectedInvite.inviteUrl);
                         Linking.openURL(smsUrl);
                       } else {
                         Alert.alert("Mangler telefon", "Legg til telefonnummer for å sende SMS.");
@@ -1030,7 +1177,7 @@ export default function GuestsScreen() {
                       if (selectedInvite?.email && selectedInvite?.inviteUrl) {
                         const subject = "Bryllupsinvitasjon";
                         const body = `Hei ${selectedInvite.name},\n\nHer er din invitasjon: ${selectedInvite.inviteUrl}\n`;
-                        const mailto = `mailto:${selectedInvite.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                        const mailto = buildMailtoUrl(selectedInvite.email, subject, body);
                         Linking.openURL(mailto);
                       } else {
                         Alert.alert("Mangler e-post", "Legg til e-postadresse for å sende e-post.");
@@ -1301,6 +1448,33 @@ const styles = StyleSheet.create({
   tableNumber: {
     fontSize: 12,
     marginLeft: Spacing.xs,
+  },
+  quickFiltersSection: {
+    marginBottom: Spacing.md,
+  },
+  quickFiltersLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: Spacing.xs,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  quickFiltersScroll: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  quickFilterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  quickFilterText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
   filterRow: {
     flexDirection: "row",

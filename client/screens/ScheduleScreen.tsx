@@ -156,11 +156,15 @@ export default function ScheduleScreen() {
   const { session } = useSession();
   const queryClient = useQueryClient();
 
-  // Query for schedule events from server
-  const { data: eventsData, isLoading: loadingEvents, refetch } = useQuery({
-    queryKey: ["schedule-events"],
-    queryFn: () => session?.token ? getScheduleEvents(session.token) : Promise.resolve([]),
-    enabled: !!session?.token,
+  // Query for schedule events from server - only if we have a valid token
+  const { data: eventsData, isLoading: loadingEvents, refetch, error: queryError } = useQuery({
+    queryKey: ["schedule-events", session?.token],
+    queryFn: () => {
+      const token = session?.token || session?.sessionToken;
+      return token ? getScheduleEvents(token) : Promise.resolve([]);
+    },
+    enabled: !!(session?.token || session?.sessionToken),
+    retry: false,
   });
 
   const events = eventsData ?? [];
@@ -168,21 +172,34 @@ export default function ScheduleScreen() {
   const [loadingOther, setLoadingOther] = useState(true);
   const loading = loadingEvents || loadingOther;
 
+  // Safe token getter
+  const getToken = () => session?.token || session?.sessionToken;
+
   // Mutations
   const createMutation = useMutation({
-    mutationFn: (data: { time: string; title: string; icon?: string }) =>
-      createScheduleEvent(session!.token!, data),
+    mutationFn: (data: { time: string; title: string; icon?: string }) => {
+      const token = getToken();
+      if (!token) throw new Error("No session token available");
+      return createScheduleEvent(token, data);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedule-events"] }),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<ScheduleEvent> }) =>
-      updateScheduleEvent(session!.token!, id, data),
+    mutationFn: ({ id, data }: { id: string; data: Partial<ScheduleEvent> }) => {
+      const token = getToken();
+      if (!token) throw new Error("No session token available");
+      return updateScheduleEvent(token, id, data);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedule-events"] }),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteScheduleEvent(session!.token!, id),
+    mutationFn: (id: string) => {
+      const token = getToken();
+      if (!token) throw new Error("No session token available");
+      return deleteScheduleEvent(token, id);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedule-events"] }),
   });
 

@@ -1031,3 +1031,388 @@ export async function updateCakeTimeline(data: Partial<CakeTimeline>): Promise<C
   if (!res.ok) throw new Error("Failed to update timeline");
   return res.json();
 }
+
+// ===== VIDEOGRAPHER API =====
+
+export interface VideographerSession {
+  id: string;
+  coupleId: string;
+  title: string;
+  date: string;
+  time?: string;
+  location?: string;
+  duration?: string;
+  videographerName?: string;
+  notes?: string;
+  completed: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface VideographerDeliverable {
+  id: string;
+  coupleId: string;
+  title: string;
+  description?: string;
+  format?: string;
+  duration?: string;
+  isConfirmed: boolean;
+  deliveryDate?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface VideographerTimeline {
+  id?: string;
+  coupleId?: string;
+  videographerSelected: boolean;
+  sessionBooked: boolean;
+  contractSigned: boolean;
+  depositPaid: boolean;
+  budget: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface VideographerData {
+  sessions: VideographerSession[];
+  deliverables: VideographerDeliverable[];
+  timeline: VideographerTimeline;
+}
+
+export async function getVideographerData(): Promise<VideographerData> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/videographer`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch videographer data");
+  return res.json();
+}
+
+export async function createVideographerSession(data: Omit<VideographerSession, "id" | "coupleId" | "createdAt" | "updatedAt">): Promise<VideographerSession> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/videographer/sessions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create session");
+  return res.json();
+}
+
+export async function updateVideographerSession(id: string, data: Partial<VideographerSession>): Promise<VideographerSession> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/videographer/sessions/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update session");
+  return res.json();
+}
+
+export async function deleteVideographerSession(id: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/videographer/sessions/${id}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to delete session");
+}
+
+export async function createVideographerDeliverable(data: Omit<VideographerDeliverable, "id" | "coupleId" | "createdAt" | "updatedAt">): Promise<VideographerDeliverable> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/videographer/deliverables`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create deliverable");
+  return res.json();
+}
+
+export async function updateVideographerDeliverable(id: string, data: Partial<VideographerDeliverable>): Promise<VideographerDeliverable> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/videographer/deliverables/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update deliverable");
+  return res.json();
+}
+
+export async function deleteVideographerDeliverable(id: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/videographer/deliverables/${id}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to delete deliverable");
+}
+
+export async function updateVideographerTimeline(data: Partial<VideographerTimeline>): Promise<VideographerTimeline> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/videographer/timeline`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update timeline");
+  return res.json();
+}
+
+// ===== PHOTOGRAPHER API =====
+
+export interface PhotographerSession {
+  id: string;
+  coupleId: string;
+  title: string;
+  date: string;
+  time?: string;
+  location?: string;
+  duration?: string;
+  photographerName?: string;
+  notes?: string;
+  completed: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PhotographerShot {
+  id: string;
+  coupleId: string;
+  title: string;
+  description?: string;
+  category?: string;
+  isSelected: boolean;
+  priority?: number;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PhotographerTimeline {
+  id?: string;
+  coupleId?: string;
+  photographerSelected: boolean;
+  sessionBooked: boolean;
+  contractSigned: boolean;
+  depositPaid: boolean;
+  budget: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PhotographerData {
+  sessions: PhotographerSession[];
+  shots: PhotographerShot[];
+  timeline: PhotographerTimeline;
+}
+
+export async function getPhotographerData(): Promise<PhotographerData> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/photographer`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch photographer data");
+  return res.json();
+}
+
+export async function createPhotographerSession(data: Omit<PhotographerSession, "id" | "coupleId" | "createdAt" | "updatedAt">): Promise<PhotographerSession> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/photographer/sessions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create session");
+  return res.json();
+}
+
+export async function updatePhotographerSession(id: string, data: Partial<PhotographerSession>): Promise<PhotographerSession> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/photographer/sessions/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update session");
+  return res.json();
+}
+
+export async function deletePhotographerSession(id: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/photographer/sessions/${id}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to delete session");
+}
+
+export async function createPhotographerShot(data: Omit<PhotographerShot, "id" | "coupleId" | "createdAt" | "updatedAt">): Promise<PhotographerShot> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/photographer/shots`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create shot");
+  return res.json();
+}
+
+export async function updatePhotographerShot(id: string, data: Partial<PhotographerShot>): Promise<PhotographerShot> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/photographer/shots/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update shot");
+  return res.json();
+}
+
+export async function deletePhotographerShot(id: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/photographer/shots/${id}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to delete shot");
+}
+
+export async function updatePhotographerTimeline(data: Partial<PhotographerTimeline>): Promise<PhotographerTimeline> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/photographer/timeline`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update timeline");
+  return res.json();
+}
+
+// ===== MUSIC/DJ API =====
+
+export interface MusicPerformance {
+  id: string;
+  coupleId: string;
+  title: string;
+  date: string;
+  time?: string;
+  duration?: string;
+  musicianName?: string;
+  performanceType?: string;
+  notes?: string;
+  completed: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MusicSetlist {
+  id: string;
+  coupleId: string;
+  title: string;
+  songs?: string;
+  genre?: string;
+  duration?: string;
+  mood?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MusicTimeline {
+  id?: string;
+  coupleId?: string;
+  musicianSelected: boolean;
+  setlistDiscussed: boolean;
+  contractSigned: boolean;
+  depositPaid: boolean;
+  budget: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MusicData {
+  performances: MusicPerformance[];
+  setlists: MusicSetlist[];
+  timeline: MusicTimeline;
+}
+
+export async function getMusicData(): Promise<MusicData> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch music data");
+  return res.json();
+}
+
+export async function createMusicPerformance(data: Omit<MusicPerformance, "id" | "coupleId" | "createdAt" | "updatedAt">): Promise<MusicPerformance> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/performances`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create performance");
+  return res.json();
+}
+
+export async function updateMusicPerformance(id: string, data: Partial<MusicPerformance>): Promise<MusicPerformance> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/performances/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update performance");
+  return res.json();
+}
+
+export async function deleteMusicPerformance(id: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/performances/${id}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to delete performance");
+}
+
+export async function createMusicSetlist(data: Omit<MusicSetlist, "id" | "coupleId" | "createdAt" | "updatedAt">): Promise<MusicSetlist> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/setlists`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create setlist");
+  return res.json();
+}
+
+export async function updateMusicSetlist(id: string, data: Partial<MusicSetlist>): Promise<MusicSetlist> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/setlists/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update setlist");
+  return res.json();
+}
+
+export async function deleteMusicSetlist(id: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/setlists/${id}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to delete setlist");
+}
+
+export async function updateMusicTimeline(data: Partial<MusicTimeline>): Promise<MusicTimeline> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/timeline`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update timeline");
+  return res.json();
+}

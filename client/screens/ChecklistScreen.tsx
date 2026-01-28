@@ -34,6 +34,7 @@ export default function ChecklistScreen() {
 
   const [monthsLeft, setMonthsLeft] = useState(12);
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
+  const [quickFilter, setQuickFilter] = useState<"all" | "thisMonth" | "overdue" | "highPriority">("all");
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTask, setEditingTask] = useState<ChecklistTask | null>(null);
@@ -172,7 +173,18 @@ export default function ChecklistScreen() {
   const handleAddTask = () => {
     if (editTitle.trim()) {
       createMutation.mutate(editTitle.trim());
+      setEditTitle("");
     }
+  };
+
+  const applyQuickPreset = (preset: { title: string; category: "planning" | "vendors" | "attire" | "logistics" | "final"; monthsBefore: number }) => {
+    setEditTitle(preset.title);
+    setEditCategory(preset.category);
+    setEditMonthsBefore(preset.monthsBefore);
+    setEditNotes("");
+    setEditAssignedTo("both");
+    setShowAddModal(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleEditTask = (task: ChecklistTask) => {
@@ -263,9 +275,27 @@ export default function ChecklistScreen() {
   const completedCount = tasks.filter((i) => i.completed).length;
   const progress = (completedCount / tasks.length) * 100;
 
-  const filteredItems = filterCategory
+  const categoryFiltered = filterCategory
     ? tasks.filter((i) => i.category === filterCategory)
     : tasks;
+
+  // Apply quick filter
+  const quickFiltered = categoryFiltered.filter((t) => {
+    switch (quickFilter) {
+      case "thisMonth":
+        return t.monthsBefore >= monthsLeft && t.monthsBefore <= monthsLeft + 1;
+      case "overdue":
+        return t.monthsBefore > monthsLeft && !t.completed;
+      case "highPriority":
+        return t.monthsBefore >= monthsLeft - 1 && t.monthsBefore <= monthsLeft + 1 && !t.completed;
+      default:
+        return true;
+    }
+  });
+  
+  const completedItems = quickFiltered.filter((t) => t.completed);
+  const uncompletedItems = quickFiltered.filter((t) => !t.completed);
+  const filteredItems = [...uncompletedItems, ...completedItems];
 
   const urgentItems = tasks.filter((i) => !i.completed && i.monthsBefore >= monthsLeft);
 
@@ -317,6 +347,77 @@ export default function ChecklistScreen() {
           </View>
         </Animated.View>
       ) : null}
+
+      {/* Quick Preset Templates */}
+      <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+        <View style={styles.presetsSection}>
+          <ThemedText style={[styles.presetsLabel, { color: theme.textMuted }]}>Hurtigvalg</ThemedText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetsScroll}>
+            {[
+              { value: "all" as const, label: "Alle", icon: "list" as const },
+              { value: "thisMonth" as const, label: "Denne måneden", icon: "calendar" as const },
+              { value: "overdue" as const, label: "Forsinkede", icon: "alert-circle" as const },
+              { value: "highPriority" as const, label: "Høy prioritet", icon: "zap" as const },
+            ].map((preset) => (
+              <Pressable
+                key={preset.value}
+                onPress={() => {
+                  setQuickFilter(preset.value);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                style={[
+                  styles.presetChip,
+                  {
+                    backgroundColor: quickFilter === preset.value ? Colors.dark.accent : theme.backgroundSecondary,
+                    borderColor: quickFilter === preset.value ? Colors.dark.accent : theme.border,
+                  },
+                ]}
+              >
+                <Feather
+                  name={preset.icon}
+                  size={14}
+                  color={quickFilter === preset.value ? "#1A1A1A" : theme.textMuted}
+                />
+                <ThemedText
+                  style={[
+                    styles.presetText,
+                    { color: quickFilter === preset.value ? "#1A1A1A" : theme.textSecondary },
+                  ]}
+                >
+                  {preset.label}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+        
+        {/* Quick Add Templates */}
+        <View style={styles.presetsSection}>
+          <ThemedText style={[styles.presetsLabel, { color: theme.textMuted }]}>Legg til raskt</ThemedText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetsScroll}>
+            {[
+              { title: "Bestill brudebukett", category: "vendors" as const, monthsBefore: 3 },
+              { title: "Bestill kakesmak", category: "vendors" as const, monthsBefore: 4 },
+              { title: "Siste prøve antrekk", category: "attire" as const, monthsBefore: 1 },
+              { title: "Send bordkart til lokale", category: "logistics" as const, monthsBefore: 1 },
+            ].map((template, idx) => (
+              <Pressable
+                key={idx}
+                onPress={() => applyQuickPreset(template)}
+                style={[
+                  styles.templateChip,
+                  { backgroundColor: theme.backgroundSecondary, borderColor: theme.border },
+                ]}
+              >
+                <Feather name="plus-circle" size={14} color={Colors.dark.accent} />
+                <ThemedText style={[styles.templateText, { color: theme.text }]}>
+                  {template.title}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(300).duration(400)}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryFilter}>
@@ -613,6 +714,46 @@ const styles = StyleSheet.create({
   urgentContent: { marginLeft: Spacing.md, flex: 1 },
   urgentTitle: { fontSize: 14, fontWeight: "600" },
   urgentText: { fontSize: 13, marginTop: 2 },
+  presetsSection: {
+    marginBottom: Spacing.md,
+  },
+  presetsLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: Spacing.xs,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  presetsScroll: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  presetChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  presetText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  templateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  templateText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
   categoryFilter: { marginBottom: Spacing.lg, marginHorizontal: -Spacing.lg, paddingHorizontal: Spacing.lg },
   categoryChip: {
     flexDirection: "row",

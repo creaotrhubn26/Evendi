@@ -132,6 +132,17 @@ npm run expo:dev
 ```
 3. Verify API calls and Supabase interactions.
 
+## Vendor Planner API (lightweight storage)
+ - Endpoints (vendor auth required):
+   - `GET /api/vendor/planner/meetings|tasks|timeline`
+   - `POST /api/vendor/planner/meetings|tasks|timeline` (stores full array/object payload)
+ - Storage: data is saved per vendor in `app_settings` with keys `vendor_planner_{kind}_{vendorId}` (no extra migrations).
+ - Shapes used in the app:
+   - Meetings: `{ id, coupleName, date, time?, location?, topic?, notes?, completed }[]`
+   - Tasks: `{ id, title, dueDate, priority: 'high'|'medium'|'low', category?, notes?, completed }[]`
+   - Timeline: simple object flags, e.g. `{ onboardingComplete?: boolean, firstMeetingDone?: boolean, contractSigned?: boolean, depositReceived?: boolean, masterTimelineCreated?: boolean }`
+ Optional next step: migrate to Drizzle tables if you need relational queries or auditing.
+
 ## Troubleshooting
 - If OAuth flow cancels: Ensure redirect URIs and app scheme match across code and Supabase.
 - If images fail to upload: Confirm Supabase storage bucket policies and `EXPO_PUBLIC_SUPABASE_*` envs.

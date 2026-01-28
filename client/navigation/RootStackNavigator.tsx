@@ -12,6 +12,17 @@ import VendorDashboardScreen from "@/screens/VendorDashboardScreen";
 import VendorPaymentScreen from "@/screens/VendorPaymentScreen";
 import VendorAdminChatScreen from "@/screens/VendorAdminChatScreen";
 import VendorProfileScreen from "@/screens/VendorProfileScreen";
+import VendorCateringScreen from "@/screens/VendorCateringScreen";
+import VendorBlomsterScreen from "@/screens/VendorBlomsterScreen";
+import VendorKakeScreen from "@/screens/VendorKakeScreen";
+import VendorTransportScreen from "@/screens/VendorTransportScreen";
+import VendorHaarMakeupScreen from "@/screens/VendorHaarMakeupScreen";
+import VendorFotografScreen from "@/screens/VendorFotografScreen";
+import VendorVideografScreen from "@/screens/VendorVideografScreen";
+import VendorMusikkScreen from "@/screens/VendorMusikkScreen";
+import VendorVenueScreen from "@/screens/VendorVenueScreen";
+import VendorPlanleggerScreen from "@/screens/VendorPlanleggerScreen";
+import VendorFotoVideografScreen from "@/screens/VendorFotoVideografScreen";
 import DeliveryCreateScreen from "@/screens/DeliveryCreateScreen";
 import InspirationCreateScreen from "@/screens/InspirationCreateScreen";
 import ProductCreateScreen from "@/screens/ProductCreateScreen";
@@ -58,6 +69,17 @@ export type RootStackParamList = {
   VendorProfile: undefined;
   VendorRegistration: undefined;
   VendorPayment: undefined;
+  VendorCatering: undefined;
+  VendorBlomster: undefined;
+  VendorKake: undefined;
+  VendorTransport: undefined;
+  VendorHaarMakeup: undefined;
+  VendorFotograf: undefined;
+  VendorVideograf: undefined;
+  VendorMusikk: undefined;
+  VendorVenue: undefined;
+  VendorPlanlegger: undefined;
+  VendorFotoVideograf: undefined;
   // Vendor detail screens
   VenueDetails: undefined;
   PhotographerDetails: undefined;
@@ -177,6 +199,83 @@ export default function RootStackNavigator() {
           <Stack.Screen
             name="VendorDashboard"
             component={VendorDashboardScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorCatering"
+            component={VendorCateringScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorBlomster"
+            component={VendorBlomsterScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorKake"
+            component={VendorKakeScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorTransport"
+            component={VendorTransportScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorHaarMakeup"
+            component={VendorHaarMakeupScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorFotograf"
+            component={VendorFotografScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorVideograf"
+            component={VendorVideografScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorMusikk"
+            component={VendorMusikkScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorVenue"
+            component={VendorVenueScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorPlanlegger"
+            component={VendorPlanleggerScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VendorFotoVideograf"
+            component={VendorFotoVideografScreen}
             options={{
               headerShown: false,
             }}

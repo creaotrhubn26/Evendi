@@ -51,3 +51,14 @@ export async function exchangeCoordinatorCode(code: string): Promise<{ token: st
   }
   return res.json();
 }
+
+export async function getCoordinatorSeating(accessToken: string): Promise<any> {
+  const res = await fetch(`${API_URL}/api/coordinator/seating`, {
+    headers: authHeader(accessToken),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.error || "Kunne ikke hente bordplan");
+  }
+  return res.json();
+}

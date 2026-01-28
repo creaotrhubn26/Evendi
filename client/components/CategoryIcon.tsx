@@ -42,5 +42,5 @@ const ICON_MAP: Record<string, string> = {
 
 export const CategoryIcon: React.FC<CategoryIconProps> = ({ name, size = 24, color = "#000" }) => {
   const iconName = ICON_MAP[name.toLowerCase()] || "briefcase";
-  return <Feather name={iconName} size={size} color={color} />;
+  return <Feather name={iconName as keyof typeof Feather.glyphMap} size={size} color={color} />;
 };

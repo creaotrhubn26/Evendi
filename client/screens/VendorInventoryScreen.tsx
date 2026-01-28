@@ -33,6 +33,14 @@ interface VendorProduct {
   availableQuantity: number | null;
   reservedQuantity: number;
   bookingBuffer: number;
+  categoryTag: string | null;
+  // Venue-specific fields
+  venueAddress?: string | null;
+  venueMaxGuests?: number | null;
+  venueMinGuests?: number | null;
+  venueCateringIncluded?: boolean;
+  venueAccommodationAvailable?: boolean;
+  venueCheckoutTime?: string | null;
 }
 
 interface Props {
@@ -165,6 +173,51 @@ export default function VendorInventoryScreen({ navigation }: Props) {
               {percentage.toFixed(0)}% tilgjengelig
             </ThemedText>
           </View>
+
+          {/* Venue-specific details */}
+          {item.categoryTag === 'venue' && (item.venueMaxGuests || item.venueAddress) && (
+            <View style={[styles.venueDetailsBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
+              {item.venueMaxGuests && (
+                <View style={styles.venueDetailRow}>
+                  <Feather name="users" size={14} color={theme.accent} />
+                  <ThemedText style={[styles.venueDetailText, { color: theme.text }]}>
+                    {item.venueMinGuests ? `${item.venueMinGuests}-${item.venueMaxGuests}` : `Opptil ${item.venueMaxGuests}`} gjester
+                  </ThemedText>
+                </View>
+              )}
+              {item.venueAddress && (
+                <View style={styles.venueDetailRow}>
+                  <Feather name="map-pin" size={14} color={theme.accent} />
+                  <ThemedText style={[styles.venueDetailText, { color: theme.text }]} numberOfLines={1}>
+                    {item.venueAddress}
+                  </ThemedText>
+                </View>
+              )}
+              <View style={styles.venueBadgesRow}>
+                {item.venueCateringIncluded && (
+                  <View style={[styles.venueBadge, { backgroundColor: "#4CAF50" + "20" }]}>
+                    <ThemedText style={[styles.venueBadgeText, { color: "#4CAF50" }]}>
+                      Servering
+                    </ThemedText>
+                  </View>
+                )}
+                {item.venueAccommodationAvailable && (
+                  <View style={[styles.venueBadge, { backgroundColor: "#2196F3" + "20" }]}>
+                    <ThemedText style={[styles.venueBadgeText, { color: "#2196F3" }]}>
+                      Overnatting
+                    </ThemedText>
+                  </View>
+                )}
+                {item.venueCheckoutTime && (
+                  <View style={[styles.venueBadge, { backgroundColor: theme.accent + "20" }]}>
+                    <ThemedText style={[styles.venueBadgeText, { color: theme.accent }]}>
+                      Ut: {item.venueCheckoutTime}
+                    </ThemedText>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
 
           <View style={[styles.infoBox, { backgroundColor: theme.accent + "12", borderColor: theme.accent + "30" }]}>
             <Feather name="info" size={14} color={theme.accent} />
@@ -403,6 +456,37 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 11,
     lineHeight: 16,
+  },
+  venueDetailsBox: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  venueDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  venueDetailText: {
+    fontSize: 13,
+    flex: 1,
+  },
+  venueBadgesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  venueBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.sm,
+  },
+  venueBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
   emptyState: {
     flex: 1,

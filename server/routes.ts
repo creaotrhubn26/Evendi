@@ -5,8 +5,9 @@ import crypto from "node:crypto";
 import { db } from "./db";
 import bcrypt from "bcryptjs";
 import { registerSubscriptionRoutes } from "./subscription-routes";
-import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetItems, coupleBudgetSettings, createBudgetItemSchema, coupleDressAppointments, coupleDressFavorites, coupleDressTimeline, createDressAppointmentSchema, createDressFavoriteSchema, coupleImportantPeople, createImportantPersonSchema, couplePhotoShots, createPhotoShotSchema, coupleHairMakeupAppointments, coupleHairMakeupLooks, coupleHairMakeupTimeline, coupleTransportBookings, coupleTransportTimeline, coupleFlowerAppointments, coupleFlowerSelections, coupleFlowerTimeline, coupleCateringTastings, coupleCateringMenu, coupleCateringDietaryNeeds, coupleCateringTimeline, coupleCakeTastings, coupleCakeDesigns, coupleCakeTimeline } from "@shared/schema";
-import { eq, and, desc, sql, inArray, or, gte, lte } from "drizzle-orm";
+import { TIMELINE_TEMPLATES, DEFAULT_TIMELINE, TimelineTemplate } from "./timeline-templates";
+import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetItems, coupleBudgetSettings, createBudgetItemSchema, coupleDressAppointments, coupleDressFavorites, coupleDressTimeline, createDressAppointmentSchema, createDressFavoriteSchema, coupleImportantPeople, createImportantPersonSchema, couplePhotoShots, createPhotoShotSchema, coupleHairMakeupAppointments, coupleHairMakeupLooks, coupleHairMakeupTimeline, coupleTransportBookings, coupleTransportTimeline, coupleFlowerAppointments, coupleFlowerSelections, coupleFlowerTimeline, coupleCateringTastings, coupleCateringMenu, coupleCateringDietaryNeeds, coupleCateringTimeline, coupleCakeTastings, coupleCakeDesigns, coupleCakeTimeline, coupleVenueBookings, coupleVenueTimelines, vendorVenueBookings, vendorVenueAvailability, vendorVenueTimelines } from "@shared/schema";
+import { eq, and, desc, sql, inArray, or, gte, lte, isNotNull } from "drizzle-orm";
 
 function generateAccessCode(): string {
   return crypto.randomBytes(8).toString("hex").toUpperCase();
@@ -581,8 +582,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt,
       });
 
+      // Fetch vendor category
+      let vendorCategory = null;
+      if (vendor.categoryId) {
+        const [category] = await db.select().from(vendorCategories).where(eq(vendorCategories.id, vendor.categoryId));
+        vendorCategory = category?.name || null;
+      }
+
       const { password: _, ...vendorWithoutPassword } = vendor;
-      res.json({ vendor: vendorWithoutPassword, sessionToken });
+      res.json({ vendor: vendorWithoutPassword, sessionToken, vendorCategory });
     } catch (error) {
       console.error("Error logging in vendor:", error);
       res.status(500).json({ error: "Kunne ikke logge inn" });
@@ -803,6 +811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         website: vendors.website,
         priceRange: vendors.priceRange,
         imageUrl: vendors.imageUrl,
+        culturalExpertise: vendors.culturalExpertise,
         hasPrioritizedSearch: subscriptionTiers.hasPrioritizedSearch,
         canHighlightProfile: subscriptionTiers.canHighlightProfile,
         hasReviewBadge: subscriptionTiers.hasReviewBadge,
@@ -897,12 +906,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return (a.businessName || "").localeCompare(b.businessName || "");
       });
 
-      // Add featured/prioritized flags to response
+      // Fetch vendor products for matched vendors (with metadata)
+      const vendorIdsForProducts = result.map(v => v.id);
+      let vendorProductsMap: Record<string, any[]> = {};
+      if (vendorIdsForProducts.length > 0) {
+        const allProducts = await db.select()
+          .from(vendorProducts)
+          .where(inArray(vendorProducts.vendorId, vendorIdsForProducts));
+        
+        // Parse metadata JSON and group by vendorId
+        allProducts.forEach(product => {
+          if (!vendorProductsMap[product.vendorId]) {
+            vendorProductsMap[product.vendorId] = [];
+          }
+          vendorProductsMap[product.vendorId].push({
+            ...product,
+            metadata: product.metadata ? JSON.parse(product.metadata) : null,
+          });
+        });
+      }
+
+      // Add featured/prioritized flags and products to response
       const response = result.map(v => ({
         ...v,
         isFeatured: v.canHighlightProfile || false,
         isPrioritized: v.hasPrioritizedSearch || false,
         hasReviewBadge: v.hasReviewBadge || false,
+        products: vendorProductsMap[v.id] || [],
       }));
 
       res.json(response);
@@ -1223,7 +1253,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
-      const { businessName, organizationNumber, description, location, phone, website, priceRange, googleReviewUrl } = req.body;
+      const { businessName, organizationNumber, description, location, phone, website, priceRange, googleReviewUrl, culturalExpertise } = req.body;
 
       if (!businessName || businessName.trim().length < 2) {
         return res.status(400).json({ error: "Bedriftsnavn er påkrevd" });
@@ -1239,6 +1269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           website: website || null,
           priceRange: priceRange || null,
           googleReviewUrl: googleReviewUrl || null,
+          culturalExpertise: culturalExpertise || null,
           updatedAt: new Date(),
         })
         .where(eq(vendors.id, vendorId))
@@ -2130,17 +2161,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { email, displayName, password } = validation.data;
+      const { selectedTraditions } = req.body; // Optional traditions array
 
       // Find or create couple profile
       let [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.email, email));
+      let isNewRegistration = false;
 
       if (!couple) {
         // New registration - hash password
         const hashedPassword = await bcrypt.hash(password, 10);
         const [newCouple] = await db.insert(coupleProfiles)
-          .values({ email, displayName, password: hashedPassword })
+          .values({ 
+            email, 
+            displayName, 
+            password: hashedPassword,
+            selectedTraditions: selectedTraditions || null,
+          })
           .returning();
         couple = newCouple;
+        isNewRegistration = true;
       } else {
         // Existing couple - verify password
         if (!couple.password) {
@@ -2159,6 +2198,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .set({ displayName, updatedAt: new Date() })
             .where(eq(coupleProfiles.id, couple.id));
           couple.displayName = displayName;
+        }
+      }
+
+      // Auto-populate timeline for new registrations with tradition selection
+      if (isNewRegistration && selectedTraditions && selectedTraditions.length > 0) {
+        // Use the first selected tradition as primary
+        const primaryTradition = selectedTraditions[0];
+        const template = TIMELINE_TEMPLATES[primaryTradition] || DEFAULT_TIMELINE;
+        
+        // Insert timeline events
+        const timelineValues = template.map(event => ({
+          coupleId: couple.id,
+          time: event.time,
+          title: event.title,
+          icon: event.icon,
+        }));
+
+        if (timelineValues.length > 0) {
+          await db.insert(scheduleEvents).values(timelineValues);
         }
       }
 
@@ -2204,6 +2262,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching couple profile:", error);
       res.status(500).json({ error: "Kunne ikke hente profil" });
+    }
+  });
+
+  // Update couple profile
+  app.put("/api/couples/me", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { displayName, weddingDate, selectedTraditions } = req.body;
+      
+      const updateData: any = { updatedAt: new Date() };
+      if (displayName !== undefined) updateData.displayName = displayName;
+      if (weddingDate !== undefined) updateData.weddingDate = weddingDate;
+      if (selectedTraditions !== undefined) updateData.selectedTraditions = selectedTraditions;
+
+      const [updated] = await db.update(coupleProfiles)
+        .set(updateData)
+        .where(eq(coupleProfiles.id, coupleId))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating couple profile:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere profil" });
     }
   });
 
@@ -3657,7 +3740,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ))
         .orderBy(vendorProducts.sortOrder);
 
-      res.json(products);
+      // Parse metadata JSON
+      const productsWithMetadata = products.map(p => ({
+        ...p,
+        metadata: p.metadata ? JSON.parse(p.metadata) : null,
+      }));
+
+      res.json(productsWithMetadata);
     } catch (error) {
       console.error("Error fetching vendor products:", error);
       res.status(500).json({ error: "Kunne ikke hente produkter" });
@@ -3686,10 +3775,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           categoryTag: validatedData.categoryTag,
           imageUrl: validatedData.imageUrl || null,
           sortOrder: validatedData.sortOrder,
+          trackInventory: validatedData.trackInventory,
+          availableQuantity: validatedData.availableQuantity,
+          bookingBuffer: validatedData.bookingBuffer,
+          metadata: req.body.metadata ? JSON.stringify(req.body.metadata) : null,
         })
         .returning();
 
-      res.status(201).json(product);
+      res.status(201).json({
+        ...product,
+        metadata: product.metadata ? JSON.parse(product.metadata) : null,
+      });
     } catch (error) {
       console.error("Error creating vendor product:", error);
       res.status(500).json({ error: "Kunne ikke opprette produkt" });
@@ -3719,12 +3815,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Produkt ikke funnet" });
       }
 
+      // Serialize metadata if provided
+      const updateData: any = { ...updates, updatedAt: new Date() };
+      if (updates.metadata) {
+        updateData.metadata = JSON.stringify(updates.metadata);
+      }
+
       const [updated] = await db.update(vendorProducts)
-        .set({ ...updates, updatedAt: new Date() })
+        .set(updateData)
         .where(eq(vendorProducts.id, id))
         .returning();
 
-      res.json(updated);
+      res.json({
+        ...updated,
+        metadata: updated.metadata ? JSON.parse(updated.metadata) : null,
+      });
     } catch (error) {
       console.error("Error updating vendor product:", error);
       res.status(500).json({ error: "Kunne ikke oppdatere produkt" });
@@ -4279,6 +4384,831 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Vendor Planner (meetings/tasks/timeline) - lightweight persistence via App Settings
+  // Keys: vendor_planner_meetings_{vendorId}, vendor_planner_tasks_{vendorId}, vendor_planner_timeline_{vendorId}
+  const plannerKey = (kind: "meetings" | "tasks" | "timeline", vendorId: string) => `vendor_planner_${kind}_${vendorId}`;
+
+  app.get("/api/vendor/planner/:kind", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { kind } = req.params as { kind: "meetings" | "tasks" | "timeline" };
+      if (!["meetings", "tasks", "timeline"].includes(kind)) {
+        return res.status(400).json({ error: "Ugyldig planner-type" });
+      }
+      const key = plannerKey(kind, vendorId);
+      const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+      const value = setting?.value ? JSON.parse(setting.value) : (kind === "timeline" ? [] : []);
+      res.json(value);
+    } catch (error) {
+      console.error("Error fetching vendor planner items:", error);
+      res.status(500).json({ error: "Kunne ikke hente planner-data" });
+    }
+  });
+
+  app.post("/api/vendor/planner/:kind", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { kind } = req.params as { kind: "meetings" | "tasks" | "timeline" };
+      if (!["meetings", "tasks", "timeline"].includes(kind)) {
+        return res.status(400).json({ error: "Ugyldig planner-type" });
+      }
+      const key = plannerKey(kind, vendorId);
+      const payload = req.body;
+      const json = JSON.stringify(payload);
+      const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+      if (existing) {
+        await db.update(appSettings).set({ value: json, updatedAt: new Date() }).where(eq(appSettings.key, key));
+      } else {
+        await db.insert(appSettings).values({ key, value: json, category: "vendor_planner" });
+      }
+      res.status(201).json({ success: true });
+    } catch (error) {
+      console.error("Error saving vendor planner items:", error);
+      res.status(500).json({ error: "Kunne ikke lagre planner-data" });
+    }
+  });
+
+  app.patch("/api/vendor/planner/:kind", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { kind } = req.params as { kind: "meetings" | "tasks" | "timeline" };
+      if (!["meetings", "tasks", "timeline"].includes(kind)) {
+        return res.status(400).json({ error: "Ugyldig planner-type" });
+      }
+      const key = plannerKey(kind, vendorId);
+      const payload = req.body;
+      const json = JSON.stringify(payload);
+      const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+      if (!existing) {
+        return res.status(404).json({ error: "Planner-data ikke funnet" });
+      }
+      const [updated] = await db.update(appSettings)
+        .set({ value: json, updatedAt: new Date() })
+        .where(eq(appSettings.key, key))
+        .returning();
+      res.json({ success: true, updated });
+    } catch (error) {
+      console.error("Error updating vendor planner items:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere planner-data" });
+    }
+  });
+
+  app.delete("/api/vendor/planner/:kind", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { kind } = req.params as { kind: "meetings" | "tasks" | "timeline" };
+      if (!["meetings", "tasks", "timeline"].includes(kind)) {
+        return res.status(400).json({ error: "Ugyldig planner-type" });
+      }
+      const key = plannerKey(kind, vendorId);
+      await db.delete(appSettings).where(eq(appSettings.key, key));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting vendor planner items:", error);
+      res.status(500).json({ error: "Kunne ikke slette planner-data" });
+    }
+  });
+
+  // Couple Venue planner (DB-backed with appSettings backfill)
+  const coupleVenueKey = (kind: "bookings" | "timeline", coupleId: string) => `couple_venue_${kind}_${coupleId}`;
+
+  const getCoupleIdFromReq = async (req: Request, res: Response): Promise<string | null> => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) {
+      res.status(401).json({ error: "Ikke autentisert" });
+      return null;
+    }
+
+    let coupleId = COUPLE_SESSIONS.get(token)?.coupleId;
+    if (!coupleId) {
+      const [session] = await db.select()
+        .from(coupleSessions)
+        .where(eq(coupleSessions.token, token));
+
+      if (!session || session.expiresAt < new Date()) {
+        res.status(401).json({ error: "Ugyldig økt" });
+        return null;
+      }
+      coupleId = session.coupleId;
+      COUPLE_SESSIONS.set(token, { coupleId, expiresAt: session.expiresAt });
+    }
+    return coupleId;
+  };
+
+  const backfillCoupleVenueFromSettings = async (kind: "bookings" | "timeline", coupleId: string) => {
+    const key = coupleVenueKey(kind, coupleId);
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+    if (!setting?.value) return null;
+    const parsed = JSON.parse(setting.value);
+
+    try {
+      if (kind === "bookings" && Array.isArray(parsed)) {
+        await db.transaction(async (tx) => {
+          await tx.delete(coupleVenueBookings).where(eq(coupleVenueBookings.coupleId, coupleId));
+          if (parsed.length === 0) return;
+          await tx.insert(coupleVenueBookings).values(
+            parsed.map((b: any) => ({
+              id: b.id || crypto.randomUUID(),
+              coupleId,
+              venueName: b.venueName,
+              date: b.date,
+              time: b.time,
+              location: b.location,
+              capacity: b.capacity ?? null,
+              notes: b.notes,
+              completed: !!b.completed,
+            }))
+          );
+        });
+      }
+
+      if (kind === "timeline" && parsed && typeof parsed === "object") {
+        await db.insert(coupleVenueTimelines)
+          .values({
+            coupleId,
+            venueSelected: !!parsed.venueSelected,
+            venueVisited: !!parsed.venueVisited,
+            contractSigned: !!parsed.contractSigned,
+            depositPaid: !!parsed.depositPaid,
+            capacity: parsed.capacity ?? null,
+            budget: parsed.budget ?? null,
+          })
+          .onConflictDoUpdate({
+            target: coupleVenueTimelines.coupleId,
+            set: {
+              venueSelected: !!parsed.venueSelected,
+              venueVisited: !!parsed.venueVisited,
+              contractSigned: !!parsed.contractSigned,
+              depositPaid: !!parsed.depositPaid,
+              capacity: parsed.capacity ?? null,
+              budget: parsed.budget ?? null,
+              updatedAt: new Date(),
+            },
+          });
+      }
+    } catch (err) {
+      console.error("Backfill couple venue from appSettings failed", err);
+    }
+
+    return parsed;
+  };
+
+  app.get("/api/couple/venue/:kind", async (req: Request, res: Response) => {
+    const coupleId = await getCoupleIdFromReq(req, res);
+    if (!coupleId) return;
+    const { kind } = req.params as { kind: "bookings" | "timeline" };
+    if (!["bookings", "timeline"].includes(kind)) {
+      return res.status(400).json({ error: "Ugyldig type" });
+    }
+    try {
+      if (kind === "bookings") {
+        const rows = await db.select().from(coupleVenueBookings).where(eq(coupleVenueBookings.coupleId, coupleId)).orderBy(desc(coupleVenueBookings.createdAt));
+        if (rows.length > 0) {
+          return res.json(rows.map((r) => ({
+            id: r.id,
+            venueName: r.venueName,
+            date: r.date,
+            time: r.time ?? undefined,
+            location: r.location ?? undefined,
+            capacity: r.capacity ?? undefined,
+            notes: r.notes ?? undefined,
+            vendorVisitCompleted: !!r.vendorVisitCompleted,
+            createdAt: r.createdAt?.toISOString?.() ?? r.createdAt,
+            updatedAt: r.updatedAt?.toISOString?.() ?? r.updatedAt,
+          })));
+        }
+        const fallback = await backfillCoupleVenueFromSettings(kind, coupleId);
+        return res.json(Array.isArray(fallback) ? fallback : []);
+      }
+
+      const [timeline] = await db.select().from(coupleVenueTimelines).where(eq(coupleVenueTimelines.coupleId, coupleId));
+      if (timeline) {
+        return res.json({
+          venueSelected: !!timeline.venueSelected,
+          venueVisited: !!timeline.venueVisited,
+          contractSigned: !!timeline.contractSigned,
+          depositPaid: !!timeline.depositPaid,
+          capacity: timeline.capacity ?? undefined,
+          budget: timeline.budget ?? undefined,
+        });
+      }
+      const fallback = await backfillCoupleVenueFromSettings(kind, coupleId);
+      return res.json(fallback && typeof fallback === "object" ? fallback : {});
+    } catch (error) {
+      console.error("Error fetching couple venue data:", error);
+      res.status(500).json({ error: "Kunne ikke hente data" });
+    }
+  });
+
+  app.post("/api/couple/venue/:kind", async (req: Request, res: Response) => {
+    const coupleId = await getCoupleIdFromReq(req, res);
+    if (!coupleId) return;
+    const { kind } = req.params as { kind: "bookings" | "timeline" };
+    if (!["bookings", "timeline"].includes(kind)) {
+      return res.status(400).json({ error: "Ugyldig type" });
+    }
+    try {
+      if (kind === "bookings") {
+        const payload = Array.isArray(req.body) ? req.body : [];
+        await db.transaction(async (tx) => {
+          await tx.delete(coupleVenueBookings).where(eq(coupleVenueBookings.coupleId, coupleId));
+          if (payload.length === 0) return;
+          await tx.insert(coupleVenueBookings).values(
+            payload.map((b: any) => ({
+              id: b.id || crypto.randomUUID(),
+              coupleId,
+              venueName: b.venueName,
+              date: b.date,
+              time: b.time,
+              location: b.location,
+              capacity: b.capacity ?? null,
+              notes: b.notes,
+              completed: !!b.completed,
+            }))
+          );
+        });
+        return res.status(201).json({ success: true });
+      }
+
+      const payload = req.body || {};
+      await db.insert(coupleVenueTimelines)
+        .values({
+          coupleId,
+          venueSelected: !!payload.venueSelected,
+          venueVisited: !!payload.venueVisited,
+          contractSigned: !!payload.contractSigned,
+          depositPaid: !!payload.depositPaid,
+          capacity: payload.capacity ?? null,
+          budget: payload.budget ?? null,
+        })
+        .onConflictDoUpdate({
+          target: coupleVenueTimelines.coupleId,
+          set: {
+            venueSelected: !!payload.venueSelected,
+            venueVisited: !!payload.venueVisited,
+            contractSigned: !!payload.contractSigned,
+            depositPaid: !!payload.depositPaid,
+            capacity: payload.capacity ?? null,
+            budget: payload.budget ?? null,
+            updatedAt: new Date(),
+          },
+        });
+      return res.status(201).json({ success: true });
+    } catch (error) {
+      console.error("Error saving couple venue data:", error);
+      res.status(500).json({ error: "Kunne ikke lagre" });
+    }
+  });
+
+  app.patch("/api/couple/venue/:kind", async (req: Request, res: Response) => {
+    const coupleId = await getCoupleIdFromReq(req, res);
+    if (!coupleId) return;
+    const { kind } = req.params as { kind: "bookings" | "timeline" };
+    if (!["bookings", "timeline"].includes(kind)) {
+      return res.status(400).json({ error: "Ugyldig type" });
+    }
+    try {
+      if (kind === "bookings") {
+        const payload = Array.isArray(req.body) ? req.body : [];
+        await db.transaction(async (tx) => {
+          await tx.delete(coupleVenueBookings).where(eq(coupleVenueBookings.coupleId, coupleId));
+          if (payload.length === 0) return;
+          await tx.insert(coupleVenueBookings).values(
+            payload.map((b: any) => ({
+              id: b.id || crypto.randomUUID(),
+              coupleId,
+              venueName: b.venueName,
+              date: b.date,
+              time: b.time,
+              location: b.location,
+              capacity: b.capacity ?? null,
+              notes: b.notes,
+              completed: !!b.completed,
+            }))
+          );
+        });
+        return res.json({ success: true });
+      }
+
+      const payload = req.body || {};
+      await db.insert(coupleVenueTimelines)
+        .values({
+          coupleId,
+          venueSelected: !!payload.venueSelected,
+          venueVisited: !!payload.venueVisited,
+          contractSigned: !!payload.contractSigned,
+          depositPaid: !!payload.depositPaid,
+          capacity: payload.capacity ?? null,
+          budget: payload.budget ?? null,
+        })
+        .onConflictDoUpdate({
+          target: coupleVenueTimelines.coupleId,
+          set: {
+            venueSelected: !!payload.venueSelected,
+            venueVisited: !!payload.venueVisited,
+            contractSigned: !!payload.contractSigned,
+            depositPaid: !!payload.depositPaid,
+            capacity: payload.capacity ?? null,
+            budget: payload.budget ?? null,
+            updatedAt: new Date(),
+          },
+        });
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating couple venue data:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere" });
+    }
+  });
+
+  app.delete("/api/couple/venue/:kind", async (req: Request, res: Response) => {
+    const coupleId = await getCoupleIdFromReq(req, res);
+    if (!coupleId) return;
+    const { kind } = req.params as { kind: "bookings" | "timeline" };
+    if (!["bookings", "timeline"].includes(kind)) {
+      return res.status(400).json({ error: "Ugyldig type" });
+    }
+    try {
+      if (kind === "bookings") {
+        await db.delete(coupleVenueBookings).where(eq(coupleVenueBookings.coupleId, coupleId));
+        return res.json({ success: true });
+      }
+      await db.delete(coupleVenueTimelines).where(eq(coupleVenueTimelines.coupleId, coupleId));
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting couple venue data:", error);
+      res.status(500).json({ error: "Kunne ikke slette" });
+    }
+  });
+
+  // Couple seating chart
+  const coupleSeatingKey = (coupleId: string) => `couple_venue_seating_${coupleId}`;
+
+  app.get("/api/couple/venue/seating", async (req: Request, res: Response) => {
+    const coupleId = await getCoupleIdFromReq(req, res);
+    if (!coupleId) return;
+    try {
+      const key = coupleSeatingKey(coupleId);
+      const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+      const seating = setting?.value ? JSON.parse(setting.value) : { tables: [], guests: [] };
+      return res.json(seating);
+    } catch (error) {
+      console.error("Error fetching couple seating:", error);
+      res.status(500).json({ error: "Kunne ikke hente seating" });
+    }
+  });
+
+  app.post("/api/couple/venue/seating", async (req: Request, res: Response) => {
+    const coupleId = await getCoupleIdFromReq(req, res);
+    if (!coupleId) return;
+    try {
+      const key = coupleSeatingKey(coupleId);
+      const payload = req.body || { tables: [], guests: [] };
+      const json = JSON.stringify(payload);
+      const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+      if (existing) {
+        await db.update(appSettings).set({ value: json, updatedAt: new Date() }).where(eq(appSettings.key, key));
+      } else {
+        await db.insert(appSettings).values({ key, value: json, category: "couple_venue_seating" });
+      }
+      return res.status(201).json({ success: true });
+    } catch (error) {
+      console.error("Error saving couple seating:", error);
+      res.status(500).json({ error: "Kunne ikke lagre seating" });
+    }
+  });
+
+  // Vendor Venue planner (DB-backed with appSettings backfill)
+  const vendorVenueKey = (kind: "bookings" | "availability" | "timeline", vendorId: string) => `vendor_venue_${kind}_${vendorId}`;
+
+  const backfillVendorVenueFromSettings = async (kind: "bookings" | "availability" | "timeline", vendorId: string) => {
+    const key = vendorVenueKey(kind, vendorId);
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+    if (!setting?.value) return null;
+    const parsed = JSON.parse(setting.value);
+
+    try {
+      if (kind === "bookings" && Array.isArray(parsed)) {
+        await db.transaction(async (tx) => {
+          await tx.delete(vendorVenueBookings).where(eq(vendorVenueBookings.vendorId, vendorId));
+          if (parsed.length === 0) return;
+          await tx.insert(vendorVenueBookings).values(
+            parsed.map((b: any) => ({
+              id: b.id || crypto.randomUUID(),
+              vendorId,
+              coupleName: b.coupleName,
+              date: b.date,
+              time: b.time,
+              location: b.location,
+              capacity: b.capacity ?? null,
+              notes: b.notes,
+              status: b.status || "booked",
+              completed: !!b.completed,
+            }))
+          );
+        });
+      }
+
+      if (kind === "availability" && Array.isArray(parsed)) {
+        await db.transaction(async (tx) => {
+          await tx.delete(vendorVenueAvailability).where(eq(vendorVenueAvailability.vendorId, vendorId));
+          if (parsed.length === 0) return;
+          await tx.insert(vendorVenueAvailability).values(
+            parsed.map((a: any) => ({
+              id: a.id || crypto.randomUUID(),
+              vendorId,
+              date: a.date,
+              status: a.status || "available",
+              maxBookings: a.maxBookings ?? null,
+              notes: a.notes,
+            }))
+          );
+        });
+      }
+
+      if (kind === "timeline" && parsed && typeof parsed === "object") {
+        await db.insert(vendorVenueTimelines)
+          .values({
+            vendorId,
+            siteVisitDone: !!parsed.siteVisitDone,
+            contractSigned: !!parsed.contractSigned,
+            depositReceived: !!parsed.depositReceived,
+            floorPlanFinalized: !!parsed.floorPlanFinalized,
+          })
+          .onConflictDoUpdate({
+            target: vendorVenueTimelines.vendorId,
+            set: {
+              siteVisitDone: !!parsed.siteVisitDone,
+              contractSigned: !!parsed.contractSigned,
+              depositReceived: !!parsed.depositReceived,
+              floorPlanFinalized: !!parsed.floorPlanFinalized,
+              updatedAt: new Date(),
+            },
+          });
+      }
+    } catch (err) {
+      console.error("Backfill vendor venue from appSettings failed", err);
+    }
+
+    return parsed;
+  };
+
+  app.get("/api/vendor/venue/:kind", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+    const { kind } = req.params as { kind: "bookings" | "availability" | "timeline" };
+    if (!["bookings", "availability", "timeline"].includes(kind)) {
+      return res.status(400).json({ error: "Ugyldig type" });
+    }
+    try {
+      if (kind === "bookings") {
+        const rows = await db.select().from(vendorVenueBookings).where(eq(vendorVenueBookings.vendorId, vendorId)).orderBy(desc(vendorVenueBookings.createdAt));
+        if (rows.length > 0) {
+          return res.json(rows.map((r) => ({
+            id: r.id,
+            coupleName: r.coupleName,
+            date: r.date,
+            time: r.time ?? undefined,
+            location: r.location ?? undefined,
+            capacity: r.capacity ?? undefined,
+            notes: r.notes ?? undefined,
+            status: r.status || "booked",
+            createdAt: r.createdAt?.toISOString?.() ?? r.createdAt,
+            updatedAt: r.updatedAt?.toISOString?.() ?? r.updatedAt,
+          })));
+        }
+        const fallback = await backfillVendorVenueFromSettings(kind, vendorId);
+        return res.json(Array.isArray(fallback) ? fallback : []);
+      }
+
+      if (kind === "availability") {
+        const rows = await db.select().from(vendorVenueAvailability).where(eq(vendorVenueAvailability.vendorId, vendorId)).orderBy(desc(vendorVenueAvailability.date));
+        if (rows.length > 0) {
+          return res.json(rows.map((r) => ({
+            id: r.id,
+            date: r.date,
+            status: (r.status as any) || "available",
+            maxBookings: r.maxBookings ?? undefined,
+            notes: r.notes ?? undefined,
+          })));
+        }
+        const fallback = await backfillVendorVenueFromSettings(kind, vendorId);
+        return res.json(Array.isArray(fallback) ? fallback : []);
+      }
+
+      const [timeline] = await db.select().from(vendorVenueTimelines).where(eq(vendorVenueTimelines.vendorId, vendorId));
+      if (timeline) {
+        return res.json({
+          siteVisitDone: !!timeline.siteVisitDone,
+          contractSigned: !!timeline.contractSigned,
+          depositReceived: !!timeline.depositReceived,
+          floorPlanFinalized: !!timeline.floorPlanFinalized,
+        });
+      }
+      const fallback = await backfillVendorVenueFromSettings(kind, vendorId);
+      return res.json(fallback && typeof fallback === "object" ? fallback : {});
+    } catch (error) {
+      console.error("Error fetching vendor venue data:", error);
+      res.status(500).json({ error: "Kunne ikke hente data" });
+    }
+  });
+
+  app.post("/api/vendor/venue/:kind", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+    const { kind } = req.params as { kind: "bookings" | "availability" | "timeline" };
+    if (!["bookings", "availability", "timeline"].includes(kind)) {
+      return res.status(400).json({ error: "Ugyldig type" });
+    }
+    try {
+      if (kind === "bookings") {
+        const payload = Array.isArray(req.body) ? req.body : [];
+        await db.transaction(async (tx) => {
+          await tx.delete(vendorVenueBookings).where(eq(vendorVenueBookings.vendorId, vendorId));
+          if (payload.length === 0) return;
+          await tx.insert(vendorVenueBookings).values(
+            payload.map((b: any) => ({
+              id: b.id || crypto.randomUUID(),
+              vendorId,
+              coupleName: b.coupleName,
+              date: b.date,
+              time: b.time,
+              location: b.location,
+              capacity: b.capacity ?? null,
+              notes: b.notes,
+              status: b.status || "booked",
+              completed: !!b.completed,
+            }))
+          );
+        });
+        return res.status(201).json({ success: true });
+      }
+
+      if (kind === "availability") {
+        const payload = Array.isArray(req.body) ? req.body : [];
+        await db.transaction(async (tx) => {
+          await tx.delete(vendorVenueAvailability).where(eq(vendorVenueAvailability.vendorId, vendorId));
+          if (payload.length === 0) return;
+          await tx.insert(vendorVenueAvailability).values(
+            payload.map((a: any) => ({
+              id: a.id || crypto.randomUUID(),
+              vendorId,
+              date: a.date,
+              status: a.status || "available",
+              maxBookings: a.maxBookings ?? null,
+              notes: a.notes,
+            }))
+          );
+        });
+        return res.status(201).json({ success: true });
+      }
+
+      const payload = req.body || {};
+      await db.insert(vendorVenueTimelines)
+        .values({
+          vendorId,
+          siteVisitDone: !!payload.siteVisitDone,
+          contractSigned: !!payload.contractSigned,
+          depositReceived: !!payload.depositReceived,
+          floorPlanFinalized: !!payload.floorPlanFinalized,
+        })
+        .onConflictDoUpdate({
+          target: vendorVenueTimelines.vendorId,
+          set: {
+            siteVisitDone: !!payload.siteVisitDone,
+            contractSigned: !!payload.contractSigned,
+            depositReceived: !!payload.depositReceived,
+            floorPlanFinalized: !!payload.floorPlanFinalized,
+            updatedAt: new Date(),
+          },
+        });
+      return res.status(201).json({ success: true });
+    } catch (error) {
+      console.error("Error saving vendor venue data:", error);
+      res.status(500).json({ error: "Kunne ikke lagre" });
+    }
+  });
+
+  app.patch("/api/vendor/venue/:kind", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+    const { kind } = req.params as { kind: "bookings" | "availability" | "timeline" };
+    if (!["bookings", "availability", "timeline"].includes(kind)) {
+      return res.status(400).json({ error: "Ugyldig type" });
+    }
+    try {
+      if (kind === "bookings") {
+        const payload = Array.isArray(req.body) ? req.body : [];
+        await db.transaction(async (tx) => {
+          await tx.delete(vendorVenueBookings).where(eq(vendorVenueBookings.vendorId, vendorId));
+          if (payload.length === 0) return;
+          await tx.insert(vendorVenueBookings).values(
+            payload.map((b: any) => ({
+              id: b.id || crypto.randomUUID(),
+              vendorId,
+              coupleName: b.coupleName,
+              date: b.date,
+              time: b.time,
+              location: b.location,
+              capacity: b.capacity ?? null,
+              notes: b.notes,
+              status: b.status || "booked",
+              completed: !!b.completed,
+            }))
+          );
+        });
+        return res.json({ success: true });
+      }
+
+      if (kind === "availability") {
+        const payload = Array.isArray(req.body) ? req.body : [];
+        await db.transaction(async (tx) => {
+          await tx.delete(vendorVenueAvailability).where(eq(vendorVenueAvailability.vendorId, vendorId));
+          if (payload.length === 0) return;
+          await tx.insert(vendorVenueAvailability).values(
+            payload.map((a: any) => ({
+              id: a.id || crypto.randomUUID(),
+              vendorId,
+              date: a.date,
+              status: a.status || "available",
+              maxBookings: a.maxBookings ?? null,
+              notes: a.notes,
+            }))
+          );
+        });
+        return res.json({ success: true });
+      }
+
+      const payload = req.body || {};
+      await db.insert(vendorVenueTimelines)
+        .values({
+          vendorId,
+          siteVisitDone: !!payload.siteVisitDone,
+          contractSigned: !!payload.contractSigned,
+          depositReceived: !!payload.depositReceived,
+          floorPlanFinalized: !!payload.floorPlanFinalized,
+        })
+        .onConflictDoUpdate({
+          target: vendorVenueTimelines.vendorId,
+          set: {
+            siteVisitDone: !!payload.siteVisitDone,
+            contractSigned: !!payload.contractSigned,
+            depositReceived: !!payload.depositReceived,
+            floorPlanFinalized: !!payload.floorPlanFinalized,
+            updatedAt: new Date(),
+          },
+        });
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating vendor venue data:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere" });
+    }
+  });
+
+  app.delete("/api/vendor/venue/:kind", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+    const { kind } = req.params as { kind: "bookings" | "availability" | "timeline" };
+    if (!["bookings", "availability", "timeline"].includes(kind)) {
+      return res.status(400).json({ error: "Ugyldig type" });
+    }
+    try {
+      if (kind === "bookings") {
+        await db.delete(vendorVenueBookings).where(eq(vendorVenueBookings.vendorId, vendorId));
+        return res.json({ success: true });
+      }
+      if (kind === "availability") {
+        await db.delete(vendorVenueAvailability).where(eq(vendorVenueAvailability.vendorId, vendorId));
+        return res.json({ success: true });
+      }
+      await db.delete(vendorVenueTimelines).where(eq(vendorVenueTimelines.vendorId, vendorId));
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting vendor venue data:", error);
+      res.status(500).json({ error: "Kunne ikke slette" });
+    }
+  });
+
+  // Vendor seating chart endpoints
+  const vendorSeatingKey = (vendorId: string) => `vendor_venue_seating_${vendorId}`;
+
+  app.get("/api/vendor/venue/seating", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+    try {
+      const key = vendorSeatingKey(vendorId);
+      const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+      const seating = setting?.value ? JSON.parse(setting.value) : { tables: [], guests: [] };
+      return res.json(seating);
+    } catch (error) {
+      console.error("Error fetching vendor seating:", error);
+      res.status(500).json({ error: "Kunne ikke hente seating" });
+    }
+  });
+
+  app.post("/api/vendor/venue/seating", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+    try {
+      const key = vendorSeatingKey(vendorId);
+      const payload = req.body || { tables: [], guests: [] };
+      const json = JSON.stringify(payload);
+      const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+      if (existing) {
+        await db.update(appSettings).set({ value: json, updatedAt: new Date() }).where(eq(appSettings.key, key));
+      } else {
+        await db.insert(appSettings).values({ key, value: json, category: "vendor_venue_seating" });
+      }
+      return res.status(201).json({ success: true });
+    } catch (error) {
+      console.error("Error saving vendor seating:", error);
+      res.status(500).json({ error: "Kunne ikke lagre seating" });
+    }
+  });
+
+  // Vendor site visits - get upcoming scheduled site visits at vendor's venue
+  app.get("/api/vendor/site-visits", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const siteVisits = await db.select({
+        id: coupleVenueBookings.id,
+        coupleName: coupleProfiles.displayName,
+        venueName: coupleVenueBookings.venueName,
+        siteVisitDate: coupleVenueBookings.siteVisitDate,
+        siteVisitTime: coupleVenueBookings.siteVisitTime,
+        address: coupleVenueBookings.address,
+        maxGuests: coupleVenueBookings.maxGuests,
+        invitedGuests: coupleVenueBookings.invitedGuests,
+        status: coupleVenueBookings.status,
+        notes: coupleVenueBookings.notes,
+        weddingDate: coupleProfiles.weddingDate,
+        email: coupleProfiles.email,
+        vendorVisitConfirmed: coupleVenueBookings.vendorVisitConfirmed,
+        vendorVisitNotes: coupleVenueBookings.vendorVisitNotes,
+        vendorVisitCompleted: coupleVenueBookings.vendorVisitCompleted,
+      })
+      .from(coupleVenueBookings)
+      .innerJoin(coupleProfiles, eq(coupleVenueBookings.coupleId, coupleProfiles.id))
+      .where(and(
+        eq(coupleVenueBookings.vendorId, vendorId),
+        isNotNull(coupleVenueBookings.siteVisitDate)
+      ))
+      .orderBy(coupleVenueBookings.siteVisitDate, coupleVenueBookings.siteVisitTime);
+
+      res.json(siteVisits);
+    } catch (error) {
+      console.error("Error fetching vendor site visits:", error);
+      res.status(500).json({ error: "Kunne ikke hente befaringer" });
+    }
+  });
+
+  // Update vendor site visit tracking
+  app.patch("/api/vendor/site-visits/:id", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { id } = req.params;
+      const { vendorVisitConfirmed, vendorVisitNotes, vendorVisitCompleted } = req.body;
+
+      // Verify this site visit belongs to the vendor
+      const [existing] = await db.select()
+        .from(coupleVenueBookings)
+        .where(and(
+          eq(coupleVenueBookings.id, id),
+          eq(coupleVenueBookings.vendorId, vendorId)
+        ));
+
+      if (!existing) {
+        return res.status(404).json({ error: "Befaring ikke funnet" });
+      }
+
+      const [updated] = await db.update(coupleVenueBookings)
+        .set({
+          vendorVisitConfirmed: vendorVisitConfirmed ?? existing.vendorVisitConfirmed,
+          vendorVisitNotes: vendorVisitNotes ?? existing.vendorVisitNotes,
+          vendorVisitCompleted: vendorVisitCompleted ?? existing.vendorVisitCompleted,
+          updatedAt: new Date(),
+        })
+        .where(eq(coupleVenueBookings.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating site visit:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere befaring" });
+    }
+  });
+
   // Couple can accept/decline offers
   app.post("/api/couple/offers/:id/respond", async (req: Request, res: Response) => {
     try {
@@ -4474,11 +5404,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get items for each offer
       const offersWithItems = await Promise.all(
         offers.map(async ({ offer, vendor }) => {
-          const items = await db.select()
+          const items = await db.select({
+            item: vendorOfferItems,
+            product: vendorProducts,
+          })
             .from(vendorOfferItems)
+            .leftJoin(vendorProducts, eq(vendorOfferItems.productId, vendorProducts.id))
             .where(eq(vendorOfferItems.offerId, offer.id))
             .orderBy(vendorOfferItems.sortOrder);
-          return { ...offer, vendor, items };
+          
+          // Parse metadata for each product
+          const itemsWithMetadata = items.map(({ item, product }) => ({
+            ...item,
+            product: product ? {
+              ...product,
+              metadata: product.metadata ? JSON.parse(product.metadata) : null,
+            } : null,
+          }));
+          
+          return { ...offer, vendor, items: itemsWithMetadata };
         })
       );
 
@@ -5763,6 +6707,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching coordinator couple profile:", error);
       res.status(500).json({ error: "Kunne ikke hente profil" });
+    }
+  });
+
+  // Read-only seating chart for coordinator (toastmaster needs table overview)
+  app.get("/api/coordinator/seating", async (req: Request, res: Response) => {
+    const coupleId = await checkCoordinatorAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const key = `couple_venue_seating_${coupleId}`;
+      const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+      const seating = setting?.value ? JSON.parse(setting.value) : { tables: [] };
+      res.json(seating);
+    } catch (error) {
+      console.error("Error fetching coordinator seating:", error);
+      res.status(500).json({ error: "Kunne ikke hente bordplan" });
     }
   });
 
@@ -7313,6 +8273,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching vendor reviews:", error);
       res.status(500).json({ error: "Kunne ikke hente anmeldelser" });
+    }
+  });
+
+  // Public endpoint to get vendor products (for couple viewing)
+  app.get("/api/vendors/:vendorId/products", async (req: Request, res: Response) => {
+    try {
+      const { vendorId } = req.params;
+
+      const products = await db.select()
+        .from(vendorProducts)
+        .where(eq(vendorProducts.vendorId, vendorId))
+        .orderBy(vendorProducts.createdAt);
+
+      // Parse metadata for each product
+      const productsWithMetadata = products.map(p => ({
+        ...p,
+        metadata: p.metadata ? JSON.parse(p.metadata) : null,
+      }));
+
+      res.json(productsWithMetadata);
+    } catch (error) {
+      console.error("Error fetching vendor products:", error);
+      res.status(500).json({ error: "Kunne ikke hente produkter" });
     }
   });
 

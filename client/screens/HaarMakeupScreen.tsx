@@ -21,7 +21,9 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { getCoupleProfile } from '@/lib/api-couples';
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
@@ -65,6 +67,30 @@ export default function HaarMakeupScreen() {
 
   const [activeTab, setActiveTab] = useState<"appointments" | "looks" | "timeline">("appointments");
   const [refreshing, setRefreshing] = useState(false);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+
+  const COUPLE_STORAGE_KEY = 'wedflow_couple_session';
+
+  // Load session token on mount
+  React.useEffect(() => {
+    const loadSession = async () => {
+      const data = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
+      if (!data) return;
+      const parsed = JSON.parse(data);
+      setSessionToken(parsed?.sessionToken || null);
+    };
+    loadSession();
+  }, []);
+
+  // Fetch couple profile for selected traditions
+  const { data: coupleProfile } = useQuery({
+    queryKey: ['coupleProfile'],
+    queryFn: async () => {
+      if (!sessionToken) throw new Error('No session');
+      return getCoupleProfile(sessionToken);
+    },
+    enabled: !!sessionToken,
+  });
 
   // Query for hair/makeup data
   const { data: hairMakeupData, isLoading: loading, isError, error, refetch } = useQuery({
@@ -295,6 +321,24 @@ export default function HaarMakeupScreen() {
     );
   };
 
+  const duplicateAppointment = async (appointment: HairMakeupAppointment) => {
+    try {
+      await createAppointmentMutation.mutateAsync({
+        stylistName: `Kopi av ${appointment.stylistName}`,
+        serviceType: appointment.serviceType,
+        appointmentType: appointment.appointmentType,
+        date: appointment.date,
+        time: appointment.time,
+        location: appointment.location,
+        notes: appointment.notes,
+        completed: false,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert("Feil", "Kunne ikke duplisere avtale");
+    }
+  };
+
   // Look handlers
   const openLookModal = (look?: HairMakeupLook) => {
     if (look) {
@@ -433,6 +477,22 @@ export default function HaarMakeupScreen() {
     );
   };
 
+  const duplicateLook = async (look: HairMakeupLook) => {
+    try {
+      await createLookMutation.mutateAsync({
+        name: `Kopi av ${look.name}`,
+        lookType: look.lookType,
+        imageUrl: look.imageUrl,
+        notes: look.notes,
+        isFavorite: false,
+        isSelected: false,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert("Feil", "Kunne ikke duplisere look");
+    }
+  };
+
   // Timeline handlers
   const toggleTimelineStep = async (key: string) => {
     const newValue = !timeline[key as keyof HairMakeupTimeline];
@@ -478,12 +538,12 @@ export default function HaarMakeupScreen() {
 
       {appointments.length === 0 ? (
         <View style={[styles.emptyState, { backgroundColor: theme.backgroundDefault }]}>
-          <Feather name="calendar" size={48} color={theme.textSecondary} />
-          <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-            Ingen avtaler ennå
+          <Feather name="heart" size={48} color={theme.primary} style={{ opacity: 0.6 }} />
+          <ThemedText style={[styles.emptyText, { color: theme.text, fontWeight: '600', fontSize: 18 }]}>
+            Se best ut på dagen deres
           </ThemedText>
-          <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-            Legg til konsultasjoner og prøvetimer
+          <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary, fontSize: 15 }]}>
+            La oss finne den perfekte looken sammen.
           </ThemedText>
         </View>
       ) : (
@@ -492,6 +552,19 @@ export default function HaarMakeupScreen() {
             <SwipeableRow onDelete={() => handleDeleteAppointment(appointment.id)}>
               <Pressable
                 onPress={() => openAppointmentModal(appointment)}
+                onLongPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  Alert.alert(
+                    appointment.stylistName,
+                    "Velg en handling",
+                    [
+                      { text: "Avbryt", style: "cancel" },
+                      { text: "Rediger", onPress: () => openAppointmentModal(appointment) },
+                      { text: "Dupliser", onPress: () => duplicateAppointment(appointment) },
+                      { text: "Slett", style: "destructive", onPress: () => handleDeleteAppointment(appointment.id) },
+                    ]
+                  );
+                }}
                 style={[styles.appointmentCard, { backgroundColor: theme.backgroundDefault }]}
               >
                 <Pressable
@@ -521,6 +594,15 @@ export default function HaarMakeupScreen() {
                     </View>
                   )}
                 </View>
+                <Pressable
+                  onPress={() => {
+                    duplicateAppointment(appointment);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={[styles.quickActionButton, { backgroundColor: theme.backgroundSecondary }]}
+                >
+                  <Feather name="copy" size={16} color={Colors.dark.accent} />
+                </Pressable>
                 <Feather name="chevron-right" size={20} color={theme.textSecondary} />
               </Pressable>
             </SwipeableRow>
@@ -541,12 +623,12 @@ export default function HaarMakeupScreen() {
 
       {looks.length === 0 ? (
         <View style={[styles.emptyState, { backgroundColor: theme.backgroundDefault }]}>
-          <Feather name="image" size={48} color={theme.textSecondary} />
-          <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-            Ingen looks lagret
+          <Feather name="heart" size={48} color={theme.primary} style={{ opacity: 0.6 }} />
+          <ThemedText style={[styles.emptyText, { color: theme.text, fontWeight: '600', fontSize: 18 }]}>
+            Hvordan vil dere se ut?
           </ThemedText>
-          <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-            Lagre inspirasjon for hår og makeup
+          <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary, fontSize: 15 }]}>
+            Lagre inspirasjon for hår og makeup.
           </ThemedText>
         </View>
       ) : (
@@ -555,7 +637,20 @@ export default function HaarMakeupScreen() {
             <Animated.View key={look.id} entering={FadeInRight.delay(index * 50)} style={styles.lookCardWrapper}>
               <Pressable
                 onPress={() => openLookModal(look)}
-                onLongPress={() => toggleLookSelected(look.id)}
+                onLongPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  Alert.alert(
+                    look.name,
+                    "Velg en handling",
+                    [
+                      { text: "Avbryt", style: "cancel" },
+                      { text: "Rediger", onPress: () => openLookModal(look) },
+                      { text: "Dupliser", onPress: () => duplicateLook(look) },
+                      { text: look.isSelected ? "Fjern valg" : "Velg", onPress: () => toggleLookSelected(look.id) },
+                      { text: "Slett", style: "destructive", onPress: () => handleDeleteLook(look.id) },
+                    ]
+                  );
+                }}
                 style={[
                   styles.lookCard,
                   { backgroundColor: theme.backgroundDefault },
@@ -622,7 +717,10 @@ export default function HaarMakeupScreen() {
       {/* Find Vendors Button */}
       <Pressable
         onPress={() => {
-          navigation.navigate("VendorMatching", { category: "hair_makeup" });
+          navigation.navigate("VendorMatching", { 
+            category: "beauty",
+            selectedTraditions: coupleProfile?.selectedTraditions || [],
+          });
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }}
         style={[styles.findVendorsButton, { backgroundColor: theme.primary }]}
@@ -1182,6 +1280,12 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     fontWeight: "500",
+  },
+  quickActionButton: {
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    justifyContent: "center",
+    alignItems: "center",
   },
   budgetCard: {
     padding: Spacing.md,

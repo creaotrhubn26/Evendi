@@ -204,6 +204,21 @@ export default function BrudekjoleScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
+  const duplicateAppointment = async (appointment: DressAppointment) => {
+    try {
+      await createAppointmentMutation.mutateAsync({
+        shopName: `Kopi av ${appointment.shopName}`,
+        date: appointment.date,
+        time: appointment.time,
+        notes: appointment.notes,
+        completed: false,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert("Feil", "Kunne ikke duplisere avtale");
+    }
+  };
+
   // Dress handlers
   const openDressModal = (dress?: DressFavorite) => {
     if (dress) {
@@ -287,6 +302,23 @@ export default function BrudekjoleScreen() {
   const handleDeleteDress = async (id: string) => {
     await deleteFavoriteMutation.mutateAsync(id);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const duplicateDress = async (dress: DressFavorite) => {
+    try {
+      await createFavoriteMutation.mutateAsync({
+        name: `Kopi av ${dress.name}`,
+        designer: dress.designer,
+        shop: dress.shop,
+        price: dress.price,
+        notes: dress.notes,
+        imageUrl: dress.imageUrl,
+        isFavorite: dress.isFavorite,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert("Feil", "Kunne ikke duplisere kjole");
+    }
   };
 
   // Timeline handlers
@@ -452,6 +484,19 @@ export default function BrudekjoleScreen() {
                     <View style={[styles.appointmentCard, { backgroundColor: theme.backgroundDefault }]}>
                       <Pressable
                         onPress={() => toggleAppointmentComplete(appointment.id)}
+                        onLongPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          Alert.alert(
+                            appointment.shopName,
+                            "Velg en handling",
+                            [
+                              { text: "Avbryt", style: "cancel" },
+                              { text: "Rediger", onPress: () => openAppointmentModal(appointment) },
+                              { text: "Dupliser", onPress: () => duplicateAppointment(appointment) },
+                              { text: "Slett", style: "destructive", onPress: () => handleDeleteAppointment(appointment.id) },
+                            ]
+                          );
+                        }}
                         style={[
                           styles.checkbox,
                           {
@@ -483,6 +528,15 @@ export default function BrudekjoleScreen() {
                           </ThemedText>
                         ) : null}
                       </View>
+                      <Pressable
+                        onPress={() => {
+                          duplicateAppointment(appointment);
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }}
+                        style={[styles.quickActionButton, { backgroundColor: theme.backgroundSecondary }]}
+                      >
+                        <Feather name="copy" size={16} color={Colors.dark.accent} />
+                      </Pressable>
                     </View>
                   </SwipeableRow>
                 </Animated.View>
@@ -521,7 +575,22 @@ export default function BrudekjoleScreen() {
                     entering={FadeInDown.delay(idx * 50).duration(300)}
                     style={styles.dressCardWrapper}
                   >
-                    <Pressable onPress={() => openDressModal(dress)} onLongPress={() => handleDeleteDress(dress.id)}>
+                    <Pressable 
+                      onPress={() => openDressModal(dress)} 
+                      onLongPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        Alert.alert(
+                          dress.name,
+                          "Velg en handling",
+                          [
+                            { text: "Avbryt", style: "cancel" },
+                            { text: "Rediger", onPress: () => openDressModal(dress) },
+                            { text: "Dupliser", onPress: () => duplicateDress(dress) },
+                            { text: "Slett", style: "destructive", onPress: () => handleDeleteDress(dress.id) },
+                          ]
+                        );
+                      }}
+                    >
                       <View style={[styles.dressCard, { backgroundColor: theme.backgroundDefault }]}>
                         {dress.imageUrl ? (
                           <Image source={{ uri: dress.imageUrl }} style={styles.dressImage} />
@@ -986,6 +1055,13 @@ const styles = StyleSheet.create({
   timelineTextContainer: { flex: 1 },
   timelineLabel: { fontSize: 15, fontWeight: "500" },
   timelineDate: { fontSize: 12, marginTop: 2 },
+
+  quickActionButton: {
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 
   tipCard: {
     flexDirection: "row",

@@ -38,6 +38,23 @@ interface VendorReview {
   } | null;
 }
 
+interface VendorProduct {
+  id: string;
+  title: string;
+  description: string | null;
+  unitPrice: number;
+  unitType: string;
+  metadata: any | null;
+  categoryTag?: string | null;
+  // Venue-specific fields
+  venueAddress?: string | null;
+  venueMaxGuests?: number | null;
+  venueMinGuests?: number | null;
+  venueCateringIncluded?: boolean;
+  venueAccommodationAvailable?: boolean;
+  venueCheckoutTime?: string | null;
+}
+
 interface VendorReviewsResponse {
   reviews: VendorReview[];
   googleReviewUrl: string | null;
@@ -59,6 +76,11 @@ export default function VendorDetailScreen() {
 
   const { data, isLoading, error } = useQuery<VendorReviewsResponse>({
     queryKey: [`/api/vendors/${vendorId}/reviews`],
+    enabled: !!vendorId,
+  });
+
+  const { data: products = [] } = useQuery<VendorProduct[]>({
+    queryKey: [`/api/vendors/${vendorId}/products`],
     enabled: !!vendorId,
   });
 
@@ -156,6 +178,285 @@ export default function VendorDetailScreen() {
         </Card>
       ) : (
         <>
+          {/* Products Section */}
+          {products.length > 0 && (
+            <>
+              <ThemedText style={[Typography.h3, { marginTop: Spacing.xl, marginBottom: Spacing.md }]}>
+                Tilbud & Tjenester
+              </ThemedText>
+              {products.map((product) => {
+                const metadata = product.metadata || {};
+                const formatPrice = (priceInOre: number) => {
+                  return (priceInOre / 100).toLocaleString("nb-NO", { minimumFractionDigits: 0 }) + " kr";
+                };
+                
+                return (
+                  <Card key={product.id} style={styles.productCard}>
+                    <View style={styles.productHeader}>
+                      <ThemedText style={[Typography.body, { fontWeight: "600", flex: 1 }]}>
+                        {product.title}
+                      </ThemedText>
+                      <ThemedText style={[Typography.body, { color: theme.accent, fontWeight: "700" }]}>
+                        {formatPrice(product.unitPrice)}
+                      </ThemedText>
+                    </View>
+                    
+                    {product.description && (
+                      <ThemedText style={[Typography.small, { opacity: 0.8, marginTop: Spacing.xs }]}>
+                        {product.description}
+                      </ThemedText>
+                    )}\n                    \n                    {/* Metadata badges */}
+                    {Object.keys(metadata).length > 0 && (
+                      <View style={styles.metadataRow}>
+                        {metadata.offersTasteSample && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#4CAF5015" }]}>
+                            <Feather name="coffee" size={10} color="#4CAF50" />
+                            <ThemedText style={[styles.metadataText, { color: "#4CAF50" }]}>Smaksprøve</ThemedText>
+                          </View>
+                        )}
+                        {metadata.cuisineType && (
+                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                              {metadata.cuisineType.charAt(0).toUpperCase() + metadata.cuisineType.slice(1)}
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.isVegetarian && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
+                            <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Vegetar</ThemedText>
+                          </View>
+                        )}
+                        {metadata.isVegan && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
+                            <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Vegan</ThemedText>
+                          </View>
+                        )}
+                        {metadata.cakeStyle && (
+                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                              {metadata.cakeStyle.charAt(0).toUpperCase() + metadata.cakeStyle.slice(1)}
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.numberOfTiers && (
+                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                              {metadata.numberOfTiers} etasjer
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.flowerItemType && (
+                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                              {metadata.flowerItemType.charAt(0).toUpperCase() + metadata.flowerItemType.slice(1)}
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.vehicleType && (
+                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                            <Feather name="truck" size={10} color={theme.accent} />
+                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                              {metadata.vehicleType.charAt(0).toUpperCase() + metadata.vehicleType.slice(1)}
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.passengerCapacity && (
+                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                            <Feather name="users" size={10} color={theme.accent} />
+                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                              {metadata.passengerCapacity} plasser
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.serviceType && (
+                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                              {metadata.serviceType.charAt(0).toUpperCase() + metadata.serviceType.slice(1)}
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.includesTrialSession && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#9C27B015" }]}>
+                            <Feather name="check" size={10} color="#9C27B0" />
+                            <ThemedText style={[styles.metadataText, { color: "#9C27B0" }]}>Prøveskyss</ThemedText>
+                          </View>
+                        )}
+                        
+                        {/* Fotograf metadata */}
+                        {metadata.packageType && metadata.hoursIncluded && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#2196F315" }]}>
+                            <Feather name="camera" size={10} color="#2196F3" />
+                            <ThemedText style={[styles.metadataText, { color: "#2196F3" }]}>
+                              {metadata.packageType} - {metadata.hoursIncluded}t
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.photosDelivered && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#2196F315" }]}>
+                            <Feather name="image" size={10} color="#2196F3" />
+                            <ThemedText style={[styles.metadataText, { color: "#2196F3" }]}>
+                              {metadata.photosDelivered} bilder
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.printRightsIncluded && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#00BCD415" }]}>
+                            <Feather name="printer" size={10} color="#00BCD4" />
+                            <ThemedText style={[styles.metadataText, { color: "#00BCD4" }]}>Trykkerett</ThemedText>
+                          </View>
+                        )}
+                        
+                        {/* Videograf metadata */}
+                        {metadata.filmDurationMinutes && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#9C27B015" }]}>
+                            <Feather name="film" size={10} color="#9C27B0" />
+                            <ThemedText style={[styles.metadataText, { color: "#9C27B0" }]}>
+                              {metadata.filmDurationMinutes} min
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.editingStyle && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#673AB715" }]}>
+                            <ThemedText style={[styles.metadataText, { color: "#673AB7" }]}>
+                              {metadata.editingStyle.charAt(0).toUpperCase() + metadata.editingStyle.slice(1)}
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.droneFootageIncluded && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#FF980015" }]}>
+                            <Feather name="navigation" size={10} color="#FF9800" />
+                            <ThemedText style={[styles.metadataText, { color: "#FF9800" }]}>Drone</ThemedText>
+                          </View>
+                        )}
+                        
+                        {/* Musikk metadata */}
+                        {metadata.performanceType && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#E91E6315" }]}>
+                            <Feather name="music" size={10} color="#E91E63" />
+                            <ThemedText style={[styles.metadataText, { color: "#E91E63" }]}>
+                              {metadata.performanceType.toUpperCase()}
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.genre && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#F4433615" }]}>
+                            <ThemedText style={[styles.metadataText, { color: "#F44336" }]}>
+                              {metadata.genre.charAt(0).toUpperCase() + metadata.genre.slice(1)}
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.performanceDurationHours && (
+                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                            <Feather name="clock" size={10} color={theme.accent} />
+                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                              {metadata.performanceDurationHours}t
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.equipmentIncluded && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#FF572215" }]}>
+                            <Feather name="headphones" size={10} color="#FF5722" />
+                            <ThemedText style={[styles.metadataText, { color: "#FF5722" }]}>Utstyr</ThemedText>
+                          </View>
+                        )}
+                        
+                        {/* Venue metadata */}
+                        {metadata.capacityMax && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#79554815" }]}>
+                            <Feather name="users" size={10} color="#795548" />
+                            <ThemedText style={[styles.metadataText, { color: "#795548" }]}>
+                              {metadata.capacityMin && `${metadata.capacityMin}-`}{metadata.capacityMax} gjester
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.indoorOutdoor && (
+                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                            <Feather name="home" size={10} color={theme.accent} />
+                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                              {metadata.indoorOutdoor.charAt(0).toUpperCase() + metadata.indoorOutdoor.slice(1)}
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.cateringIncluded && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
+                            <Feather name="coffee" size={10} color="#8BC34A" />
+                            <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Catering</ThemedText>
+                          </View>
+                        )}
+                        
+                        {/* Planlegger metadata */}
+                        {metadata.serviceLevel && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#00BCD415" }]}>
+                            <Feather name="clipboard" size={10} color="#00BCD4" />
+                            <ThemedText style={[styles.metadataText, { color: "#00BCD4" }]}>
+                              {metadata.serviceLevel.charAt(0).toUpperCase() + metadata.serviceLevel.slice(1)}
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.monthsOfService && (
+                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                            <Feather name="calendar" size={10} color={theme.accent} />
+                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                              {metadata.monthsOfService} mnd
+                            </ThemedText>
+                          </View>
+                        )}
+                        {metadata.vendorCoordinationIncluded && (
+                          <View style={[styles.metadataBadge, { backgroundColor: "#00968815" }]}>
+                            <Feather name="users" size={10} color="#009688" />
+                            <ThemedText style={[styles.metadataText, { color: "#009688" }]}>Koordinering</ThemedText>
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                    {/* Venue-specific details */}
+                    {product.categoryTag === 'venue' && (product.venueMaxGuests || product.venueAddress) && (
+                      <View style={[styles.venueDetailsBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
+                        {product.venueMaxGuests && (
+                          <View style={styles.venueDetailRow}>
+                            <Feather name="users" size={14} color={theme.accent} />
+                            <ThemedText style={[Typography.small, { flex: 1, marginLeft: Spacing.xs }]}>
+                              Kapasitet: {product.venueMinGuests ? `${product.venueMinGuests}-${product.venueMaxGuests}` : `Opptil ${product.venueMaxGuests}`} gjester
+                            </ThemedText>
+                          </View>
+                        )}
+                        {product.venueAddress && (
+                          <View style={styles.venueDetailRow}>
+                            <Feather name="map-pin" size={14} color={theme.accent} />
+                            <ThemedText style={[Typography.small, { flex: 1, marginLeft: Spacing.xs }]} numberOfLines={1}>
+                              {product.venueAddress}
+                            </ThemedText>
+                          </View>
+                        )}
+                        <View style={styles.venueBadgesRow}>
+                          {product.venueCateringIncluded && (
+                            <View style={[styles.venueBadge, { backgroundColor: "#4CAF5020" }]}>
+                              <Feather name="coffee" size={10} color="#4CAF50" />
+                              <ThemedText style={[styles.metadataText, { color: "#4CAF50" }]}>Servering inkludert</ThemedText>
+                            </View>
+                          )}
+                          {product.venueAccommodationAvailable && (
+                            <View style={[styles.venueBadge, { backgroundColor: "#2196F320" }]}>
+                              <Feather name="home" size={10} color="#2196F3" />
+                              <ThemedText style={[styles.metadataText, { color: "#2196F3" }]}>Overnatting tilgjengelig</ThemedText>
+                            </View>
+                          )}
+                          {product.venueCheckoutTime && (
+                            <View style={[styles.venueBadge, { backgroundColor: theme.accent + "20" }]}>
+                              <Feather name="clock" size={10} color={theme.accent} />
+                              <ThemedText style={[styles.metadataText, { color: theme.accent }]}>Utsjekk: {product.venueCheckoutTime}</ThemedText>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    )}
+                  </Card>
+                );
+              })}
+            </>
+          )}
+          
           <Card style={styles.ratingCard}>
             <View style={styles.ratingMain}>
               <ThemedText style={[Typography.h1, { color: theme.accent }]}>
@@ -320,5 +621,58 @@ const styles = StyleSheet.create({
   errorCard: {
     alignItems: "center",
     paddingVertical: Spacing.xl,
+  },
+  productCard: {
+    marginBottom: Spacing.md,
+  },
+  productHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: Spacing.xs,
+  },
+  metadataRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: Spacing.sm,
+  },
+  metadataBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.sm,
+  },
+  metadataText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  venueDetailsBox: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    marginTop: Spacing.md,
+    gap: Spacing.xs,
+  },
+  venueDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  venueBadgesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: Spacing.xs,
+  },
+  venueBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.sm,
   },
 });

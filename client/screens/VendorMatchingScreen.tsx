@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   FlatList,
   Alert,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -21,6 +22,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import { getApiUrl } from "@/lib/query-client";
+import { getCoupleProfile } from "@/lib/api-couples";
 
 const COUPLE_STORAGE_KEY = "wedflow_couple_session";
 
@@ -45,6 +47,23 @@ interface WeddingPreferences {
   budget: number | null;
 }
 
+interface VendorProduct {
+  id: string;
+  vendorId: string;
+  title: string;
+  description: string | null;
+  unitPrice: number;
+  unitType: string;
+  metadata: any | null;
+  // Venue-specific fields
+  venueAddress?: string | null;
+  venueMaxGuests?: number | null;
+  venueMinGuests?: number | null;
+  venueCateringIncluded?: boolean;
+  venueAccommodationAvailable?: boolean;
+  venueCheckoutTime?: string | null;
+}
+
 interface VendorMatch {
   id: string;
   businessName: string;
@@ -54,6 +73,7 @@ interface VendorMatch {
   location: string | null;
   priceRange: string | null;
   imageUrl: string | null;
+  culturalExpertise?: string[] | null;
   // Capacity fields for matching
   venueCapacityMin?: number | null;
   venueCapacityMax?: number | null;
@@ -62,6 +82,8 @@ interface VendorMatch {
   // Match score
   matchScore?: number;
   matchReasons?: string[];
+  // Products
+  products?: VendorProduct[];
 }
 
 type RouteParams = {
@@ -69,6 +91,7 @@ type RouteParams = {
     category?: string;
     guestCount?: number;
     cuisineTypes?: string[];
+    selectedTraditions?: string[];
   };
 };
 
@@ -98,16 +121,51 @@ export default function VendorMatchingScreen() {
   const initialCategory = route.params?.category || null;
   const initialGuestCount = route.params?.guestCount || null;
   const initialCuisineTypes = route.params?.cuisineTypes || [];
+  const initialTraditions = route.params?.selectedTraditions || [];
   
   const [selectedCategory, setSelectedCategory] = useState<string | null>(initialCategory);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>(initialCuisineTypes);
+  const [selectedTraditions, setSelectedTraditions] = useState<string[]>(initialTraditions);
   const [preferences, setPreferences] = useState<WeddingPreferences>({
     guestCount: initialGuestCount,
     weddingDate: null,
     location: null,
     budget: null,
   });
+  
+  // Metadata filters
+  const [filterTasteSample, setFilterTasteSample] = useState(false);
+  const [filterVegetarian, setFilterVegetarian] = useState(false);
+  const [filterVegan, setFilterVegan] = useState(false);
+  const [filterCakeStyles, setFilterCakeStyles] = useState<string[]>([]);
+  const [filterVehicleTypes, setFilterVehicleTypes] = useState<string[]>([]);
+  const [filterServiceTypes, setFilterServiceTypes] = useState<string[]>([]);
+  const [filterTrialSession, setFilterTrialSession] = useState(false);
+  
+  // Fotograf filters
+  const [filterPhotoPackageTypes, setFilterPhotoPackageTypes] = useState<string[]>([]);
+  const [filterPrintRights, setFilterPrintRights] = useState(false);
+  const [filterRawPhotos, setFilterRawPhotos] = useState(false);
+  
+  // Videograf filters
+  const [filterVideoPackageTypes, setFilterVideoPackageTypes] = useState<string[]>([]);
+  const [filterDroneFootage, setFilterDroneFootage] = useState(false);
+  const [filterEditingStyles, setFilterEditingStyles] = useState<string[]>([]);
+  
+  // Musikk filters
+  const [filterPerformanceTypes, setFilterPerformanceTypes] = useState<string[]>([]);
+  const [filterMusicGenres, setFilterMusicGenres] = useState<string[]>([]);
+  const [filterEquipmentIncluded, setFilterEquipmentIncluded] = useState(false);
+  
+  // Venue filters
+  const [filterIndoorOutdoor, setFilterIndoorOutdoor] = useState<string[]>([]);
+  const [filterCateringIncluded, setFilterCateringIncluded] = useState(false);
+  const [filterMinCapacity, setFilterMinCapacity] = useState<number | null>(null);
+  
+  // Planlegger filters
+  const [filterServiceLevels, setFilterServiceLevels] = useState<string[]>([]);
+  const [filterVendorCoordination, setFilterVendorCoordination] = useState(false);
 
   useEffect(() => {
     loadSessionAndPreferences();
@@ -162,6 +220,16 @@ export default function VendorMatchingScreen() {
     }
   }, [guestData, initialGuestCount]);
 
+  // Fetch couple profile to get selected traditions
+  const { data: coupleProfile } = useQuery({
+    queryKey: ["coupleProfile"],
+    queryFn: async () => {
+      if (!sessionToken) throw new Error("No session");
+      return getCoupleProfile(sessionToken);
+    },
+    enabled: !!sessionToken,
+  });
+
   // Fetch vendors that match the category
   const { data: vendors = [], isLoading } = useQuery<VendorMatch[]>({
     queryKey: ["/api/vendors/matching", selectedCategory, preferences.guestCount, selectedCuisines],
@@ -184,19 +252,148 @@ export default function VendorMatchingScreen() {
   const matchedVendors = useMemo(() => {
     if (!vendors.length) return [];
     
-    return vendors.map(vendor => {
+    // Apply metadata filters first
+    let filtered = vendors;
+    
+    if (selectedCategory === "catering") {
+      if (filterTasteSample || filterVegetarian || filterVegan) {
+        filtered = filtered.filter(vendor => 
+          vendor.products?.some(product => {
+            const metadata = product.metadata || {};
+            return (
+              (!filterTasteSample || metadata.offersTasteSample) &&
+              (!filterVegetarian || metadata.isVegetarian) &&
+              (!filterVegan || metadata.isVegan)
+            );
+          })
+        );
+      }
+    }
+    
+    if (selectedCategory === "cake") {
+      if (filterCakeStyles.length > 0) {
+        filtered = filtered.filter(vendor =>
+          vendor.products?.some(product => {
+            const metadata = product.metadata || {};
+            return metadata.cakeStyle && filterCakeStyles.includes(metadata.cakeStyle);
+          })
+        );
+      }
+    }
+    
+    if (selectedCategory === "transport") {
+      if (filterVehicleTypes.length > 0) {
+        filtered = filtered.filter(vendor =>
+          vendor.products?.some(product => {
+            const metadata = product.metadata || {};
+            return metadata.vehicleType && filterVehicleTypes.includes(metadata.vehicleType);
+          })
+        );
+      }
+    }
+    
+    if (selectedCategory === "beauty") {
+      if (filterServiceTypes.length > 0 || filterTrialSession) {
+        filtered = filtered.filter(vendor =>
+          vendor.products?.some(product => {
+            const metadata = product.metadata || {};
+            return (
+              (filterServiceTypes.length === 0 || (metadata.serviceType && filterServiceTypes.includes(metadata.serviceType))) &&
+              (!filterTrialSession || metadata.includesTrialSession)
+            );
+          })
+        );
+      }
+    }
+    
+    if (selectedCategory === "photographer") {
+      if (filterPhotoPackageTypes.length > 0 || filterPrintRights || filterRawPhotos) {
+        filtered = filtered.filter(vendor =>
+          vendor.products?.some(product => {
+            const metadata = product.metadata || {};
+            return (
+              (filterPhotoPackageTypes.length === 0 || (metadata.packageType && filterPhotoPackageTypes.includes(metadata.packageType))) &&
+              (!filterPrintRights || metadata.printRightsIncluded) &&
+              (!filterRawPhotos || metadata.rawPhotosIncluded)
+            );
+          })
+        );
+      }
+    }
+    
+    if (selectedCategory === "videographer") {
+      if (filterVideoPackageTypes.length > 0 || filterDroneFootage || filterEditingStyles.length > 0) {
+        filtered = filtered.filter(vendor =>
+          vendor.products?.some(product => {
+            const metadata = product.metadata || {};
+            return (
+              (filterVideoPackageTypes.length === 0 || (metadata.packageType && filterVideoPackageTypes.includes(metadata.packageType))) &&
+              (!filterDroneFootage || metadata.droneFootageIncluded) &&
+              (filterEditingStyles.length === 0 || (metadata.editingStyle && filterEditingStyles.includes(metadata.editingStyle)))
+            );
+          })
+        );
+      }
+    }
+    
+    if (selectedCategory === "music") {
+      if (filterPerformanceTypes.length > 0 || filterMusicGenres.length > 0 || filterEquipmentIncluded) {
+        filtered = filtered.filter(vendor =>
+          vendor.products?.some(product => {
+            const metadata = product.metadata || {};
+            return (
+              (filterPerformanceTypes.length === 0 || (metadata.performanceType && filterPerformanceTypes.includes(metadata.performanceType))) &&
+              (filterMusicGenres.length === 0 || (metadata.genre && filterMusicGenres.includes(metadata.genre))) &&
+              (!filterEquipmentIncluded || metadata.equipmentIncluded)
+            );
+          })
+        );
+      }
+    }
+    
+    if (selectedCategory === "venue") {
+      if (filterIndoorOutdoor.length > 0 || filterCateringIncluded || filterMinCapacity) {
+        filtered = filtered.filter(vendor =>
+          vendor.products?.some(product => {
+            const metadata = product.metadata || {};
+            return (
+              (filterIndoorOutdoor.length === 0 || (metadata.indoorOutdoor && filterIndoorOutdoor.includes(metadata.indoorOutdoor))) &&
+              (!filterCateringIncluded || product.venueCateringIncluded) &&
+              (!filterMinCapacity || (product.venueMaxGuests && product.venueMaxGuests >= filterMinCapacity))
+            );
+          })
+        );
+      }
+    }
+    
+    if (selectedCategory === "planner") {
+      if (filterServiceLevels.length > 0 || filterVendorCoordination) {
+        filtered = filtered.filter(vendor =>
+          vendor.products?.some(product => {
+            const metadata = product.metadata || {};
+            return (
+              (filterServiceLevels.length === 0 || (metadata.serviceLevel && filterServiceLevels.includes(metadata.serviceLevel))) &&
+              (!filterVendorCoordination || metadata.vendorCoordinationIncluded)
+            );
+          })
+        );
+      }
+    }
+    
+    return filtered.map(vendor => {
       let score = 50; // Base score
       const reasons: string[] = [];
       
       // Check capacity match for venues
       if (preferences.guestCount && selectedCategory === "venue") {
-        if (vendor.venueCapacityMin && vendor.venueCapacityMax) {
-          if (preferences.guestCount >= vendor.venueCapacityMin && preferences.guestCount <= vendor.venueCapacityMax) {
+        const venueProduct = vendor.products?.find(p => p.venueMaxGuests || p.venueMinGuests);
+        if (venueProduct?.venueMaxGuests && venueProduct?.venueMinGuests) {
+          if (preferences.guestCount >= venueProduct.venueMinGuests && preferences.guestCount <= venueProduct.venueMaxGuests) {
             score += 30;
             reasons.push(`Passer for ${preferences.guestCount} gjester`);
-          } else if (preferences.guestCount < vendor.venueCapacityMin) {
+          } else if (preferences.guestCount < venueProduct.venueMinGuests) {
             score -= 10;
-            reasons.push(`Minimum ${vendor.venueCapacityMin} gjester`);
+            reasons.push(`Minimum ${venueProduct.venueMinGuests} gjester`);
           }
         }
       }
@@ -234,6 +431,30 @@ export default function VendorMatchingScreen() {
         if (cuisineMatches > 0) {
           score += cuisineMatches * 20; // 20 points per cuisine match
           reasons.push(`Tilbyr ${matchedCuisineLabels.join(", ")} mat`);
+        }
+      }
+
+      // Check cultural expertise match - use passed traditions OR couple profile traditions
+      const coupleTraditions = selectedTraditions.length > 0 
+        ? selectedTraditions 
+        : (coupleProfile?.selectedTraditions || []);
+        
+      if (coupleTraditions.length > 0 && vendor.culturalExpertise) {
+        const matchingTraditions = coupleTraditions.filter(
+          tradition => vendor.culturalExpertise?.includes(tradition)
+        );
+        
+        if (matchingTraditions.length > 0) {
+          score += matchingTraditions.length * 30; // 30 points per matching tradition (increased from 25)
+          const traditionNames = matchingTraditions.map(t => {
+            const nameMap: Record<string, string> = {
+              norway: "Norsk", sweden: "Svensk", denmark: "Dansk",
+              hindu: "Hindu", sikh: "Sikh", muslim: "Muslim",
+              jewish: "Jødisk", chinese: "Kinesisk"
+            };
+            return nameMap[t] || t;
+          });
+          reasons.push(`Ekspertise i ${traditionNames.join(", ")} tradisjoner`);
         }
       }
       
@@ -325,7 +546,35 @@ export default function VendorMatchingScreen() {
       
       return { ...vendor, matchScore: score, matchReasons: reasons };
     }).sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
-  }, [vendors, preferences, selectedCategory]);
+  }, [
+    vendors, 
+    preferences, 
+    selectedCategory,
+    selectedTraditions,
+    selectedCuisines,
+    coupleProfile,
+    filterTasteSample, 
+    filterVegetarian, 
+    filterVegan, 
+    filterCakeStyles, 
+    filterVehicleTypes, 
+    filterServiceTypes, 
+    filterTrialSession,
+    filterPhotoPackageTypes,
+    filterPrintRights,
+    filterRawPhotos,
+    filterVideoPackageTypes,
+    filterDroneFootage,
+    filterEditingStyles,
+    filterPerformanceTypes,
+    filterMusicGenres,
+    filterEquipmentIncluded,
+    filterIndoorOutdoor,
+    filterCateringIncluded,
+    filterMinCapacity,
+    filterServiceLevels,
+    filterVendorCoordination
+  ]);
 
   const getCategoryConfig = (categoryId: string) => {
     return VENDOR_CATEGORIES.find(c => c.id === categoryId) || VENDOR_CATEGORIES[0];
@@ -333,6 +582,28 @@ export default function VendorMatchingScreen() {
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
+    // Reset filters when changing category
+    setFilterTasteSample(false);
+    setFilterVegetarian(false);
+    setFilterVegan(false);
+    setFilterCakeStyles([]);
+    setFilterVehicleTypes([]);
+    setFilterServiceTypes([]);
+    setFilterTrialSession(false);
+    setFilterPhotoPackageTypes([]);
+    setFilterPrintRights(false);
+    setFilterRawPhotos(false);
+    setFilterVideoPackageTypes([]);
+    setFilterDroneFootage(false);
+    setFilterEditingStyles([]);
+    setFilterPerformanceTypes([]);
+    setFilterMusicGenres([]);
+    setFilterEquipmentIncluded(false);
+    setFilterIndoorOutdoor([]);
+    setFilterCateringIncluded(false);
+    setFilterMinCapacity(null);
+    setFilterServiceLevels([]);
+    setFilterVendorCoordination(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -458,6 +729,275 @@ export default function VendorMatchingScreen() {
             </View>
           )}
           
+          {/* Display vendor products with metadata */}
+          {item.products && item.products.length > 0 && (
+            <View style={styles.productsSection}>
+              <ThemedText style={[styles.productsSectionTitle, { color: theme.textSecondary }]}>
+                Tilbud ({item.products.length})
+              </ThemedText>
+              {item.products.slice(0, 3).map((product) => {
+                const metadata = product.metadata || {};
+                const formatPrice = (priceInOre: number) => {
+                  return (priceInOre / 100).toLocaleString("nb-NO", { minimumFractionDigits: 0 }) + " kr";
+                };
+                
+                return (
+                  <View key={product.id} style={[styles.productCard, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}>
+                    <View style={styles.productHeader}>
+                      <ThemedText style={[styles.productTitle, { color: theme.text }]} numberOfLines={1}>
+                        {product.title}
+                      </ThemedText>
+                      <ThemedText style={[styles.productPrice, { color: theme.accent }]}>
+                        {formatPrice(product.unitPrice)}
+                      </ThemedText>
+                    </View>
+                    
+                    {/* Category-specific metadata badges */}
+                    <View style={styles.metadataRow}>
+                      {/* Catering metadata */}
+                      {metadata.offersTasteSample && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#4CAF5015" }]}>
+                          <Feather name="coffee" size={10} color="#4CAF50" />
+                          <ThemedText style={[styles.metadataText, { color: "#4CAF50" }]}>Smaksprøve</ThemedText>
+                        </View>
+                      )}
+                      {metadata.cuisineType && (
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "10" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                            {metadata.cuisineType.charAt(0).toUpperCase() + metadata.cuisineType.slice(1)}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.isVegetarian && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
+                          <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Vegetar</ThemedText>
+                        </View>
+                      )}
+                      {metadata.isVegan && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
+                          <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Vegan</ThemedText>
+                        </View>
+                      )}
+                      
+                      {/* Cake metadata */}
+                      {metadata.cakeStyle && (
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "10" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                            {metadata.cakeStyle.charAt(0).toUpperCase() + metadata.cakeStyle.slice(1)}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.numberOfTiers && (
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "10" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                            {metadata.numberOfTiers} etasjer
+                          </ThemedText>
+                        </View>
+                      )}
+                      
+                      {/* Flower metadata */}
+                      {metadata.flowerItemType && (
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "10" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                            {metadata.flowerItemType.charAt(0).toUpperCase() + metadata.flowerItemType.slice(1)}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.isSeasonal && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#FF980015" }]}>
+                          <Feather name="sun" size={10} color="#FF9800" />
+                          <ThemedText style={[styles.metadataText, { color: "#FF9800" }]}>Sesongbasert</ThemedText>
+                        </View>
+                      )}
+                      
+                      {/* Transport metadata */}
+                      {metadata.vehicleType && (
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "10" }]}>
+                          <Feather name="truck" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                            {metadata.vehicleType.charAt(0).toUpperCase() + metadata.vehicleType.slice(1)}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.passengerCapacity && (
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "10" }]}>
+                          <Feather name="users" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                            {metadata.passengerCapacity} plasser
+                          </ThemedText>
+                        </View>
+                      )}
+                      
+                      {/* Hair & Makeup metadata */}
+                      {metadata.serviceType && (
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "10" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                            {metadata.serviceType.charAt(0).toUpperCase() + metadata.serviceType.slice(1)}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.includesTrialSession && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#9C27B015" }]}>
+                          <Feather name="check" size={10} color="#9C27B0" />
+                          <ThemedText style={[styles.metadataText, { color: "#9C27B0" }]}>Prøveskyss</ThemedText>
+                        </View>
+                      )}
+                      
+                      {/* Fotograf metadata */}
+                      {metadata.packageType && selectedCategory === "photographer" && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#2196F315" }]}>
+                          <ThemedText style={[styles.metadataText, { color: "#2196F3" }]}>
+                            {metadata.packageType.charAt(0).toUpperCase() + metadata.packageType.slice(1)}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.hoursIncluded && (
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "10" }]}>
+                          <Feather name="clock" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                            {metadata.hoursIncluded}t
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.photosDelivered && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#2196F315" }]}>
+                          <Feather name="image" size={10} color="#2196F3" />
+                          <ThemedText style={[styles.metadataText, { color: "#2196F3" }]}>
+                            {metadata.photosDelivered} bilder
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.printRightsIncluded && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#00BCD415" }]}>
+                          <Feather name="printer" size={10} color="#00BCD4" />
+                          <ThemedText style={[styles.metadataText, { color: "#00BCD4" }]}>Trykkerett</ThemedText>
+                        </View>
+                      )}
+                      {metadata.rawPhotosIncluded && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#00BCD415" }]}>
+                          <ThemedText style={[styles.metadataText, { color: "#00BCD4" }]}>RAW</ThemedText>
+                        </View>
+                      )}
+                      
+                      {/* Videograf metadata */}
+                      {metadata.packageType && selectedCategory === "videographer" && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#9C27B015" }]}>
+                          <ThemedText style={[styles.metadataText, { color: "#9C27B0" }]}>
+                            {metadata.packageType.charAt(0).toUpperCase() + metadata.packageType.slice(1)}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.filmDurationMinutes && (
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "10" }]}>
+                          <Feather name="film" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                            {metadata.filmDurationMinutes} min
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.editingStyle && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#673AB715" }]}>
+                          <ThemedText style={[styles.metadataText, { color: "#673AB7" }]}>
+                            {metadata.editingStyle.charAt(0).toUpperCase() + metadata.editingStyle.slice(1)}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.droneFootageIncluded && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#FF980015" }]}>
+                          <Feather name="navigation" size={10} color="#FF9800" />
+                          <ThemedText style={[styles.metadataText, { color: "#FF9800" }]}>Drone</ThemedText>
+                        </View>
+                      )}
+                      
+                      {/* Musikk metadata */}
+                      {metadata.performanceType && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#E91E6315" }]}>
+                          <Feather name="music" size={10} color="#E91E63" />
+                          <ThemedText style={[styles.metadataText, { color: "#E91E63" }]}>
+                            {metadata.performanceType.toUpperCase()}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.genre && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#F4433615" }]}>
+                          <ThemedText style={[styles.metadataText, { color: "#F44336" }]}>
+                            {metadata.genre.charAt(0).toUpperCase() + metadata.genre.slice(1)}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.performanceDurationHours && (
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "10" }]}>
+                          <Feather name="clock" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                            {metadata.performanceDurationHours}t
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.equipmentIncluded && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#FF572215" }]}>
+                          <Feather name="headphones" size={10} color="#FF5722" />
+                          <ThemedText style={[styles.metadataText, { color: "#FF5722" }]}>Utstyr</ThemedText>
+                        </View>
+                      )}
+                      
+                      {/* Venue metadata */}
+                      {metadata.capacityMax && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#79554815" }]}>
+                          <Feather name="users" size={10} color="#795548" />
+                          <ThemedText style={[styles.metadataText, { color: "#795548" }]}>
+                            {metadata.capacityMin && `${metadata.capacityMin}-`}{metadata.capacityMax} gjester
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.indoorOutdoor && (
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "10" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                            {metadata.indoorOutdoor.charAt(0).toUpperCase() + metadata.indoorOutdoor.slice(1)}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.cateringIncluded && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
+                          <Feather name="coffee" size={10} color="#8BC34A" />
+                          <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Catering</ThemedText>
+                        </View>
+                      )}
+                      
+                      {/* Planlegger metadata */}
+                      {metadata.serviceLevel && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#00BCD415" }]}>
+                          <Feather name="clipboard" size={10} color="#00BCD4" />
+                          <ThemedText style={[styles.metadataText, { color: "#00BCD4" }]}>
+                            {metadata.serviceLevel.charAt(0).toUpperCase() + metadata.serviceLevel.slice(1)}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.monthsOfService && (
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "10" }]}>
+                          <Feather name="calendar" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                            {metadata.monthsOfService} mnd
+                          </ThemedText>
+                        </View>
+                      )}
+                      {metadata.vendorCoordinationIncluded && (
+                        <View style={[styles.metadataBadge, { backgroundColor: "#00968815" }]}>
+                          <Feather name="users" size={10} color="#009688" />
+                          <ThemedText style={[styles.metadataText, { color: "#009688" }]}>Koordinering</ThemedText>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+              {item.products.length > 3 && (
+                <ThemedText style={[styles.moreProductsText, { color: theme.textMuted }]}>
+                  +{item.products.length - 3} flere produkter
+                </ThemedText>
+              )}
+            </View>
+          )}
+          
           {item.priceRange && (
             <View style={styles.priceRow}>
               <Feather name="tag" size={12} color={theme.textMuted} />
@@ -548,6 +1088,536 @@ export default function VendorMatchingScreen() {
               </ThemedText>
             </View>
           </View>
+
+          {/* Metadata Filters */}
+          {selectedCategory && (
+            <Animated.View entering={FadeInDown.duration(300).delay(100)} style={[styles.filtersSection, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+              {/* Quick Filter Presets */}
+              <View style={styles.quickFiltersRow}>
+                <Feather name="zap" size={14} color={theme.accent} />
+                <ThemedText style={[styles.quickFiltersLabel, { color: theme.textSecondary }]}>Hurtigvalg:</ThemedText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickFiltersScroll}>
+                  <Pressable
+                    onPress={() => {
+                      // Clear all filters
+                      setFilterTasteSample(false);
+                      setFilterVegetarian(false);
+                      setFilterVegan(false);
+                      setFilterCakeStyles([]);
+                      setFilterVehicleTypes([]);
+                      setFilterServiceTypes([]);
+                      setFilterTrialSession(false);
+                      setFilterPhotoPackageTypes([]);
+                      setFilterPrintRights(false);
+                      setFilterRawPhotos(false);
+                      setFilterVideoPackageTypes([]);
+                      setFilterDroneFootage(false);
+                      setFilterEditingStyles([]);
+                      setFilterPerformanceTypes([]);
+                      setFilterMusicGenres([]);
+                      setFilterEquipmentIncluded(false);
+                      setFilterIndoorOutdoor([]);
+                      setFilterCateringIncluded(false);
+                      setFilterServiceLevels([]);
+                      setFilterVendorCoordination(false);
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    }}
+                    style={[styles.quickFilterChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                  >
+                    <Feather name="x-circle" size={12} color={theme.textMuted} />
+                    <ThemedText style={[styles.quickFilterText, { color: theme.textMuted }]}>Nullstill</ThemedText>
+                  </Pressable>
+                  {selectedCategory === "photographer" && (
+                    <>
+                      <Pressable
+                        onPress={() => {
+                          setFilterPrintRights(true);
+                          setFilterRawPhotos(true);
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }}
+                        style={[styles.quickFilterChip, { backgroundColor: theme.accent + "15", borderColor: theme.accent }]}
+                      >
+                        <ThemedText style={[styles.quickFilterText, { color: theme.accent }]}>Full rettigheter</ThemedText>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          setFilterPhotoPackageTypes(["heldag"]);
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }}
+                        style={[styles.quickFilterChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                      >
+                        <ThemedText style={[styles.quickFilterText, { color: theme.text }]}>Heldagspakker</ThemedText>
+                      </Pressable>
+                    </>
+                  )}
+                  {selectedCategory === "videographer" && (
+                    <Pressable
+                      onPress={() => {
+                        setFilterDroneFootage(true);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[styles.quickFilterChip, { backgroundColor: theme.accent + "15", borderColor: theme.accent }]}
+                    >
+                      <Feather name="navigation" size={12} color={theme.accent} />
+                      <ThemedText style={[styles.quickFilterText, { color: theme.accent }]}>Med drone</ThemedText>
+                    </Pressable>
+                  )}
+                  {selectedCategory === "venue" && (
+                    <Pressable
+                      onPress={() => {
+                        setFilterCateringIncluded(true);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[styles.quickFilterChip, { backgroundColor: theme.accent + "15", borderColor: theme.accent }]}
+                    >
+                      <Feather name="coffee" size={12} color={theme.accent} />
+                      <ThemedText style={[styles.quickFilterText, { color: theme.accent }]}>Med catering</ThemedText>
+                    </Pressable>
+                  )}
+                  {selectedCategory === "music" && (
+                    <>
+                      <Pressable
+                        onPress={() => {
+                          setFilterPerformanceTypes(["dj"]);
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }}
+                        style={[styles.quickFilterChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                      >
+                        <ThemedText style={[styles.quickFilterText, { color: theme.text }]}>Kun DJ</ThemedText>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          setFilterPerformanceTypes(["band"]);
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }}
+                        style={[styles.quickFilterChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                      >
+                        <ThemedText style={[styles.quickFilterText, { color: theme.text }]}>Kun band</ThemedText>
+                      </Pressable>
+                    </>
+                  )}
+                </ScrollView>
+              </View>
+              
+              <View style={styles.filtersHeader}>
+                <Feather name="filter" size={14} color={theme.textSecondary} />
+                <ThemedText style={[styles.filtersTitle, { color: theme.textSecondary }]}>Filtre</ThemedText>
+              </View>
+              
+              {/* Catering Filters */}
+              {selectedCategory === "catering" && (
+                <View style={styles.filterChips}>
+                  <Pressable
+                    onPress={() => {
+                      setFilterTasteSample(!filterTasteSample);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={[styles.filterChip, { 
+                      backgroundColor: filterTasteSample ? "#4CAF50" : theme.backgroundRoot,
+                      borderColor: filterTasteSample ? "#4CAF50" : theme.border 
+                    }]}
+                  >
+                    <Feather name="coffee" size={12} color={filterTasteSample ? "#FFFFFF" : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterTasteSample ? "#FFFFFF" : theme.text }]}>
+                      Smaksprøve
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setFilterVegetarian(!filterVegetarian);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={[styles.filterChip, { 
+                      backgroundColor: filterVegetarian ? "#8BC34A" : theme.backgroundRoot,
+                      borderColor: filterVegetarian ? "#8BC34A" : theme.border 
+                    }]}
+                  >
+                    <ThemedText style={[styles.filterChipText, { color: filterVegetarian ? "#FFFFFF" : theme.text }]}>
+                      Vegetar
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setFilterVegan(!filterVegan);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={[styles.filterChip, { 
+                      backgroundColor: filterVegan ? "#8BC34A" : theme.backgroundRoot,
+                      borderColor: filterVegan ? "#8BC34A" : theme.border 
+                    }]}
+                  >
+                    <ThemedText style={[styles.filterChipText, { color: filterVegan ? "#FFFFFF" : theme.text }]}>
+                      Vegan
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              )}
+              
+              {/* Cake Filters */}
+              {selectedCategory === "cake" && (
+                <View style={styles.filterChips}>
+                  {["elegant", "modern", "rustic", "whimsical"].map(style => (
+                    <Pressable
+                      key={style}
+                      onPress={() => {
+                        setFilterCakeStyles(prev => 
+                          prev.includes(style) ? prev.filter(s => s !== style) : [...prev, style]
+                        );
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[styles.filterChip, { 
+                        backgroundColor: filterCakeStyles.includes(style) ? theme.accent : theme.backgroundRoot,
+                        borderColor: filterCakeStyles.includes(style) ? theme.accent : theme.border 
+                      }]}
+                    >
+                      <ThemedText style={[styles.filterChipText, { 
+                        color: filterCakeStyles.includes(style) ? "#FFFFFF" : theme.text 
+                      }]}>
+                        {style.charAt(0).toUpperCase() + style.slice(1)}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              
+              {/* Transport Filters */}
+              {selectedCategory === "transport" && (
+                <View style={styles.filterChips}>
+                  {["luxury-car", "vintage-car", "limousine", "bus", "van"].map(type => (
+                    <Pressable
+                      key={type}
+                      onPress={() => {
+                        setFilterVehicleTypes(prev => 
+                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                        );
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[styles.filterChip, { 
+                        backgroundColor: filterVehicleTypes.includes(type) ? theme.accent : theme.backgroundRoot,
+                        borderColor: filterVehicleTypes.includes(type) ? theme.accent : theme.border 
+                      }]}
+                    >
+                      <Feather name="truck" size={12} color={filterVehicleTypes.includes(type) ? "#FFFFFF" : theme.textSecondary} />
+                      <ThemedText style={[styles.filterChipText, { 
+                        color: filterVehicleTypes.includes(type) ? "#FFFFFF" : theme.text 
+                      }]}>
+                        {type.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              
+              {/* Hair & Makeup Filters */}
+              {selectedCategory === "beauty" && (
+                <View style={styles.filterChips}>
+                  {["hair", "makeup", "both"].map(type => (
+                    <Pressable
+                      key={type}
+                      onPress={() => {
+                        setFilterServiceTypes(prev => 
+                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                        );
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[styles.filterChip, { 
+                        backgroundColor: filterServiceTypes.includes(type) ? theme.accent : theme.backgroundRoot,
+                        borderColor: filterServiceTypes.includes(type) ? theme.accent : theme.border 
+                      }]}
+                    >
+                      <ThemedText style={[styles.filterChipText, { 
+                        color: filterServiceTypes.includes(type) ? "#FFFFFF" : theme.text 
+                      }]}>
+                        {type === "both" ? "Begge" : type === "hair" ? "Hår" : "Makeup"}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                  <Pressable
+                    onPress={() => {
+                      setFilterTrialSession(!filterTrialSession);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={[styles.filterChip, { 
+                      backgroundColor: filterTrialSession ? "#9C27B0" : theme.backgroundRoot,
+                      borderColor: filterTrialSession ? "#9C27B0" : theme.border 
+                    }]}
+                  >
+                    <Feather name="check" size={12} color={filterTrialSession ? "#FFFFFF" : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterTrialSession ? "#FFFFFF" : theme.text }]}>
+                      Prøveskyss
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              )}
+              
+              {/* Fotograf Filters */}
+              {selectedCategory === "photographer" && (
+                <View style={styles.filterChips}>
+                  {["timebasert", "heldag", "flerdag"].map(type => (
+                    <Pressable
+                      key={type}
+                      onPress={() => {
+                        setFilterPhotoPackageTypes(prev => 
+                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                        );
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[styles.filterChip, { 
+                        backgroundColor: filterPhotoPackageTypes.includes(type) ? "#2196F3" : theme.backgroundRoot,
+                        borderColor: filterPhotoPackageTypes.includes(type) ? "#2196F3" : theme.border 
+                      }]}
+                    >
+                      <ThemedText style={[styles.filterChipText, { 
+                        color: filterPhotoPackageTypes.includes(type) ? "#FFFFFF" : theme.text 
+                      }]}>
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                  <Pressable
+                    onPress={() => {
+                      setFilterPrintRights(!filterPrintRights);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={[styles.filterChip, { 
+                      backgroundColor: filterPrintRights ? "#00BCD4" : theme.backgroundRoot,
+                      borderColor: filterPrintRights ? "#00BCD4" : theme.border 
+                    }]}
+                  >
+                    <Feather name="printer" size={12} color={filterPrintRights ? "#FFFFFF" : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterPrintRights ? "#FFFFFF" : theme.text }]}>
+                      Trykkerett
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setFilterRawPhotos(!filterRawPhotos);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={[styles.filterChip, { 
+                      backgroundColor: filterRawPhotos ? "#00BCD4" : theme.backgroundRoot,
+                      borderColor: filterRawPhotos ? "#00BCD4" : theme.border 
+                    }]}
+                  >
+                    <Feather name="file" size={12} color={filterRawPhotos ? "#FFFFFF" : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterRawPhotos ? "#FFFFFF" : theme.text }]}>
+                      RAW-filer
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              )}
+              
+              {/* Videograf Filters */}
+              {selectedCategory === "videographer" && (
+                <View style={styles.filterChips}>
+                  {["highlight", "fullfilm", "både"].map(type => (
+                    <Pressable
+                      key={type}
+                      onPress={() => {
+                        setFilterVideoPackageTypes(prev => 
+                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                        );
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[styles.filterChip, { 
+                        backgroundColor: filterVideoPackageTypes.includes(type) ? "#9C27B0" : theme.backgroundRoot,
+                        borderColor: filterVideoPackageTypes.includes(type) ? "#9C27B0" : theme.border 
+                      }]}
+                    >
+                      <ThemedText style={[styles.filterChipText, { 
+                        color: filterVideoPackageTypes.includes(type) ? "#FFFFFF" : theme.text 
+                      }]}>
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                  {["cinematic", "documentary", "artistic"].map(style => (
+                    <Pressable
+                      key={style}
+                      onPress={() => {
+                        setFilterEditingStyles(prev => 
+                          prev.includes(style) ? prev.filter(s => s !== style) : [...prev, style]
+                        );
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[styles.filterChip, { 
+                        backgroundColor: filterEditingStyles.includes(style) ? "#673AB7" : theme.backgroundRoot,
+                        borderColor: filterEditingStyles.includes(style) ? "#673AB7" : theme.border 
+                      }]}
+                    >
+                      <ThemedText style={[styles.filterChipText, { 
+                        color: filterEditingStyles.includes(style) ? "#FFFFFF" : theme.text 
+                      }]}>
+                        {style.charAt(0).toUpperCase() + style.slice(1)}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                  <Pressable
+                    onPress={() => {
+                      setFilterDroneFootage(!filterDroneFootage);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={[styles.filterChip, { 
+                      backgroundColor: filterDroneFootage ? "#FF9800" : theme.backgroundRoot,
+                      borderColor: filterDroneFootage ? "#FF9800" : theme.border 
+                    }]}
+                  >
+                    <Feather name="navigation" size={12} color={filterDroneFootage ? "#FFFFFF" : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterDroneFootage ? "#FFFFFF" : theme.text }]}>
+                      Drone
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              )}
+              
+              {/* Musikk Filters */}
+              {selectedCategory === "music" && (
+                <View style={styles.filterChips}>
+                  {["band", "dj", "solo", "duo"].map(type => (
+                    <Pressable
+                      key={type}
+                      onPress={() => {
+                        setFilterPerformanceTypes(prev => 
+                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                        );
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[styles.filterChip, { 
+                        backgroundColor: filterPerformanceTypes.includes(type) ? "#E91E63" : theme.backgroundRoot,
+                        borderColor: filterPerformanceTypes.includes(type) ? "#E91E63" : theme.border 
+                      }]}
+                    >
+                      <ThemedText style={[styles.filterChipText, { 
+                        color: filterPerformanceTypes.includes(type) ? "#FFFFFF" : theme.text 
+                      }]}>
+                        {type.toUpperCase()}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                  {["pop", "jazz", "rock", "klassisk"].map(genre => (
+                    <Pressable
+                      key={genre}
+                      onPress={() => {
+                        setFilterMusicGenres(prev => 
+                          prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre]
+                        );
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[styles.filterChip, { 
+                        backgroundColor: filterMusicGenres.includes(genre) ? "#F44336" : theme.backgroundRoot,
+                        borderColor: filterMusicGenres.includes(genre) ? "#F44336" : theme.border 
+                      }]}
+                    >
+                      <ThemedText style={[styles.filterChipText, { 
+                        color: filterMusicGenres.includes(genre) ? "#FFFFFF" : theme.text 
+                      }]}>
+                        {genre.charAt(0).toUpperCase() + genre.slice(1)}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                  <Pressable
+                    onPress={() => {
+                      setFilterEquipmentIncluded(!filterEquipmentIncluded);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={[styles.filterChip, { 
+                      backgroundColor: filterEquipmentIncluded ? "#FF5722" : theme.backgroundRoot,
+                      borderColor: filterEquipmentIncluded ? "#FF5722" : theme.border 
+                    }]}
+                  >
+                    <Feather name="headphones" size={12} color={filterEquipmentIncluded ? "#FFFFFF" : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterEquipmentIncluded ? "#FFFFFF" : theme.text }]}>
+                      Utstyr inkl.
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              )}
+              
+              {/* Venue Filters */}
+              {selectedCategory === "venue" && (
+                <View style={styles.filterChips}>
+                  {["innendørs", "utendørs", "begge"].map(type => (
+                    <Pressable
+                      key={type}
+                      onPress={() => {
+                        setFilterIndoorOutdoor(prev => 
+                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                        );
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[styles.filterChip, { 
+                        backgroundColor: filterIndoorOutdoor.includes(type) ? "#795548" : theme.backgroundRoot,
+                        borderColor: filterIndoorOutdoor.includes(type) ? "#795548" : theme.border 
+                      }]}
+                    >
+                      <ThemedText style={[styles.filterChipText, { 
+                        color: filterIndoorOutdoor.includes(type) ? "#FFFFFF" : theme.text 
+                      }]}>
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                  <Pressable
+                    onPress={() => {
+                      setFilterCateringIncluded(!filterCateringIncluded);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={[styles.filterChip, { 
+                      backgroundColor: filterCateringIncluded ? "#8BC34A" : theme.backgroundRoot,
+                      borderColor: filterCateringIncluded ? "#8BC34A" : theme.border 
+                    }]}
+                  >
+                    <Feather name="coffee" size={12} color={filterCateringIncluded ? "#FFFFFF" : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterCateringIncluded ? "#FFFFFF" : theme.text }]}>
+                      Catering inkl.
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              )}
+              
+              {/* Planlegger Filters */}
+              {selectedCategory === "planner" && (
+                <View style={styles.filterChips}>
+                  {["full", "delvis", "dagskoordinering", "konsultasjon"].map(level => (
+                    <Pressable
+                      key={level}
+                      onPress={() => {
+                        setFilterServiceLevels(prev => 
+                          prev.includes(level) ? prev.filter(l => l !== level) : [...prev, level]
+                        );
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={[styles.filterChip, { 
+                        backgroundColor: filterServiceLevels.includes(level) ? "#00BCD4" : theme.backgroundRoot,
+                        borderColor: filterServiceLevels.includes(level) ? "#00BCD4" : theme.border 
+                      }]}
+                    >
+                      <ThemedText style={[styles.filterChipText, { 
+                        color: filterServiceLevels.includes(level) ? "#FFFFFF" : theme.text 
+                      }]}>
+                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                  <Pressable
+                    onPress={() => {
+                      setFilterVendorCoordination(!filterVendorCoordination);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={[styles.filterChip, { 
+                      backgroundColor: filterVendorCoordination ? "#009688" : theme.backgroundRoot,
+                      borderColor: filterVendorCoordination ? "#009688" : theme.border 
+                    }]}
+                  >
+                    <Feather name="users" size={12} color={filterVendorCoordination ? "#FFFFFF" : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterVendorCoordination ? "#FFFFFF" : theme.text }]}>
+                      Leverandørkoordinering
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              )}
+            </Animated.View>
+          )}
 
           {/* Vendor Results */}
           {isLoading ? (
@@ -664,6 +1734,62 @@ const styles = StyleSheet.create({
   selectedCategoryInfo: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
   selectedCategoryName: { fontSize: 15, fontWeight: "600" },
   
+  // Filters section
+  filtersSection: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  quickFiltersRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  quickFiltersLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  quickFiltersScroll: {
+    flex: 1,
+  },
+  quickFilterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    gap: 4,
+    marginRight: Spacing.xs,
+  },
+  quickFilterText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  filtersHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  filtersTitle: { fontSize: 12, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
+  filterChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.xs,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  filterChipText: { fontSize: 12, fontWeight: "600" },
+  
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", gap: Spacing.md },
   loadingText: { fontSize: 14 },
   
@@ -707,4 +1833,28 @@ const styles = StyleSheet.create({
   reasonText: { fontSize: 11, fontWeight: "500" },
   priceRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   priceText: { fontSize: 12 },
+  
+  // Product section styles
+  productsSection: { marginTop: Spacing.sm, gap: Spacing.xs },
+  productsSectionTitle: { fontSize: 12, fontWeight: "600", marginBottom: Spacing.xs },
+  productCard: {
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.xs,
+  },
+  productHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: Spacing.xs },
+  productTitle: { fontSize: 13, fontWeight: "600", flex: 1, marginRight: Spacing.sm },
+  productPrice: { fontSize: 13, fontWeight: "700" },
+  metadataRow: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
+  metadataBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+  },
+  metadataText: { fontSize: 10, fontWeight: "600" },
+  moreProductsText: { fontSize: 11, fontStyle: "italic", marginTop: Spacing.xs },
 });

@@ -44,6 +44,7 @@ export const vendors = pgTable("vendors", {
   priceRange: text("price_range"),
   imageUrl: text("image_url"),
   googleReviewUrl: text("google_review_url"),
+  culturalExpertise: text("cultural_expertise").array(),
   status: text("status").notNull().default("pending"),
   rejectionReason: text("rejection_reason"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -366,6 +367,7 @@ export const coupleProfiles = pgTable("couple_profiles", {
   password: text("password").notNull(),
   partnerEmail: text("partner_email"),
   weddingDate: text("wedding_date"),
+  selectedTraditions: text("selected_traditions").array(),
   lastActiveAt: timestamp("last_active_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -711,6 +713,15 @@ export const vendorProducts = pgTable("vendor_products", {
   availableQuantity: integer("available_quantity"),
   reservedQuantity: integer("reserved_quantity").default(0),
   bookingBuffer: integer("booking_buffer").default(0),
+  // Category-specific metadata
+  metadata: text("metadata").$type<string>(),
+  // Venue-specific fields (for venue products)
+  venueAddress: text("venue_address"),
+  venueMaxGuests: integer("venue_max_guests"),
+  venueMinGuests: integer("venue_min_guests"),
+  venueCateringIncluded: boolean("venue_catering_included").default(false),
+  venueAccommodationAvailable: boolean("venue_accommodation_available").default(false),
+  venueCheckoutTime: text("venue_checkout_time"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -782,6 +793,182 @@ export const createVendorAvailabilitySchema = z.object({
   notes: z.string().optional(),
 });
 
+// Venue planner storage (DB-backed)
+export const coupleVenueBookings = pgTable("couple_venue_bookings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  vendorId: varchar("vendor_id").references(() => vendors.id, { onDelete: "set null" }), // Link to vendor for site visits
+  venueName: text("venue_name").notNull(),
+  date: text("date").notNull(), // Stored as dd.MM.yyyy
+  time: text("time"),
+  location: text("location"),
+  capacity: integer("capacity"),
+  notes: text("notes"),
+  status: text("status").default("considering"), // 'considering', 'booked', 'confirmed'
+  isPrimary: boolean("is_primary").default(false), // Distinguish primary from secondary venues
+  venueType: text("venue_type"), // 'ceremony', 'reception', 'party', 'accommodation', 'other'
+  // Decision-making fields
+  address: text("address"),
+  maxGuests: integer("max_guests"),
+  invitedGuests: integer("invited_guests"),
+  cateringIncluded: boolean("catering_included").default(false),
+  accommodationAvailable: boolean("accommodation_available").default(false),
+  checkoutTime: text("checkout_time"), // When venue must be vacated
+  // Site visit / befaring fields
+  siteVisitDate: text("site_visit_date"), // Date of scheduled site visit
+  siteVisitTime: text("site_visit_time"), // Time of site visit
+  visitNotesLiked: text("visit_notes_liked"), // "Hva likte vi?"
+  visitNotesUnsure: text("visit_notes_unsure"), // "Hva var vi usikre på?"
+  // Vendor tracking fields
+  vendorVisitConfirmed: boolean("vendor_visit_confirmed").default(false), // Vendor confirmed the visit
+  vendorVisitNotes: text("vendor_visit_notes"), // Vendor's notes about the visit
+  vendorVisitCompleted: boolean("vendor_visit_completed").default(false), // Visit has been completed
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const coupleVenueTimelines = pgTable("couple_venue_timelines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
+  venueSelected: boolean("venue_selected").default(false),
+  venueVisited: boolean("venue_visited").default(false),
+  contractSigned: boolean("contract_signed").default(false),
+  depositPaid: boolean("deposit_paid").default(false),
+  capacity: integer("capacity"),
+  budget: integer("budget"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const vendorVenueBookings = pgTable("vendor_venue_bookings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  coupleName: text("couple_name").notNull(),
+  date: text("date").notNull(), // Stored as dd.MM.yyyy
+  time: text("time"),
+  location: text("location"),
+  capacity: integer("capacity"),
+  notes: text("notes"),
+  status: text("status").default("considering"), // 'considering', 'booked', 'confirmed'
+  // Decision-making fields
+  address: text("address"),
+  maxGuests: integer("max_guests"),
+  cateringIncluded: boolean("catering_included").default(false),
+  accommodationAvailable: boolean("accommodation_available").default(false),
+  checkoutTime: text("checkout_time"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const vendorVenueAvailability = pgTable(
+  "vendor_venue_availability",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+    date: text("date").notNull(), // Stored as dd.MM.yyyy for UI compatibility
+    status: text("status").notNull().default("available"), // available | blocked | limited
+    maxBookings: integer("max_bookings"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    vendorDateIdx: uniqueIndex("idx_vendor_venue_availability_vendor_date").on(table.vendorId, table.date),
+    vendorIdx: index("idx_vendor_venue_availability_vendor").on(table.vendorId),
+    dateIdx: index("idx_vendor_venue_availability_date").on(table.date),
+  })
+);
+
+export const vendorVenueTimelines = pgTable("vendor_venue_timelines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }).unique(),
+  siteVisitDone: boolean("site_visit_done").default(false),
+  contractSigned: boolean("contract_signed").default(false),
+  depositReceived: boolean("deposit_received").default(false),
+  floorPlanFinalized: boolean("floor_plan_finalized").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCoupleVenueBookingSchema = createInsertSchema(coupleVenueBookings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCoupleVenueTimelineSchema = createInsertSchema(coupleVenueTimelines).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVendorVenueBookingSchema = createInsertSchema(vendorVenueBookings).omit({
+  id: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVendorVenueAvailabilitySchema = createInsertSchema(vendorVenueAvailability).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVendorVenueTimelineSchema = createInsertSchema(vendorVenueTimelines).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Category-specific product metadata types
+export interface CateringMetadata {
+  offersTasteSample?: boolean;
+  cuisineType?: string; // norwegian, indian, pakistani, etc.
+  isVegetarian?: boolean;
+  isVegan?: boolean;
+  isGlutenFree?: boolean;
+  isDairyFree?: boolean;
+  courseType?: string; // appetizer, main, dessert, drink, other
+  servesCount?: number;
+}
+
+export interface CakeMetadata {
+  offersTasteSample?: boolean;
+  cakeStyle?: string; // traditional, naked, drip, fondant, buttercream, macaron, cheesecake, cupcakes
+  flavors?: string;
+  servings?: number;
+  tiers?: number;
+  frosting?: string;
+  filling?: string;
+}
+
+export interface FlowerMetadata {
+  itemType?: string; // bouquet, boutonniere, centerpiece, ceremony, arch, other
+  flowerTypes?: string;
+  seasonalAvailability?: string;
+  isSeasonalOnly?: boolean;
+  colors?: string;
+}
+
+export interface TransportMetadata {
+  vehicleType?: string; // limousine, vintage, bus, etc.
+  passengerCapacity?: number;
+  includesDriver?: boolean;
+  vehicleDescription?: string;
+  fuelType?: string;
+}
+
+export interface HairMakeupMetadata {
+  serviceType?: string; // hair, makeup, both
+  includesTrialSession?: boolean;
+  lookType?: string; // natural, glamorous, vintage, bohemian, etc.
+  durationHours?: number;
+  includesAirbrush?: boolean;
+}
+
+export type ProductMetadata = CateringMetadata | CakeMetadata | FlowerMetadata | TransportMetadata | HairMakeupMetadata;
+
 export type VendorProduct = typeof vendorProducts.$inferSelect;
 export type InsertVendorProduct = z.infer<typeof insertVendorProductSchema>;
 export type CreateVendorProduct = z.infer<typeof createVendorProductSchema>;
@@ -789,6 +976,18 @@ export type CreateVendorProduct = z.infer<typeof createVendorProductSchema>;
 export type VendorAvailability = typeof vendorAvailability.$inferSelect;
 export type InsertVendorAvailability = z.infer<typeof insertVendorAvailabilitySchema>;
 export type CreateVendorAvailability = z.infer<typeof createVendorAvailabilitySchema>;
+
+export type CoupleVenueBooking = typeof coupleVenueBookings.$inferSelect;
+export type CoupleVenueTimeline = typeof coupleVenueTimelines.$inferSelect;
+export type InsertCoupleVenueBooking = z.infer<typeof insertCoupleVenueBookingSchema>;
+export type InsertCoupleVenueTimeline = z.infer<typeof insertCoupleVenueTimelineSchema>;
+
+export type VendorVenueBooking = typeof vendorVenueBookings.$inferSelect;
+export type VendorVenueAvailability = typeof vendorVenueAvailability.$inferSelect;
+export type VendorVenueTimeline = typeof vendorVenueTimelines.$inferSelect;
+export type InsertVendorVenueBooking = z.infer<typeof insertVendorVenueBookingSchema>;
+export type InsertVendorVenueAvailability = z.infer<typeof insertVendorVenueAvailabilitySchema>;
+export type InsertVendorVenueTimeline = z.infer<typeof insertVendorVenueTimelineSchema>;
 
 // Vendor Offers to Couples
 export const vendorOffers = pgTable("vendor_offers", {

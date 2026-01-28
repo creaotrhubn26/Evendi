@@ -35,6 +35,7 @@ interface VendorProduct {
   availableQuantity?: number;
   reservedQuantity?: number;
   bookingBuffer?: number;
+  metadata?: any | null;
 }
 
 interface VendorAvailabilityStatus {
@@ -83,6 +84,41 @@ export default function OfferCreateScreen() {
   const [customItemTitle, setCustomItemTitle] = useState("");
   const [customItemPrice, setCustomItemPrice] = useState("");
   const [customItemQuantity, setCustomItemQuantity] = useState("1");
+  const [showTemplates, setShowTemplates] = useState(!isEditMode);
+
+  // Offer templates
+  const getOfferTemplates = () => {
+    return [
+      {
+        title: "Heldagspakke",
+        validityDays: 14,
+        message: "Heldekkende pakke for hele bryllupsdagen. Inneholder det viktigste du trenger.",
+      },
+      {
+        title: "Timepakke",
+        validityDays: 7,
+        message: "Fleksibel timepakke tilpasset dine behov. Kan utvides ved behov.",
+      },
+      {
+        title: "Custom pakke",
+        validityDays: 14,
+        message: "Skreddersydd løsning basert på deres ønsker. La oss diskutere detaljer.",
+      },
+    ];
+  };
+
+  const applyOfferTemplate = (template: any) => {
+    setTitle(template.title);
+    setMessage(template.message);
+    setValidUntil(new Date(Date.now() + template.validityDays * 24 * 60 * 60 * 1000));
+    setShowTemplates(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  // Smart default for validity period
+  const getSuggestedValidityDays = () => {
+    return 14; // 2 weeks default
+  };
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -363,6 +399,41 @@ export default function OfferCreateScreen() {
         scrollIndicatorInsets={{ bottom: insets.bottom }}
       >
         <Animated.View entering={FadeInDown.duration(300)} style={styles.formSection}>
+          {/* Template Selection */}
+          {showTemplates && !isEditMode && (
+            <Animated.View entering={FadeInDown.duration(300)} style={[styles.templatesCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.accent }]}>
+              <View style={styles.templatesHeader}>
+                <View style={styles.templatesHeaderLeft}>
+                  <Feather name="zap" size={18} color={theme.accent} />
+                  <ThemedText style={[styles.templatesTitle, { color: theme.accent }]}>Hurtigstart</ThemedText>
+                </View>
+                <Pressable onPress={() => setShowTemplates(false)} style={styles.templatesClose}>
+                  <Feather name="x" size={16} color={theme.textMuted} />
+                </Pressable>
+              </View>
+              <ThemedText style={[styles.templatesSubtitle, { color: theme.textSecondary }]}>
+                Velg en mal for å komme raskt i gang
+              </ThemedText>
+              <View style={styles.templatesGrid}>
+                {getOfferTemplates().map((template, index) => (
+                  <Pressable
+                    key={index}
+                    onPress={() => applyOfferTemplate(template)}
+                    style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                  >
+                    <Feather name="copy" size={14} color={theme.accent} />
+                    <View style={styles.templateChipContent}>
+                      <ThemedText style={[styles.templateChipTitle, { color: theme.text }]}>{template.title}</ThemedText>
+                      <ThemedText style={[styles.templateChipSubtitle, { color: theme.textSecondary }]}>
+                        Gyldig {template.validityDays} dager
+                      </ThemedText>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            </Animated.View>
+          )}
+
           <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <ThemedText style={styles.formTitle}>Mottaker</ThemedText>
 
@@ -459,6 +530,17 @@ export default function OfferCreateScreen() {
 
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Gyldig til</ThemedText>
+              {!validUntil && (
+                <Pressable
+                  onPress={() => setValidUntil(new Date(Date.now() + getSuggestedValidityDays() * 24 * 60 * 60 * 1000))}
+                  style={[styles.suggestionChip, { backgroundColor: "#f59e0b" + "15", borderColor: "#f59e0b" }]}
+                >
+                  <Feather name="zap" size={12} color="#f59e0b" />
+                  <ThemedText style={[styles.suggestionText, { color: "#f59e0b" }]}>
+                    Foreslått: {getSuggestedValidityDays()} dager
+                  </ThemedText>
+                </Pressable>
+              )}
               {Platform.OS === "web" ? (
                 <TextInput
                   style={[
@@ -575,6 +657,86 @@ export default function OfferCreateScreen() {
                             </View>
                           )}
                         </View>
+                        
+                        {/* Display metadata badges */}
+                        {product.metadata && (
+                          <View style={styles.metadataRow}>
+                            {product.metadata.offersTasteSample && (
+                              <View style={[styles.metadataBadge, { backgroundColor: "#4CAF5015" }]}>
+                                <Feather name="coffee" size={10} color="#4CAF50" />
+                                <ThemedText style={[styles.metadataText, { color: "#4CAF50" }]}>Smaksprøve</ThemedText>
+                              </View>
+                            )}
+                            {product.metadata.cuisineType && (
+                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
+                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
+                                  {product.metadata.cuisineType.charAt(0).toUpperCase() + product.metadata.cuisineType.slice(1)}
+                                </ThemedText>
+                              </View>
+                            )}
+                            {product.metadata.isVegetarian && (
+                              <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
+                                <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Vegetar</ThemedText>
+                              </View>
+                            )}
+                            {product.metadata.isVegan && (
+                              <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
+                                <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Vegan</ThemedText>
+                              </View>
+                            )}
+                            {product.metadata.cakeStyle && (
+                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
+                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
+                                  {product.metadata.cakeStyle.charAt(0).toUpperCase() + product.metadata.cakeStyle.slice(1)}
+                                </ThemedText>
+                              </View>
+                            )}
+                            {product.metadata.numberOfTiers && (
+                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
+                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
+                                  {product.metadata.numberOfTiers} etasjer
+                                </ThemedText>
+                              </View>
+                            )}
+                            {product.metadata.flowerItemType && (
+                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
+                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
+                                  {product.metadata.flowerItemType.charAt(0).toUpperCase() + product.metadata.flowerItemType.slice(1)}
+                                </ThemedText>
+                              </View>
+                            )}
+                            {product.metadata.vehicleType && (
+                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
+                                <Feather name="truck" size={10} color={Colors.dark.accent} />
+                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
+                                  {product.metadata.vehicleType.charAt(0).toUpperCase() + product.metadata.vehicleType.slice(1)}
+                                </ThemedText>
+                              </View>
+                            )}
+                            {product.metadata.passengerCapacity && (
+                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
+                                <Feather name="users" size={10} color={Colors.dark.accent} />
+                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
+                                  {product.metadata.passengerCapacity} plasser
+                                </ThemedText>
+                              </View>
+                            )}
+                            {product.metadata.serviceType && (
+                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
+                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
+                                  {product.metadata.serviceType.charAt(0).toUpperCase() + product.metadata.serviceType.slice(1)}
+                                </ThemedText>
+                              </View>
+                            )}
+                            {product.metadata.includesTrialSession && (
+                              <View style={[styles.metadataBadge, { backgroundColor: "#9C27B015" }]}>
+                                <Feather name="check" size={10} color="#9C27B0" />
+                                <ThemedText style={[styles.metadataText, { color: "#9C27B0" }]}>Prøveskyss</ThemedText>
+                              </View>
+                            )}
+                          </View>
+                        )}
+                        
                         <ThemedText style={[styles.productPrice, { color: Colors.dark.accent }]}>
                           {formatPrice(product.unitPrice)} / {product.unitType}
                         </ThemedText>
@@ -841,6 +1003,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
+  metadataRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: Spacing.xs,
+  },
+  metadataBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+  },
+  metadataText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
   customItemSection: {
     paddingTop: Spacing.md,
     borderTopWidth: 1,
@@ -984,5 +1164,70 @@ const styles = StyleSheet.create({
   availabilityInfoText: {
     fontSize: 13,
     flex: 1,
+  },
+  templatesCard: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  templatesHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.xs,
+  },
+  templatesHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  templatesTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  templatesClose: {
+    padding: Spacing.xs,
+  },
+  templatesSubtitle: {
+    fontSize: 13,
+    marginBottom: Spacing.md,
+  },
+  templatesGrid: {
+    gap: Spacing.sm,
+  },
+  templateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    gap: Spacing.sm,
+  },
+  templateChipContent: {
+    flex: 1,
+  },
+  templateChipTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  templateChipSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  suggestionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    gap: 4,
+    alignSelf: "flex-start",
+    marginBottom: Spacing.xs,
+    borderWidth: 1,
+  },
+  suggestionText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
 });

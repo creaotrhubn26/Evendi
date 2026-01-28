@@ -12,10 +12,22 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { getCoupleSession, getTimelineCulture, saveTimelineCulture } from "@/lib/storage";
+import { getCoupleSession, getTimelineCulture, saveTimelineCulture, getSpeeches } from "@/lib/storage";
 import { getScheduleEvents, updateScheduleEvent } from "@/lib/api-schedule-events";
 import { getCoupleProfile } from "@/lib/api-couples";
-import { ScheduleEvent } from "@/lib/types";
+import { ScheduleEvent, Speech } from "@/lib/types";
+import { useQuery } from "@tanstack/react-query";
+
+type ScheduleInterval = {
+  id: string;
+  from: string;
+  to: string;
+  eventIdFrom: string;
+  eventIdTo: string;
+  current: number;
+  needed: number;
+  index: number;
+};
 
 const ICON_MAP: Record<string, keyof typeof Feather.glyphMap> = {
   heart: "heart",
@@ -37,13 +49,30 @@ export default function TimelineScreen() {
   const [schedule, setSchedule] = useState<ScheduleEvent[]>([]);
   const [weddingDate, setWeddingDate] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [culture, setCulture] = useState<string | null>(null);
+  const [speeches, setSpeeches] = useState<Speech[]>([]);
+
+  // Subscribe to speeches for real-time updates
+  const speechesQuery = useQuery<Speech[]>({
+    queryKey: ['speeches'],
+    queryFn: async () => {
+      const data = await getSpeeches();
+      return Array.isArray(data) ? data : [];
+    },
+  });
+
+  useEffect(() => {
+    if (speechesQuery.data) {
+      setSpeeches(speechesQuery.data);
+    }
+  }, [speechesQuery.data]);
 
   const [expandedBuffer, setExpandedBuffer] = useState<string | null>(null);
   const [totalBufferTime, setTotalBufferTime] = useState(0);
-  const [problematicIntervals, setProblematicIntervals] = useState<any[]>([]);
+  const [problematicIntervals, setProblematicIntervals] = useState<ScheduleInterval[]>([]);
   const [showOptimizationTips, setShowOptimizationTips] = useState(false);
-  const [editingInterval, setEditingInterval] = useState<any>(null);
+  const [editingInterval, setEditingInterval] = useState<ScheduleInterval | null>(null);
   const [newTime, setNewTime] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -53,14 +82,15 @@ export default function TimelineScreen() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const session = await getCoupleSession();
-    const storedCulture = await getTimelineCulture();
-    if (storedCulture) setCulture(storedCulture);
+    setError(null);
+    try {
+      const session = await getCoupleSession();
+      const storedCulture = await getTimelineCulture();
+      if (storedCulture) setCulture(storedCulture);
 
-    let fetchedSchedule: ScheduleEvent[] = [];
-    let fetchedWeddingDate = "";
-    if (session?.token) {
-      try {
+      let fetchedSchedule: ScheduleEvent[] = [];
+      let fetchedWeddingDate = "";
+      if (session?.token) {
         const [serverSchedule, coupleProfile] = await Promise.all([
           getScheduleEvents(session.token),
           getCoupleProfile(session.token),
@@ -70,35 +100,40 @@ export default function TimelineScreen() {
           icon: (event.icon || 'star') as 'heart' | 'camera' | 'music' | 'users' | 'coffee' | 'sun' | 'moon' | 'star',
         }));
         fetchedWeddingDate = coupleProfile.weddingDate || "";
-      } catch (err) {
-        // fall back to empty on error
-        fetchedSchedule = [];
       }
-    }
-    const sortedSchedule = fetchedSchedule.sort((a, b) => a.time.localeCompare(b.time));
-    setSchedule(sortedSchedule);
-    
-    // Calculate total buffer time and problematic intervals
-    let totalBuffer = 0;
-    const problems = [];
-    for (let i = 0; i < sortedSchedule.length - 1; i++) {
-      const diff = getTimeDiff(sortedSchedule[i].time, sortedSchedule[i + 1].time);
-      totalBuffer += diff;
-      if (diff < 30) {
-        problems.push({
-          from: sortedSchedule[i].title,
-          to: sortedSchedule[i + 1].title,
-          current: diff,
-          needed: getRecommendedBuffer(diff),
-          index: i,
-        });
+      const sortedSchedule = fetchedSchedule.sort((a, b) => a.time.localeCompare(b.time));
+      setSchedule(sortedSchedule);
+      
+      let totalBuffer = 0;
+      const problems: ScheduleInterval[] = [];
+      for (let i = 0; i < sortedSchedule.length - 1; i++) {
+        const diff = getTimeDiff(sortedSchedule[i].time, sortedSchedule[i + 1].time);
+        totalBuffer += diff;
+        if (diff < 30) {
+          problems.push({
+            id: `${sortedSchedule[i].id}-${sortedSchedule[i + 1].id}`,
+            from: sortedSchedule[i].title,
+            to: sortedSchedule[i + 1].title,
+            eventIdFrom: sortedSchedule[i].id,
+            eventIdTo: sortedSchedule[i + 1].id,
+            current: diff,
+            needed: getRecommendedBuffer(diff),
+            index: i,
+          });
+        }
       }
+      setTotalBufferTime(totalBuffer);
+      setProblematicIntervals(problems);
+      
+      setWeddingDate(fetchedWeddingDate);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Kunne ikke laste timelinedata";
+      setError(errorMsg);
+      setSchedule([]);
+      setProblematicIntervals([]);
+    } finally {
+      setLoading(false);
     }
-    setTotalBufferTime(totalBuffer);
-    setProblematicIntervals(problems);
-    
-    setWeddingDate(fetchedWeddingDate);
-    setLoading(false);
   }, []);
 
   useFocusEffect(
@@ -142,20 +177,33 @@ export default function TimelineScreen() {
   };
 
   const handleDeleteEvent = async (id: string) => {
-    const session = await getCoupleSession();
-    if (!session?.token) {
-      Alert.alert("Innlogging kreves", "Logg inn for å slette hendelser.");
-      return;
-    }
-    try {
-      const prev = [...schedule];
-      setSchedule(prev.filter((e) => e.id !== id));
-      await import("@/lib/api-schedule-events").then(({ deleteScheduleEvent }) => deleteScheduleEvent(session.token!, id));
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err) {
-      Alert.alert("Feil", "Kunne ikke slette hendelse");
-      await loadData();
-    }
+    Alert.alert(
+      "Slett hendelse",
+      "Er du sikker på at du vil slette denne hendelsen? Dette kan ikke angres.",
+      [
+        { text: "Avbryt", style: "cancel" },
+        {
+          text: "Slett",
+          style: "destructive",
+          onPress: async () => {
+            const session = await getCoupleSession();
+            if (!session?.token) {
+              Alert.alert("Innlogging kreves", "Logg inn for å slette hendelser.");
+              return;
+            }
+            try {
+              const prev = [...schedule];
+              setSchedule(prev.filter((e) => e.id !== id));
+              await import("@/lib/api-schedule-events").then(({ deleteScheduleEvent }) => deleteScheduleEvent(session.token!, id));
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (err) {
+              Alert.alert("Feil", "Kunne ikke slette hendelse");
+              await loadData();
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getRecommendedBuffer = (diff: number): number => {
@@ -227,7 +275,7 @@ export default function TimelineScreen() {
     return "";
   };
 
-  const handleEditTime = async (interval: any) => {
+  const handleEditTime = async (interval: ScheduleInterval) => {
     setEditingInterval(interval);
     const nextEvent = schedule.find(e => e.id === interval.eventIdTo);
     if (nextEvent) {
@@ -235,17 +283,21 @@ export default function TimelineScreen() {
     }
   };
 
+  const isValidTimeFormat = (time: string): boolean => {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time.trim())) return false;
+    return true;
+  };
+
   const handleSaveTime = async () => {
     if (!editingInterval || !newTime) return;
 
+    if (!isValidTimeFormat(newTime)) {
+      Alert.alert("Ugyldig tid", "Bruk format HH:MM (f.eks. 14:30). Timer: 00-23, minutter: 00-59");
+      return;
+    }
+
     setIsSaving(true);
     try {
-      const timeParts = newTime.split(":");
-      if (timeParts.length !== 2 || isNaN(parseInt(timeParts[0])) || isNaN(parseInt(timeParts[1]))) {
-        Alert.alert("Ugyldig tid", "Bruk format HH:MM (e.g., 14:30)");
-        setIsSaving(false);
-        return;
-      }
 
       const session = await getCoupleSession();
       if (!session?.token) {
@@ -310,7 +362,19 @@ export default function TimelineScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
-        <ThemedText style={{ color: theme.textSecondary }}>Laster...</ThemedText>
+        <Feather name="calendar" size={48} color={theme.textSecondary} style={{ marginBottom: Spacing.md }} />
+        <ThemedText style={{ color: theme.textSecondary }}>Laster timelinedata…</ThemedText>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
+        <Feather name="alert-circle" size={48} color={theme.error} style={{ marginBottom: Spacing.md }} />
+        <ThemedText style={[styles.errorTitle, { color: theme.error }]}>Kunne ikke laste timeline</ThemedText>
+        <ThemedText style={[styles.errorMessage, { color: theme.textSecondary }]}>{error}</ThemedText>
+        <Button style={{ marginTop: Spacing.lg }} onPress={loadData}>Prøv igjen</Button>
       </View>
     );
   }
@@ -385,16 +449,7 @@ export default function TimelineScreen() {
                 <View style={[styles.eventCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
                   <ThemedText style={styles.eventTitle}>{event.title}</ThemedText>
                   <Pressable
-                    onPress={() =>
-                      Alert.alert(
-                        "Slett hendelse",
-                        `Fjern "${event.title}"?`,
-                        [
-                          { text: "Avbryt", style: "cancel" },
-                          { text: "Slett", style: "destructive", onPress: () => handleDeleteEvent(event.id) },
-                        ]
-                      )
-                    }
+                    onPress={() => handleDeleteEvent(event.id)}
                     style={styles.deleteBtn}
                   >
                     <Feather name="trash-2" size={14} color={theme.textSecondary} />
@@ -434,6 +489,55 @@ export default function TimelineScreen() {
         })}
       </View>
 
+      {speeches.length > 0 && (
+        <Animated.View entering={FadeInDown.delay(600).duration(400)} style={{ marginTop: Spacing.xl }}>
+          <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+            <View style={styles.sectionHeader}>
+              <Feather name="mic" size={20} color={Colors.dark.accent} />
+              <ThemedText type="h4" style={styles.sectionTitle}>
+                Taler ({speeches.length})
+              </ThemedText>
+            </View>
+            <ThemedText style={[styles.sectionSubtext, { color: theme.textSecondary }]}>
+              Pause/senk musikken når taler starter
+            </ThemedText>
+            {speeches.sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59')).map((speech, idx) => {
+              const statusColor = speech.status === 'speaking' ? '#f59e0b' : speech.status === 'done' ? '#22c55e' : '#9ca3af';
+              const statusText = speech.status === 'speaking' ? '🔴 NÅ' : speech.status === 'done' ? 'Ferdig' : 'Klar';
+              return (
+                <View
+                  key={speech.id}
+                  style={[
+                    styles.speechRow,
+                    {
+                      borderLeftColor: statusColor,
+                      backgroundColor: speech.status === 'speaking' ? '#f59e0b10' : 'transparent',
+                    },
+                  ]}
+                >
+                  <View style={styles.speechTime}>
+                    <ThemedText style={[styles.speechTimeText, { color: theme.accent }]}>
+                      {speech.time || 'TBA'}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.speechInfo}>
+                    <ThemedText style={styles.speechName}>{speech.speakerName}</ThemedText>
+                    <ThemedText style={[styles.speechRole, { color: theme.textSecondary }]}>
+                      {speech.role}
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.speechBadge, { backgroundColor: statusColor + '20' }]}>
+                    <ThemedText style={[styles.speechBadgeText, { color: statusColor }]}>
+                      {statusText}
+                    </ThemedText>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </Animated.View>
+      )}
+
       {schedule.length === 0 ? (
         <View style={styles.emptyState}>
           <Feather name="calendar" size={48} color={theme.textMuted} />
@@ -457,9 +561,9 @@ export default function TimelineScreen() {
               {problematicIntervals.length} intervall{problematicIntervals.length > 1 ? "er" : ""} kan forbedres
             </ThemedText>
             
-            {problematicIntervals.map((interval, idx) => (
+            {problematicIntervals.map((interval) => (
               <Pressable 
-                key={idx}
+                key={interval.id}
                 onPress={() => handleEditTime(interval)}
                 style={[styles.optimizationItem, { borderColor: theme.border }]}
               >
@@ -612,6 +716,7 @@ export default function TimelineScreen() {
                     value={newTime}
                     onChangeText={setNewTime}
                     maxLength={5}
+                    editable={!isSaving}
                   />
                 </View>
 
@@ -633,7 +738,7 @@ export default function TimelineScreen() {
                   </Button>
                   <Button
                     onPress={handleSaveTime}
-                    style={styles.saveButton}
+                    style={[styles.saveButton, isSaving && { opacity: 0.5 }]}
                     disabled={isSaving}
                   >
                     {isSaving ? "Lagrer..." : "Lagre endringer"}
@@ -660,7 +765,8 @@ export default function TimelineScreen() {
             </View>
             <View style={styles.modalSection}>
               <ThemedText style={[styles.modalLabel, { color: theme.textSecondary }]}>Tid (HH:MM)</ThemedText>
-              <TextInput style={[styles.timeInput, { borderColor: Colors.dark.accent, color: theme.text }]} value={newEventTime} onChangeText={setNewEventTime} placeholder="14:00" placeholderTextColor={theme.textSecondary} maxLength={5} />
+              <TextInput style={[styles.timeInput, { borderColor: Colors.dark.accent, color: theme.text }]} value={newEventTime} onChangeText={setNewEventTime} placeholder="14:00" placeholderTextColor={theme.textSecondary} maxLength={5} keyboardType="numeric" />
+              <ThemedText style={[styles.modalHint, { color: theme.textSecondary }]}>Timer: 00-23, minutter: 00-59</ThemedText>
             </View>
                 <View style={styles.modalSection}>
                   <ThemedText style={[styles.modalLabel, { color: theme.textSecondary }]}>Ikon</ThemedText>
@@ -693,6 +799,8 @@ export default function TimelineScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { justifyContent: "center", alignItems: "center" },
+  errorTitle: { fontSize: 18, fontWeight: "600", marginBottom: Spacing.sm },
+  errorMessage: { fontSize: 14, marginBottom: Spacing.md, textAlign: "center", maxWidth: 250 },
   headerCard: {
     padding: Spacing.xl,
     borderRadius: BorderRadius.lg,
@@ -746,6 +854,61 @@ const styles = StyleSheet.create({
   iconChip: { padding: Spacing.sm, borderRadius: BorderRadius.full, borderWidth: 1 },
   emptyState: { alignItems: "center", paddingVertical: Spacing["5xl"] },
   emptyText: { fontSize: 16, marginTop: Spacing.lg },
+  sectionCard: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  sectionTitle: {
+    fontWeight: '600',
+  },
+  sectionSubtext: {
+    fontSize: 13,
+    marginBottom: Spacing.md,
+  },
+  speechRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderLeftWidth: 3,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.xs,
+  },
+  speechTime: {
+    width: 50,
+    marginRight: Spacing.md,
+  },
+  speechTimeText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  speechInfo: {
+    flex: 1,
+  },
+  speechName: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  speechRole: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  speechBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.sm,
+  },
+  speechBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
   tipsCard: { padding: Spacing.lg, borderRadius: BorderRadius.md, borderWidth: 1 },
   tipsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.md },
   tipsTitle: { marginBottom: 0 },
@@ -784,9 +947,10 @@ const styles = StyleSheet.create({
   timeInput: { borderWidth: 1, borderRadius: BorderRadius.sm, padding: Spacing.md, fontSize: 16, fontWeight: "600" },
   modalTip: { borderWidth: 1, borderRadius: BorderRadius.sm, padding: Spacing.md, marginBottom: Spacing.lg, flexDirection: "row", alignItems: "flex-start", gap: Spacing.sm },
   modalTipText: { flex: 1, fontSize: 12, lineHeight: 16, fontWeight: "500" },
+  modalHint: { fontSize: 11, marginTop: Spacing.xs, fontStyle: "italic" },
   modalButtonGroup: { flexDirection: "row", gap: Spacing.md },
   cancelButton: { flex: 1, backgroundColor: "transparent" },
-  saveButton: { flex: 1 },
+  saveButton: { flex: 1, opacity: 1 },
   addFabContainer: { position: "absolute", right: Spacing.lg, bottom: Spacing.lg },
   addFab: { width: 56, height: 56, borderRadius: 28, justifyContent: "center", alignItems: "center" },
 });

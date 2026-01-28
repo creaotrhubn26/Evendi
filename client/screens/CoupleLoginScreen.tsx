@@ -8,6 +8,8 @@ import {
   Alert,
   Image,
   Platform,
+  Modal,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -35,6 +37,17 @@ interface CoupleSession {
 
 const GOOGLE_LOGO_URI = "https://developers.google.com/identity/images/g-logo.png";
 
+const CULTURAL_TRADITIONS = [
+  { key: "norway", name: "Norge", icon: "🇳🇴", color: "#BA2020" },
+  { key: "sweden", name: "Sverige", icon: "🇸🇪", color: "#006AA7" },
+  { key: "denmark", name: "Danmark", icon: "🇩🇰", color: "#C60C30" },
+  { key: "hindu", name: "Hindu", icon: "🕉️", color: "#FF6B35" },
+  { key: "sikh", name: "Sikh", icon: "☬", color: "#FF9933" },
+  { key: "muslim", name: "Muslim", icon: "☪️", color: "#1B5E20" },
+  { key: "jewish", name: "Jødisk", icon: "✡️", color: "#1565C0" },
+  { key: "chinese", name: "Kinesisk", icon: "🏮", color: "#D32F2F" },
+];
+
 interface Props {
   navigation: NativeStackNavigationProp<any>;
   onLoginSuccess?: () => void;
@@ -49,6 +62,8 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
   const [displayName, setDisplayName] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedTraditions, setSelectedTraditions] = useState<string[]>([]);
+  const [showTraditionSelection, setShowTraditionSelection] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -92,7 +107,8 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
       const response = await apiRequest("POST", "/api/couples/login", { 
         email, 
         password,
-        displayName: isRegistering ? displayName : email.split("@")[0]
+        displayName: isRegistering ? displayName : email.split("@")[0],
+        selectedTraditions: isRegistering && selectedTraditions.length > 0 ? selectedTraditions : undefined,
       });
       return response.json();
     },
@@ -135,6 +151,35 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
       return;
     }
 
+    // For new registrations, show tradition selection first
+    if (isRegistering && selectedTraditions.length === 0) {
+      setShowTraditionSelection(true);
+      return;
+    }
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    loginMutation.mutate();
+  };
+
+  const toggleTradition = (key: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedTraditions(prev =>
+      prev.includes(key) ? prev.filter(t => t !== key) : [...prev, key]
+    );
+  };
+
+  const handleContinueWithTraditions = () => {
+    if (selectedTraditions.length === 0) {
+      Alert.alert("Velg tradisjon", "Vennligst velg minst én tradisjon for å fortsette, eller trykk 'Hopp over' for å gjøre dette senere.");
+      return;
+    }
+    setShowTraditionSelection(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    loginMutation.mutate();
+  };
+
+  const handleSkipTraditions = () => {
+    setShowTraditionSelection(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     loginMutation.mutate();
   };
@@ -361,6 +406,85 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
           Med Wedflow får du full kontroll over planleggingen av bryllupet ditt – fra gjesteoversikt og tidslinje til budsjett og leverandørsamtaler.
         </ThemedText>
       </KeyboardAwareScrollViewCompat>
+
+      {/* Tradition Selection Modal */}
+      <Modal
+        visible={showTraditionSelection}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowTraditionSelection(false)}
+      >
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: theme.backgroundRoot }]} edges={['top', 'bottom']}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+            <ThemedText style={styles.modalTitle}>Velg kulturelle tradisjoner</ThemedText>
+            <ThemedText style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+              Vi tilpasser tidslinjen og planleggingen basert på dine valg
+            </ThemedText>
+          </View>
+
+          <ScrollView 
+            style={styles.traditionsScroll}
+            contentContainerStyle={styles.traditionsContent}
+          >
+            {CULTURAL_TRADITIONS.map((tradition) => {
+              const isSelected = selectedTraditions.includes(tradition.key);
+              return (
+                <Pressable
+                  key={tradition.key}
+                  onPress={() => toggleTradition(tradition.key)}
+                  style={[
+                    styles.traditionCard,
+                    {
+                      backgroundColor: isSelected ? tradition.color + "15" : theme.backgroundDefault,
+                      borderColor: isSelected ? tradition.color : theme.border,
+                      borderWidth: isSelected ? 2 : 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.traditionHeader}>
+                    <ThemedText style={styles.traditionIcon}>{tradition.icon}</ThemedText>
+                    <ThemedText style={[styles.traditionName, { color: theme.text }]}>
+                      {tradition.name}
+                    </ThemedText>
+                  </View>
+                  {isSelected && (
+                    <View style={[styles.checkBadge, { backgroundColor: tradition.color }]}>
+                      <Feather name="check" size={16} color="#FFFFFF" />
+                    </View>
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <View style={[styles.modalFooter, { borderTopColor: theme.border, backgroundColor: theme.backgroundDefault }]}>
+            <Pressable
+              onPress={handleSkipTraditions}
+              style={[styles.skipBtn, { borderColor: theme.border }]}
+            >
+              <ThemedText style={[styles.skipBtnText, { color: theme.textSecondary }]}>
+                Hopp over
+              </ThemedText>
+            </Pressable>
+            
+            <Pressable
+              onPress={handleContinueWithTraditions}
+              disabled={selectedTraditions.length === 0}
+              style={[
+                styles.continueBtn,
+                { 
+                  backgroundColor: selectedTraditions.length > 0 ? Colors.dark.accent : theme.border,
+                  opacity: selectedTraditions.length === 0 ? 0.5 : 1,
+                },
+              ]}
+            >
+              <ThemedText style={[styles.continueBtnText, { color: selectedTraditions.length > 0 ? "#1A1A1A" : theme.textMuted }]}>
+                Fortsett{selectedTraditions.length > 0 ? ` (${selectedTraditions.length})` : ""}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -494,5 +618,82 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: Spacing.sm,
     marginLeft: Spacing.sm,
+  },
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    padding: Spacing.xl,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    marginBottom: Spacing.xs,
+  },
+  modalSubtitle: {
+    fontSize: 15,
+  },
+  traditionsScroll: {
+    flex: 1,
+  },
+  traditionsContent: {
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  traditionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+  },
+  traditionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+  },
+  traditionIcon: {
+    fontSize: 32,
+  },
+  traditionName: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  checkBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalFooter: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderTopWidth: 1,
+  },
+  skipBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  skipBtnText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  continueBtn: {
+    flex: 2,
+    height: 50,
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  continueBtnText: {
+    fontSize: 17,
+    fontWeight: "600",
   },
 });
