@@ -240,6 +240,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(diagnostics);
   });
 
+  // Test endpoint to debug query issues
+  app.get("/api/test-query/:id", async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      console.log("[TestQuery] Testing query with ID:", id);
+      
+      const result = await db.select({
+        id: coupleProfiles.id,
+        email: coupleProfiles.email,
+        displayName: coupleProfiles.displayName,
+      }).from(coupleProfiles).where(eq(coupleProfiles.id, id));
+      
+      console.log("[TestQuery] Success, found:", result.length);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("[TestQuery] Error:", error);
+      res.status(500).json({ error: "Query failed", details: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   app.get("/api/weather", async (req: Request, res: Response) => {
     try {
       const lat = parseFloat(req.query.lat as string);
