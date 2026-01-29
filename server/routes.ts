@@ -5653,10 +5653,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         couple = await db.select({
           id: coupleProfiles.id,
+          email: coupleProfiles.email,
+          displayName: coupleProfiles.displayName,
+          partnerEmail: coupleProfiles.partnerEmail,
+          weddingDate: coupleProfiles.weddingDate,
+          selectedTraditions: coupleProfiles.selectedTraditions,
+          lastActiveAt: coupleProfiles.lastActiveAt,
+          createdAt: coupleProfiles.createdAt,
+          updatedAt: coupleProfiles.updatedAt,
         })
           .from(coupleProfiles)
-          .where(eq(coupleProfiles.id, userId))
-          .limit(1);
+          .where(eq(coupleProfiles.id, userId));
       } catch (dbError) {
         console.error("[Impersonate] Database query error:", dbError);
         if (dbError instanceof Error) {
