@@ -236,6 +236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ADMIN_SECRET_VALUE: process.env.ADMIN_SECRET || "NOT SET",
       },
       node_version: process.version,
+      build_version: "e6e40fb",
     };
     res.json(diagnostics);
   });
