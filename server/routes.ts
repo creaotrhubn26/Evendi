@@ -5669,21 +5669,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(503).json({ error: "Databaseforbindelse ikke tilgjengelig" });
       }
 
-      let couple: any[];
+      let coupleData: any[];
       try {
-        couple = await db.select({
+        // Use the exact same pattern as the working users endpoint
+        coupleData = await db.select({
           id: coupleProfiles.id,
+          name: coupleProfiles.displayName,
           email: coupleProfiles.email,
-          displayName: coupleProfiles.displayName,
-          partnerEmail: coupleProfiles.partnerEmail,
-          weddingDate: coupleProfiles.weddingDate,
-          selectedTraditions: coupleProfiles.selectedTraditions,
-          lastActiveAt: coupleProfiles.lastActiveAt,
-          createdAt: coupleProfiles.createdAt,
-          updatedAt: coupleProfiles.updatedAt,
-        })
-          .from(coupleProfiles)
-          .where(eq(coupleProfiles.id, userId));
+        }).from(coupleProfiles).limit(50);
       } catch (dbError) {
         console.error("[Impersonate] Database query error:", dbError);
         if (dbError instanceof Error) {
@@ -5693,17 +5686,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(503).json({ error: "Databasefeil ved oppslag" });
       }
 
-      console.log("[Impersonate] Query result:", couple?.length ? "Found" : "Not found");
+      console.log("[Impersonate] Query result:", coupleData?.length ? "Found" : "Not found");
 
-      if (!couple || couple.length === 0) {
+      // Find the couple with matching ID
+      const couple = coupleData.find(c => c.id === userId);
+      
+      if (!couple) {
         console.warn("[Impersonate] Couple not found for ID:", userId);
         return res.status(404).json({ error: "Brudepar ikke funnet" });
-      }
-
-      const coupleData = couple[0];
-      if (!coupleData) {
-        console.warn("[Impersonate] Couple data is null/undefined");
-        return res.status(404).json({ error: "Brudepar data er ugyldig" });
       }
 
       // Generate a preview session token
@@ -5720,7 +5710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         sessionToken,
         coupleId: userId,
-        coupleData: coupleData,
+        coupleData: couple,
       });
     } catch (error) {
       console.error("[Impersonate] Error:", error instanceof Error ? error.message : String(error));
@@ -5745,36 +5735,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(503).json({ error: "Databaseforbindelse ikke tilgjengelig" });
       }
 
-      let vendor: any[];
+      let vendorData: any[];
       try {
-        vendor = await db.select({
+        // Use the exact same pattern as the working users endpoint
+        vendorData = await db.select({
           id: vendors.id,
-          businessName: vendors.businessName,
+          name: vendors.businessName,
           email: vendors.email,
           categoryId: vendors.categoryId,
-          status: vendors.status,
-          createdAt: vendors.createdAt,
-          updatedAt: vendors.updatedAt,
         })
           .from(vendors)
-          .where(eq(vendors.id, userId))
-          .limit(1);
+          .where(eq(vendors.status, "approved"))
+          .limit(50);
       } catch (dbError) {
-        console.error("[Impersonate Vendor] Database query error:", dbError instanceof Error ? dbError.message : String(dbError));
+        console.error("[Impersonate Vendor] Database query error:", dbError);
+        if (dbError instanceof Error) {
+          console.error("[Impersonate Vendor] Error message:", dbError.message);
+          console.error("[Impersonate Vendor] Error stack:", dbError.stack);
+        }
         return res.status(503).json({ error: "Databasefeil ved oppslag" });
       }
 
-      console.log("[Impersonate Vendor] Query result:", vendor?.length ? "Found" : "Not found");
+      console.log("[Impersonate Vendor] Query result:", vendorData?.length ? "Found" : "Not found");
 
-      if (!vendor || vendor.length === 0) {
+      // Find the vendor with matching ID
+      const vendor = vendorData.find(v => v.id === userId);
+
+      if (!vendor) {
         console.warn("[Impersonate Vendor] Vendor not found for ID:", userId);
         return res.status(404).json({ error: "Leverandør ikke funnet" });
-      }
-
-      const vendorData = vendor[0];
-      if (!vendorData) {
-        console.warn("[Impersonate Vendor] Vendor data is null/undefined");
-        return res.status(404).json({ error: "Leverandør data er ugyldig" });
       }
 
       // Generate a preview session token
@@ -5792,7 +5781,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         sessionToken,
         vendorId: userId,
-        vendorData: vendorData,
+        vendorData: vendor,
       });
     } catch (error) {
       console.error("[Impersonate Vendor] Error:", error instanceof Error ? error.message : String(error));
