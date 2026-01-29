@@ -5670,14 +5670,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(503).json({ error: "Databaseforbindelse ikke tilgjengelig" });
       }
 
+      console.log("[Impersonate DEBUG] About to query database");
+
       let coupleData: any[];
       try {
         // Use the exact same pattern as the working users endpoint
+        console.log("[Impersonate DEBUG] Executing select query");
         coupleData = await db.select({
           id: coupleProfiles.id,
           name: coupleProfiles.displayName,
           email: coupleProfiles.email,
         }).from(coupleProfiles).limit(50);
+        console.log("[Impersonate DEBUG] Query succeeded, results:", coupleData?.length);
       } catch (dbError) {
         console.error("[Impersonate] Database query error:", dbError);
         if (dbError instanceof Error) {
