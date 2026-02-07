@@ -210,7 +210,7 @@ export default function AboutScreen() {
 
       <Animated.View entering={FadeInDown.delay(400).duration(400)}>
         <ThemedText style={[styles.copyright, { color: theme.textMuted }]}>
-          2024-2026 Norwedfilm. Alle rettigheter reservert.
+          2026 Norwedfilm. Alle rettigheter reservert.
         </ThemedText>
       </Animated.View>
     </ScrollView>
