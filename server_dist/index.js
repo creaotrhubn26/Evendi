@@ -2813,7 +2813,7 @@ async function registerRoutes(app2) {
         ADMIN_SECRET_VALUE: process.env.ADMIN_SECRET || "NOT SET"
       },
       node_version: process.version,
-      build_version: "e6e40fb"
+      build_version: "fe0eec0"
     };
     res.json(diagnostics);
   });
@@ -4299,14 +4299,30 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
   }
   app2.post("/api/couples/login", async (req, res) => {
     try {
+      console.log("[CoupleLogin] Login attempt for email:", req.body.email);
       const validation = coupleLoginSchema.safeParse(req.body);
       if (!validation.success) {
+        console.log("[CoupleLogin] Validation failed:", validation.error.errors[0].message);
         return res.status(400).json({ error: validation.error.errors[0].message });
       }
       const { email, displayName, password } = validation.data;
       const { selectedTraditions } = req.body;
-      let [couple] = await db.select().from(coupleProfiles).where(eq2(coupleProfiles.email, email));
+      console.log("[CoupleLogin] Starting lookup for email:", email);
+      const coupleResults = await db.select({
+        id: coupleProfiles.id,
+        email: coupleProfiles.email,
+        displayName: coupleProfiles.displayName,
+        password: coupleProfiles.password,
+        partnerEmail: coupleProfiles.partnerEmail,
+        weddingDate: coupleProfiles.weddingDate,
+        selectedTraditions: coupleProfiles.selectedTraditions,
+        lastActiveAt: coupleProfiles.lastActiveAt,
+        createdAt: coupleProfiles.createdAt,
+        updatedAt: coupleProfiles.updatedAt
+      }).from(coupleProfiles).where(eq2(coupleProfiles.email, email));
+      let couple = coupleResults[0] || null;
       let isNewRegistration = false;
+      console.log("[CoupleLogin] Lookup result:", couple ? "Found" : "Not found");
       if (!couple) {
         const hashedPassword = await bcrypt.hash(password, 10);
         const [newCouple] = await db.insert(coupleProfiles).values({
@@ -4353,7 +4369,11 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
       COUPLE_SESSIONS.set(token, { coupleId: couple.id, expiresAt });
       res.json({ couple, sessionToken: token });
     } catch (error) {
-      console.error("Couple login error:", error);
+      console.error("[CoupleLogin] Error:", error);
+      if (error instanceof Error) {
+        console.error("[CoupleLogin] Error message:", error.message);
+        console.error("[CoupleLogin] Error stack:", error.stack);
+      }
       res.status(500).json({ error: "Kunne ikke logge inn" });
     }
   });
