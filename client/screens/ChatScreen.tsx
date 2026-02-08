@@ -514,12 +514,16 @@ export default function ChatScreen({ route, navigation }: Props) {
     if (!sessionToken || !conversationId) return;
     let closedByUs = false;
     let reconnectTimer: any = null;
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
 
     const connect = () => {
+      if (retryCount >= MAX_RETRIES) return;
       try {
         const wsUrl = getApiUrl().replace(/^http/, "ws") + `/ws/couples?token=${encodeURIComponent(sessionToken)}&conversationId=${encodeURIComponent(conversationId)}`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
+        ws.onopen = () => { retryCount = 0; };
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse((event as any).data);
@@ -536,11 +540,20 @@ export default function ChatScreen({ route, navigation }: Props) {
             }
           } catch {}
         };
+        ws.onerror = () => {};
         ws.onclose = () => {
-          if (!closedByUs) reconnectTimer = setTimeout(connect, 3000);
+          if (!closedByUs) {
+            retryCount++;
+            const delay = Math.min(3000 * Math.pow(2, retryCount), 30000);
+            reconnectTimer = setTimeout(connect, delay);
+          }
         };
       } catch {
-        reconnectTimer = setTimeout(connect, 3000);
+        retryCount++;
+        if (retryCount < MAX_RETRIES) {
+          const delay = Math.min(3000 * Math.pow(2, retryCount), 30000);
+          reconnectTimer = setTimeout(connect, delay);
+        }
       }
     };
 

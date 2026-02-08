@@ -101,12 +101,20 @@ export default function MessagesScreen({ navigation }: Props) {
     if (!sessionToken) return;
     let closedByUs = false;
     let reconnectTimer: any = null;
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
 
     const connect = () => {
+      if (retryCount >= MAX_RETRIES) return; // Stop after max retries
       try {
         const wsUrl = getApiUrl().replace(/^http/, "ws") + `/ws/couples-list?token=${encodeURIComponent(sessionToken)}`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
+
+        ws.onopen = () => {
+          retryCount = 0; // Reset on successful connection
+        };
+
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse((event as any).data);
@@ -115,7 +123,7 @@ export default function MessagesScreen({ navigation }: Props) {
               setWsConversations((prev) => {
                 const idx = prev.findIndex((c) => c.id === conversationId);
                 const baseConv = conversations.find((c) => c.id === conversationId);
-                if (!baseConv) return prev; // unknown conversation
+                if (!baseConv) return prev;
                 const updated = { ...baseConv, lastMessageAt: lastMessageAt || baseConv.lastMessageAt, coupleUnreadCount: typeof coupleUnreadCount === "number" ? coupleUnreadCount : baseConv.coupleUnreadCount };
                 if (idx >= 0) {
                   const list = [...prev];
@@ -128,11 +136,22 @@ export default function MessagesScreen({ navigation }: Props) {
             }
           } catch {}
         };
+        ws.onerror = () => {
+          // Silently handle - onclose will fire next
+        };
         ws.onclose = () => {
-          if (!closedByUs) reconnectTimer = setTimeout(connect, 3000);
+          if (!closedByUs) {
+            retryCount++;
+            const delay = Math.min(3000 * Math.pow(2, retryCount), 30000);
+            reconnectTimer = setTimeout(connect, delay);
+          }
         };
       } catch {
-        reconnectTimer = setTimeout(connect, 3000);
+        retryCount++;
+        if (retryCount < MAX_RETRIES) {
+          const delay = Math.min(3000 * Math.pow(2, retryCount), 30000);
+          reconnectTimer = setTimeout(connect, delay);
+        }
       }
     };
 
