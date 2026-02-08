@@ -2229,9 +2229,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/couples/login", async (req: Request, res: Response) => {
     try {
       console.log("[CoupleLogin] Login attempt for email:", req.body.email);
-      const validation = coupleLoginSchema.safeParse(req.body);
+      console.log("[CoupleLogin] Body keys:", Object.keys(req.body || {}));
+
+      // Accept login without displayName (use email prefix as fallback)
+      const bodyWithDefaults = {
+        ...req.body,
+        displayName: req.body.displayName || req.body.email?.split("@")[0] || "User",
+      };
+
+      const validation = coupleLoginSchema.safeParse(bodyWithDefaults);
       if (!validation.success) {
-        console.log("[CoupleLogin] Validation failed:", validation.error.errors[0].message);
+        console.log("[CoupleLogin] Validation failed:", JSON.stringify(validation.error.errors));
         return res.status(400).json({ error: validation.error.errors[0].message });
       }
 

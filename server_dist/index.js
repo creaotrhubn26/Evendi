@@ -3373,7 +3373,7 @@ function registerCreatorhubRoutes(app2) {
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
       await db.insert(coupleSessions).values({
         coupleId: couple.id,
-        sessionToken,
+        token: sessionToken,
         expiresAt
       });
       return res.json({
@@ -3411,7 +3411,7 @@ function registerCreatorhubRoutes(app2) {
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
       await db.insert(vendorSessions).values({
         vendorId: vendor.id,
-        sessionToken,
+        token: sessionToken,
         expiresAt
       });
       return res.json({
@@ -5430,9 +5430,14 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
   app2.post("/api/couples/login", async (req, res) => {
     try {
       console.log("[CoupleLogin] Login attempt for email:", req.body.email);
-      const validation = coupleLoginSchema.safeParse(req.body);
+      console.log("[CoupleLogin] Body keys:", Object.keys(req.body || {}));
+      const bodyWithDefaults = {
+        ...req.body,
+        displayName: req.body.displayName || req.body.email?.split("@")[0] || "User"
+      };
+      const validation = coupleLoginSchema.safeParse(bodyWithDefaults);
       if (!validation.success) {
-        console.log("[CoupleLogin] Validation failed:", validation.error.errors[0].message);
+        console.log("[CoupleLogin] Validation failed:", JSON.stringify(validation.error.errors));
         return res.status(400).json({ error: validation.error.errors[0].message });
       }
       const { email, displayName, password } = validation.data;

@@ -1026,7 +1026,7 @@ export function registerCreatorhubRoutes(app: Express) {
 
       await db.insert(coupleSessions).values({
         coupleId: couple.id,
-        sessionToken,
+        token: sessionToken,
         expiresAt,
       });
 
@@ -1075,7 +1075,7 @@ export function registerCreatorhubRoutes(app: Express) {
 
       await db.insert(vendorSessions).values({
         vendorId: vendor.id,
-        sessionToken,
+        token: sessionToken,
         expiresAt,
       });
 
