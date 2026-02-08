@@ -2493,7 +2493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get projects
       const projects = await db.execute(sql`
-        SELECT p.id, p.name, p.status, p.event_date, p.location,
+        SELECT p.id, p.name, p.status, p.event_date, p.location, p.budget,
                v.business_name as vendor_name, vc.name as vendor_category
         FROM legacy.projects p
         LEFT JOIN users u ON u.id = p.user_id

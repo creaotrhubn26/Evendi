@@ -21,13 +21,17 @@ const KEYS = {
   PHOTO_SHOTS: "@wedflow/photo_shots",
   BUDGET_ITEMS: "@wedflow/budget_items",
   TOTAL_BUDGET: "@wedflow/total_budget",
-  COUPLE_SESSION: "@wedflow/couple_session",
+  COUPLE_SESSION: "wedflow_couple_session",
 };
 
 export async function getCoupleSession(): Promise<{ token: string } | null> {
   try {
     const data = await AsyncStorage.getItem(KEYS.COUPLE_SESSION);
-    return data ? JSON.parse(data) : null;
+    if (!data) return null;
+    const parsed = JSON.parse(data);
+    // Login stores sessionToken, normalize to token
+    const token = parsed.token || parsed.sessionToken;
+    return token ? { token } : null;
   } catch {
     return null;
   }
