@@ -2421,11 +2421,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           p.category, p.location, p.client_email,
           p.budget, p.created_at, p.updated_at,
           u.email as vendor_email,
-          v.business_name as vendor_name, v.category as vendor_category,
-          v.phone as vendor_phone, v.city as vendor_city
+          v.business_name as vendor_name, vc.name as vendor_category,
+          v.phone as vendor_phone, v.location as vendor_location
         FROM legacy.projects p
         LEFT JOIN users u ON u.id = p.user_id
         LEFT JOIN vendors v ON v.email = u.email
+        LEFT JOIN vendor_categories vc ON vc.id = v.category_id
         WHERE p.client_email = ${couple.email}
         ORDER BY p.event_date DESC
       `);
@@ -2454,12 +2455,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           p.category, p.location, p.client_email,
           p.budget, p.created_at, p.updated_at,
           u.email as vendor_email,
-          v.business_name as vendor_name, v.category as vendor_category,
-          v.phone as vendor_phone, v.city as vendor_city,
+          v.business_name as vendor_name, vc.name as vendor_category,
+          v.phone as vendor_phone, v.location as vendor_location,
           v.id as vendor_id
         FROM legacy.projects p
         LEFT JOIN users u ON u.id = p.user_id
         LEFT JOIN vendors v ON v.email = u.email
+        LEFT JOIN vendor_categories vc ON vc.id = v.category_id
         WHERE p.id = ${req.params.projectId}
           AND p.client_email = ${couple.email}
       `);
@@ -2490,10 +2492,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get projects
       const projects = await db.execute(sql`
         SELECT p.id, p.name, p.status, p.event_date, p.location,
-               v.business_name as vendor_name, v.category as vendor_category
+               v.business_name as vendor_name, vc.name as vendor_category
         FROM legacy.projects p
         LEFT JOIN users u ON u.id = p.user_id
         LEFT JOIN vendors v ON v.email = u.email
+        LEFT JOIN vendor_categories vc ON vc.id = v.category_id
         WHERE p.client_email = ${couple.email}
         ORDER BY p.event_date DESC
       `);
@@ -2508,10 +2511,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get vendors from projects
       const vendorList = await db.execute(sql`
-        SELECT DISTINCT v.id, v.business_name, v.category, v.email, v.phone, v.city
+        SELECT DISTINCT v.id, v.business_name, vc.name as category, v.email, v.phone, v.location
         FROM legacy.projects p
         JOIN users u ON u.id = p.user_id
         JOIN vendors v ON v.email = u.email
+        LEFT JOIN vendor_categories vc ON vc.id = v.category_id
         WHERE p.client_email = ${couple.email}
       `);
 
@@ -2544,11 +2548,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const vendorList = await db.execute(sql`
-        SELECT DISTINCT v.id, v.business_name, v.category, v.email, v.phone, v.city,
+        SELECT DISTINCT v.id, v.business_name, vc.name as category, v.email, v.phone, v.location,
                p.name as project_name, p.event_date
         FROM legacy.projects p
         JOIN users u ON u.id = p.user_id
         JOIN vendors v ON v.email = u.email
+        LEFT JOIN vendor_categories vc ON vc.id = v.category_id
         WHERE p.client_email = ${couple.email}
       `);
 
