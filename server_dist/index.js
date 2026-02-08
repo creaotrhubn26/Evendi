@@ -3354,6 +3354,258 @@ function registerCreatorhubRoutes(app2) {
       return res.status(500).json({ error: "Failed to get audit log" });
     }
   });
+  app2.post("/api/creatorhub/wedflow/impersonate/couple", authenticateApiKey, async (req, res) => {
+    try {
+      const { coupleId, email } = req.body;
+      if (!coupleId && !email) {
+        return res.status(400).json({ error: "coupleId or email required" });
+      }
+      let couple;
+      if (coupleId) {
+        [couple] = await db.select().from(coupleProfiles).where(eq2(coupleProfiles.id, coupleId));
+      } else {
+        [couple] = await db.select().from(coupleProfiles).where(eq2(coupleProfiles.email, email));
+      }
+      if (!couple) {
+        return res.status(404).json({ error: "Couple not found" });
+      }
+      const sessionToken = crypto2.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+      await db.insert(coupleSessions).values({
+        coupleId: couple.id,
+        sessionToken,
+        expiresAt
+      });
+      return res.json({
+        sessionToken,
+        expiresAt,
+        couple: {
+          id: couple.id,
+          email: couple.email,
+          displayName: couple.displayName,
+          weddingDate: couple.weddingDate
+        },
+        usage: 'Use as "Authorization: Bearer <sessionToken>" on /api/couples/* endpoints'
+      });
+    } catch (err) {
+      console.error("[CreatorHub] Impersonate couple error:", err);
+      return res.status(500).json({ error: "Failed to impersonate couple" });
+    }
+  });
+  app2.post("/api/creatorhub/wedflow/impersonate/vendor", authenticateApiKey, async (req, res) => {
+    try {
+      const { vendorId, email } = req.body;
+      if (!vendorId && !email) {
+        return res.status(400).json({ error: "vendorId or email required" });
+      }
+      let vendor;
+      if (vendorId) {
+        [vendor] = await db.select().from(vendors).where(eq2(vendors.id, vendorId));
+      } else {
+        [vendor] = await db.select().from(vendors).where(eq2(vendors.email, email));
+      }
+      if (!vendor) {
+        return res.status(404).json({ error: "Vendor not found" });
+      }
+      const sessionToken = crypto2.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+      await db.insert(vendorSessions).values({
+        vendorId: vendor.id,
+        sessionToken,
+        expiresAt
+      });
+      return res.json({
+        sessionToken,
+        expiresAt,
+        vendor: {
+          id: vendor.id,
+          email: vendor.email,
+          businessName: vendor.businessName,
+          status: vendor.status
+        },
+        usage: 'Use as "Authorization: Bearer <sessionToken>" on /api/vendors/* endpoints'
+      });
+    } catch (err) {
+      console.error("[CreatorHub] Impersonate vendor error:", err);
+      return res.status(500).json({ error: "Failed to impersonate vendor" });
+    }
+  });
+  app2.get("/api/creatorhub/wedflow/couples", authenticateApiKey, async (req, res) => {
+    try {
+      const allCouples = await db.select({
+        id: coupleProfiles.id,
+        email: coupleProfiles.email,
+        displayName: coupleProfiles.displayName,
+        partnerEmail: coupleProfiles.partnerEmail,
+        weddingDate: coupleProfiles.weddingDate,
+        lastActiveAt: coupleProfiles.lastActiveAt,
+        createdAt: coupleProfiles.createdAt
+      }).from(coupleProfiles).orderBy(desc(coupleProfiles.createdAt));
+      return res.json(allCouples);
+    } catch (err) {
+      console.error("[CreatorHub] List couples error:", err);
+      return res.status(500).json({ error: "Failed to list couples" });
+    }
+  });
+  app2.get("/api/creatorhub/wedflow/couples/:id", authenticateApiKey, async (req, res) => {
+    try {
+      const [couple] = await db.select().from(coupleProfiles).where(eq2(coupleProfiles.id, req.params.id));
+      if (!couple) return res.status(404).json({ error: "Couple not found" });
+      const coupleConversations = await db.select().from(conversations).where(eq2(conversations.coupleId, couple.id)).orderBy(desc(conversations.lastMessageAt));
+      return res.json({ ...couple, password: void 0, conversations: coupleConversations });
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to get couple" });
+    }
+  });
+  app2.patch("/api/creatorhub/wedflow/couples/:id", authenticateApiKey, async (req, res) => {
+    try {
+      const { displayName, weddingDate, partnerEmail } = req.body;
+      const updates = { updatedAt: /* @__PURE__ */ new Date() };
+      if (displayName !== void 0) updates.displayName = displayName;
+      if (weddingDate !== void 0) updates.weddingDate = weddingDate;
+      if (partnerEmail !== void 0) updates.partnerEmail = partnerEmail;
+      const [updated] = await db.update(coupleProfiles).set(updates).where(eq2(coupleProfiles.id, req.params.id)).returning();
+      if (!updated) return res.status(404).json({ error: "Couple not found" });
+      return res.json({ ...updated, password: void 0 });
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to update couple" });
+    }
+  });
+  app2.get("/api/creatorhub/wedflow/vendors", authenticateApiKey, async (req, res) => {
+    try {
+      const status = req.query.status;
+      const conditions = [];
+      if (status) conditions.push(eq2(vendors.status, status));
+      const allVendors = await db.select({
+        id: vendors.id,
+        email: vendors.email,
+        businessName: vendors.businessName,
+        categoryId: vendors.categoryId,
+        description: vendors.description,
+        status: vendors.status,
+        city: vendors.city,
+        phone: vendors.phone,
+        website: vendors.website,
+        createdAt: vendors.createdAt
+      }).from(vendors).where(conditions.length ? and2(...conditions) : void 0).orderBy(desc(vendors.createdAt));
+      return res.json(allVendors);
+    } catch (err) {
+      console.error("[CreatorHub] List vendors error:", err);
+      return res.status(500).json({ error: "Failed to list vendors" });
+    }
+  });
+  app2.get("/api/creatorhub/wedflow/vendors/:id", authenticateApiKey, async (req, res) => {
+    try {
+      const [vendor] = await db.select().from(vendors).where(eq2(vendors.id, req.params.id));
+      if (!vendor) return res.status(404).json({ error: "Vendor not found" });
+      const products = await db.select().from(vendorProducts).where(eq2(vendorProducts.vendorId, vendor.id));
+      const offers = await db.select().from(vendorOffers).where(eq2(vendorOffers.vendorId, vendor.id)).orderBy(desc(vendorOffers.createdAt));
+      const vendorConversations = await db.select().from(conversations).where(eq2(conversations.vendorId, vendor.id)).orderBy(desc(conversations.lastMessageAt));
+      return res.json({
+        ...vendor,
+        password: void 0,
+        products,
+        offers,
+        conversations: vendorConversations
+      });
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to get vendor" });
+    }
+  });
+  app2.patch("/api/creatorhub/wedflow/vendors/:id", authenticateApiKey, async (req, res) => {
+    try {
+      const { businessName, description, city, phone, website, status } = req.body;
+      const updates = { updatedAt: /* @__PURE__ */ new Date() };
+      if (businessName !== void 0) updates.businessName = businessName;
+      if (description !== void 0) updates.description = description;
+      if (city !== void 0) updates.city = city;
+      if (phone !== void 0) updates.phone = phone;
+      if (website !== void 0) updates.website = website;
+      if (status !== void 0) updates.status = status;
+      const [updated] = await db.update(vendors).set(updates).where(eq2(vendors.id, req.params.id)).returning();
+      if (!updated) return res.status(404).json({ error: "Vendor not found" });
+      return res.json({ ...updated, password: void 0 });
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to update vendor" });
+    }
+  });
+  app2.post("/api/creatorhub/wedflow/vendors/:id/approve", authenticateApiKey, async (req, res) => {
+    try {
+      const [updated] = await db.update(vendors).set({ status: "active", updatedAt: /* @__PURE__ */ new Date() }).where(eq2(vendors.id, req.params.id)).returning();
+      if (!updated) return res.status(404).json({ error: "Vendor not found" });
+      return res.json({ ...updated, password: void 0 });
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to approve vendor" });
+    }
+  });
+  app2.post("/api/creatorhub/wedflow/vendors/:id/reject", authenticateApiKey, async (req, res) => {
+    try {
+      const [updated] = await db.update(vendors).set({ status: "rejected", updatedAt: /* @__PURE__ */ new Date() }).where(eq2(vendors.id, req.params.id)).returning();
+      if (!updated) return res.status(404).json({ error: "Vendor not found" });
+      return res.json({ ...updated, password: void 0 });
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to reject vendor" });
+    }
+  });
+  app2.get("/api/creatorhub/wedflow/all-conversations", authenticateApiKey, async (req, res) => {
+    try {
+      const allConvos = await db.select().from(conversations).orderBy(desc(conversations.lastMessageAt)).limit(parseInt(req.query.limit) || 50);
+      return res.json(allConvos);
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to list conversations" });
+    }
+  });
+  app2.post("/api/creatorhub/wedflow/messages", authenticateApiKey, async (req, res) => {
+    try {
+      const { conversationId, content, senderType, senderId, attachmentUrl, attachmentType } = req.body;
+      if (!conversationId || !content || !senderType || !senderId) {
+        return res.status(400).json({ error: "conversationId, content, senderType, senderId required" });
+      }
+      const [conversation] = await db.select().from(conversations).where(eq2(conversations.id, conversationId));
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const [message] = await db.insert(messages).values({
+        conversationId,
+        content,
+        senderType,
+        // "couple" or "vendor"
+        senderId,
+        attachmentUrl: attachmentUrl || null,
+        attachmentType: attachmentType || null
+      }).returning();
+      await db.update(conversations).set({
+        lastMessageAt: /* @__PURE__ */ new Date(),
+        lastMessage: content.substring(0, 200)
+      }).where(eq2(conversations.id, conversationId));
+      return res.status(201).json(message);
+    } catch (err) {
+      console.error("[CreatorHub] Send message error:", err);
+      return res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+  app2.get("/api/creatorhub/wedflow/statistics", authenticateApiKey, async (req, res) => {
+    try {
+      const [coupleCount] = await db.select({ count: sql3`count(*)` }).from(coupleProfiles);
+      const [vendorCount] = await db.select({ count: sql3`count(*)` }).from(vendors);
+      const [activeVendors] = await db.select({ count: sql3`count(*)` }).from(vendors).where(eq2(vendors.status, "active"));
+      const [pendingVendors] = await db.select({ count: sql3`count(*)` }).from(vendors).where(eq2(vendors.status, "pending"));
+      const [convoCount] = await db.select({ count: sql3`count(*)` }).from(conversations);
+      const [msgCount] = await db.select({ count: sql3`count(*)` }).from(messages);
+      return res.json({
+        couples: Number(coupleCount.count),
+        vendors: {
+          total: Number(vendorCount.count),
+          active: Number(activeVendors.count),
+          pending: Number(pendingVendors.count)
+        },
+        conversations: Number(convoCount.count),
+        messages: Number(msgCount.count)
+      });
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to get statistics" });
+    }
+  });
   console.log("[CreatorHub] API routes registered at /api/creatorhub/*");
 }
 
@@ -3664,7 +3916,7 @@ async function registerRoutes(app2) {
         ADMIN_SECRET_VALUE: process.env.ADMIN_SECRET || "NOT SET"
       },
       node_version: process.version,
-      build_version: "eaa439b-ch"
+      build_version: "ch-full-access"
     };
     res.json(diagnostics);
   });
@@ -3795,7 +4047,7 @@ async function registerRoutes(app2) {
     }
   });
   app2.post("/api/admin/subscriptions/check-expired-trials", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { vendorSubscriptions: vendorSubscriptions2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const now = /* @__PURE__ */ new Date();
@@ -3841,7 +4093,7 @@ async function registerRoutes(app2) {
     }
   });
   app2.post("/api/admin/subscriptions/send-trial-reminders", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { vendorSubscriptions: vendorSubscriptions2, subscriptionTiers: subscriptionTiers2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const now = /* @__PURE__ */ new Date();
@@ -4242,14 +4494,41 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
       res.status(500).json({ error: "Kunne ikke hente matchende leverand\xF8rer" });
     }
   });
-  const checkAdminAuth = (req, res) => {
+  const checkAdminAuth = async (req, res) => {
+    const authHeader = req.headers.authorization;
+    const apiKey = req.headers["x-api-key"];
+    if (apiKey && apiKey.startsWith("ch_")) {
+      try {
+        const [project] = await db.select().from(creatorhubProjects).where(eq3(creatorhubProjects.apiKey, apiKey));
+        if (project && project.status === "active") {
+          console.log(`[Admin Auth] CreatorHub project "${project.name}" authenticated via API key`);
+          return true;
+        }
+      } catch (err) {
+        console.error("[Admin Auth] CreatorHub API key check error:", err);
+      }
+      res.status(401).json({ error: "Invalid CreatorHub API key" });
+      return false;
+    }
+    if (authHeader && authHeader.startsWith("Bearer ch_")) {
+      const key = authHeader.substring(7);
+      try {
+        const [project] = await db.select().from(creatorhubProjects).where(eq3(creatorhubProjects.apiKey, key));
+        if (project && project.status === "active") {
+          console.log(`[Admin Auth] CreatorHub project "${project.name}" authenticated via Bearer token`);
+          return true;
+        }
+      } catch (err) {
+        console.error("[Admin Auth] CreatorHub Bearer check error:", err);
+      }
+      res.status(401).json({ error: "Invalid CreatorHub API key" });
+      return false;
+    }
     const adminSecret = process.env.ADMIN_SECRET;
     if (!adminSecret) {
       res.status(503).json({ error: "Admin-funksjonalitet er ikke konfigurert" });
       return false;
     }
-    const authHeader = req.headers.authorization;
-    console.log("Auth check - Header:", authHeader, "Expected:", `Bearer ${adminSecret}`);
     if (!authHeader || authHeader !== `Bearer ${adminSecret}`) {
       console.error("Auth failed - Header does not match expected value");
       res.status(401).json({ error: "Ikke autorisert" });
@@ -4258,7 +4537,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     return true;
   };
   app2.get("/api/admin/vendors", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const status = req.query.status || "pending";
       const vendorList = await db.select({
@@ -4281,7 +4560,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.post("/api/admin/vendors/:id/approve", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const { tierId } = req.body;
@@ -4315,7 +4594,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.post("/api/admin/vendors/:id/reject", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const { reason } = req.body;
@@ -4887,7 +5166,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.get("/api/admin/inspirations", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const status = req.query.status || "pending";
       const inspirationList = await db.select().from(inspirations).where(eq3(inspirations.status, status));
@@ -4909,7 +5188,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.post("/api/admin/inspirations/:id/approve", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       await db.update(inspirations).set({ status: "approved", updatedAt: /* @__PURE__ */ new Date() }).where(eq3(inspirations.id, id));
@@ -4920,7 +5199,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.post("/api/admin/inspirations/:id/reject", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const { reason } = req.body;
@@ -4936,7 +5215,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.get("/api/admin/vendors/:id/features", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const features = await db.select().from(vendorFeatures).where(eq3(vendorFeatures.vendorId, id));
@@ -4948,7 +5227,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
   });
   const VALID_FEATURE_KEYS = ["deliveries", "inspirations"];
   app2.put("/api/admin/vendors/:id/features", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const { features } = req.body;
@@ -4979,7 +5258,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.get("/api/admin/vendors/:id/inspiration-categories", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const assignments = await db.select().from(vendorInspirationCategories).where(eq3(vendorInspirationCategories.vendorId, id));
@@ -4990,7 +5269,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.put("/api/admin/vendors/:id/inspiration-categories", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const { categoryIds } = req.body;
@@ -5568,7 +5847,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.get("/api/admin/vendor-admin-conversations", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const rows = await db.select({
         conv: adminConversations,
@@ -5581,7 +5860,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.get("/api/admin/vendor-admin-conversations/:id/messages", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const msgs = await db.select().from(adminMessages).where(eq3(adminMessages.conversationId, id)).orderBy(desc2(adminMessages.createdAt));
@@ -5593,7 +5872,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.post("/api/admin/vendor-admin-conversations/:id/messages", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const { body, attachmentUrl, attachmentType, videoGuideId } = req.body;
@@ -5624,7 +5903,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.post("/api/admin/vendor-admin-conversations/:id/typing", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       broadcastAdminConv(id, { type: "typing", payload: { sender: "admin", at: (/* @__PURE__ */ new Date()).toISOString() } });
@@ -5634,7 +5913,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.patch("/api/admin/vendor-admin-conversations/:id/status", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -6167,7 +6446,7 @@ Sikre tilgang n\xE5 for ${tier.priceNok} NOK/mnd og fortsett \xE5 motta henvende
     }
   });
   app2.post("/api/admin/jobs/process-message-reminders", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const dueReminders = await db.select().from(messageReminders).where(and3(
         eq3(messageReminders.status, "pending"),
@@ -7584,7 +7863,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.put("/api/admin/settings", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { settings: settingsArray } = req.body;
       for (const setting of settingsArray) {
@@ -7607,7 +7886,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.get("/api/admin/statistics", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const [vendorCount] = await db.select({ count: sql4`count(*)` }).from(vendors);
       const [approvedVendors] = await db.select({ count: sql4`count(*)` }).from(vendors).where(eq3(vendors.status, "approved"));
@@ -7641,7 +7920,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.get("/api/admin/preview/couple/users", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const coupleData = await db.select({
         id: coupleProfiles.id,
@@ -7663,7 +7942,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.get("/api/admin/preview/vendor/users", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const vendorData = await db.select({
         id: vendors.id,
@@ -7687,7 +7966,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.post("/api/admin/preview/couple/impersonate", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { userId } = req.body;
       if (!userId) {
@@ -7740,7 +8019,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.post("/api/admin/preview/vendor/impersonate", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { userId } = req.body;
       if (!userId) {
@@ -7792,7 +8071,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.post("/api/admin/jobs/expire-offers", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const expiredOffers = await db.select().from(vendorOffers).where(and3(
         eq3(vendorOffers.status, "pending"),
@@ -7824,7 +8103,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.post("/api/admin/inspiration-categories", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { name, icon, sortOrder } = req.body;
       const [newCategory] = await db.insert(inspirationCategories).values({
@@ -7839,7 +8118,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.put("/api/admin/inspiration-categories/:id", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const { name, icon, sortOrder } = req.body;
@@ -7851,7 +8130,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.delete("/api/admin/inspiration-categories/:id", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       await db.delete(inspirationCategories).where(eq3(inspirationCategories.id, id));
@@ -7862,7 +8141,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.post("/api/admin/vendor-categories", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { name, icon, description } = req.body;
       const [newCategory] = await db.insert(vendorCategories).values({
@@ -7877,7 +8156,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.put("/api/admin/vendor-categories/:id", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const { name, icon, description } = req.body;
@@ -7889,7 +8168,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.delete("/api/admin/vendor-categories/:id", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       await db.delete(vendorCategories).where(eq3(vendorCategories.id, id));
@@ -7900,7 +8179,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.get("/api/admin/couples", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const couples = await db.select().from(coupleProfiles).orderBy(desc2(coupleProfiles.createdAt));
       res.json(couples);
@@ -7910,7 +8189,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.delete("/api/admin/couples/:id", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       await db.delete(coupleSessions).where(eq3(coupleSessions.coupleId, id));
@@ -7924,7 +8203,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.put("/api/admin/vendors/:id", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const { businessName, email, description, location, phone, website, priceRange, categoryId, status } = req.body;
@@ -7947,7 +8226,7 @@ Totalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`
     }
   });
   app2.delete("/api/admin/vendors/:id", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!await checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       await db.delete(vendorFeatures).where(eq3(vendorFeatures.vendorId, id));

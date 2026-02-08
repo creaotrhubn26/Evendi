@@ -25,7 +25,10 @@ import {
   createCreatorhubBookingSchema,
   createCreatorhubCrmNoteSchema,
   vendors,
+  vendorSessions,
+  vendorProducts,
   coupleProfiles,
+  coupleSessions,
   conversations,
   messages,
   vendorOffers,
@@ -985,6 +988,389 @@ export function registerCreatorhubRoutes(app: Express) {
       return res.json(logs);
     } catch (err: any) {
       return res.status(500).json({ error: "Failed to get audit log" });
+    }
+  });
+
+  // ===============================================
+  // FULL WEDFLOW CONTROL (Admin-level access)
+  // ===============================================
+
+  // ----- IMPERSONATION: Get session tokens for any couple or vendor -----
+
+  /**
+   * POST /api/creatorhub/wedflow/impersonate/couple
+   * Get a session token to act as a specific couple. Use this token as
+   * "Authorization: Bearer <token>" on any /api/couples/* endpoint.
+   */
+  app.post("/api/creatorhub/wedflow/impersonate/couple", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const { coupleId, email } = req.body;
+      if (!coupleId && !email) {
+        return res.status(400).json({ error: "coupleId or email required" });
+      }
+
+      let couple;
+      if (coupleId) {
+        [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+      } else {
+        [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.email, email));
+      }
+
+      if (!couple) {
+        return res.status(404).json({ error: "Couple not found" });
+      }
+
+      // Create a session token
+      const sessionToken = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      await db.insert(coupleSessions).values({
+        coupleId: couple.id,
+        sessionToken,
+        expiresAt,
+      });
+
+      return res.json({
+        sessionToken,
+        expiresAt,
+        couple: {
+          id: couple.id,
+          email: couple.email,
+          displayName: couple.displayName,
+          weddingDate: couple.weddingDate,
+        },
+        usage: 'Use as "Authorization: Bearer <sessionToken>" on /api/couples/* endpoints',
+      });
+    } catch (err: any) {
+      console.error("[CreatorHub] Impersonate couple error:", err);
+      return res.status(500).json({ error: "Failed to impersonate couple" });
+    }
+  });
+
+  /**
+   * POST /api/creatorhub/wedflow/impersonate/vendor
+   * Get a session token to act as a specific vendor.
+   */
+  app.post("/api/creatorhub/wedflow/impersonate/vendor", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const { vendorId, email } = req.body;
+      if (!vendorId && !email) {
+        return res.status(400).json({ error: "vendorId or email required" });
+      }
+
+      let vendor;
+      if (vendorId) {
+        [vendor] = await db.select().from(vendors).where(eq(vendors.id, vendorId));
+      } else {
+        [vendor] = await db.select().from(vendors).where(eq(vendors.email, email));
+      }
+
+      if (!vendor) {
+        return res.status(404).json({ error: "Vendor not found" });
+      }
+
+      // Create a session token
+      const sessionToken = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      await db.insert(vendorSessions).values({
+        vendorId: vendor.id,
+        sessionToken,
+        expiresAt,
+      });
+
+      return res.json({
+        sessionToken,
+        expiresAt,
+        vendor: {
+          id: vendor.id,
+          email: vendor.email,
+          businessName: vendor.businessName,
+          status: vendor.status,
+        },
+        usage: 'Use as "Authorization: Bearer <sessionToken>" on /api/vendors/* endpoints',
+      });
+    } catch (err: any) {
+      console.error("[CreatorHub] Impersonate vendor error:", err);
+      return res.status(500).json({ error: "Failed to impersonate vendor" });
+    }
+  });
+
+  // ----- FULL DATA ACCESS: Read/write all Wedflow data -----
+
+  /**
+   * GET /api/creatorhub/wedflow/couples
+   * List all couples with their profiles
+   */
+  app.get("/api/creatorhub/wedflow/couples", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const allCouples = await db.select({
+        id: coupleProfiles.id,
+        email: coupleProfiles.email,
+        displayName: coupleProfiles.displayName,
+        partnerEmail: coupleProfiles.partnerEmail,
+        weddingDate: coupleProfiles.weddingDate,
+        lastActiveAt: coupleProfiles.lastActiveAt,
+        createdAt: coupleProfiles.createdAt,
+      }).from(coupleProfiles).orderBy(desc(coupleProfiles.createdAt));
+      return res.json(allCouples);
+    } catch (err: any) {
+      console.error("[CreatorHub] List couples error:", err);
+      return res.status(500).json({ error: "Failed to list couples" });
+    }
+  });
+
+  /**
+   * GET /api/creatorhub/wedflow/couples/:id
+   * Get full couple details
+   */
+  app.get("/api/creatorhub/wedflow/couples/:id", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const [couple] = await db.select().from(coupleProfiles)
+        .where(eq(coupleProfiles.id, req.params.id));
+      if (!couple) return res.status(404).json({ error: "Couple not found" });
+
+      // Get their conversations
+      const coupleConversations = await db.select().from(conversations)
+        .where(eq(conversations.coupleId, couple.id))
+        .orderBy(desc(conversations.lastMessageAt));
+
+      return res.json({ ...couple, password: undefined, conversations: coupleConversations });
+    } catch (err: any) {
+      return res.status(500).json({ error: "Failed to get couple" });
+    }
+  });
+
+  /**
+   * PATCH /api/creatorhub/wedflow/couples/:id
+   * Update couple profile
+   */
+  app.patch("/api/creatorhub/wedflow/couples/:id", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const { displayName, weddingDate, partnerEmail } = req.body;
+      const updates: any = { updatedAt: new Date() };
+      if (displayName !== undefined) updates.displayName = displayName;
+      if (weddingDate !== undefined) updates.weddingDate = weddingDate;
+      if (partnerEmail !== undefined) updates.partnerEmail = partnerEmail;
+
+      const [updated] = await db.update(coupleProfiles)
+        .set(updates)
+        .where(eq(coupleProfiles.id, req.params.id))
+        .returning();
+
+      if (!updated) return res.status(404).json({ error: "Couple not found" });
+      return res.json({ ...updated, password: undefined });
+    } catch (err: any) {
+      return res.status(500).json({ error: "Failed to update couple" });
+    }
+  });
+
+  /**
+   * GET /api/creatorhub/wedflow/vendors
+   * List all vendors
+   */
+  app.get("/api/creatorhub/wedflow/vendors", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const conditions: any[] = [];
+      if (status) conditions.push(eq(vendors.status, status));
+
+      const allVendors = await db.select({
+        id: vendors.id,
+        email: vendors.email,
+        businessName: vendors.businessName,
+        categoryId: vendors.categoryId,
+        description: vendors.description,
+        status: vendors.status,
+        city: vendors.city,
+        phone: vendors.phone,
+        website: vendors.website,
+        createdAt: vendors.createdAt,
+      }).from(vendors)
+        .where(conditions.length ? and(...conditions) : undefined)
+        .orderBy(desc(vendors.createdAt));
+
+      return res.json(allVendors);
+    } catch (err: any) {
+      console.error("[CreatorHub] List vendors error:", err);
+      return res.status(500).json({ error: "Failed to list vendors" });
+    }
+  });
+
+  /**
+   * GET /api/creatorhub/wedflow/vendors/:id
+   * Get full vendor details
+   */
+  app.get("/api/creatorhub/wedflow/vendors/:id", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const [vendor] = await db.select().from(vendors)
+        .where(eq(vendors.id, req.params.id));
+      if (!vendor) return res.status(404).json({ error: "Vendor not found" });
+
+      // Get their products, offers, conversations
+      const products = await db.select().from(vendorProducts)
+        .where(eq(vendorProducts.vendorId, vendor.id));
+      const offers = await db.select().from(vendorOffers)
+        .where(eq(vendorOffers.vendorId, vendor.id))
+        .orderBy(desc(vendorOffers.createdAt));
+      const vendorConversations = await db.select().from(conversations)
+        .where(eq(conversations.vendorId, vendor.id))
+        .orderBy(desc(conversations.lastMessageAt));
+
+      return res.json({
+        ...vendor,
+        password: undefined,
+        products,
+        offers,
+        conversations: vendorConversations,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: "Failed to get vendor" });
+    }
+  });
+
+  /**
+   * PATCH /api/creatorhub/wedflow/vendors/:id
+   * Update vendor profile
+   */
+  app.patch("/api/creatorhub/wedflow/vendors/:id", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const { businessName, description, city, phone, website, status } = req.body;
+      const updates: any = { updatedAt: new Date() };
+      if (businessName !== undefined) updates.businessName = businessName;
+      if (description !== undefined) updates.description = description;
+      if (city !== undefined) updates.city = city;
+      if (phone !== undefined) updates.phone = phone;
+      if (website !== undefined) updates.website = website;
+      if (status !== undefined) updates.status = status;
+
+      const [updated] = await db.update(vendors)
+        .set(updates)
+        .where(eq(vendors.id, req.params.id))
+        .returning();
+
+      if (!updated) return res.status(404).json({ error: "Vendor not found" });
+      return res.json({ ...updated, password: undefined });
+    } catch (err: any) {
+      return res.status(500).json({ error: "Failed to update vendor" });
+    }
+  });
+
+  /**
+   * POST /api/creatorhub/wedflow/vendors/:id/approve
+   * Approve a vendor
+   */
+  app.post("/api/creatorhub/wedflow/vendors/:id/approve", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const [updated] = await db.update(vendors)
+        .set({ status: "active", updatedAt: new Date() })
+        .where(eq(vendors.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Vendor not found" });
+      return res.json({ ...updated, password: undefined });
+    } catch (err: any) {
+      return res.status(500).json({ error: "Failed to approve vendor" });
+    }
+  });
+
+  /**
+   * POST /api/creatorhub/wedflow/vendors/:id/reject
+   * Reject a vendor
+   */
+  app.post("/api/creatorhub/wedflow/vendors/:id/reject", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const [updated] = await db.update(vendors)
+        .set({ status: "rejected", updatedAt: new Date() })
+        .where(eq(vendors.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Vendor not found" });
+      return res.json({ ...updated, password: undefined });
+    } catch (err: any) {
+      return res.status(500).json({ error: "Failed to reject vendor" });
+    }
+  });
+
+  /**
+   * GET /api/creatorhub/wedflow/conversations/:id/messages
+   * Get all messages in a conversation (with send capability)
+   */
+  app.get("/api/creatorhub/wedflow/all-conversations", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const allConvos = await db.select().from(conversations)
+        .orderBy(desc(conversations.lastMessageAt))
+        .limit(parseInt(req.query.limit as string) || 50);
+      return res.json(allConvos);
+    } catch (err: any) {
+      return res.status(500).json({ error: "Failed to list conversations" });
+    }
+  });
+
+  /**
+   * POST /api/creatorhub/wedflow/messages
+   * Send a message in any conversation (as couple or vendor)
+   */
+  app.post("/api/creatorhub/wedflow/messages", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const { conversationId, content, senderType, senderId, attachmentUrl, attachmentType } = req.body;
+      if (!conversationId || !content || !senderType || !senderId) {
+        return res.status(400).json({ error: "conversationId, content, senderType, senderId required" });
+      }
+
+      const [conversation] = await db.select().from(conversations)
+        .where(eq(conversations.id, conversationId));
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      const [message] = await db.insert(messages).values({
+        conversationId,
+        content,
+        senderType, // "couple" or "vendor"
+        senderId,
+        attachmentUrl: attachmentUrl || null,
+        attachmentType: attachmentType || null,
+      }).returning();
+
+      // Update conversation last message
+      await db.update(conversations)
+        .set({
+          lastMessageAt: new Date(),
+          lastMessage: content.substring(0, 200),
+        })
+        .where(eq(conversations.id, conversationId));
+
+      return res.status(201).json(message);
+    } catch (err: any) {
+      console.error("[CreatorHub] Send message error:", err);
+      return res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
+  /**
+   * GET /api/creatorhub/wedflow/statistics
+   * Get full platform statistics
+   */
+  app.get("/api/creatorhub/wedflow/statistics", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const [coupleCount] = await db.select({ count: sql<number>`count(*)` }).from(coupleProfiles);
+      const [vendorCount] = await db.select({ count: sql<number>`count(*)` }).from(vendors);
+      const [activeVendors] = await db.select({ count: sql<number>`count(*)` }).from(vendors).where(eq(vendors.status, "active"));
+      const [pendingVendors] = await db.select({ count: sql<number>`count(*)` }).from(vendors).where(eq(vendors.status, "pending"));
+      const [convoCount] = await db.select({ count: sql<number>`count(*)` }).from(conversations);
+      const [msgCount] = await db.select({ count: sql<number>`count(*)` }).from(messages);
+
+      return res.json({
+        couples: Number(coupleCount.count),
+        vendors: {
+          total: Number(vendorCount.count),
+          active: Number(activeVendors.count),
+          pending: Number(pendingVendors.count),
+        },
+        conversations: Number(convoCount.count),
+        messages: Number(msgCount.count),
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: "Failed to get statistics" });
     }
   });
 

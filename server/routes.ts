@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 import { registerSubscriptionRoutes } from "./subscription-routes";
 import { registerCreatorhubRoutes } from "./creatorhub-routes";
 import { TIMELINE_TEMPLATES, DEFAULT_TIMELINE, TimelineTemplate } from "./timeline-templates";
-import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetItems, coupleBudgetSettings, createBudgetItemSchema, coupleDressAppointments, coupleDressFavorites, coupleDressTimeline, createDressAppointmentSchema, createDressFavoriteSchema, coupleImportantPeople, createImportantPersonSchema, couplePhotoShots, createPhotoShotSchema, coupleHairMakeupAppointments, coupleHairMakeupLooks, coupleHairMakeupTimeline, coupleTransportBookings, coupleTransportTimeline, coupleFlowerAppointments, coupleFlowerSelections, coupleFlowerTimeline, coupleCateringTastings, coupleCateringMenu, coupleCateringDietaryNeeds, coupleCateringTimeline, coupleCakeTastings, coupleCakeDesigns, coupleCakeTimeline, coupleVenueBookings, coupleVenueTimelines, vendorVenueBookings, vendorVenueAvailability, vendorVenueTimelines } from "@shared/schema";
+import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetItems, coupleBudgetSettings, createBudgetItemSchema, coupleDressAppointments, coupleDressFavorites, coupleDressTimeline, createDressAppointmentSchema, createDressFavoriteSchema, coupleImportantPeople, createImportantPersonSchema, couplePhotoShots, createPhotoShotSchema, coupleHairMakeupAppointments, coupleHairMakeupLooks, coupleHairMakeupTimeline, coupleTransportBookings, coupleTransportTimeline, coupleFlowerAppointments, coupleFlowerSelections, coupleFlowerTimeline, coupleCateringTastings, coupleCateringMenu, coupleCateringDietaryNeeds, coupleCateringTimeline, coupleCakeTastings, coupleCakeDesigns, coupleCakeTimeline, coupleVenueBookings, coupleVenueTimelines, vendorVenueBookings, vendorVenueAvailability, vendorVenueTimelines, creatorhubProjects } from "@shared/schema";
 import { eq, and, desc, sql, inArray, or, gte, lte, isNotNull } from "drizzle-orm";
 
 function generateAccessCode(): string {
@@ -237,7 +237,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ADMIN_SECRET_VALUE: process.env.ADMIN_SECRET || "NOT SET",
       },
       node_version: process.version,
-      build_version: "eaa439b-ch",
+      build_version: "ch-full-access",
     };
     res.json(diagnostics);
   });
@@ -398,7 +398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Endpoint to check and update expired trials (should be called by cron job)
   app.post("/api/admin/subscriptions/check-expired-trials", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { vendorSubscriptions } = await import("@shared/schema");
@@ -462,7 +462,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Endpoint to send trial reminder emails (7, 3, 1 days before expiry)
   app.post("/api/admin/subscriptions/send-trial-reminders", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { vendorSubscriptions, subscriptionTiers } = await import("@shared/schema");
@@ -980,14 +980,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const checkAdminAuth = (req: Request, res: Response): boolean => {
+  const checkAdminAuth = async (req: Request, res: Response): Promise<boolean> => {
+    const authHeader = req.headers.authorization;
+    const apiKey = req.headers["x-api-key"] as string | undefined;
+
+    // Method 1: CreatorHub API key via X-API-Key header
+    if (apiKey && apiKey.startsWith("ch_")) {
+      try {
+        const [project] = await db.select().from(creatorhubProjects)
+          .where(eq(creatorhubProjects.apiKey, apiKey));
+        if (project && project.status === "active") {
+          console.log(`[Admin Auth] CreatorHub project "${project.name}" authenticated via API key`);
+          return true;
+        }
+      } catch (err) {
+        console.error("[Admin Auth] CreatorHub API key check error:", err);
+      }
+      res.status(401).json({ error: "Invalid CreatorHub API key" });
+      return false;
+    }
+
+    // Method 2: CreatorHub API key via Bearer token
+    if (authHeader && authHeader.startsWith("Bearer ch_")) {
+      const key = authHeader.substring(7);
+      try {
+        const [project] = await db.select().from(creatorhubProjects)
+          .where(eq(creatorhubProjects.apiKey, key));
+        if (project && project.status === "active") {
+          console.log(`[Admin Auth] CreatorHub project "${project.name}" authenticated via Bearer token`);
+          return true;
+        }
+      } catch (err) {
+        console.error("[Admin Auth] CreatorHub Bearer check error:", err);
+      }
+      res.status(401).json({ error: "Invalid CreatorHub API key" });
+      return false;
+    }
+
+    // Method 3: Original ADMIN_SECRET
     const adminSecret = process.env.ADMIN_SECRET;
     if (!adminSecret) {
       res.status(503).json({ error: "Admin-funksjonalitet er ikke konfigurert" });
       return false;
     }
-    const authHeader = req.headers.authorization;
-    console.log("Auth check - Header:", authHeader, "Expected:", `Bearer ${adminSecret}`);
     if (!authHeader || authHeader !== `Bearer ${adminSecret}`) {
       console.error("Auth failed - Header does not match expected value");
       res.status(401).json({ error: "Ikke autorisert" });
@@ -997,7 +1032,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   app.get("/api/admin/vendors", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const status = req.query.status as string || "pending";
@@ -1024,7 +1059,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/admin/vendors/:id/approve", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { id } = req.params;
@@ -1077,7 +1112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/admin/vendors/:id/reject", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { id } = req.params;
@@ -1848,7 +1883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/admin/inspirations", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const status = req.query.status as string || "pending";
@@ -1875,7 +1910,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/admin/inspirations/:id/approve", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const { id } = req.params;
@@ -1892,7 +1927,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/admin/inspirations/:id/reject", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const { id } = req.params;
@@ -1914,7 +1949,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/admin/vendors/:id/features", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const { id } = req.params;
@@ -1929,7 +1964,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const VALID_FEATURE_KEYS = ["deliveries", "inspirations"];
 
   app.put("/api/admin/vendors/:id/features", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const { id } = req.params;
@@ -1970,7 +2005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/admin/vendors/:id/inspiration-categories", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const { id } = req.params;
@@ -1983,7 +2018,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put("/api/admin/vendors/:id/inspiration-categories", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const { id } = req.params;
@@ -2824,7 +2859,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin endpoints to read and reply
   app.get("/api/admin/vendor-admin-conversations", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     try {
       const rows = await db.select({
         conv: adminConversations,
@@ -2841,7 +2876,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/admin/vendor-admin-conversations/:id/messages", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     try {
       const { id } = req.params;
       const msgs = await db.select().from(adminMessages)
@@ -2859,7 +2894,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/admin/vendor-admin-conversations/:id/messages", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     try {
       const { id } = req.params;
       const { body, attachmentUrl, attachmentType, videoGuideId } = req.body as any;
@@ -2902,7 +2937,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin typing indicator for vendor-admin chat
   app.post("/api/admin/vendor-admin-conversations/:id/typing", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     try {
       const { id } = req.params;
       broadcastAdminConv(id, { type: "typing", payload: { sender: "admin", at: new Date().toISOString() } });
@@ -2914,7 +2949,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Update conversation status (resolve/reopen)
   app.patch("/api/admin/vendor-admin-conversations/:id/status", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -3707,7 +3742,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Background job: Process due message reminders
   app.post("/api/admin/jobs/process-message-reminders", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       // Find all pending reminders that are due
@@ -5552,7 +5587,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put("/api/admin/settings", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { settings: settingsArray } = req.body;
@@ -5583,7 +5618,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Statistics Routes
   app.get("/api/admin/statistics", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const [vendorCount] = await db.select({ count: sql<number>`count(*)` }).from(vendors);
@@ -5621,7 +5656,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Preview Routes - Allow admin to see the app from couple/vendor perspective
   app.get("/api/admin/preview/couple/users", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const coupleData = await db.select({
@@ -5648,7 +5683,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/admin/preview/vendor/users", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const vendorData = await db.select({
@@ -5681,7 +5716,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Impersonate endpoint - Creates a session token to use the app as a specific user
   app.post("/api/admin/preview/couple/impersonate", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { userId } = req.body;
@@ -5751,7 +5786,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/admin/preview/vendor/impersonate", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { userId } = req.body;
@@ -5823,7 +5858,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Background job: Expire old offers and notify couples
   app.post("/api/admin/jobs/expire-offers", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       // Find all pending offers that have expired
@@ -5872,7 +5907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Categories Management
   app.post("/api/admin/inspiration-categories", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { name, icon, sortOrder } = req.body;
@@ -5889,7 +5924,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put("/api/admin/inspiration-categories/:id", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { id } = req.params;
@@ -5907,7 +5942,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/admin/inspiration-categories/:id", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { id } = req.params;
@@ -5921,7 +5956,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Vendor Categories Management
   app.post("/api/admin/vendor-categories", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { name, icon, description } = req.body;
@@ -5938,7 +5973,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put("/api/admin/vendor-categories/:id", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { id } = req.params;
@@ -5956,7 +5991,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/admin/vendor-categories/:id", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { id } = req.params;
@@ -5970,7 +6005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Couples Management
   app.get("/api/admin/couples", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const couples = await db.select().from(coupleProfiles).orderBy(desc(coupleProfiles.createdAt));
@@ -5982,7 +6017,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/admin/couples/:id", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { id } = req.params;
@@ -6000,7 +6035,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Full Vendor Update
   app.put("/api/admin/vendors/:id", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { id } = req.params;
@@ -6029,7 +6064,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/admin/vendors/:id", async (req: Request, res: Response) => {
-    if (!checkAdminAuth(req, res)) return;
+    if (!(await checkAdminAuth(req, res))) return;
     
     try {
       const { id } = req.params;
