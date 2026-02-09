@@ -20,7 +20,10 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
 import { SwipeableRow } from '../components/SwipeableRow';
+import { VendorSuggestions } from '../components/VendorSuggestions';
+import { VendorActionBar } from '../components/VendorActionBar';
 import { useTheme } from '../hooks/useTheme';
+import { useVendorSearch } from '../hooks/useVendorSearch';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
 
@@ -100,8 +103,10 @@ export function PlanleggerScreen() {
   const [editingMeeting, setEditingMeeting] = useState<PlannerMeeting | null>(null);
   const [editingTask, setEditingTask] = useState<PlannerTask | null>(null);
 
+  // Vendor search for planner autocomplete
+  const plannerSearch = useVendorSearch({ category: 'planner' });
+
   // Form state - Meetings
-  const [plannerName, setPlannerName] = useState('');
   const [meetingDate, setMeetingDate] = useState('');
   const [meetingTime, setMeetingTime] = useState('');
   const [meetingLocation, setMeetingLocation] = useState('');
@@ -136,7 +141,8 @@ export function PlanleggerScreen() {
   const openMeetingModal = (meeting?: PlannerMeeting) => {
     if (meeting) {
       setEditingMeeting(meeting);
-      setPlannerName(meeting.plannerName);
+      plannerSearch.setSearchText(meeting.plannerName);
+      plannerSearch.setSelectedVendor(null);
       setMeetingDate(meeting.date);
       setMeetingTime(meeting.time || '');
       setMeetingLocation(meeting.location || '');
@@ -144,7 +150,7 @@ export function PlanleggerScreen() {
       setMeetingNotes(meeting.notes || '');
     } else {
       setEditingMeeting(null);
-      setPlannerName('');
+      plannerSearch.clearSelection();
       setMeetingDate('');
       setMeetingTime('');
       setMeetingLocation('');
@@ -155,14 +161,14 @@ export function PlanleggerScreen() {
   };
 
   const saveMeeting = async () => {
-    if (!plannerName.trim() || !meetingDate.trim()) {
+    if (!plannerSearch.searchText.trim() || !meetingDate.trim()) {
       Alert.alert('Feil', 'Vennligst fyll inn planleggernavn og dato');
       return;
     }
 
     const meeting: PlannerMeeting = {
       id: editingMeeting?.id || Date.now().toString(),
-      plannerName,
+      plannerName: plannerSearch.searchText.trim(),
       date: meetingDate,
       time: meetingTime,
       location: meetingLocation,
@@ -569,10 +575,32 @@ export function PlanleggerScreen() {
               <ThemedText style={styles.formLabel}>Planleggernavn *</ThemedText>
               <TextInput
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-                placeholder="f.eks. Planlegger navn"
+                placeholder="Søk etter registrert planlegger..."
                 placeholderTextColor={theme.textSecondary}
-                value={plannerName}
-                onChangeText={setPlannerName}
+                value={plannerSearch.searchText}
+                onChangeText={plannerSearch.onChangeText}
+              />
+              {plannerSearch.selectedVendor && (
+                <VendorActionBar
+                  vendor={plannerSearch.selectedVendor}
+                  vendorCategory="planner"
+                  onClear={plannerSearch.clearSelection}
+                  icon="clipboard"
+                />
+              )}
+              <VendorSuggestions
+                suggestions={plannerSearch.suggestions}
+                isLoading={plannerSearch.isLoading}
+                onSelect={plannerSearch.onSelectVendor}
+                onViewProfile={(v) => navigation.navigate('VendorDetail', {
+                  vendorId: v.id,
+                  vendorName: v.businessName,
+                  vendorDescription: v.description || '',
+                  vendorLocation: v.location || '',
+                  vendorPriceRange: v.priceRange || '',
+                  vendorCategory: 'planner',
+                })}
+                icon="clipboard"
               />
             </View>
 

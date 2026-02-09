@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   StyleSheet,
@@ -9,12 +9,15 @@ import {
   Alert,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -22,6 +25,10 @@ import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
+import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
+import { getApiUrl } from "@/lib/query-client";
+
+const COUPLE_STORAGE_KEY = "wedflow_couple_session";
 
 interface VendorReview {
   id: string;
@@ -66,11 +73,12 @@ interface VendorReviewsResponse {
 
 export default function VendorDetailScreen() {
   const route = useRoute<any>();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<PlanningStackParamList>>();
   const { theme } = useTheme();
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
+  const [isStartingChat, setIsStartingChat] = useState(false);
 
   const { vendorId, vendorName, vendorDescription, vendorLocation, vendorPriceRange, vendorCategory } = route.params || {};
 
@@ -83,6 +91,52 @@ export default function VendorDetailScreen() {
     queryKey: [`/api/vendors/${vendorId}/products`],
     enabled: !!vendorId,
   });
+
+  /** Start (or resume) a chat conversation with this vendor */
+  const handleStartChat = async () => {
+    setIsStartingChat(true);
+    try {
+      const sessionData = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
+      if (!sessionData) {
+        Alert.alert("Logg inn", "Du må logge inn som par for å sende meldinger.");
+        setIsStartingChat(false);
+        return;
+      }
+      const { sessionToken } = JSON.parse(sessionData);
+
+      const response = await fetch(
+        new URL("/api/couples/messages", getApiUrl()).toString(),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          body: JSON.stringify({
+            vendorId,
+            body: `Hei! Jeg er interessert i tjenestene deres (${getCategoryLabel(vendorCategory)}).`,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => null);
+        throw new Error(err?.error || "Kunne ikke starte samtale");
+      }
+
+      const msg = await response.json();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      navigation.navigate("Chat", {
+        conversationId: msg.conversationId,
+        vendorName: vendorName || "Leverandør",
+      });
+    } catch (e: any) {
+      Alert.alert("Feil", e.message || "Kunne ikke starte samtale");
+    } finally {
+      setIsStartingChat(false);
+    }
+  };
 
   const handleOpenGoogle = async () => {
     if (!data?.googleReviewUrl) return;
@@ -166,6 +220,33 @@ export default function VendorDetailScreen() {
           </ThemedText>
         ) : null}
       </Card>
+
+      {/* Action Bar — Contact / Chat / Appointment */}
+      <Animated.View entering={FadeInDown.delay(100).duration(300)} style={styles.actionBar}>
+        <Pressable
+          onPress={handleStartChat}
+          disabled={isStartingChat}
+          style={[styles.actionButton, { backgroundColor: theme.primary }]}
+        >
+          <Feather name="message-circle" size={18} color="#FFFFFF" />
+          <ThemedText style={styles.actionButtonText}>
+            {isStartingChat ? "Starter..." : "Send melding"}
+          </ThemedText>
+        </Pressable>
+
+        <Pressable
+          onPress={() => {
+            navigation.goBack();
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+          style={[styles.actionButtonOutline, { borderColor: theme.primary }]}
+        >
+          <Feather name="calendar" size={18} color={theme.primary} />
+          <ThemedText style={[styles.actionButtonOutlineText, { color: theme.primary }]}>
+            Book avtale
+          </ThemedText>
+        </Pressable>
+      </Animated.View>
 
       {isLoading ? (
         <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: Spacing.xl }} />
@@ -674,5 +755,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: BorderRadius.sm,
+  },
+  actionBar: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: BorderRadius.md,
+  },
+  actionButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  actionButtonOutline: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+  },
+  actionButtonOutlineText: {
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

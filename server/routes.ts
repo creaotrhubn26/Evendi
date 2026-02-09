@@ -831,8 +831,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Smart vendor matching endpoint for couples
   app.get("/api/vendors/matching", async (req: Request, res: Response) => {
     try {
-      const { category, guestCount, location, cuisineTypes } = req.query;
+      const { category, guestCount, location, cuisineTypes, search } = req.query;
       const guestCountNum = guestCount ? parseInt(guestCount as string) : undefined;
+      const searchTerm = search && typeof search === "string" ? search.trim().toLowerCase() : undefined;
       // Parse cuisine types from query (comma-separated)
       const requestedCuisines = cuisineTypes && typeof cuisineTypes === "string" 
         ? cuisineTypes.split(",").map(c => c.trim().toLowerCase())
@@ -868,6 +869,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let filtered = category 
         ? vendorsWithSubs.filter(v => v.categoryId === category)
         : vendorsWithSubs;
+
+      // Filter by search term (business name match) if specified
+      if (searchTerm) {
+        filtered = filtered.filter(v => {
+          const name = (v.businessName || "").toLowerCase();
+          const desc = (v.description || "").toLowerCase();
+          return name.includes(searchTerm) || desc.includes(searchTerm);
+        });
+      }
 
       // Fetch category details for capacity matching
       const vendorIds = filtered.map(v => v.id);

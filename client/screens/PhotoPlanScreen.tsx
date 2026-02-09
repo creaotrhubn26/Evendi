@@ -96,7 +96,7 @@ export default function PhotoPlanScreen() {
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("portraits");
+  const [selectedCategory, setSelectedCategory] = useState<PhotoShot["category"]>("portraits");
   const [editingShot, setEditingShot] = useState<PhotoShot | null>(null);
 
   const completedCount = shots.filter((s) => s.completed).length;
@@ -120,12 +120,16 @@ export default function PhotoPlanScreen() {
       if (editingShot) {
         await updateMutation.mutateAsync({
           id: editingShot.id,
-          data: { title: newTitle.trim(), description: newDescription.trim() || null, category: selectedCategory },
+          data: {
+            title: newTitle.trim(),
+            description: newDescription.trim() || undefined,
+            category: selectedCategory,
+          },
         });
       } else {
         await createMutation.mutateAsync({
           title: newTitle.trim(),
-          description: newDescription.trim() || null,
+          description: newDescription.trim() || undefined,
           completed: false,
           category: selectedCategory,
         });

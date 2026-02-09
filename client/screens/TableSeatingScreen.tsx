@@ -1,12 +1,30 @@
-import React, { useState, useCallback } from "react";
-import { ScrollView, StyleSheet, View, Pressable, Alert, TextInput, Modal } from "react-native";
+import React, { useState, useCallback, useRef } from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  View,
+  Pressable,
+  Alert,
+  TextInput,
+  Modal,
+  LayoutRectangle,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import Animated, { FadeInUp } from "react-native-reanimated";
+import Animated, {
+  FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  runOnJS,
+} from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -34,22 +52,34 @@ export default function TableSeatingScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [showSpeakers, setShowSpeakers] = useState(true);
+  const [draggingGuest, setDraggingGuest] = useState<{ guest: WeddingGuest; fromTableId: string | null } | null>(null);
+  const [draggingOverTableId, setDraggingOverTableId] = useState<string | null>(null);
+
+  const tableLayouts = useRef<Record<string, LayoutRectangle>>({});
+  const scrollOffset = useRef(0);
+  const scrollViewLayout = useRef({ x: 0, y: 0, height: 0 });
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const SCROLL_EDGE_MARGIN = 80;
+  const SCROLL_STEP = 24;
+
+  const dragX = useSharedValue(0);
+  const dragY = useSharedValue(0);
+  const dragActive = useSharedValue(0);
 
   const { data: tables = [], isLoading } = useQuery<Table[]>({
     queryKey: ["/api/couple/tables"],
   });
 
   const loadGuests = useCallback(async () => {
-    if (!sessionToken) {
-      const session = await getCoupleSession();
-      if (session) {
-        setSessionToken(session.token);
-      } else {
-        return;
-      }
-    }
     try {
-      const guestsData = await getGuests(sessionToken!);
+      let token = sessionToken;
+      if (!token) {
+        const session = await getCoupleSession();
+        if (!session) return;
+        token = session.token;
+        setSessionToken(session.token);
+      }
+      const guestsData = await getGuests(token);
       setGuests(guestsData);
     } catch (err) {
       console.warn("Failed to load guests:", err);
@@ -147,6 +177,15 @@ export default function TableSeatingScreen() {
     return guests.filter((g) => !assignedIds.has(g.id));
   }, [guests, tables]);
 
+  const dragGhostStyle = useAnimatedStyle(() => ({
+    opacity: dragActive.value,
+    transform: [
+      { translateX: dragX.value },
+      { translateY: dragY.value },
+      { scale: dragActive.value ? 1 : 0.95 },
+    ],
+  }));
+
   const handleAssignGuest = async (tableId: string) => {
     if (!selectedGuest) return;
     assignGuestMutation.mutate({ tableId, guestId: selectedGuest.id });
@@ -166,11 +205,76 @@ export default function TableSeatingScreen() {
     );
   };
 
-  const getGuestsByTable = (tableId: string) => {
-    const table = tables.find(t => t.id === tableId);
+  const getGuestsByTable = useCallback((tableId: string) => {
+    const table = tables.find((t) => t.id === tableId);
     if (!table) return [];
     return guests.filter((g) => table.guests.includes(g.id));
-  };
+  }, [guests, tables]);
+
+  const resolveTableAtPoint = useCallback((absoluteX: number, absoluteY: number) => {
+    const contentX = absoluteX - scrollViewLayout.current.x;
+    const contentY = absoluteY - scrollViewLayout.current.y + scrollOffset.current;
+
+    for (const [tableId, layout] of Object.entries(tableLayouts.current)) {
+      const withinX = contentX >= layout.x && contentX <= layout.x + layout.width;
+      const withinY = contentY >= layout.y && contentY <= layout.y + layout.height;
+      if (withinX && withinY) return tableId;
+    }
+    return null;
+  }, []);
+
+  const handleDropGuest = useCallback((guest: WeddingGuest, targetTableId: string | null) => {
+    if (!targetTableId) return;
+    const targetTable = tables.find((t) => t.id === targetTableId);
+    if (!targetTable) return;
+    const tableGuests = getGuestsByTable(targetTableId);
+    if (tableGuests.length >= targetTable.seats) {
+      Alert.alert("Ingen ledige plasser", `"${targetTable.name}" er fullt.`);
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    assignGuestMutation.mutate({ tableId: targetTableId, guestId: guest.id });
+  }, [assignGuestMutation, getGuestsByTable, tables]);
+
+  const startDrag = useCallback((guest: WeddingGuest, fromTableId: string | null, x: number, y: number) => {
+    dragActive.value = withSpring(1, { damping: 20 });
+    dragX.value = x - 80;
+    dragY.value = y - 20;
+    setDraggingGuest({ guest, fromTableId });
+    setSelectedGuest(null);
+  }, [dragActive, dragX, dragY]);
+
+  const updateDrag = useCallback((x: number, y: number) => {
+    dragX.value = x - 80;
+    dragY.value = y - 20;
+    const target = resolveTableAtPoint(x, y);
+    setDraggingOverTableId(target);
+    const layout = scrollViewLayout.current;
+    if (layout.height > 0) {
+      const topEdge = layout.y + SCROLL_EDGE_MARGIN;
+      const bottomEdge = layout.y + layout.height - SCROLL_EDGE_MARGIN;
+      if (y < topEdge) {
+        const nextOffset = Math.max(0, scrollOffset.current - SCROLL_STEP);
+        if (nextOffset !== scrollOffset.current) {
+          scrollOffset.current = nextOffset;
+          scrollViewRef.current?.scrollTo({ y: nextOffset, animated: false });
+        }
+      } else if (y > bottomEdge) {
+        const nextOffset = scrollOffset.current + SCROLL_STEP;
+        scrollOffset.current = nextOffset;
+        scrollViewRef.current?.scrollTo({ y: nextOffset, animated: false });
+      }
+    }
+  }, [dragX, dragY]);
+
+  const endDrag = useCallback((guest: WeddingGuest, fromTableId: string | null, x: number, y: number) => {
+    dragActive.value = withSpring(0, { damping: 20 });
+    const target = resolveTableAtPoint(x, y);
+    setDraggingGuest(null);
+    setDraggingOverTableId(null);
+    if (!target || target === fromTableId) return;
+    handleDropGuest(guest, target);
+  }, [dragActive, handleDropGuest, resolveTableAtPoint]);
 
   const speechesByTable = React.useMemo(() => {
     const map = new Map<string, Speech[]>();
@@ -215,7 +319,7 @@ export default function TableSeatingScreen() {
   };
 
   const getCategoryLabel = (category?: string) => {
-    const cat = TABLE_CATEGORIES.find(c => c.value === category);
+    const cat = TABLE_CATEGORIES.find((c) => c.value === category);
     return cat?.label || "";
   };
 
@@ -236,12 +340,24 @@ export default function TableSeatingScreen() {
   return (
     <>
       <ScrollView
+        ref={scrollViewRef}
         style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.lg,
           paddingBottom: tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
+        onLayout={(event) => {
+          scrollViewLayout.current = {
+            x: event.nativeEvent.layout.x,
+            y: event.nativeEvent.layout.y,
+            height: event.nativeEvent.layout.height,
+          };
+        }}
+        onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+          scrollOffset.current = event.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
       >
         {selectedGuest ? (
@@ -292,6 +408,11 @@ export default function TableSeatingScreen() {
             const tableGuests = getGuestsByTable(table.id);
             const availableSeats = table.seats - tableGuests.length;
             const tableSpeeches = speechesByTable.get(table.id) || [];
+            const isDropTarget = !!draggingGuest && draggingOverTableId === table.id;
+            const isSameTable = draggingGuest?.fromTableId === table.id;
+            const canDrop = isDropTarget && !isSameTable && availableSeats > 0;
+            const shouldDim = !!draggingGuest && !isDropTarget && availableSeats > 0;
+            const dropColor = canDrop ? Colors.dark.accent : "#ef4444";
 
             return (
               <Animated.View
@@ -299,6 +420,9 @@ export default function TableSeatingScreen() {
                 entering={FadeInUp.delay(index * 100).duration(300)}
               >
                 <Pressable
+                  onLayout={(event) => {
+                    tableLayouts.current[table.id] = event.nativeEvent.layout;
+                  }}
                   onPress={() =>
                     selectedGuest && availableSeats > 0
                       ? handleAssignGuest(table.id)
@@ -309,14 +433,19 @@ export default function TableSeatingScreen() {
                     styles.tableCard,
                     {
                       backgroundColor: theme.backgroundDefault,
+                      opacity: shouldDim ? 0.55 : 1,
                       borderColor:
+                        isDropTarget
+                          ? dropColor
+                          :
                         selectedGuest && availableSeats > 0
                           ? Colors.dark.accent
                           : table.isReserved
                           ? Colors.dark.accent + "60"
                           : theme.border,
-                      borderWidth: selectedGuest && availableSeats > 0 ? 2 : 1,
+                      borderWidth: isDropTarget || (selectedGuest && availableSeats > 0) ? 2 : 1,
                     },
+                    isDropTarget ? (canDrop ? styles.dropTarget : styles.dropTargetInvalid) : null,
                   ]}
                 >
                   <View style={styles.tableHeader}>
@@ -352,6 +481,16 @@ export default function TableSeatingScreen() {
                       <Feather name="edit-2" size={16} color={theme.textSecondary} />
                     </Pressable>
                   </View>
+
+                  {isDropTarget ? (
+                    <View style={[styles.dropHint, { backgroundColor: dropColor + "20", borderColor: dropColor }]}
+                    >
+                      <ThemedText style={[styles.dropHintText, { color: dropColor }]}
+                      >
+                        {canDrop ? "Slipp for å plassere" : "Fullt bord"}
+                      </ThemedText>
+                    </View>
+                  ) : null}
 
                   {showSpeakers && tableSpeeches.length > 0 ? (
                     <View style={styles.speechOverlay}>
@@ -408,18 +547,36 @@ export default function TableSeatingScreen() {
                   {tableGuests.length > 0 ? (
                     <View style={styles.guestsList}>
                       {tableGuests.map((guest) => (
-                        <Pressable
-                          key={guest.id}
-                          onLongPress={() => handleRemoveGuest(guest, table.id)}
-                          style={[
-                            styles.guestChip,
-                            { backgroundColor: theme.backgroundSecondary },
-                          ]}
-                        >
-                          <ThemedText style={styles.guestChipText}>
-                            {guest.name}
-                          </ThemedText>
-                        </Pressable>
+                            <View
+                              key={guest.id}
+                              style={[styles.guestChip, { backgroundColor: theme.backgroundSecondary }]}
+                            >
+                              <Pressable
+                                onLongPress={() => handleRemoveGuest(guest, table.id)}
+                                style={styles.guestChipPressable}
+                              >
+                                <ThemedText style={styles.guestChipText}>
+                                  {guest.name}
+                                </ThemedText>
+                              </Pressable>
+                              <GestureDetector
+                                gesture={Gesture.Pan()
+                                  .minDistance(8)
+                                  .onBegin((e) => {
+                                    runOnJS(startDrag)(guest, table.id, e.absoluteX, e.absoluteY);
+                                  })
+                                  .onUpdate((e) => {
+                                    runOnJS(updateDrag)(e.absoluteX, e.absoluteY);
+                                  })
+                                  .onEnd((e) => {
+                                    runOnJS(endDrag)(guest, table.id, e.absoluteX, e.absoluteY);
+                                  })}
+                              >
+                                <View style={styles.dragHandle}>
+                                  <Feather name="move" size={14} color={theme.textSecondary} />
+                                </View>
+                              </GestureDetector>
+                            </View>
                       ))}
                     </View>
                   ) : !table.isReserved ? (
@@ -452,12 +609,8 @@ export default function TableSeatingScreen() {
             </ThemedText>
             <View style={styles.unassignedList}>
               {unassignedGuests.map((guest) => (
-                <Pressable
+                <View
                   key={guest.id}
-                  onPress={() => {
-                    setSelectedGuest(guest);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
                   style={[
                     styles.unassignedGuest,
                     {
@@ -469,23 +622,61 @@ export default function TableSeatingScreen() {
                     },
                   ]}
                 >
-                  <ThemedText
-                    style={[
-                      styles.unassignedName,
-                      {
-                        color:
-                          selectedGuest?.id === guest.id ? "#1A1A1A" : theme.text,
-                      },
-                    ]}
+                  <Pressable
+                    onPress={() => {
+                      setSelectedGuest(guest);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={styles.unassignedPressable}
                   >
-                    {guest.name}
-                  </ThemedText>
-                </Pressable>
+                    <ThemedText
+                      style={[
+                        styles.unassignedName,
+                        {
+                          color:
+                            selectedGuest?.id === guest.id ? "#1A1A1A" : theme.text,
+                        },
+                      ]}
+                    >
+                      {guest.name}
+                    </ThemedText>
+                  </Pressable>
+                  <GestureDetector
+                    gesture={Gesture.Pan()
+                      .minDistance(8)
+                      .onBegin((e) => {
+                        runOnJS(startDrag)(guest, null, e.absoluteX, e.absoluteY);
+                      })
+                      .onUpdate((e) => {
+                        runOnJS(updateDrag)(e.absoluteX, e.absoluteY);
+                      })
+                      .onEnd((e) => {
+                        runOnJS(endDrag)(guest, null, e.absoluteX, e.absoluteY);
+                      })}
+                  >
+                    <View style={styles.dragHandle}>
+                      <Feather name="move" size={14} color={theme.textSecondary} />
+                    </View>
+                  </GestureDetector>
+                </View>
               ))}
             </View>
           </View>
         ) : null}
       </ScrollView>
+
+      {draggingGuest ? (
+        <Animated.View pointerEvents="none" style={[styles.dragGhost, dragGhostStyle]}>
+          <View
+            style={[
+              styles.dragGhostChip,
+              { backgroundColor: theme.backgroundDefault, borderColor: Colors.dark.accent },
+            ]}
+          >
+            <ThemedText style={styles.dragGhostText}>{draggingGuest.guest.name}</ThemedText>
+          </View>
+        </Animated.View>
+      ) : null}
 
       <Modal
         visible={showEditModal}
@@ -669,6 +860,20 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     borderRadius: BorderRadius.md,
   },
+  dropTarget: {
+    shadowColor: Colors.dark.accent,
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  dropTargetInvalid: {
+    shadowColor: "#ef4444",
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
   tableHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -710,6 +915,18 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
     borderRadius: BorderRadius.sm,
     backgroundColor: "rgba(255,255,255,0.02)",
+  },
+  dropHint: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  dropHintText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   speechOverlayHeader: {
     flexDirection: "row",
@@ -769,9 +986,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.full,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  guestChipPressable: {
+    paddingRight: Spacing.xs,
   },
   guestChipText: {
     fontSize: 13,
+  },
+  dragHandle: {
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: Spacing.xs,
   },
   emptyTable: {
     fontSize: 14,
@@ -807,10 +1034,37 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.full,
     borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  unassignedPressable: {
+    paddingRight: Spacing.xs,
   },
   unassignedName: {
     fontSize: 14,
     fontWeight: "500",
+  },
+  dragGhost: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    zIndex: 20,
+  },
+  dragGhostChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  dragGhostText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   modalOverlay: {
     flex: 1,

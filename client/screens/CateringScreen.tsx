@@ -27,7 +27,10 @@ import type { WeddingGuest } from "@shared/schema";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
+import { VendorSuggestions } from "@/components/VendorSuggestions";
+import { VendorActionBar } from "@/components/VendorActionBar";
 import { useTheme } from "@/hooks/useTheme";
+import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import {
@@ -141,10 +144,12 @@ export default function CateringScreen() {
   const budget = timeline?.budget ?? 0;
   const guestCount = timeline?.guestCount ?? 0;
 
+  // Vendor search for caterer autocomplete
+  const catererSearch = useVendorSearch({ category: "catering" });
+
   // Tasting modal state
   const [showTastingModal, setShowTastingModal] = useState(false);
   const [editingTasting, setEditingTasting] = useState<CateringTasting | null>(null);
-  const [tastingCaterer, setTastingCaterer] = useState("");
   const [tastingDate, setTastingDate] = useState("");
   const [tastingTime, setTastingTime] = useState("");
   const [tastingLocation, setTastingLocation] = useState("");
@@ -281,7 +286,8 @@ export default function CateringScreen() {
   const openTastingModal = (tasting?: CateringTasting) => {
     if (tasting) {
       setEditingTasting(tasting);
-      setTastingCaterer(tasting.catererName);
+      catererSearch.setSearchText(tasting.catererName);
+      catererSearch.setSelectedVendor(null);
       setTastingDate(tasting.date);
       setTastingTime(tasting.time || "");
       setTastingLocation(tasting.location || "");
@@ -289,7 +295,7 @@ export default function CateringScreen() {
       setTastingRating(tasting.rating || 0);
     } else {
       setEditingTasting(null);
-      setTastingCaterer("");
+      catererSearch.clearSelection();
       setTastingDate("");
       setTastingTime("");
       setTastingLocation("");
@@ -300,7 +306,7 @@ export default function CateringScreen() {
   };
 
   const saveTasting = async () => {
-    if (!tastingCaterer.trim()) {
+    if (!catererSearch.searchText.trim()) {
       Alert.alert("Feil", "Vennligst fyll inn caterer");
       return;
     }
@@ -318,7 +324,7 @@ export default function CateringScreen() {
         await updateTastingMutation.mutateAsync({
           id: editingTasting.id,
           data: {
-            catererName: tastingCaterer,
+            catererName: catererSearch.searchText.trim(),
             date: tastingDate,
             time: tastingTime,
             location: tastingLocation,
@@ -328,7 +334,7 @@ export default function CateringScreen() {
         });
       } else {
         await createTastingMutation.mutateAsync({
-          catererName: tastingCaterer,
+          catererName: catererSearch.searchText.trim(),
           date: tastingDate,
           time: tastingTime,
           location: tastingLocation,
@@ -1208,10 +1214,32 @@ export default function CateringScreen() {
               <ThemedText style={styles.formLabel}>Caterer *</ThemedText>
               <TextInput
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
-                value={tastingCaterer}
-                onChangeText={setTastingCaterer}
-                placeholder="Navn på caterer"
+                value={catererSearch.searchText}
+                onChangeText={catererSearch.onChangeText}
+                placeholder="Søk etter registrert caterer..."
                 placeholderTextColor={theme.textSecondary}
+              />
+              {catererSearch.selectedVendor && (
+                <VendorActionBar
+                  vendor={catererSearch.selectedVendor}
+                  vendorCategory="catering"
+                  onClear={catererSearch.clearSelection}
+                  icon="coffee"
+                />
+              )}
+              <VendorSuggestions
+                suggestions={catererSearch.suggestions}
+                isLoading={catererSearch.isLoading}
+                onSelect={catererSearch.onSelectVendor}
+                onViewProfile={(v) => navigation.navigate("VendorDetail", {
+                  vendorId: v.id,
+                  vendorName: v.businessName,
+                  vendorDescription: v.description || "",
+                  vendorLocation: v.location || "",
+                  vendorPriceRange: v.priceRange || "",
+                  vendorCategory: "catering",
+                })}
+                icon="coffee"
               />
             </View>
 

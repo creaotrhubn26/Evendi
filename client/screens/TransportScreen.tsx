@@ -21,7 +21,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
+import { VendorSuggestions } from "@/components/VendorSuggestions";
+import { VendorActionBar } from "@/components/VendorActionBar";
 import { useTheme } from "@/hooks/useTheme";
+import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import {
@@ -82,11 +85,13 @@ export default function TransportScreen() {
   };
   const budget = timeline?.budget ?? 0;
 
+  // Vendor search for transport provider autocomplete
+  const providerSearch = useVendorSearch({ category: "transport" });
+
   // Booking modal state
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [editingBooking, setEditingBooking] = useState<TransportBooking | null>(null);
   const [bookingVehicleType, setBookingVehicleType] = useState("");
-  const [bookingProvider, setBookingProvider] = useState("");
   const [bookingVehicleDesc, setBookingVehicleDesc] = useState("");
   const [bookingPickupTime, setBookingPickupTime] = useState("");
   const [bookingPickupLocation, setBookingPickupLocation] = useState("");
@@ -134,7 +139,8 @@ export default function TransportScreen() {
     if (booking) {
       setEditingBooking(booking);
       setBookingVehicleType(booking.vehicleType);
-      setBookingProvider(booking.providerName || "");
+      providerSearch.setSearchText(booking.providerName || "");
+      providerSearch.setSelectedVendor(null);
       setBookingVehicleDesc(booking.vehicleDescription || "");
       setBookingPickupTime(booking.pickupTime || "");
       setBookingPickupLocation(booking.pickupLocation || "");
@@ -147,7 +153,7 @@ export default function TransportScreen() {
     } else {
       setEditingBooking(null);
       setBookingVehicleType("");
-      setBookingProvider("");
+      providerSearch.clearSelection();
       setBookingVehicleDesc("");
       setBookingPickupTime("");
       setBookingPickupLocation("");
@@ -196,7 +202,7 @@ export default function TransportScreen() {
     try {
       const data = {
         vehicleType: bookingVehicleType,
-        providerName: bookingProvider,
+        providerName: providerSearch.searchText.trim(),
         vehicleDescription: bookingVehicleDesc,
         pickupTime: bookingPickupTime,
         pickupLocation: bookingPickupLocation,
@@ -663,10 +669,32 @@ export default function TransportScreen() {
               <ThemedText style={styles.formLabel}>Leverandør</ThemedText>
               <TextInput
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
-                value={bookingProvider}
-                onChangeText={setBookingProvider}
-                placeholder="Navn på firma/sjåfør"
+                value={providerSearch.searchText}
+                onChangeText={providerSearch.onChangeText}
+                placeholder="Søk etter registrert transportfirma..."
                 placeholderTextColor={theme.textSecondary}
+              />
+              {providerSearch.selectedVendor && (
+                <VendorActionBar
+                  vendor={providerSearch.selectedVendor}
+                  vendorCategory="transport"
+                  onClear={providerSearch.clearSelection}
+                  icon="truck"
+                />
+              )}
+              <VendorSuggestions
+                suggestions={providerSearch.suggestions}
+                isLoading={providerSearch.isLoading}
+                onSelect={providerSearch.onSelectVendor}
+                onViewProfile={(v) => navigation.navigate("VendorDetail", {
+                  vendorId: v.id,
+                  vendorName: v.businessName,
+                  vendorDescription: v.description || "",
+                  vendorLocation: v.location || "",
+                  vendorPriceRange: v.priceRange || "",
+                  vendorCategory: "transport",
+                })}
+                icon="truck"
               />
             </View>
 

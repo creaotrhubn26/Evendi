@@ -27,7 +27,10 @@ import { getCoupleProfile } from '@/lib/api-couples';
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
+import { VendorSuggestions } from "@/components/VendorSuggestions";
+import { VendorActionBar } from "@/components/VendorActionBar";
 import { useTheme } from "@/hooks/useTheme";
+import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import {
@@ -139,9 +142,11 @@ export default function HaarMakeupScreen() {
   const budget = timeline?.budget ?? 0;
 
   // Appointment modal state
+  // Vendor search for stylist/salon autocomplete
+  const stylistSearch = useVendorSearch({ category: "beauty" });
+
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<HairMakeupAppointment | null>(null);
-  const [appointmentStylist, setAppointmentStylist] = useState("");
   const [appointmentServiceType, setAppointmentServiceType] = useState("");
   const [appointmentType, setAppointmentType] = useState("");
   const [appointmentDate, setAppointmentDate] = useState("");
@@ -208,7 +213,8 @@ export default function HaarMakeupScreen() {
   const openAppointmentModal = (appointment?: HairMakeupAppointment) => {
     if (appointment) {
       setEditingAppointment(appointment);
-      setAppointmentStylist(appointment.stylistName);
+      stylistSearch.setSearchText(appointment.stylistName);
+      stylistSearch.setSelectedVendor(null);
       setAppointmentServiceType(appointment.serviceType || "");
       setAppointmentType(appointment.appointmentType || "");
       setAppointmentDate(appointment.date);
@@ -217,7 +223,7 @@ export default function HaarMakeupScreen() {
       setAppointmentNotes(appointment.notes || "");
     } else {
       setEditingAppointment(null);
-      setAppointmentStylist("");
+      stylistSearch.clearSelection();
       setAppointmentServiceType("");
       setAppointmentType("");
       setAppointmentDate("");
@@ -243,7 +249,7 @@ export default function HaarMakeupScreen() {
   };
 
   const saveAppointment = async () => {
-    if (!appointmentStylist.trim() || !appointmentDate.trim()) {
+    if (!stylistSearch.searchText.trim() || !appointmentDate.trim()) {
       Alert.alert("Feil", "Vennligst fyll inn stylist og dato");
       return;
     }
@@ -264,7 +270,7 @@ export default function HaarMakeupScreen() {
         await updateAppointmentMutation.mutateAsync({
           id: editingAppointment.id,
           data: {
-            stylistName: appointmentStylist,
+            stylistName: stylistSearch.searchText.trim(),
             serviceType: appointmentServiceType,
             appointmentType: appointmentType,
             date: appointmentDate,
@@ -275,7 +281,7 @@ export default function HaarMakeupScreen() {
         });
       } else {
         await createAppointmentMutation.mutateAsync({
-          stylistName: appointmentStylist,
+          stylistName: stylistSearch.searchText.trim(),
           serviceType: appointmentServiceType,
           appointmentType: appointmentType,
           date: appointmentDate,
@@ -865,10 +871,32 @@ export default function HaarMakeupScreen() {
               <ThemedText style={styles.formLabel}>Stylist/Salong *</ThemedText>
               <TextInput
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
-                value={appointmentStylist}
-                onChangeText={setAppointmentStylist}
-                placeholder="Navn på stylist eller salong"
+                value={stylistSearch.searchText}
+                onChangeText={stylistSearch.onChangeText}
+                placeholder="Søk etter registrert stylist..."
                 placeholderTextColor={theme.textSecondary}
+              />
+              {stylistSearch.selectedVendor && (
+                <VendorActionBar
+                  vendor={stylistSearch.selectedVendor}
+                  vendorCategory="beauty"
+                  onClear={stylistSearch.clearSelection}
+                  icon="scissors"
+                />
+              )}
+              <VendorSuggestions
+                suggestions={stylistSearch.suggestions}
+                isLoading={stylistSearch.isLoading}
+                onSelect={stylistSearch.onSelectVendor}
+                onViewProfile={(v) => navigation.navigate("VendorDetail", {
+                  vendorId: v.id,
+                  vendorName: v.businessName,
+                  vendorDescription: v.description || "",
+                  vendorLocation: v.location || "",
+                  vendorPriceRange: v.priceRange || "",
+                  vendorCategory: "beauty",
+                })}
+                icon="scissors"
               />
             </View>
 

@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -45,6 +45,7 @@ export default function VendorBlomsterScreen() {
   const navigation = useNavigation<Navigation>();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
 
   const vendorConfig = getVendorConfig(null, "Blomster");
 
@@ -87,6 +88,30 @@ export default function VendorBlomsterScreen() {
     enabled: !!sessionToken,
   });
 
+  const deleteProductMutation = useMutation({
+    mutationFn: async (id: string) => {
+      if (!sessionToken) throw new Error("Ingen sesjon");
+      const res = await fetch(new URL(`/api/vendor/products/${id}`, getApiUrl()).toString(), {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      if (!res.ok) throw new Error("Kunne ikke slette produkt");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/vendor/products"] }),
+  });
+
+  const deleteOfferMutation = useMutation({
+    mutationFn: async (id: string) => {
+      if (!sessionToken) throw new Error("Ingen sesjon");
+      const res = await fetch(new URL(`/api/vendor/offers/${id}`, getApiUrl()).toString(), {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      if (!res.ok) throw new Error("Kunne ikke slette tilbud");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/vendor/offers"] }),
+  });
+
   const onRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([refetchProducts(), refetchOffers()]);
@@ -107,14 +132,36 @@ export default function VendorBlomsterScreen() {
   const handleDeleteProduct = (id: string) => {
     Alert.alert("Slett produkt", "Er du sikker?", [
       { text: "Avbryt", style: "cancel" },
-      { text: "Slett", style: "destructive", onPress: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success) },
+      {
+        text: "Slett",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteProductMutation.mutateAsync(id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch {
+            Alert.alert("Feil", "Kunne ikke slette produkt");
+          }
+        },
+      },
     ]);
   };
 
   const handleDeleteOffer = (id: string) => {
     Alert.alert("Slett tilbud", "Er du sikker?", [
       { text: "Avbryt", style: "cancel" },
-      { text: "Slett", style: "destructive", onPress: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success) },
+      {
+        text: "Slett",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteOfferMutation.mutateAsync(id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch {
+            Alert.alert("Feil", "Kunne ikke slette tilbud");
+          }
+        },
+      },
     ]);
   };
 

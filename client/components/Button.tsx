@@ -18,6 +18,7 @@ interface ButtonProps {
   disabled?: boolean;
   accessibilityLabel?: string;
   accessibilityHint?: string;
+  testID?: string;
 }
 
 const springConfig: WithSpringConfig = {
@@ -37,6 +38,7 @@ export function Button({
   disabled = false,
   accessibilityLabel,
   accessibilityHint,
+  testID,
 }: ButtonProps) {
   const { theme, designSettings } = useTheme();
   const scale = useSharedValue(1);
@@ -69,6 +71,7 @@ export function Button({
       accessibilityLabel={accessibilityLabel || (typeof children === 'string' ? children : undefined)}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled }}
+      testID={testID}
       style={[
         styles.button,
         {

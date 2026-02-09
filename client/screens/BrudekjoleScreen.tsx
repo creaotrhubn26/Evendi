@@ -24,7 +24,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
+import { VendorSuggestions } from "@/components/VendorSuggestions";
+import { VendorActionBar } from "@/components/VendorActionBar";
 import { useTheme } from "@/hooks/useTheme";
+import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import {
@@ -81,9 +84,11 @@ export default function BrudekjoleScreen() {
   const dressBudget = timeline?.budget ?? 0;
 
   // Appointment modal state
+  // Vendor search for bridal shop autocomplete
+  const shopSearch = useVendorSearch({ category: undefined });
+
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<DressAppointment | null>(null);
-  const [appointmentShop, setAppointmentShop] = useState("");
   const [appointmentDate, setAppointmentDate] = useState("");
   const [appointmentTime, setAppointmentTime] = useState("");
   const [appointmentNotes, setAppointmentNotes] = useState("");
@@ -149,13 +154,14 @@ export default function BrudekjoleScreen() {
   const openAppointmentModal = (appointment?: DressAppointment) => {
     if (appointment) {
       setEditingAppointment(appointment);
-      setAppointmentShop(appointment.shopName);
+      shopSearch.setSearchText(appointment.shopName);
+      shopSearch.setSelectedVendor(null);
       setAppointmentDate(appointment.date);
       setAppointmentTime(appointment.time || "");
       setAppointmentNotes(appointment.notes || "");
     } else {
       setEditingAppointment(null);
-      setAppointmentShop("");
+      shopSearch.clearSelection();
       setAppointmentDate("");
       setAppointmentTime("");
       setAppointmentNotes("");
@@ -164,7 +170,7 @@ export default function BrudekjoleScreen() {
   };
 
   const saveAppointment = async () => {
-    if (!appointmentShop.trim() || !appointmentDate.trim()) {
+    if (!shopSearch.searchText.trim() || !appointmentDate.trim()) {
       Alert.alert("Feil", "Vennligst fyll inn butikknavn og dato");
       return;
     }
@@ -173,11 +179,11 @@ export default function BrudekjoleScreen() {
       if (editingAppointment) {
         await updateAppointmentMutation.mutateAsync({
           id: editingAppointment.id,
-          data: { shopName: appointmentShop, date: appointmentDate, time: appointmentTime, notes: appointmentNotes },
+          data: { shopName: shopSearch.searchText.trim(), date: appointmentDate, time: appointmentTime, notes: appointmentNotes },
         });
       } else {
         await createAppointmentMutation.mutateAsync({
-          shopName: appointmentShop,
+          shopName: shopSearch.searchText.trim(),
           date: appointmentDate,
           time: appointmentTime,
           notes: appointmentNotes,
@@ -718,10 +724,32 @@ export default function BrudekjoleScreen() {
 
             <TextInput
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
-              placeholder="Butikknavn (f.eks. Jenny Skavlan Brudesalong)"
+              placeholder="Søk etter brudesalong..."
               placeholderTextColor={theme.textMuted}
-              value={appointmentShop}
-              onChangeText={setAppointmentShop}
+              value={shopSearch.searchText}
+              onChangeText={shopSearch.onChangeText}
+            />
+            {shopSearch.selectedVendor && (
+              <VendorActionBar
+                vendor={shopSearch.selectedVendor}
+                vendorCategory="bridal"
+                onClear={shopSearch.clearSelection}
+                icon="heart"
+              />
+            )}
+            <VendorSuggestions
+              suggestions={shopSearch.suggestions}
+              isLoading={shopSearch.isLoading}
+              onSelect={shopSearch.onSelectVendor}
+              onViewProfile={(v) => navigation.navigate("VendorDetail", {
+                vendorId: v.id,
+                vendorName: v.businessName,
+                vendorDescription: v.description || "",
+                vendorLocation: v.location || "",
+                vendorPriceRange: v.priceRange || "",
+                vendorCategory: "bridal",
+              })}
+              icon="heart"
             />
 
             <View style={styles.inputRow}>

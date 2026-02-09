@@ -25,7 +25,10 @@ import { getCoupleProfile } from '@/lib/api-couples';
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
+import { VendorSuggestions } from "@/components/VendorSuggestions";
+import { VendorActionBar } from "@/components/VendorActionBar";
 import { useTheme } from "@/hooks/useTheme";
+import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import {
@@ -53,7 +56,10 @@ const TIMELINE_STEPS = [
 
 const APPOINTMENT_TYPES = ["Konsultasjon", "Oppfølging", "Mockup-visning", "Leveringsplanlegging", "Annet"];
 
-const ITEM_TYPES = [
+type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
+type FlowerItemType = "bouquet" | "boutonniere" | "centerpiece" | "ceremony" | "arch" | "other";
+
+const ITEM_TYPES: Array<{ key: FlowerItemType; label: string; icon: FeatherIconName }> = [
   { key: "bouquet", label: "Brudebukett", icon: "heart" },
   { key: "boutonniere", label: "Knapphullsblomst", icon: "user" },
   { key: "centerpiece", label: "Borddekorasjon", icon: "layers" },
@@ -61,6 +67,9 @@ const ITEM_TYPES = [
   { key: "arch", label: "Bue/Portal", icon: "maximize" },
   { key: "other", label: "Annet", icon: "plus" },
 ];
+
+const isFlowerItemType = (value: string): value is FlowerItemType =>
+  ITEM_TYPES.some((item) => item.key === value);
 
 export default function BlomsterScreen() {
   const insets = useSafeAreaInsets();
@@ -113,10 +122,12 @@ export default function BlomsterScreen() {
   };
   const budget = timeline?.budget ?? 0;
 
+  // Vendor search for florist autocomplete
+  const floristSearch = useVendorSearch({ category: "florist" });
+
   // Appointment modal state
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<FlowerAppointment | null>(null);
-  const [appointmentFlorist, setAppointmentFlorist] = useState("");
   const [appointmentType, setAppointmentType] = useState("");
   const [appointmentDate, setAppointmentDate] = useState("");
   const [appointmentTime, setAppointmentTime] = useState("");
@@ -126,7 +137,7 @@ export default function BlomsterScreen() {
   // Selection modal state
   const [showSelectionModal, setShowSelectionModal] = useState(false);
   const [editingSelection, setEditingSelection] = useState<FlowerSelection | null>(null);
-  const [selectionItemType, setSelectionItemType] = useState("");
+  const [selectionItemType, setSelectionItemType] = useState<FlowerItemType | "">("");
   const [selectionName, setSelectionName] = useState("");
   const [selectionDescription, setSelectionDescription] = useState("");
   const [selectionImage, setSelectionImage] = useState<string | undefined>();
@@ -181,11 +192,28 @@ export default function BlomsterScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [refetch]);
 
+  const isValidDateString = (value: string) => {
+    const trimmed = value.trim();
+    if (!/^\d{2}\.\d{2}\.\d{4}$/.test(trimmed)) return false;
+    const [day, month, year] = trimmed.split(".").map((part) => parseInt(part, 10));
+    if (!day || !month || !year) return false;
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+  };
+
+  const isValidTimeString = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return true;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(trimmed)) return false;
+    return true;
+  };
+
   // Appointment handlers
   const openAppointmentModal = (appointment?: FlowerAppointment) => {
     if (appointment) {
       setEditingAppointment(appointment);
-      setAppointmentFlorist(appointment.floristName);
+      floristSearch.setSearchText(appointment.floristName);
+      floristSearch.setSelectedVendor(null);
       setAppointmentType(appointment.appointmentType);
       setAppointmentDate(appointment.date);
       setAppointmentTime(appointment.time || "");
@@ -193,7 +221,7 @@ export default function BlomsterScreen() {
       setAppointmentNotes(appointment.notes || "");
     } else {
       setEditingAppointment(null);
-      setAppointmentFlorist("");
+      floristSearch.clearSelection();
       setAppointmentType("");
       setAppointmentDate("");
       setAppointmentTime("");
@@ -203,33 +231,82 @@ export default function BlomsterScreen() {
     setShowAppointmentModal(true);
   };
 
+  const resetAppointmentForm = () => {
+    Alert.alert("Nullstill skjema", "Vil du slette alle feltene i avtalen?", [
+      { text: "Avbryt", style: "cancel" },
+      {
+        text: "Nullstill",
+        style: "destructive",
+        onPress: () => {
+          setEditingAppointment(null);
+          floristSearch.clearSelection();
+          setAppointmentType("");
+          setAppointmentDate("");
+          setAppointmentTime("");
+          setAppointmentLocation("");
+          setAppointmentNotes("");
+        },
+      },
+      {
+        text: "Nullstill og lukk",
+        style: "destructive",
+        onPress: () => {
+          setEditingAppointment(null);
+          floristSearch.clearSelection();
+          setAppointmentType("");
+          setAppointmentDate("");
+          setAppointmentTime("");
+          setAppointmentLocation("");
+          setAppointmentNotes("");
+          setShowAppointmentModal(false);
+        },
+      }
+    ]);
+  };
+
   const saveAppointment = async () => {
-    if (!appointmentFlorist.trim() || !appointmentDate.trim()) {
+    if (!floristSearch.searchText.trim() || !appointmentDate.trim()) {
       Alert.alert("Feil", "Vennligst fyll inn florist og dato");
       return;
     }
+
+    if (!isValidDateString(appointmentDate)) {
+      Alert.alert("Feil", "Dato må være på formatet DD.MM.ÅÅÅÅ");
+      return;
+    }
+
+    if (!isValidTimeString(appointmentTime)) {
+      Alert.alert("Feil", "Klokkeslett må være på formatet HH:MM");
+      return;
+    }
+
+    const floristName = floristSearch.searchText.trim();
+    const date = appointmentDate.trim();
+    const time = appointmentTime.trim();
+    const location = appointmentLocation.trim();
+    const notes = appointmentNotes.trim();
 
     try {
       if (editingAppointment) {
         await updateAppointmentMutation.mutateAsync({
           id: editingAppointment.id,
           data: {
-            floristName: appointmentFlorist,
+            floristName,
             appointmentType: appointmentType,
-            date: appointmentDate,
-            time: appointmentTime,
-            location: appointmentLocation,
-            notes: appointmentNotes,
+            date,
+            time: time || undefined,
+            location: location || undefined,
+            notes: notes || undefined,
           },
         });
       } else {
         await createAppointmentMutation.mutateAsync({
-          floristName: appointmentFlorist,
+          floristName,
           appointmentType: appointmentType,
-          date: appointmentDate,
-          time: appointmentTime,
-          location: appointmentLocation,
-          notes: appointmentNotes,
+          date,
+          time: time || undefined,
+          location: location || undefined,
+          notes: notes || undefined,
           completed: false,
         });
       }
@@ -274,7 +351,7 @@ export default function BlomsterScreen() {
   const openSelectionModal = (selection?: FlowerSelection) => {
     if (selection) {
       setEditingSelection(selection);
-      setSelectionItemType(selection.itemType);
+      setSelectionItemType(isFlowerItemType(selection.itemType) ? selection.itemType : "");
       setSelectionName(selection.name);
       setSelectionDescription(selection.description || "");
       setSelectionImage(selection.imageUrl);
@@ -294,7 +371,47 @@ export default function BlomsterScreen() {
     setShowSelectionModal(true);
   };
 
+  const resetSelectionForm = () => {
+    Alert.alert("Nullstill skjema", "Vil du slette alle feltene i valget?", [
+      { text: "Avbryt", style: "cancel" },
+      {
+        text: "Nullstill",
+        style: "destructive",
+        onPress: () => {
+          setEditingSelection(null);
+          setSelectionItemType("");
+          setSelectionName("");
+          setSelectionDescription("");
+          setSelectionImage(undefined);
+          setSelectionQuantity("");
+          setSelectionPrice("");
+          setSelectionNotes("");
+        },
+      },
+      {
+        text: "Nullstill og lukk",
+        style: "destructive",
+        onPress: () => {
+          setEditingSelection(null);
+          setSelectionItemType("");
+          setSelectionName("");
+          setSelectionDescription("");
+          setSelectionImage(undefined);
+          setSelectionQuantity("");
+          setSelectionPrice("");
+          setSelectionNotes("");
+          setShowSelectionModal(false);
+        },
+      }
+    ]);
+  };
+
   const pickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Tilgang nektet", "Gi tilgang til bildebiblioteket for å velge et bilde.");
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -308,14 +425,16 @@ export default function BlomsterScreen() {
   };
 
   const saveSelection = async () => {
-    if (!selectionName.trim() || !selectionItemType.trim()) {
+    if (!selectionName.trim() || !selectionItemType.trim() || !isFlowerItemType(selectionItemType)) {
       Alert.alert("Feil", "Vennligst fyll inn navn og type");
       return;
     }
 
+    const itemType = selectionItemType;
+
     try {
       const data = {
-        itemType: selectionItemType,
+        itemType,
         name: selectionName,
         description: selectionDescription,
         imageUrl: selectionImage,
@@ -400,9 +519,9 @@ export default function BlomsterScreen() {
     return item?.label || type;
   };
 
-  const getItemTypeIcon = (type: string) => {
+  const getItemTypeIcon = (type: string): FeatherIconName => {
     const item = ITEM_TYPES.find((i) => i.key === type);
-    return item?.icon || "flower";
+    return item?.icon || "help-circle";
   };
 
   const completedSteps = TIMELINE_STEPS.filter((step) => timeline[step.key as keyof FlowerTimeline]).length;
@@ -548,7 +667,7 @@ export default function BlomsterScreen() {
                   <Image source={{ uri: selection.imageUrl }} style={styles.selectionImage} />
                 ) : (
                   <View style={[styles.selectionImagePlaceholder, { backgroundColor: theme.border }]}>
-                    <Feather name={getItemTypeIcon(selection.itemType) as any} size={32} color={theme.textSecondary} />
+                    <Feather name={getItemTypeIcon(selection.itemType)} size={32} color={theme.textSecondary} />
                   </View>
                 )}
                 <View style={styles.selectionInfo}>
@@ -684,17 +803,17 @@ export default function BlomsterScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Tab Bar */}
       <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        {[
+        {([
           { key: "appointments", label: "Avtaler", icon: "calendar" },
           { key: "selections", label: "Valg", icon: "sun" },
           { key: "timeline", label: "Tidslinje", icon: "list" },
-        ].map((tab) => (
+        ] as const).map((tab) => (
           <Pressable
             key={tab.key}
-            onPress={() => setActiveTab(tab.key as any)}
+            onPress={() => setActiveTab(tab.key)}
             style={[styles.tab, activeTab === tab.key && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
           >
-            <Feather name={tab.icon as any} size={18} color={activeTab === tab.key ? theme.primary : theme.textSecondary} />
+            <Feather name={tab.icon} size={18} color={activeTab === tab.key ? theme.primary : theme.textSecondary} />
             <ThemedText style={[styles.tabLabel, { color: activeTab === tab.key ? theme.primary : theme.textSecondary }]}>
               {tab.label}
             </ThemedText>
@@ -704,7 +823,10 @@ export default function BlomsterScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + Spacing.xl }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: tabBarHeight + Spacing.xl, paddingTop: insets.top + Spacing.sm },
+        ]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         {activeTab === "appointments" && renderAppointmentsTab()}
@@ -732,10 +854,32 @@ export default function BlomsterScreen() {
               <ThemedText style={styles.formLabel}>Florist *</ThemedText>
               <TextInput
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
-                value={appointmentFlorist}
-                onChangeText={setAppointmentFlorist}
-                placeholder="Navn på florist"
+                value={floristSearch.searchText}
+                onChangeText={floristSearch.onChangeText}
+                placeholder="Søk etter registrert florist..."
                 placeholderTextColor={theme.textSecondary}
+              />
+              {floristSearch.selectedVendor && (
+                <VendorActionBar
+                  vendor={floristSearch.selectedVendor}
+                  vendorCategory="florist"
+                  onClear={floristSearch.clearSelection}
+                  icon="sun"
+                />
+              )}
+              <VendorSuggestions
+                suggestions={floristSearch.suggestions}
+                isLoading={floristSearch.isLoading}
+                onSelect={floristSearch.onSelectVendor}
+                onViewProfile={(v) => navigation.navigate("VendorDetail", {
+                  vendorId: v.id,
+                  vendorName: v.businessName,
+                  vendorDescription: v.description || "",
+                  vendorLocation: v.location || "",
+                  vendorPriceRange: v.priceRange || "",
+                  vendorCategory: "florist",
+                })}
+                icon="sun"
               />
             </View>
 
@@ -807,6 +951,13 @@ export default function BlomsterScreen() {
                 numberOfLines={4}
               />
             </View>
+
+            <Pressable
+              onPress={resetAppointmentForm}
+              style={[styles.resetButton, { borderColor: theme.border }]}
+            >
+              <ThemedText style={[styles.resetButtonText, { color: theme.textSecondary }]}>Nullstill skjema</ThemedText>
+            </Pressable>
           </ScrollView>
         </View>
       </Modal>
@@ -841,7 +992,7 @@ export default function BlomsterScreen() {
                     ]}
                   >
                     <Feather
-                      name={item.icon as any}
+                      name={item.icon}
                       size={20}
                       color={selectionItemType === item.key ? theme.primary : theme.textSecondary}
                     />
@@ -933,6 +1084,13 @@ export default function BlomsterScreen() {
                 numberOfLines={4}
               />
             </View>
+
+            <Pressable
+              onPress={resetSelectionForm}
+              style={[styles.resetButton, { borderColor: theme.border }]}
+            >
+              <ThemedText style={[styles.resetButtonText, { color: theme.textSecondary }]}>Nullstill skjema</ThemedText>
+            </Pressable>
 
             {editingSelection && (
               <Pressable
@@ -1290,6 +1448,17 @@ const styles = StyleSheet.create({
   formRow: {
     flexDirection: "row",
     gap: Spacing.md,
+  },
+  resetButton: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    alignItems: "center",
+    marginTop: Spacing.md,
+  },
+  resetButtonText: {
+    fontSize: 14,
+    fontWeight: "500",
   },
   chipContainer: {
     flexDirection: "row",
