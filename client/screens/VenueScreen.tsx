@@ -25,6 +25,7 @@ import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
 import { SwipeableRow } from '../components/SwipeableRow';
 import { SeatingChart, Table, Guest } from '../components/SeatingChart';
+import { VendorSearchField } from '@/components/VendorSearchField';
 import { useTheme } from '../hooks/useTheme';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
@@ -828,13 +829,13 @@ export function VenueScreen() {
 
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
-              <ThemedText style={styles.formLabel}>Lokalnavn *</ThemedText>
-              <TextInput
-                style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-                placeholder="f.eks. Hotel Grand Ballroom"
-                placeholderTextColor={theme.textSecondary}
-                value={venueName}
-                onChangeText={setVenueName}
+              <VendorSearchField
+                category="venue"
+                icon="home"
+                label="Lokalnavn *"
+                placeholder="Søk etter registrert lokale..."
+                externalValue={venueName}
+                onNameChange={setVenueName}
               />
             </View>
 

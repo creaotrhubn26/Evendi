@@ -25,6 +25,7 @@ import {
 } from '@/lib/api-couple-data';
 import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
+import { VendorSearchField } from '@/components/VendorSearchField';
 import { useTheme } from '../hooks/useTheme';
 import { Colors, Spacing } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
@@ -222,6 +223,16 @@ export function VideografScreen() {
             <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
               La oss finne videografen som fanger følelsene.
             </ThemedText>
+
+            <View style={{ width: '100%', marginTop: Spacing.md }}>
+              <VendorSearchField
+                category="videographer"
+                icon="video"
+                label="Søk etter videograf"
+                placeholder="Søk etter registrert videograf..."
+              />
+            </View>
+
             <Button onPress={handleFindVideographer} style={styles.findButton}>
               Finn videograf
             </Button>
