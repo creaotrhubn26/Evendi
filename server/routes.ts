@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 import { registerSubscriptionRoutes } from "./subscription-routes";
 import { registerCreatorhubRoutes } from "./creatorhub-routes";
 import { TIMELINE_TEMPLATES, DEFAULT_TIMELINE, TimelineTemplate, resolveTraditionKey } from "./timeline-templates";
-import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetItems, coupleBudgetSettings, createBudgetItemSchema, coupleDressAppointments, coupleDressFavorites, coupleDressTimeline, createDressAppointmentSchema, createDressFavoriteSchema, coupleImportantPeople, createImportantPersonSchema, couplePhotoShots, createPhotoShotSchema, coupleHairMakeupAppointments, coupleHairMakeupLooks, coupleHairMakeupTimeline, coupleTransportBookings, coupleTransportTimeline, coupleFlowerAppointments, coupleFlowerSelections, coupleFlowerTimeline, coupleCateringTastings, coupleCateringMenu, coupleCateringDietaryNeeds, coupleCateringTimeline, coupleCakeTastings, coupleCakeDesigns, coupleCakeTimeline, coupleVenueBookings, coupleVenueTimelines, vendorVenueBookings, vendorVenueAvailability, vendorVenueTimelines, creatorhubProjects, couplePhotographerSessions, couplePhotographerShots, couplePhotographerTimeline, coupleVideographerSessions, coupleVideographerDeliverables, coupleVideographerTimeline, coupleMusicPerformances, coupleMusicSetlists, coupleMusicTimeline } from "@shared/schema";
+import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetItems, coupleBudgetSettings, createBudgetItemSchema, coupleDressAppointments, coupleDressFavorites, coupleDressTimeline, createDressAppointmentSchema, createDressFavoriteSchema, coupleImportantPeople, createImportantPersonSchema, couplePhotoShots, createPhotoShotSchema, coupleHairMakeupAppointments, coupleHairMakeupLooks, coupleHairMakeupTimeline, coupleTransportBookings, coupleTransportTimeline, coupleFlowerAppointments, coupleFlowerSelections, coupleFlowerTimeline, coupleCateringTastings, coupleCateringMenu, coupleCateringDietaryNeeds, coupleCateringTimeline, coupleCakeTastings, coupleCakeDesigns, coupleCakeTimeline, coupleVenueBookings, coupleVenueTimelines, vendorVenueBookings, vendorVenueAvailability, vendorVenueTimelines, creatorhubProjects, couplePhotographerSessions, couplePhotographerShots, couplePhotographerTimeline, coupleVideographerSessions, coupleVideographerDeliverables, coupleVideographerTimeline, coupleMusicPerformances, coupleMusicSetlists, coupleMusicTimeline, couplePlannerMeetings, couplePlannerTasks, couplePlannerTimeline } from "@shared/schema";
 import { eq, and, desc, sql, inArray, or, gte, lte, isNotNull } from "drizzle-orm";
 
 function generateAccessCode(): string {
@@ -11142,6 +11142,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error) {
       console.error("Error updating timeline:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere tidslinje" });
+    }
+  });
+
+  // ===== PLANNER ROUTES =====
+
+  // Get all planner data (meetings, tasks, timeline)
+  app.get("/api/couple/planner", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const [meetings, tasks, timeline] = await Promise.all([
+        db.select().from(couplePlannerMeetings).where(eq(couplePlannerMeetings.coupleId, coupleId)).orderBy(desc(couplePlannerMeetings.createdAt)),
+        db.select().from(couplePlannerTasks).where(eq(couplePlannerTasks.coupleId, coupleId)).orderBy(desc(couplePlannerTasks.createdAt)),
+        db.select().from(couplePlannerTimeline).where(eq(couplePlannerTimeline.coupleId, coupleId)),
+      ]);
+      res.json({ meetings, tasks, timeline: timeline[0] || null });
+    } catch (error) {
+      console.error("Error fetching planner data:", error);
+      res.status(500).json({ error: "Kunne ikke hente planlegger-data" });
+    }
+  });
+
+  // Create a planner meeting
+  app.post("/api/couple/planner/meetings", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const [meeting] = await db.insert(couplePlannerMeetings).values({ coupleId, ...req.body }).returning();
+      res.json(meeting);
+    } catch (error) {
+      console.error("Error creating meeting:", error);
+      res.status(500).json({ error: "Kunne ikke opprette møte" });
+    }
+  });
+
+  // Update a planner meeting
+  app.patch("/api/couple/planner/meetings/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const [meeting] = await db.update(couplePlannerMeetings)
+        .set({ ...req.body, updatedAt: new Date() })
+        .where(and(eq(couplePlannerMeetings.id, req.params.id), eq(couplePlannerMeetings.coupleId, coupleId)))
+        .returning();
+      if (!meeting) return res.status(404).json({ error: "Møte ikke funnet" });
+      res.json(meeting);
+    } catch (error) {
+      console.error("Error updating meeting:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere møte" });
+    }
+  });
+
+  // Delete a planner meeting
+  app.delete("/api/couple/planner/meetings/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const [deleted] = await db.delete(couplePlannerMeetings)
+        .where(and(eq(couplePlannerMeetings.id, req.params.id), eq(couplePlannerMeetings.coupleId, coupleId)))
+        .returning();
+      if (!deleted) return res.status(404).json({ error: "Møte ikke funnet" });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting meeting:", error);
+      res.status(500).json({ error: "Kunne ikke slette møte" });
+    }
+  });
+
+  // Create a planner task
+  app.post("/api/couple/planner/tasks", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const [task] = await db.insert(couplePlannerTasks).values({ coupleId, ...req.body }).returning();
+      res.json(task);
+    } catch (error) {
+      console.error("Error creating task:", error);
+      res.status(500).json({ error: "Kunne ikke opprette oppgave" });
+    }
+  });
+
+  // Update a planner task
+  app.patch("/api/couple/planner/tasks/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const [task] = await db.update(couplePlannerTasks)
+        .set({ ...req.body, updatedAt: new Date() })
+        .where(and(eq(couplePlannerTasks.id, req.params.id), eq(couplePlannerTasks.coupleId, coupleId)))
+        .returning();
+      if (!task) return res.status(404).json({ error: "Oppgave ikke funnet" });
+      res.json(task);
+    } catch (error) {
+      console.error("Error updating task:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere oppgave" });
+    }
+  });
+
+  // Delete a planner task
+  app.delete("/api/couple/planner/tasks/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const [deleted] = await db.delete(couplePlannerTasks)
+        .where(and(eq(couplePlannerTasks.id, req.params.id), eq(couplePlannerTasks.coupleId, coupleId)))
+        .returning();
+      if (!deleted) return res.status(404).json({ error: "Oppgave ikke funnet" });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      res.status(500).json({ error: "Kunne ikke slette oppgave" });
+    }
+  });
+
+  // Update planner timeline (upsert)
+  app.put("/api/couple/planner/timeline", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const existing = await db.select().from(couplePlannerTimeline).where(eq(couplePlannerTimeline.coupleId, coupleId));
+      if (existing.length > 0) {
+        const [timeline] = await db.update(couplePlannerTimeline)
+          .set({ ...req.body, updatedAt: new Date() })
+          .where(eq(couplePlannerTimeline.coupleId, coupleId))
+          .returning();
+        res.json(timeline);
+      } else {
+        const [timeline] = await db.insert(couplePlannerTimeline).values({ coupleId, ...req.body }).returning();
+        res.json(timeline);
+      }
+    } catch (error) {
+      console.error("Error updating planner timeline:", error);
       res.status(500).json({ error: "Kunne ikke oppdatere tidslinje" });
     }
   });

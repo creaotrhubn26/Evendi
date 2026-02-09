@@ -32,6 +32,13 @@ import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
 import { getApiUrl } from '@/lib/query-client';
 import { getSpeeches } from '@/lib/storage';
 import { Speech } from '@/lib/types';
+import {
+  getVenueBookings,
+  getVenueTimeline,
+  getVenueSeating,
+  saveVenueData,
+  saveVenueSeating,
+} from '@/lib/api-couple-data';
 
 type TabType = 'bookings' | 'seating' | 'timeline';
 type NavigationProp = NativeStackNavigationProp<PlanningStackParamList>;
@@ -155,11 +162,7 @@ export function VenueScreen() {
     queryKey: ['/api/couple/venue/bookings', sessionToken],
     enabled: !!sessionToken,
     queryFn: async () => {
-      const res = await fetch(new URL('/api/couple/venue/bookings', apiBase).toString(), {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
-      if (!res.ok) return [] as VenueBooking[];
-      return res.json();
+      return getVenueBookings() as Promise<VenueBooking[]>;
     },
   });
 
@@ -173,11 +176,7 @@ export function VenueScreen() {
     queryKey: ['/api/couple/venue/timeline', sessionToken],
     enabled: !!sessionToken,
     queryFn: async () => {
-      const res = await fetch(new URL('/api/couple/venue/timeline', apiBase).toString(), {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
-      if (!res.ok) return {} as VenueTimeline;
-      return res.json();
+      return getVenueTimeline() as Promise<VenueTimeline>;
     },
   });
 
@@ -206,11 +205,7 @@ export function VenueScreen() {
     queryKey: ['/api/couple/venue/seating', sessionToken],
     enabled: !!sessionToken,
     queryFn: async () => {
-      const res = await fetch(new URL('/api/couple/venue/seating', apiBase).toString(), {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
-      if (!res.ok) return { tables: [], guests: [] };
-      return res.json();
+      return getVenueSeating();
     },
   });
 
@@ -224,14 +219,7 @@ export function VenueScreen() {
   const plannerMutation = useMutation({
     mutationFn: async ({ kind, payload }: { kind: 'bookings' | 'timeline'; payload: any }) => {
       if (!sessionToken) return;
-      await fetch(new URL(`/api/couple/venue/${kind}`, apiBase).toString(), {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${sessionToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      await saveVenueData(kind, payload);
     },
   });
 
@@ -257,15 +245,7 @@ export function VenueScreen() {
     const key = ['/api/couple/venue/seating', sessionToken];
     const payload = { tables, guests };
     queryClient.setQueryData(key, payload);
-    
-    await fetch(new URL('/api/couple/venue/seating', apiBase).toString(), {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${sessionToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    await saveVenueSeating(payload);
   };
 
   const onRefresh = async () => {

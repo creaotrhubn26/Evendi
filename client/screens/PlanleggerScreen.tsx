@@ -16,6 +16,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
@@ -26,42 +27,23 @@ import { useTheme } from '../hooks/useTheme';
 import { useVendorSearch } from '../hooks/useVendorSearch';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
+import {
+  getPlannerData,
+  createPlannerMeeting,
+  updatePlannerMeeting,
+  deletePlannerMeeting as apiDeleteMeeting,
+  createPlannerTask,
+  updatePlannerTask,
+  deletePlannerTask as apiDeleteTask,
+  updatePlannerTimeline,
+  PlannerMeeting,
+  PlannerTask,
+  PlannerTimeline,
+  PlannerData,
+} from '../lib/api-couple-data';
 
 type TabType = 'meetings' | 'tasks' | 'timeline';
 type NavigationProp = NativeStackNavigationProp<PlanningStackParamList>;
-
-interface PlannerMeeting {
-  id: string;
-  plannerName: string;
-  date: string;
-  time?: string;
-  location?: string;
-  topic?: string;
-  notes?: string;
-  completed: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface PlannerTask {
-  id: string;
-  title: string;
-  dueDate: string;
-  priority: 'high' | 'medium' | 'low';
-  category?: string;
-  notes?: string;
-  completed: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface PlannerTimeline {
-  plannerSelected?: boolean;
-  initialMeeting?: boolean;
-  contractSigned?: boolean;
-  depositPaid?: boolean;
-  timelineCreated?: boolean;
-}
 
 const PRIORITY_COLORS = {
   high: '#DC2626',
@@ -96,6 +78,7 @@ const TASK_CATEGORIES = [
 export function PlanleggerScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { theme } = useTheme();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabType>('meetings');
   const [refreshing, setRefreshing] = useState(false);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
@@ -120,22 +103,63 @@ export function PlanleggerScreen() {
   const [taskCategory, setTaskCategory] = useState('');
   const [taskNotes, setTaskNotes] = useState('');
 
-  // Mock data
-  const [meetings, setMeetings] = useState<PlannerMeeting[]>([]);
-  const [tasks, setTasks] = useState<PlannerTask[]>([]);
-  const [timeline, setTimeline] = useState<PlannerTimeline>({});
+  // Real data from API
+  const plannerQuery = useQuery<PlannerData>({
+    queryKey: ['/api/couple/planner'],
+    queryFn: getPlannerData,
+  });
+
+  const meetings = plannerQuery.data?.meetings ?? [];
+  const tasks = plannerQuery.data?.tasks ?? [];
+  const timeline: PlannerTimeline = plannerQuery.data?.timeline ?? {};
 
   useFocusEffect(
     useCallback(() => {
-      // Load data when screen is focused
-    }, [])
+      queryClient.invalidateQueries({ queryKey: ['/api/couple/planner'] });
+    }, [queryClient])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await queryClient.invalidateQueries({ queryKey: ['/api/couple/planner'] });
     setRefreshing(false);
   };
+
+  // Mutations
+  const meetingCreateMut = useMutation({
+    mutationFn: (data: Parameters<typeof createPlannerMeeting>[0]) => createPlannerMeeting(data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/couple/planner'] }),
+  });
+
+  const meetingUpdateMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<PlannerMeeting> }) => updatePlannerMeeting(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/couple/planner'] }),
+  });
+
+  const meetingDeleteMut = useMutation({
+    mutationFn: (id: string) => apiDeleteMeeting(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/couple/planner'] }),
+  });
+
+  const taskCreateMut = useMutation({
+    mutationFn: (data: Parameters<typeof createPlannerTask>[0]) => createPlannerTask(data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/couple/planner'] }),
+  });
+
+  const taskUpdateMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<PlannerTask> }) => updatePlannerTask(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/couple/planner'] }),
+  });
+
+  const taskDeleteMut = useMutation({
+    mutationFn: (id: string) => apiDeleteTask(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/couple/planner'] }),
+  });
+
+  const timelineMut = useMutation({
+    mutationFn: (data: Partial<PlannerTimeline>) => updatePlannerTimeline(data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/couple/planner'] }),
+  });
 
   // Meeting handlers
   const openMeetingModal = (meeting?: PlannerMeeting) => {
@@ -166,8 +190,7 @@ export function PlanleggerScreen() {
       return;
     }
 
-    const meeting: PlannerMeeting = {
-      id: editingMeeting?.id || Date.now().toString(),
+    const meetingData = {
       plannerName: plannerSearch.searchText.trim(),
       date: meetingDate,
       time: meetingTime,
@@ -177,14 +200,17 @@ export function PlanleggerScreen() {
       completed: editingMeeting?.completed || false,
     };
 
-    if (editingMeeting) {
-      setMeetings(meetings.map(m => m.id === editingMeeting.id ? meeting : m));
-    } else {
-      setMeetings([...meetings, meeting]);
+    try {
+      if (editingMeeting) {
+        await meetingUpdateMut.mutateAsync({ id: editingMeeting.id, data: meetingData });
+      } else {
+        await meetingCreateMut.mutateAsync(meetingData);
+      }
+      setShowMeetingModal(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert('Feil', 'Kunne ikke lagre møte');
     }
-
-    setShowMeetingModal(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const deleteMeeting = (id: string) => {
@@ -193,9 +219,13 @@ export function PlanleggerScreen() {
       {
         text: 'Slett',
         style: 'destructive',
-        onPress: () => {
-          setMeetings(meetings.filter(m => m.id !== id));
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onPress: async () => {
+          try {
+            await meetingDeleteMut.mutateAsync(id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch (e) {
+            Alert.alert('Feil', 'Kunne ikke slette møte');
+          }
         },
       },
     ]);
@@ -203,22 +233,30 @@ export function PlanleggerScreen() {
 
   const duplicateMeeting = async (meeting: PlannerMeeting) => {
     try {
-      const newMeeting: PlannerMeeting = {
-        ...meeting,
-        id: Date.now().toString(),
+      await meetingCreateMut.mutateAsync({
         plannerName: `Kopi av ${meeting.plannerName}`,
+        date: meeting.date,
+        time: meeting.time || '',
+        location: meeting.location || '',
+        topic: meeting.topic || '',
+        notes: meeting.notes || '',
         completed: false,
-      };
-      setMeetings([...meetings, newMeeting]);
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
       Alert.alert('Feil', 'Kunne ikke duplisere møte');
     }
   };
 
-  const toggleMeetingComplete = (id: string) => {
-    setMeetings(meetings.map(m => m.id === id ? { ...m, completed: !m.completed } : m));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const toggleMeetingComplete = async (id: string) => {
+    const meeting = meetings.find(m => m.id === id);
+    if (!meeting) return;
+    try {
+      await meetingUpdateMut.mutateAsync({ id, data: { completed: !meeting.completed } });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e) {
+      // silent
+    }
   };
 
   // Task handlers
@@ -227,7 +265,7 @@ export function PlanleggerScreen() {
       setEditingTask(task);
       setTaskTitle(task.title);
       setTaskDueDate(task.dueDate);
-      setTaskPriority(task.priority);
+      setTaskPriority((task.priority as 'high' | 'medium' | 'low') || 'medium');
       setTaskCategory(task.category || '');
       setTaskNotes(task.notes || '');
     } else {
@@ -247,8 +285,7 @@ export function PlanleggerScreen() {
       return;
     }
 
-    const task: PlannerTask = {
-      id: editingTask?.id || Date.now().toString(),
+    const taskData = {
       title: taskTitle,
       dueDate: taskDueDate,
       priority: taskPriority,
@@ -257,14 +294,17 @@ export function PlanleggerScreen() {
       completed: editingTask?.completed || false,
     };
 
-    if (editingTask) {
-      setTasks(tasks.map(t => t.id === editingTask.id ? task : t));
-    } else {
-      setTasks([...tasks, task]);
+    try {
+      if (editingTask) {
+        await taskUpdateMut.mutateAsync({ id: editingTask.id, data: taskData });
+      } else {
+        await taskCreateMut.mutateAsync(taskData);
+      }
+      setShowTaskModal(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert('Feil', 'Kunne ikke lagre oppgave');
     }
-
-    setShowTaskModal(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const deleteTask = (id: string) => {
@@ -273,9 +313,13 @@ export function PlanleggerScreen() {
       {
         text: 'Slett',
         style: 'destructive',
-        onPress: () => {
-          setTasks(tasks.filter(t => t.id !== id));
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onPress: async () => {
+          try {
+            await taskDeleteMut.mutateAsync(id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch (e) {
+            Alert.alert('Feil', 'Kunne ikke slette oppgave');
+          }
         },
       },
     ]);
@@ -283,22 +327,29 @@ export function PlanleggerScreen() {
 
   const duplicateTask = async (task: PlannerTask) => {
     try {
-      const newTask: PlannerTask = {
-        ...task,
-        id: Date.now().toString(),
+      await taskCreateMut.mutateAsync({
         title: `Kopi av ${task.title}`,
+        dueDate: task.dueDate,
+        priority: task.priority as 'high' | 'medium' | 'low',
+        category: task.category || '',
+        notes: task.notes || '',
         completed: false,
-      };
-      setTasks([...tasks, newTask]);
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
       Alert.alert('Feil', 'Kunne ikke duplisere oppgave');
     }
   };
 
-  const toggleTaskComplete = (id: string) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const toggleTaskComplete = async (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    try {
+      await taskUpdateMut.mutateAsync({ id, data: { completed: !task.completed } });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e) {
+      // silent
+    }
   };
 
   const handleFindPlanner = () => {
@@ -443,8 +494,8 @@ export function PlanleggerScreen() {
                     <ThemedText style={[styles.cardDate, { color: theme.textSecondary }]}>
                       {task.dueDate}
                     </ThemedText>
-                    <View style={[styles.priorityBadge, { backgroundColor: PRIORITY_COLORS[task.priority] }]}>
-                      <ThemedText style={styles.priorityText}>{PRIORITY_LABELS[task.priority]}</ThemedText>
+                    <View style={[styles.priorityBadge, { backgroundColor: PRIORITY_COLORS[task.priority as keyof typeof PRIORITY_COLORS] || PRIORITY_COLORS.medium }]}>
+                      <ThemedText style={styles.priorityText}>{PRIORITY_LABELS[task.priority as keyof typeof PRIORITY_LABELS] || task.priority}</ThemedText>
                     </View>
                     {task.category && (
                       <ThemedText style={[styles.categoryLabel, { color: theme.textSecondary }]}>
@@ -482,10 +533,8 @@ export function PlanleggerScreen() {
           <Pressable
             key={step.key}
             onPress={() => {
-              setTimeline({
-                ...timeline,
-                [step.key]: !timeline[step.key as keyof PlannerTimeline],
-              });
+              const newVal = !timeline[step.key as keyof PlannerTimeline];
+              timelineMut.mutate({ [step.key]: newVal });
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}
             style={styles.timelineStep}
@@ -494,10 +543,10 @@ export function PlanleggerScreen() {
               style={[
                 styles.timelineCheckbox,
                 { borderColor: theme.border },
-                timeline[step.key as keyof PlannerTimeline] && { backgroundColor: Colors.light.success, borderColor: Colors.light.success },
+                !!timeline[step.key as keyof PlannerTimeline] && { backgroundColor: Colors.light.success, borderColor: Colors.light.success },
               ]}
             >
-              {timeline[step.key as keyof PlannerTimeline] && <Feather name="check" size={12} color="#fff" />}
+              {!!timeline[step.key as keyof PlannerTimeline] && <Feather name="check" size={12} color="#fff" />}
             </View>
             <View style={styles.timelineStepContent}>
               <Feather name={step.icon} size={16} color={theme.textSecondary} />

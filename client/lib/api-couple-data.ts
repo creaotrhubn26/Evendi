@@ -1416,3 +1416,202 @@ export async function updateMusicTimeline(data: Partial<MusicTimeline>): Promise
   if (!res.ok) throw new Error("Failed to update timeline");
   return res.json();
 }
+
+// ===== PLANNER =====
+
+export interface PlannerMeeting {
+  id: string;
+  coupleId: string;
+  plannerName: string;
+  date: string;
+  time?: string | null;
+  location?: string | null;
+  topic?: string | null;
+  notes?: string | null;
+  completed?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PlannerTask {
+  id: string;
+  coupleId: string;
+  title: string;
+  dueDate: string;
+  priority: string;
+  category?: string | null;
+  notes?: string | null;
+  completed?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PlannerTimeline {
+  id?: string;
+  coupleId?: string;
+  plannerSelected?: boolean;
+  initialMeeting?: boolean;
+  contractSigned?: boolean;
+  depositPaid?: boolean;
+  timelineCreated?: boolean;
+  budget?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PlannerData {
+  meetings: PlannerMeeting[];
+  tasks: PlannerTask[];
+  timeline: PlannerTimeline | null;
+}
+
+export async function getPlannerData(): Promise<PlannerData> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/planner`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch planner data");
+  return res.json();
+}
+
+export async function createPlannerMeeting(data: Omit<PlannerMeeting, "id" | "coupleId" | "createdAt" | "updatedAt">): Promise<PlannerMeeting> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/planner/meetings`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create meeting");
+  return res.json();
+}
+
+export async function updatePlannerMeeting(id: string, data: Partial<PlannerMeeting>): Promise<PlannerMeeting> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/planner/meetings/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update meeting");
+  return res.json();
+}
+
+export async function deletePlannerMeeting(id: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/planner/meetings/${id}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to delete meeting");
+}
+
+export async function createPlannerTask(data: Omit<PlannerTask, "id" | "coupleId" | "createdAt" | "updatedAt">): Promise<PlannerTask> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/planner/tasks`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create task");
+  return res.json();
+}
+
+export async function updatePlannerTask(id: string, data: Partial<PlannerTask>): Promise<PlannerTask> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/planner/tasks/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update task");
+  return res.json();
+}
+
+export async function deletePlannerTask(id: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/planner/tasks/${id}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to delete task");
+}
+
+export async function updatePlannerTimeline(data: Partial<PlannerTimeline>): Promise<PlannerTimeline> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/planner/timeline`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update planner timeline");
+  return res.json();
+}
+
+// ===== VENUE =====
+
+export interface VenueBookingData {
+  id?: string;
+  venueName?: string;
+  venueType?: string;
+  date?: string;
+  time?: string;
+  location?: string;
+  capacity?: number;
+  notes?: string;
+  status?: string;
+  [key: string]: any;
+}
+
+export interface VenueTimelineData {
+  venueSelected?: boolean;
+  visited?: boolean;
+  contractSigned?: boolean;
+  depositPaid?: boolean;
+  [key: string]: any;
+}
+
+export interface VenueSeatingData {
+  tables: any[];
+  guests: any[];
+}
+
+export async function getVenueBookings(): Promise<VenueBookingData[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/venue/bookings`, { headers });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function getVenueTimeline(): Promise<VenueTimelineData> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/venue/timeline`, { headers });
+  if (!res.ok) return {};
+  return res.json();
+}
+
+export async function getVenueSeating(): Promise<VenueSeatingData> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/venue/seating`, { headers });
+  if (!res.ok) return { tables: [], guests: [] };
+  return res.json();
+}
+
+export async function saveVenueData(kind: "bookings" | "timeline", payload: any): Promise<any> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/venue/${kind}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to save venue ${kind}`);
+  return res.json();
+}
+
+export async function saveVenueSeating(data: VenueSeatingData): Promise<any> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/venue/seating`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to save venue seating");
+  return res.json();
+}

@@ -2209,6 +2209,52 @@ export type CoupleCakeTasting = typeof coupleCakeTastings.$inferSelect;
 export type CoupleCakeDesign = typeof coupleCakeDesigns.$inferSelect;
 export type CoupleCakeTimeline = typeof coupleCakeTimeline.$inferSelect;
 
+// ===== COUPLE PLANNER TABLES =====
+
+export const couplePlannerMeetings = pgTable("couple_planner_meetings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  plannerName: text("planner_name").notNull(),
+  date: text("date").notNull(),
+  time: text("time"),
+  location: text("location"),
+  topic: text("topic"),
+  notes: text("notes"),
+  completed: boolean("completed").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const couplePlannerTasks = pgTable("couple_planner_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  dueDate: text("due_date").notNull(),
+  priority: text("priority").notNull().default("medium"), // "high", "medium", "low"
+  category: text("category"),
+  notes: text("notes"),
+  completed: boolean("completed").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const couplePlannerTimeline = pgTable("couple_planner_timeline", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
+  plannerSelected: boolean("planner_selected").default(false),
+  initialMeeting: boolean("initial_meeting").default(false),
+  contractSigned: boolean("contract_signed").default(false),
+  depositPaid: boolean("deposit_paid").default(false),
+  timelineCreated: boolean("timeline_created").default(false),
+  budget: integer("budget").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type CouplePlannerMeeting = typeof couplePlannerMeetings.$inferSelect;
+export type CouplePlannerTask = typeof couplePlannerTasks.$inferSelect;
+export type CouplePlannerTimeline = typeof couplePlannerTimeline.$inferSelect;
+
 // ==========================================
 // ===== CREATORHUB INTEGRATION TABLES =====
 // ==========================================
