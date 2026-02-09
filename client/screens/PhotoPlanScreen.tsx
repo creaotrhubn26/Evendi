@@ -27,6 +27,7 @@ import {
   updatePhotoShot,
   deletePhotoShot,
   seedDefaultPhotoShots,
+  getVendorPlannedShots,
   PhotoShot,
 } from "@/lib/api-couple-data";
 
@@ -68,6 +69,14 @@ export default function PhotoPlanScreen() {
   });
 
   const shots = shotsData ?? [];
+
+  // Query for vendor-planned shots (pushed from CreatorHub)
+  const { data: vendorShotsData } = useQuery({
+    queryKey: ["vendor-planned-shots"],
+    queryFn: getVendorPlannedShots,
+  });
+
+  const vendorShots = vendorShotsData?.vendorShots ?? [];
 
   // Refresh handler
   const [refreshing, setRefreshing] = useState(false);
@@ -300,6 +309,79 @@ export default function PhotoPlanScreen() {
           </View>
         </View>
       ))}
+
+      {/* Vendor-planned shots from photographer (CreatorHub bridge) */}
+      {vendorShots.length > 0 && (
+        <View style={styles.categorySection}>
+          <View style={[styles.vendorBridgeHeader, { backgroundColor: theme.backgroundDefault, borderColor: Colors.dark.accent }]}>
+            <View style={styles.categoryHeader}>
+              <View style={[styles.categoryIcon, { backgroundColor: Colors.dark.accent + '20' }]}>
+                <Feather name="camera" size={16} color={Colors.dark.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText type="h4">Fotografens plan</ThemedText>
+                <ThemedText style={[styles.shotDescription, { color: theme.textSecondary }]}>
+                  {vendorShots.length} bilder planlagt av fotografen din
+                </ThemedText>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.shotsList}>
+            {vendorShots.map((shot, index) => (
+              <Animated.View
+                key={shot.id}
+                entering={FadeInRight.delay(index * 50).duration(300)}
+              >
+                <View
+                  style={[
+                    styles.shotItem,
+                    {
+                      backgroundColor: theme.backgroundDefault,
+                      borderColor: Colors.dark.accent + '40',
+                      borderLeftWidth: 3,
+                      borderLeftColor: Colors.dark.accent,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.checkbox,
+                      {
+                        backgroundColor: shot.completed ? Colors.dark.accent : 'transparent',
+                        borderColor: shot.completed ? Colors.dark.accent : theme.border,
+                      },
+                    ]}
+                  >
+                    {shot.completed ? (
+                      <Feather name="check" size={14} color="#1A1A1A" />
+                    ) : (
+                      <Feather name="camera" size={10} color={Colors.dark.accent} />
+                    )}
+                  </View>
+                  <View style={styles.shotInfo}>
+                    <ThemedText
+                      style={[
+                        styles.shotTitle,
+                        shot.completed && styles.shotTitleCompleted,
+                      ]}
+                    >
+                      {shot.title}
+                    </ThemedText>
+                    {shot.description ? (
+                      <ThemedText
+                        style={[styles.shotDescription, { color: theme.textSecondary }]}
+                      >
+                        {shot.description}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                </View>
+              </Animated.View>
+            ))}
+          </View>
+        </View>
+      )}
 
       {showForm ? (
         <Animated.View
@@ -554,5 +636,11 @@ const styles = StyleSheet.create({
   addButtonText: {
     marginLeft: Spacing.sm,
     fontWeight: "500",
+  },
+  vendorBridgeHeader: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
   },
 });

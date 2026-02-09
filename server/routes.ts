@@ -9977,6 +9977,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get vendor-planned photo shots (pushed from CreatorHub)
+  app.get("/api/couple/photo-shots/vendor-planned", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const vendorShots = await db.select()
+        .from(couplePhotoShots)
+        .where(and(
+          eq(couplePhotoShots.coupleId, coupleId),
+          sql`${couplePhotoShots.id} LIKE 'vendor-%'`
+        ))
+        .orderBy(couplePhotoShots.sortOrder, couplePhotoShots.createdAt);
+
+      res.json({
+        vendorShots,
+        count: vendorShots.length,
+      });
+    } catch (error) {
+      console.error("Error fetching vendor-planned shots:", error);
+      res.status(500).json({ error: "Kunne ikke hente fotografens planlagte bilder" });
+    }
+  });
+
   // Seed default photo shots
   app.post("/api/couple/photo-shots/seed-defaults", async (req: Request, res: Response) => {
     const coupleId = await checkCoupleAuth(req, res);

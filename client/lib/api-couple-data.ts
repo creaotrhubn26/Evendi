@@ -338,6 +338,13 @@ export async function seedDefaultPhotoShots(): Promise<PhotoShot[]> {
   return res.json();
 }
 
+export async function getVendorPlannedShots(): Promise<{ vendorShots: PhotoShot[]; count: number }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/photo-shots/vendor-planned`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch vendor-planned shots");
+  return res.json();
+}
+
 // ===== CONTRACTS API =====
 
 export interface CoupleContract {
