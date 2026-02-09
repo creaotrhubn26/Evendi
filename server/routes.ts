@@ -11946,6 +11946,206 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==============================================================
+  // VENDOR ↔ CREATORHUB PROJECT BRIDGE
+  // Lets vendors see CreatorHub projects, timeline, comments, shots
+  // ==============================================================
+
+  // GET /api/vendor/creatorhub-bridge — Vendor sees linked CreatorHub projects + timeline for their couples
+  app.get("/api/vendor/creatorhub-bridge", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const coupleId = req.query.coupleId as string;
+      if (!coupleId) return res.status(400).json({ error: "coupleId er påkrevd" });
+
+      // Verify vendor has access to this couple
+      const [conv] = await db.select({ id: conversations.id })
+        .from(conversations)
+        .where(and(eq(conversations.vendorId, vendorId), eq(conversations.coupleId, coupleId)));
+      if (!conv) return res.status(403).json({ error: "Ingen tilgang til dette paret" });
+
+      // Get couple email
+      const [couple] = await db.select({ email: coupleProfiles.email, displayName: coupleProfiles.displayName })
+        .from(coupleProfiles)
+        .where(eq(coupleProfiles.id, coupleId));
+      if (!couple) return res.status(404).json({ error: "Par ikke funnet" });
+
+      // Find projects linked to this couple's email
+      const projectsResult = await db.execute(sql`
+        SELECT id, title, category, status, client_email, metadata, settings, created_at
+        FROM legacy.projects
+        WHERE LOWER(client_email) = LOWER(${couple.email})
+        ORDER BY created_at DESC
+      `);
+
+      const projects: any[] = [];
+      for (const proj of (projectsResult.rows || [])) {
+        // Get timeline for this project
+        const timelineResult = await db.execute(sql`
+          SELECT id, title, wedding_date, venue, couple_name, cultural_type, status,
+                 photographer_message, client_notes, client_access_enabled
+          FROM wedding_timelines
+          WHERE project_id = ${(proj as any).id}
+          ORDER BY created_at DESC LIMIT 1
+        `);
+        const timeline = (timelineResult.rows || [])[0] || null;
+
+        let events: any[] = [];
+        let comments: any[] = [];
+        if (timeline) {
+          const eventsResult = await db.execute(sql`
+            SELECT id, title, event_time, duration_minutes, description, location, status, can_client_edit
+            FROM wedding_timeline_events
+            WHERE timeline_id = ${(timeline as any).id}
+            ORDER BY event_time ASC
+          `);
+          events = eventsResult.rows || [];
+
+          const commentsResult = await db.execute(sql`
+            SELECT id, author_type, author_name, message, is_private, created_at
+            FROM wedding_timeline_comments
+            WHERE timeline_id = ${(timeline as any).id}
+            ORDER BY created_at ASC
+          `);
+          comments = commentsResult.rows || [];
+        }
+
+        // Get shot list from project metadata
+        const metadata = (proj as any).metadata;
+        const shotList = metadata?.shotList || [];
+
+        projects.push({
+          id: (proj as any).id,
+          title: (proj as any).title,
+          category: (proj as any).category,
+          status: (proj as any).status,
+          createdAt: (proj as any).created_at,
+          timeline,
+          events,
+          comments,
+          shotList,
+        });
+      }
+
+      res.json({
+        success: true,
+        coupleId,
+        coupleName: couple.displayName,
+        coupleEmail: couple.email,
+        projects,
+        conversationId: conv.id,
+      });
+    } catch (error) {
+      console.error("Vendor CreatorHub bridge error:", error);
+      res.status(500).json({ error: "Kunne ikke hente prosjektdata" });
+    }
+  });
+
+  // GET /api/vendor/timeline-comments/:timelineId — Get timeline comments
+  app.get("/api/vendor/timeline-comments/:timelineId", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { timelineId } = req.params;
+
+      const result = await db.execute(sql`
+        SELECT id, author_type, author_name, message, is_private, created_at
+        FROM wedding_timeline_comments
+        WHERE timeline_id = ${timelineId}
+        ORDER BY created_at ASC
+      `);
+
+      res.json({ success: true, comments: result.rows || [] });
+    } catch (error) {
+      console.error("Get timeline comments error:", error);
+      res.status(500).json({ error: "Kunne ikke hente kommentarer" });
+    }
+  });
+
+  // POST /api/vendor/timeline-comments/:timelineId — Add a comment to the timeline
+  app.post("/api/vendor/timeline-comments/:timelineId", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { timelineId } = req.params;
+      const { message, isPrivate } = req.body;
+
+      if (!message || !message.trim()) {
+        return res.status(400).json({ error: "Melding er påkrevd" });
+      }
+
+      // Verify timeline exists
+      const tlCheck = await db.execute(sql`SELECT id FROM wedding_timelines WHERE id = ${timelineId}`);
+      if (!(tlCheck.rows || []).length) return res.status(404).json({ error: "Tidslinje ikke funnet" });
+
+      // Get vendor name
+      const [vendor] = await db.select({ businessName: vendors.businessName })
+        .from(vendors)
+        .where(eq(vendors.id, vendorId));
+      const vendorName = vendor?.businessName || "Leverandør";
+
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      await db.execute(sql`
+        INSERT INTO wedding_timeline_comments (id, timeline_id, author_type, author_name, message, is_private, created_at, updated_at)
+        VALUES (${id}, ${timelineId}, 'vendor', ${vendorName}, ${message.trim()}, ${isPrivate || false}, ${now}, ${now})
+      `);
+
+      res.json({
+        success: true,
+        comment: {
+          id,
+          timeline_id: timelineId,
+          author_type: "vendor",
+          author_name: vendorName,
+          message: message.trim(),
+          is_private: isPrivate || false,
+          created_at: now,
+        },
+      });
+    } catch (error) {
+      console.error("Add timeline comment error:", error);
+      res.status(500).json({ error: "Kunne ikke legge til kommentar" });
+    }
+  });
+
+  // POST /api/vendor/timeline-events/:timelineId — Vendor adds an event to the timeline
+  app.post("/api/vendor/timeline-events/:timelineId", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { timelineId } = req.params;
+      const { title, eventTime, durationMinutes, description, location } = req.body;
+
+      if (!title) return res.status(400).json({ error: "Tittel er påkrevd" });
+
+      // Verify timeline exists
+      const tlCheck = await db.execute(sql`SELECT id FROM wedding_timelines WHERE id = ${timelineId}`);
+      if (!(tlCheck.rows || []).length) return res.status(404).json({ error: "Tidslinje ikke funnet" });
+
+      const id = crypto.randomUUID();
+
+      await db.execute(sql`
+        INSERT INTO wedding_timeline_events (id, timeline_id, title, event_time, duration_minutes, description, location, status, can_client_edit)
+        VALUES (${id}, ${timelineId}, ${title}, ${eventTime || null}, ${durationMinutes || 30}, ${description || ""}, ${location || ""}, 'planned', false)
+      `);
+
+      res.json({
+        success: true,
+        event: { id, timeline_id: timelineId, title, event_time: eventTime, duration_minutes: durationMinutes || 30, description, location, status: "planned" },
+      });
+    } catch (error) {
+      console.error("Add timeline event error:", error);
+      res.status(500).json({ error: "Kunne ikke legge til hendelse" });
+    }
+  });
+
   // Register subscription routes
   registerSubscriptionRoutes(app);
 

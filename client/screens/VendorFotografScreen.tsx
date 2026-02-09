@@ -12,6 +12,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
+import VendorCreatorHubBridge from "@/components/VendorCreatorHubBridge";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
@@ -48,11 +49,38 @@ export default function VendorFotografScreen() {
   const navigation = useNavigation<Navigation>();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'speeches' | 'seating'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'speeches' | 'seating' | 'prosjekt'>('dashboard');
   const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [seatingData, setSeatingData] = useState<{ tables: Table[]; guests?: any[] }>({ tables: [], guests: [] });
+  const [selectedCoupleId, setSelectedCoupleId] = useState<string | null>(null);
 
   const vendorConfig = getVendorConfig(null, "Fotograf");
+
+  // Fetch vendor's couples from conversations
+  const { data: vendorCouples = [] } = useQuery<{ id: string; coupleId: string; coupleName: string }[]>({
+    queryKey: ["/api/vendor/conversations-couples"],
+    queryFn: async () => {
+      if (!sessionToken) return [];
+      const res = await fetch(new URL("/api/vendor/conversations", getApiUrl()).toString(), {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      if (!res.ok) return [];
+      const convos = await res.json();
+      return convos.map((c: any) => ({
+        id: c.id,
+        coupleId: c.coupleId,
+        coupleName: c.couple?.displayName || c.couple?.email || "Ukjent par",
+      }));
+    },
+    enabled: !!sessionToken,
+  });
+
+  // Auto-select first couple
+  useEffect(() => {
+    if (vendorCouples.length > 0 && !selectedCoupleId) {
+      setSelectedCoupleId(vendorCouples[0].coupleId);
+    }
+  }, [vendorCouples, selectedCoupleId]);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -186,6 +214,15 @@ export default function VendorFotografScreen() {
           <Feather name="users" size={18} color={activeTab === 'seating' ? theme.accent : theme.textSecondary} />
           <ThemedText style={[styles.tabText, { color: activeTab === 'seating' ? theme.accent : theme.textSecondary }]}>
             Bordplan
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, activeTab === 'prosjekt' && { borderBottomColor: theme.accent, borderBottomWidth: 2 }]}
+          onPress={() => setActiveTab('prosjekt')}
+        >
+          <Feather name="link" size={18} color={activeTab === 'prosjekt' ? theme.accent : theme.textSecondary} />
+          <ThemedText style={[styles.tabText, { color: activeTab === 'prosjekt' ? theme.accent : theme.textSecondary }]}>
+            Prosjekt
           </ThemedText>
         </Pressable>
       </View>
@@ -393,6 +430,47 @@ export default function VendorFotografScreen() {
               <Feather name="users" size={32} color={theme.textMuted} />
               <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Bordplan ikke lagt til</ThemedText>
               <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Bordplan vises her når brudeparet legger den til</ThemedText>
+            </View>
+          )}
+        </ScrollView>
+      ) : activeTab === 'prosjekt' ? (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }}>
+          {/* Couple selector if multiple couples */}
+          {vendorCouples.length > 1 && (
+            <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, marginBottom: Spacing.md }]}>
+              <ThemedText style={[styles.cardTitle, { color: theme.text, marginBottom: Spacing.sm }]}>Velg par</ThemedText>
+              {vendorCouples.map((c) => (
+                <Pressable
+                  key={c.coupleId}
+                  onPress={() => setSelectedCoupleId(c.coupleId)}
+                  style={[
+                    styles.listRow,
+                    { borderBottomColor: theme.border },
+                    selectedCoupleId === c.coupleId && { backgroundColor: theme.accent + '10' },
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+                    <Feather name={selectedCoupleId === c.coupleId ? 'check-circle' : 'circle'} size={18} color={selectedCoupleId === c.coupleId ? theme.accent : theme.textSecondary} />
+                    <ThemedText style={{ color: theme.text, fontWeight: selectedCoupleId === c.coupleId ? '600' : '400' }}>{c.coupleName}</ThemedText>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {selectedCoupleId && sessionToken ? (
+            <VendorCreatorHubBridge
+              sessionToken={sessionToken}
+              coupleId={selectedCoupleId}
+              onOpenChat={(convId) => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                navigation.navigate("VendorChat", { conversationId: convId });
+              }}
+            />
+          ) : (
+            <View style={[styles.emptyCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+              <Feather name="link" size={32} color={theme.textMuted} />
+              <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen par tilkoblet</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Start en samtale med et brudepar for å koble til prosjektet</ThemedText>
             </View>
           )}
         </ScrollView>

@@ -12,6 +12,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
+import VendorCreatorHubBridge from "@/components/VendorCreatorHubBridge";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
@@ -48,11 +49,38 @@ export default function VendorVideografScreen() {
   const navigation = useNavigation<Navigation>();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'speeches' | 'seating'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'speeches' | 'seating' | 'prosjekt'>('dashboard');
   const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [seatingData, setSeatingData] = useState<{ tables: Table[]; guests?: any[] }>({ tables: [], guests: [] });
+  const [selectedCoupleId, setSelectedCoupleId] = useState<string | null>(null);
 
   const vendorConfig = getVendorConfig(null, "Videograf");
+
+  // Fetch vendor's couples from conversations
+  const { data: vendorCouples = [] } = useQuery<{ id: string; coupleId: string; coupleName: string }[]>({
+    queryKey: ["/api/vendor/conversations-couples-video"],
+    queryFn: async () => {
+      if (!sessionToken) return [];
+      const res = await fetch(new URL("/api/vendor/conversations", getApiUrl()).toString(), {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      if (!res.ok) return [];
+      const convos = await res.json();
+      return convos.map((c: any) => ({
+        id: c.id,
+        coupleId: c.coupleId,
+        coupleName: c.couple?.displayName || c.couple?.email || "Ukjent par",
+      }));
+    },
+    enabled: !!sessionToken,
+  });
+
+  // Auto-select first couple
+  useEffect(() => {
+    if (vendorCouples.length > 0 && !selectedCoupleId) {
+      setSelectedCoupleId(vendorCouples[0].coupleId);
+    }
+  }, [vendorCouples, selectedCoupleId]);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -152,8 +180,48 @@ export default function VendorVideografScreen() {
   if (!sessionToken) return null;
 
   return (
+    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+      {/* Header */}
+      <View style={{ padding: Spacing.lg, paddingTop: insets.top + Spacing.md }}>
+        <ThemedText style={[styles.title, { color: theme.text }]}>Videograf dashboard</ThemedText>
+        <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Publiser videopakker, tjenester og priser, og send tilbud raskt.</ThemedText>
+      </View>
+
+      {/* Tab Navigation */}
+      <View style={[styles.tabContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        <Pressable
+          style={[styles.tab, activeTab === 'dashboard' && { borderBottomColor: theme.accent, borderBottomWidth: 2 }]}
+          onPress={() => setActiveTab('dashboard')}
+        >
+          <Feather name="package" size={18} color={activeTab === 'dashboard' ? theme.accent : theme.textSecondary} />
+          <ThemedText style={[styles.tabText, { color: activeTab === 'dashboard' ? theme.accent : theme.textSecondary }]}>
+            Pakker
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, activeTab === 'speeches' && { borderBottomColor: theme.accent, borderBottomWidth: 2 }]}
+          onPress={() => setActiveTab('speeches')}
+        >
+          <Feather name="mic" size={18} color={activeTab === 'speeches' ? theme.accent : theme.textSecondary} />
+          <ThemedText style={[styles.tabText, { color: activeTab === 'speeches' ? theme.accent : theme.textSecondary }]}>
+            Taler ({speeches.length})
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, activeTab === 'prosjekt' && { borderBottomColor: theme.accent, borderBottomWidth: 2 }]}
+          onPress={() => setActiveTab('prosjekt')}
+        >
+          <Feather name="link" size={18} color={activeTab === 'prosjekt' ? theme.accent : theme.textSecondary} />
+          <ThemedText style={[styles.tabText, { color: activeTab === 'prosjekt' ? theme.accent : theme.textSecondary }]}>
+            Prosjekt
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      {/* Tab Content */}
+      {activeTab === 'dashboard' ? (
     <ScrollView
-      style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
+      style={{ flex: 1 }}
       contentContainerStyle={{ padding: Spacing.lg, paddingBottom: Spacing.xl + insets.bottom }}
       refreshControl={
         <RefreshControl
@@ -163,8 +231,6 @@ export default function VendorVideografScreen() {
         />
       }
     >
-      <ThemedText style={[styles.title, { color: theme.text }]}>Videograf dashboard</ThemedText>
-      <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Publiser videopakker, tjenester og priser, og send tilbud raskt.</ThemedText>
 
       <View style={styles.cardRow}>
         <Pressable
@@ -271,12 +337,105 @@ export default function VendorVideografScreen() {
         )}
       </View>
     </ScrollView>
+      ) : activeTab === 'speeches' ? (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }}>
+          {speeches.length > 0 ? (
+            <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs }}>
+                <Feather name="video" size={18} color={theme.accent} />
+                <ThemedText style={styles.cardTitle}>Taler å filme ({speeches.length})</ThemedText>
+              </View>
+              <ThemedText style={[styles.infoText, { color: theme.textSecondary, marginBottom: Spacing.md }]}>
+                Planlegg kameravinkler og mikrofon-plassering for taleøyeblikk
+              </ThemedText>
+              {speeches.sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59')).map((speech) => (
+                <View key={speech.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }}>
+                  <View style={{ width: 50, marginRight: Spacing.md }}>
+                    <ThemedText style={{ fontSize: 14, fontWeight: '600', color: theme.accent }}>{speech.time || 'TBA'}</ThemedText>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={{ fontSize: 14, fontWeight: '500', color: theme.text }}>{speech.speakerName}</ThemedText>
+                    <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{speech.role}</ThemedText>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={[styles.emptyCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+              <Feather name="mic" size={32} color={theme.textSecondary} />
+              <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen taler lagt til</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Taler vises her når brudeparet legger dem til</ThemedText>
+            </View>
+          )}
+        </ScrollView>
+      ) : activeTab === 'prosjekt' ? (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }}>
+          {vendorCouples.length > 1 && (
+            <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, marginBottom: Spacing.md }]}>
+              <ThemedText style={[styles.cardTitle, { color: theme.text, marginBottom: Spacing.sm }]}>Velg par</ThemedText>
+              {vendorCouples.map((c) => (
+                <Pressable
+                  key={c.coupleId}
+                  onPress={() => setSelectedCoupleId(c.coupleId)}
+                  style={[
+                    styles.listRow,
+                    { borderBottomColor: theme.border },
+                    selectedCoupleId === c.coupleId && { backgroundColor: theme.accent + '10' },
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+                    <Feather name={selectedCoupleId === c.coupleId ? 'check-circle' : 'circle'} size={18} color={selectedCoupleId === c.coupleId ? theme.accent : theme.textSecondary} />
+                    <ThemedText style={{ color: theme.text, fontWeight: selectedCoupleId === c.coupleId ? '600' : '400' }}>{c.coupleName}</ThemedText>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {selectedCoupleId && sessionToken ? (
+            <VendorCreatorHubBridge
+              sessionToken={sessionToken}
+              coupleId={selectedCoupleId}
+              onOpenChat={(convId) => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                navigation.navigate("VendorChat", { conversationId: convId });
+              }}
+            />
+          ) : (
+            <View style={[styles.emptyCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+              <Feather name="link" size={32} color={theme.textSecondary} />
+              <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen par tilkoblet</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Start en samtale med et brudepar for å koble til prosjektet</ThemedText>
+            </View>
+          )}
+        </ScrollView>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 28, fontWeight: "700", marginBottom: Spacing.xs },
-  subtitle: { fontSize: 14, marginBottom: Spacing.lg },
+  title: { fontSize: 24, fontWeight: "700", marginBottom: Spacing.xs },
+  subtitle: { fontSize: 14 },
+  tabContainer: {
+    flexDirection: 'row',
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.md,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
   cardRow: { flexDirection: "row", gap: Spacing.md, marginBottom: Spacing.lg },
   card: { flex: 1, padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1 },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.sm },
@@ -290,5 +449,12 @@ const styles = StyleSheet.create({
   emptyRow: { flexDirection: "row", gap: Spacing.md, alignItems: "center", paddingVertical: Spacing.md },
   emptyTitle: { fontSize: 14, fontWeight: "600" },
   emptySubtitle: { fontSize: 12, marginTop: 2 },
+  emptyCard: {
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
   listRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: Spacing.sm, borderBottomWidth: 1 },
 });
