@@ -150,6 +150,11 @@ export const deliveries = pgTable("deliveries", {
   projectId: varchar("project_id"),
   timelineId: varchar("timeline_id"),
   coupleId: varchar("couple_id"),
+  chatNotified: boolean("chat_notified").default(false),
+  openedAt: timestamp("opened_at"),
+  openCount: integer("open_count").default(0),
+  downloadCount: integer("download_count").default(0),
+  favoriteCount: integer("favorite_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -164,6 +169,25 @@ export const deliveryItems = pgTable("delivery_items", {
   url: text("url").notNull(),
   description: text("description"),
   sortOrder: integer("sort_order").default(0),
+  downloadCount: integer("download_count").default(0),
+  favoriteCount: integer("favorite_count").default(0),
+  favoritedAt: timestamp("favorited_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Delivery tracking — logs every open/download/favorite action
+export const deliveryTracking = pgTable("delivery_tracking", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  deliveryId: varchar("delivery_id").references(() => deliveries.id, { onDelete: "cascade" }),
+  deliveryItemId: varchar("delivery_item_id").references(() => deliveryItems.id, { onDelete: "set null" }),
+  coupleId: varchar("couple_id"),
+  vendorId: varchar("vendor_id"),
+  action: text("action").notNull(), // 'opened', 'downloaded', 'favorited', 'unfavorited', 'shared', 'viewed_item'
+  actionDetail: text("action_detail"), // JSON extra data
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

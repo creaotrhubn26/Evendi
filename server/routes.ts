@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 import { registerSubscriptionRoutes } from "./subscription-routes";
 import { registerCreatorhubRoutes } from "./creatorhub-routes";
 import { TIMELINE_TEMPLATES, DEFAULT_TIMELINE, TimelineTemplate, resolveTraditionKey } from "./timeline-templates";
-import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetItems, coupleBudgetSettings, createBudgetItemSchema, coupleDressAppointments, coupleDressFavorites, coupleDressTimeline, createDressAppointmentSchema, createDressFavoriteSchema, coupleImportantPeople, createImportantPersonSchema, couplePhotoShots, createPhotoShotSchema, coupleHairMakeupAppointments, coupleHairMakeupLooks, coupleHairMakeupTimeline, coupleTransportBookings, coupleTransportTimeline, coupleFlowerAppointments, coupleFlowerSelections, coupleFlowerTimeline, coupleCateringTastings, coupleCateringMenu, coupleCateringDietaryNeeds, coupleCateringTimeline, coupleCakeTastings, coupleCakeDesigns, coupleCakeTimeline, coupleVenueBookings, coupleVenueTimelines, vendorVenueBookings, vendorVenueAvailability, vendorVenueTimelines, creatorhubProjects, couplePhotographerSessions, couplePhotographerShots, couplePhotographerTimeline, coupleVideographerSessions, coupleVideographerDeliverables, coupleVideographerTimeline, coupleMusicPerformances, coupleMusicSetlists, coupleMusicTimeline, couplePlannerMeetings, couplePlannerTasks, couplePlannerTimeline, weddingRoleInvitations } from "@shared/schema";
+import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, deliveryTracking, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetItems, coupleBudgetSettings, createBudgetItemSchema, coupleDressAppointments, coupleDressFavorites, coupleDressTimeline, createDressAppointmentSchema, createDressFavoriteSchema, coupleImportantPeople, createImportantPersonSchema, couplePhotoShots, createPhotoShotSchema, coupleHairMakeupAppointments, coupleHairMakeupLooks, coupleHairMakeupTimeline, coupleTransportBookings, coupleTransportTimeline, coupleFlowerAppointments, coupleFlowerSelections, coupleFlowerTimeline, coupleCateringTastings, coupleCateringMenu, coupleCateringDietaryNeeds, coupleCateringTimeline, coupleCakeTastings, coupleCakeDesigns, coupleCakeTimeline, coupleVenueBookings, coupleVenueTimelines, vendorVenueBookings, vendorVenueAvailability, vendorVenueTimelines, creatorhubProjects, couplePhotographerSessions, couplePhotographerShots, couplePhotographerTimeline, coupleVideographerSessions, coupleVideographerDeliverables, coupleVideographerTimeline, coupleMusicPerformances, coupleMusicSetlists, coupleMusicTimeline, couplePlannerMeetings, couplePlannerTasks, couplePlannerTimeline, weddingRoleInvitations } from "@shared/schema";
 import { eq, and, desc, sql, inArray, or, gte, lte, isNotNull } from "drizzle-orm";
 
 function generateAccessCode(): string {
@@ -1661,6 +1661,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const items = await db.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, delivery.id));
 
+      // Track open event
+      await db.insert(deliveryTracking).values({
+        deliveryId: delivery.id,
+        coupleId: delivery.coupleId,
+        vendorId: delivery.vendorId,
+        action: 'opened',
+        actionDetail: JSON.stringify({ source: 'wedflow-app', accessCode }),
+      });
+      // Update open counter
+      await db.execute(sql`UPDATE deliveries SET open_count = COALESCE(open_count, 0) + 1, opened_at = COALESCE(opened_at, NOW()) WHERE id = ${delivery.id}`);
+
       res.json({ 
         delivery: { ...delivery, items },
         vendor 
@@ -1668,6 +1679,178 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching delivery:", error);
       res.status(500).json({ error: "Kunne ikke hente leveranse" });
+    }
+  });
+
+  // POST /api/delivery-track — Track open/download/favorite actions
+  app.post("/api/delivery-track", async (req: Request, res: Response) => {
+    try {
+      const { deliveryId, deliveryItemId, action, accessCode: ac, source } = req.body;
+      if (!deliveryId || !action) return res.status(400).json({ error: "deliveryId og action er påkrevd" });
+
+      const validActions = ['opened', 'downloaded', 'favorited', 'unfavorited', 'shared', 'viewed_item'];
+      if (!validActions.includes(action)) return res.status(400).json({ error: "Ugyldig action" });
+
+      // Verify delivery exists
+      const [delivery] = await db.select().from(deliveries).where(eq(deliveries.id, deliveryId));
+      if (!delivery) return res.status(404).json({ error: "Leveranse ikke funnet" });
+
+      // Insert tracking record
+      await db.insert(deliveryTracking).values({
+        deliveryId,
+        deliveryItemId: deliveryItemId || null,
+        coupleId: delivery.coupleId,
+        vendorId: delivery.vendorId,
+        action,
+        actionDetail: JSON.stringify({ accessCode: ac || null, source: source || 'wedflow-app' }),
+      });
+
+      // Update counters
+      if (action === 'opened') {
+        await db.execute(sql`UPDATE deliveries SET open_count = COALESCE(open_count, 0) + 1, opened_at = COALESCE(opened_at, NOW()) WHERE id = ${deliveryId}`);
+      } else if (action === 'downloaded') {
+        await db.execute(sql`UPDATE deliveries SET download_count = COALESCE(download_count, 0) + 1 WHERE id = ${deliveryId}`);
+        if (deliveryItemId) {
+          await db.execute(sql`UPDATE delivery_items SET download_count = COALESCE(download_count, 0) + 1 WHERE id = ${deliveryItemId}`);
+        }
+      } else if (action === 'favorited') {
+        await db.execute(sql`UPDATE deliveries SET favorite_count = COALESCE(favorite_count, 0) + 1 WHERE id = ${deliveryId}`);
+        if (deliveryItemId) {
+          await db.execute(sql`UPDATE delivery_items SET favorite_count = COALESCE(favorite_count, 0) + 1, favorited_at = NOW() WHERE id = ${deliveryItemId}`);
+        }
+      } else if (action === 'unfavorited') {
+        await db.execute(sql`UPDATE deliveries SET favorite_count = GREATEST(COALESCE(favorite_count, 0) - 1, 0) WHERE id = ${deliveryId}`);
+        if (deliveryItemId) {
+          await db.execute(sql`UPDATE delivery_items SET favorite_count = GREATEST(COALESCE(favorite_count, 0) - 1, 0), favorited_at = NULL WHERE id = ${deliveryItemId}`);
+        }
+      }
+
+      res.json({ success: true, action });
+    } catch (error) {
+      console.error("Delivery track error:", error);
+      res.status(500).json({ error: "Kunne ikke registrere handling" });
+    }
+  });
+
+  // GET /api/vendor/delivery-tracking/:deliveryId — Vendor tracking dashboard
+  app.get("/api/vendor/delivery-tracking/:deliveryId", async (req: Request, res: Response) => {
+    try {
+      const vendorId = await checkVendorAuth(req, res);
+      if (!vendorId) return;
+
+      const { deliveryId } = req.params;
+
+      const [delivery] = await db.select().from(deliveries).where(
+        and(eq(deliveries.id, deliveryId), eq(deliveries.vendorId, vendorId))
+      );
+      if (!delivery) return res.status(404).json({ error: "Leveranse ikke funnet" });
+
+      const items = await db.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, deliveryId));
+
+      const history = await db.select().from(deliveryTracking)
+        .where(eq(deliveryTracking.deliveryId, deliveryId))
+        .orderBy(sql`created_at DESC`)
+        .limit(50);
+
+      res.json({
+        delivery: {
+          id: delivery.id,
+          title: delivery.title,
+          coupleName: delivery.coupleName,
+          accessCode: delivery.accessCode,
+          status: delivery.status,
+          openCount: delivery.openCount || 0,
+          downloadCount: delivery.downloadCount || 0,
+          favoriteCount: delivery.favoriteCount || 0,
+          openedAt: delivery.openedAt,
+          chatNotified: delivery.chatNotified,
+        },
+        items: items.map(item => ({
+          id: item.id,
+          type: item.type,
+          label: item.label,
+          downloadCount: item.downloadCount || 0,
+          favoriteCount: item.favoriteCount || 0,
+          favoritedAt: item.favoritedAt,
+        })),
+        history,
+      });
+    } catch (error) {
+      console.error("Vendor delivery tracking error:", error);
+      res.status(500).json({ error: "Kunne ikke hente sporingsdata" });
+    }
+  });
+
+  // POST /api/vendor/delivery-notify — Send chat notification to couple
+  app.post("/api/vendor/delivery-notify", async (req: Request, res: Response) => {
+    try {
+      const vendorId = await checkVendorAuth(req, res);
+      if (!vendorId) return;
+
+      const { deliveryId, customMessage } = req.body;
+      if (!deliveryId) return res.status(400).json({ error: "deliveryId er påkrevd" });
+
+      const [delivery] = await db.select().from(deliveries).where(
+        and(eq(deliveries.id, deliveryId), eq(deliveries.vendorId, vendorId))
+      );
+      if (!delivery) return res.status(404).json({ error: "Leveranse ikke funnet" });
+
+      const items = await db.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, deliveryId));
+
+      // Find or create conversation
+      let conversationId: string | null = null;
+      let targetCoupleId = delivery.coupleId;
+
+      if (!targetCoupleId && delivery.coupleEmail) {
+        const [cp] = await db.select().from(coupleProfiles).where(sql`LOWER(email) = LOWER(${delivery.coupleEmail})`);
+        if (cp) targetCoupleId = cp.id;
+      }
+
+      if (targetCoupleId) {
+        const [existConv] = await db.select().from(conversations).where(
+          and(eq(conversations.vendorId, vendorId), eq(conversations.coupleId, targetCoupleId))
+        );
+        if (existConv) {
+          conversationId = existConv.id;
+        } else {
+          const [newConv] = await db.insert(conversations).values({
+            vendorId,
+            coupleId: targetCoupleId,
+            status: 'active',
+            lastMessageAt: new Date(),
+            coupleUnreadCount: 1,
+            vendorUnreadCount: 0,
+          }).returning();
+          conversationId = newConv.id;
+        }
+
+        const chatBody = customMessage ||
+          `📦 Leveransen din er klar!\n\n"${delivery.title}"\n${items.length} ${items.length === 1 ? 'element' : 'elementer'} venter på deg.\n\n🔑 Tilgangskode: ${delivery.accessCode}\n\nÅpne Wedflow → "Hent leveranse" → Skriv inn koden. 💕`;
+
+        await db.insert(messages).values({
+          conversationId: conversationId!,
+          senderType: 'vendor',
+          senderId: vendorId,
+          body: chatBody,
+        });
+
+        await db.execute(sql`UPDATE conversations SET last_message_at = NOW(), couple_unread_count = COALESCE(couple_unread_count, 0) + 1 WHERE id = ${conversationId}`);
+      }
+
+      await db.execute(sql`UPDATE deliveries SET chat_notified = true WHERE id = ${deliveryId}`);
+
+      res.json({
+        success: true,
+        messageSent: !!conversationId,
+        conversationId,
+        accessCode: delivery.accessCode,
+        message: conversationId
+          ? `Melding sendt til ${delivery.coupleName} i chatten`
+          : "Leveransen er merket som varslet, men ingen samtale ble funnet",
+      });
+    } catch (error) {
+      console.error("Vendor delivery notify error:", error);
+      res.status(500).json({ error: "Kunne ikke sende varsel" });
     }
   });
 
