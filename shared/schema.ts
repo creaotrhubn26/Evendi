@@ -1244,6 +1244,57 @@ export type CoordinatorInvitation = typeof coordinatorInvitations.$inferSelect;
 export type InsertCoordinatorInvitation = z.infer<typeof insertCoordinatorInvitationSchema>;
 export type CreateCoordinatorInvitation = z.infer<typeof createCoordinatorInvitationSchema>;
 
+// Wedding Role Invitations - Invite partner, toastmaster, best man etc. with granular access
+export const weddingRoleInvitations = pgTable("wedding_role_invitations", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  importantPersonId: varchar("important_person_id").references(() => coupleImportantPeople.id, { onDelete: "set null" }),
+  email: text("email"),
+  name: text("name").notNull(),
+  role: text("role").notNull().default("partner"), // partner, toastmaster, bestman, maidofhonor, bridesmaid, groomsman, coordinator, other
+  accessToken: text("access_token").notNull().unique(),
+  inviteCode: text("invite_code").notNull().unique(), // 6-char code like WED-XXXXX
+  // Access permissions
+  canViewTimeline: boolean("can_view_timeline").default(true),
+  canCommentTimeline: boolean("can_comment_timeline").default(false),
+  canViewSchedule: boolean("can_view_schedule").default(true),
+  canEditSchedule: boolean("can_edit_schedule").default(false),
+  canViewShotlist: boolean("can_view_shotlist").default(false),
+  canViewBudget: boolean("can_view_budget").default(false),
+  canViewGuestlist: boolean("can_view_guestlist").default(false),
+  canViewImportantPeople: boolean("can_view_important_people").default(false),
+  canEditPlanning: boolean("can_edit_planning").default(false), // Full planning access (partner)
+  // Status
+  status: text("status").notNull().default("pending"), // pending, accepted, revoked, expired
+  joinedAt: timestamp("joined_at"),
+  expiresAt: timestamp("expires_at"),
+  lastAccessedAt: timestamp("last_accessed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const createWeddingRoleInvitationSchema = z.object({
+  name: z.string().min(1, "Navn er påkrevd"),
+  email: z.string().email().optional().or(z.literal("")),
+  role: z.enum(["partner", "toastmaster", "bestman", "maidofhonor", "bridesmaid", "groomsman", "coordinator", "other"]).default("partner"),
+  importantPersonId: z.string().optional(),
+  canViewTimeline: z.boolean().default(true),
+  canCommentTimeline: z.boolean().default(false),
+  canViewSchedule: z.boolean().default(true),
+  canEditSchedule: z.boolean().default(false),
+  canViewShotlist: z.boolean().default(false),
+  canViewBudget: z.boolean().default(false),
+  canViewGuestlist: z.boolean().default(false),
+  canViewImportantPeople: z.boolean().default(false),
+  canEditPlanning: z.boolean().default(false),
+  expiresAt: z.string().optional(),
+});
+
+export type WeddingRoleInvitation = typeof weddingRoleInvitations.$inferSelect;
+export type CreateWeddingRoleInvitation = z.infer<typeof createWeddingRoleInvitationSchema>;
+
 // Guest Invitations - Send invite links to guests with response fields
 export const guestInvitations = pgTable("guest_invitations", {
   id: varchar("id")

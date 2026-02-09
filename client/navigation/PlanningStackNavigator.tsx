@@ -41,6 +41,7 @@ import { MusikkScreen } from "@/screens/MusikkScreen";
 import { VenueScreen } from "@/screens/VenueScreen";
 import { PlanleggerScreen } from "@/screens/PlanleggerScreen";
 import { FotoVideografScreen } from "@/screens/FotoVideografScreen";
+import JoinWeddingScreen from "@/screens/JoinWeddingScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -89,6 +90,7 @@ export type PlanningStackParamList = {
   Venue: undefined;
   Planlegger: undefined;
   FotoVideograf: undefined;
+  JoinWedding: undefined;
   VendorDetail: {
     vendorId: string;
     vendorName: string;
@@ -310,6 +312,11 @@ export default function PlanningStackNavigator() {
         name="VendorDetail"
         component={VendorDetailScreen}
         options={({ route }) => ({ title: route.params.vendorName })}
+      />
+      <Stack.Screen
+        name="JoinWedding"
+        component={JoinWeddingScreen}
+        options={{ title: "Bli med i bryllup" }}
       />
     </Stack.Navigator>
   );

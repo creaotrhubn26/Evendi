@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 import { registerSubscriptionRoutes } from "./subscription-routes";
 import { registerCreatorhubRoutes } from "./creatorhub-routes";
 import { TIMELINE_TEMPLATES, DEFAULT_TIMELINE, TimelineTemplate, resolveTraditionKey } from "./timeline-templates";
-import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetItems, coupleBudgetSettings, createBudgetItemSchema, coupleDressAppointments, coupleDressFavorites, coupleDressTimeline, createDressAppointmentSchema, createDressFavoriteSchema, coupleImportantPeople, createImportantPersonSchema, couplePhotoShots, createPhotoShotSchema, coupleHairMakeupAppointments, coupleHairMakeupLooks, coupleHairMakeupTimeline, coupleTransportBookings, coupleTransportTimeline, coupleFlowerAppointments, coupleFlowerSelections, coupleFlowerTimeline, coupleCateringTastings, coupleCateringMenu, coupleCateringDietaryNeeds, coupleCateringTimeline, coupleCakeTastings, coupleCakeDesigns, coupleCakeTimeline, coupleVenueBookings, coupleVenueTimelines, vendorVenueBookings, vendorVenueAvailability, vendorVenueTimelines, creatorhubProjects, couplePhotographerSessions, couplePhotographerShots, couplePhotographerTimeline, coupleVideographerSessions, coupleVideographerDeliverables, coupleVideographerTimeline, coupleMusicPerformances, coupleMusicSetlists, coupleMusicTimeline, couplePlannerMeetings, couplePlannerTasks, couplePlannerTimeline } from "@shared/schema";
+import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetItems, coupleBudgetSettings, createBudgetItemSchema, coupleDressAppointments, coupleDressFavorites, coupleDressTimeline, createDressAppointmentSchema, createDressFavoriteSchema, coupleImportantPeople, createImportantPersonSchema, couplePhotoShots, createPhotoShotSchema, coupleHairMakeupAppointments, coupleHairMakeupLooks, coupleHairMakeupTimeline, coupleTransportBookings, coupleTransportTimeline, coupleFlowerAppointments, coupleFlowerSelections, coupleFlowerTimeline, coupleCateringTastings, coupleCateringMenu, coupleCateringDietaryNeeds, coupleCateringTimeline, coupleCakeTastings, coupleCakeDesigns, coupleCakeTimeline, coupleVenueBookings, coupleVenueTimelines, vendorVenueBookings, vendorVenueAvailability, vendorVenueTimelines, creatorhubProjects, couplePhotographerSessions, couplePhotographerShots, couplePhotographerTimeline, coupleVideographerSessions, coupleVideographerDeliverables, coupleVideographerTimeline, coupleMusicPerformances, coupleMusicSetlists, coupleMusicTimeline, couplePlannerMeetings, couplePlannerTasks, couplePlannerTimeline, weddingRoleInvitations } from "@shared/schema";
 import { eq, and, desc, sql, inArray, or, gte, lte, isNotNull } from "drizzle-orm";
 
 function generateAccessCode(): string {
@@ -12143,6 +12143,480 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Add timeline event error:", error);
       res.status(500).json({ error: "Kunne ikke legge til hendelse" });
+    }
+  });
+
+  // ==========================================
+  // Wedding Role Invitations — Join/Invite System
+  // ==========================================
+
+  // Generate a unique invite code
+  function generateInviteCode(): string {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No I/O/0/1 for clarity
+    let code = "WED-";
+    for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+  }
+
+  // Get all wedding role invitations for the couple
+  app.get("/api/couple/wedding-invites", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const invitations = await db.select()
+        .from(weddingRoleInvitations)
+        .where(eq(weddingRoleInvitations.coupleId, coupleId))
+        .orderBy(desc(weddingRoleInvitations.createdAt));
+
+      res.json(invitations);
+    } catch (error) {
+      console.error("Error fetching wedding invitations:", error);
+      res.status(500).json({ error: "Kunne ikke hente invitasjoner" });
+    }
+  });
+
+  // Create a wedding role invitation (used from SharePartnerScreen or ImportantPeopleScreen)
+  app.post("/api/couple/wedding-invites", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { name, email, role, importantPersonId, canViewTimeline, canCommentTimeline, canViewSchedule, canEditSchedule, canViewShotlist, canViewBudget, canViewGuestlist, canViewImportantPeople, canEditPlanning, expiresAt } = req.body;
+
+      if (!name || name.trim().length === 0) {
+        return res.status(400).json({ error: "Navn er påkrevd" });
+      }
+
+      // Generate unique access token and invite code
+      const accessToken = crypto.randomBytes(32).toString("hex");
+      let inviteCode = generateInviteCode();
+
+      // Ensure invite code is unique
+      let existing = await db.select({ id: weddingRoleInvitations.id }).from(weddingRoleInvitations).where(eq(weddingRoleInvitations.inviteCode, inviteCode));
+      while (existing.length > 0) {
+        inviteCode = generateInviteCode();
+        existing = await db.select({ id: weddingRoleInvitations.id }).from(weddingRoleInvitations).where(eq(weddingRoleInvitations.inviteCode, inviteCode));
+      }
+
+      // Default permissions based on role
+      const isPartner = role === "partner";
+      const isKey = ["toastmaster", "coordinator", "bestman", "maidofhonor"].includes(role);
+
+      const [invitation] = await db.insert(weddingRoleInvitations)
+        .values({
+          coupleId,
+          importantPersonId: importantPersonId || null,
+          name,
+          email: email || null,
+          role: role || "partner",
+          accessToken,
+          inviteCode,
+          canViewTimeline: canViewTimeline ?? true,
+          canCommentTimeline: canCommentTimeline ?? (isPartner || isKey),
+          canViewSchedule: canViewSchedule ?? true,
+          canEditSchedule: canEditSchedule ?? isPartner,
+          canViewShotlist: canViewShotlist ?? (isPartner || isKey),
+          canViewBudget: canViewBudget ?? isPartner,
+          canViewGuestlist: canViewGuestlist ?? isPartner,
+          canViewImportantPeople: canViewImportantPeople ?? isPartner,
+          canEditPlanning: canEditPlanning ?? isPartner,
+          expiresAt: expiresAt ? new Date(expiresAt) : null,
+        })
+        .returning();
+
+      // If linked to an important person, update their email if provided
+      if (importantPersonId && email) {
+        await db.update(coupleImportantPeople)
+          .set({ email, updatedAt: new Date() })
+          .where(and(
+            eq(coupleImportantPeople.id, importantPersonId),
+            eq(coupleImportantPeople.coupleId, coupleId)
+          ));
+      }
+
+      res.status(201).json(invitation);
+    } catch (error) {
+      console.error("Error creating wedding invitation:", error);
+      res.status(500).json({ error: "Kunne ikke opprette invitasjon" });
+    }
+  });
+
+  // Update a wedding role invitation (change permissions)
+  app.patch("/api/couple/wedding-invites/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+      const { name, role, canViewTimeline, canCommentTimeline, canViewSchedule, canEditSchedule, canViewShotlist, canViewBudget, canViewGuestlist, canViewImportantPeople, canEditPlanning, status } = req.body;
+
+      const [updated] = await db.update(weddingRoleInvitations)
+        .set({
+          ...(name !== undefined && { name }),
+          ...(role !== undefined && { role }),
+          ...(canViewTimeline !== undefined && { canViewTimeline }),
+          ...(canCommentTimeline !== undefined && { canCommentTimeline }),
+          ...(canViewSchedule !== undefined && { canViewSchedule }),
+          ...(canEditSchedule !== undefined && { canEditSchedule }),
+          ...(canViewShotlist !== undefined && { canViewShotlist }),
+          ...(canViewBudget !== undefined && { canViewBudget }),
+          ...(canViewGuestlist !== undefined && { canViewGuestlist }),
+          ...(canViewImportantPeople !== undefined && { canViewImportantPeople }),
+          ...(canEditPlanning !== undefined && { canEditPlanning }),
+          ...(status !== undefined && { status }),
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(weddingRoleInvitations.id, id),
+          eq(weddingRoleInvitations.coupleId, coupleId)
+        ))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: "Invitasjon ikke funnet" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating wedding invitation:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere invitasjon" });
+    }
+  });
+
+  // Delete (revoke) a wedding role invitation
+  app.delete("/api/couple/wedding-invites/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const { id } = req.params;
+
+      await db.delete(weddingRoleInvitations)
+        .where(and(
+          eq(weddingRoleInvitations.id, id),
+          eq(weddingRoleInvitations.coupleId, coupleId)
+        ));
+
+      res.json({ message: "Invitasjon slettet" });
+    } catch (error) {
+      console.error("Error deleting wedding invitation:", error);
+      res.status(500).json({ error: "Kunne ikke slette invitasjon" });
+    }
+  });
+
+  // ==========================================
+  // Partner/Join — Public endpoints (no auth required)
+  // ==========================================
+
+  // Validate invite code and get basic info (for JoinWeddingScreen)
+  app.post("/api/partner/validate-code", async (req: Request, res: Response) => {
+    try {
+      const { code } = req.body;
+      if (!code) return res.status(400).json({ error: "Invitasjonskode er påkrevd" });
+
+      const normalizedCode = code.trim().toUpperCase();
+
+      const [invitation] = await db.select({
+        id: weddingRoleInvitations.id,
+        role: weddingRoleInvitations.role,
+        name: weddingRoleInvitations.name,
+        status: weddingRoleInvitations.status,
+        expiresAt: weddingRoleInvitations.expiresAt,
+        coupleId: weddingRoleInvitations.coupleId,
+      })
+        .from(weddingRoleInvitations)
+        .where(eq(weddingRoleInvitations.inviteCode, normalizedCode));
+
+      if (!invitation) {
+        return res.status(404).json({ error: "Ugyldig invitasjonskode" });
+      }
+
+      if (invitation.status === "revoked") {
+        return res.status(403).json({ error: "Denne invitasjonen er trukket tilbake" });
+      }
+
+      if (invitation.status === "accepted") {
+        return res.status(409).json({ error: "Denne invitasjonen er allerede brukt" });
+      }
+
+      if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
+        await db.update(weddingRoleInvitations)
+          .set({ status: "expired" })
+          .where(eq(weddingRoleInvitations.id, invitation.id));
+        return res.status(403).json({ error: "Invitasjonen har utløpt" });
+      }
+
+      // Get couple info
+      const [couple] = await db.select({
+        displayName: coupleProfiles.displayName,
+        weddingDate: coupleProfiles.weddingDate,
+      }).from(coupleProfiles).where(eq(coupleProfiles.id, invitation.coupleId));
+
+      res.json({
+        valid: true,
+        invitation: {
+          id: invitation.id,
+          role: invitation.role,
+          name: invitation.name,
+        },
+        couple: couple || null,
+      });
+    } catch (error) {
+      console.error("Error validating invite code:", error);
+      res.status(500).json({ error: "Kunne ikke validere kode" });
+    }
+  });
+
+  // Join a wedding — redeem invite code
+  app.post("/api/partner/join", async (req: Request, res: Response) => {
+    try {
+      const { code, name, email, role } = req.body;
+      if (!code) return res.status(400).json({ error: "Invitasjonskode er påkrevd" });
+      if (!name) return res.status(400).json({ error: "Navn er påkrevd" });
+      if (!email) return res.status(400).json({ error: "E-post er påkrevd" });
+
+      const normalizedCode = code.trim().toUpperCase();
+
+      const [invitation] = await db.select()
+        .from(weddingRoleInvitations)
+        .where(and(
+          eq(weddingRoleInvitations.inviteCode, normalizedCode),
+          eq(weddingRoleInvitations.status, "pending")
+        ));
+
+      if (!invitation) {
+        return res.status(404).json({ error: "Ugyldig eller allerede brukt invitasjonskode" });
+      }
+
+      // Check expiry
+      if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
+        await db.update(weddingRoleInvitations)
+          .set({ status: "expired" })
+          .where(eq(weddingRoleInvitations.id, invitation.id));
+        return res.status(403).json({ error: "Invitasjonen har utløpt" });
+      }
+
+      // Mark invitation as accepted
+      const [updated] = await db.update(weddingRoleInvitations)
+        .set({
+          status: "accepted",
+          email,
+          name,
+          role: role || invitation.role,
+          joinedAt: new Date(),
+          lastAccessedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(weddingRoleInvitations.id, invitation.id))
+        .returning();
+
+      // If linked to an important person, update their info
+      if (invitation.importantPersonId) {
+        await db.update(coupleImportantPeople)
+          .set({
+            name,
+            email,
+            updatedAt: new Date(),
+          })
+          .where(eq(coupleImportantPeople.id, invitation.importantPersonId));
+      }
+
+      // Return the access token for future access
+      res.json({
+        success: true,
+        accessToken: updated.accessToken,
+        invitation: {
+          id: updated.id,
+          role: updated.role,
+          name: updated.name,
+          canViewTimeline: updated.canViewTimeline,
+          canCommentTimeline: updated.canCommentTimeline,
+          canViewSchedule: updated.canViewSchedule,
+          canEditSchedule: updated.canEditSchedule,
+          canViewShotlist: updated.canViewShotlist,
+          canViewBudget: updated.canViewBudget,
+          canViewGuestlist: updated.canViewGuestlist,
+          canViewImportantPeople: updated.canViewImportantPeople,
+          canEditPlanning: updated.canEditPlanning,
+        },
+      });
+    } catch (error) {
+      console.error("Error joining wedding:", error);
+      res.status(500).json({ error: "Kunne ikke delta i bryllupet" });
+    }
+  });
+
+  // Access wedding data by token (for invited persons)
+  app.get("/api/partner/access/:token", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+
+      const [invitation] = await db.select()
+        .from(weddingRoleInvitations)
+        .where(and(
+          eq(weddingRoleInvitations.accessToken, token),
+          eq(weddingRoleInvitations.status, "accepted")
+        ));
+
+      if (!invitation) {
+        return res.status(404).json({ error: "Ugyldig eller utløpt tilgang" });
+      }
+
+      // Check expiry
+      if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
+        await db.update(weddingRoleInvitations)
+          .set({ status: "expired" })
+          .where(eq(weddingRoleInvitations.id, invitation.id));
+        return res.status(403).json({ error: "Tilgangen har utløpt" });
+      }
+
+      // Update last accessed
+      await db.update(weddingRoleInvitations)
+        .set({ lastAccessedAt: new Date() })
+        .where(eq(weddingRoleInvitations.id, invitation.id));
+
+      // Get couple info
+      const [couple] = await db.select({
+        displayName: coupleProfiles.displayName,
+        weddingDate: coupleProfiles.weddingDate,
+      }).from(coupleProfiles).where(eq(coupleProfiles.id, invitation.coupleId));
+
+      // Build response based on permissions
+      const responseData: any = {
+        invitation: {
+          id: invitation.id,
+          name: invitation.name,
+          role: invitation.role,
+          canViewTimeline: invitation.canViewTimeline,
+          canCommentTimeline: invitation.canCommentTimeline,
+          canViewSchedule: invitation.canViewSchedule,
+          canEditSchedule: invitation.canEditSchedule,
+          canViewShotlist: invitation.canViewShotlist,
+          canViewBudget: invitation.canViewBudget,
+          canViewGuestlist: invitation.canViewGuestlist,
+          canViewImportantPeople: invitation.canViewImportantPeople,
+          canEditPlanning: invitation.canEditPlanning,
+        },
+        couple,
+      };
+
+      // Get timeline if allowed
+      if (invitation.canViewTimeline) {
+        // Find timeline through vendor conversations -> projects -> timelines
+        const timelines = await db.execute(sql`
+          SELECT DISTINCT wt.id, wt.title, wt.wedding_date, wt.status, wt.couple_name, wt.created_at
+          FROM wedding_timelines wt
+          JOIN creatorhub_projects cp ON wt.project_id = cp.id
+          JOIN conversations c ON c.vendor_id = cp.owner_id
+          WHERE c.couple_id = ${invitation.coupleId}
+          ORDER BY wt.created_at DESC LIMIT 1
+        `);
+        if ((timelines.rows || []).length > 0) {
+          const timeline = (timelines.rows as any[])[0];
+          responseData.timeline = timeline;
+
+          // Get timeline events
+          const events = await db.execute(sql`
+            SELECT id, title, event_time, duration_minutes, description, location, status
+            FROM wedding_timeline_events
+            WHERE timeline_id = ${timeline.id}
+            ORDER BY event_time ASC NULLS LAST
+          `);
+          responseData.timelineEvents = events.rows || [];
+
+          // Get timeline comments if can comment
+          if (invitation.canCommentTimeline) {
+            const comments = await db.execute(sql`
+              SELECT id, content, author_name, author_role, is_private, created_at
+              FROM wedding_timeline_comments
+              WHERE timeline_id = ${timeline.id} AND is_private = false
+              ORDER BY created_at DESC LIMIT 50
+            `);
+            responseData.timelineComments = comments.rows || [];
+          }
+        }
+      }
+
+      // Get schedule if allowed
+      if (invitation.canViewSchedule) {
+        const scheduleList = await db.select()
+          .from(scheduleEvents)
+          .where(eq(scheduleEvents.coupleId, invitation.coupleId))
+          .orderBy(scheduleEvents.time);
+        responseData.schedule = scheduleList;
+      }
+
+      // Get shotlist if allowed
+      if (invitation.canViewShotlist) {
+        const shots = await db.execute(sql`
+          SELECT id, title, description, category, completed
+          FROM couple_photo_shots
+          WHERE couple_id = ${invitation.coupleId}
+          ORDER BY sort_order ASC
+        `);
+        responseData.shotlist = shots.rows || [];
+      }
+
+      // Get important people if allowed
+      if (invitation.canViewImportantPeople) {
+        const people = await db.select()
+          .from(coupleImportantPeople)
+          .where(eq(coupleImportantPeople.coupleId, invitation.coupleId))
+          .orderBy(coupleImportantPeople.sortOrder);
+        responseData.importantPeople = people;
+      }
+
+      res.json(responseData);
+    } catch (error) {
+      console.error("Error accessing wedding data:", error);
+      res.status(500).json({ error: "Kunne ikke hente bryllupsdata" });
+    }
+  });
+
+  // ==========================================
+  // Vendor — View important people for a couple
+  // ==========================================
+
+  app.get("/api/vendor/couple/:coupleId/important-people", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { coupleId } = req.params;
+
+      // Verify vendor has a relationship with this couple (active contract or conversation)
+      const contractCheck = await db.execute(sql`
+        SELECT id FROM couple_vendor_contracts
+        WHERE vendor_id = ${vendorId} AND couple_id = ${coupleId} AND status = 'active'
+        LIMIT 1
+      `);
+      const convCheck = await db.execute(sql`
+        SELECT id FROM conversations
+        WHERE vendor_id = ${vendorId} AND couple_id = ${coupleId}
+        LIMIT 1
+      `);
+
+      if (!(contractCheck.rows || []).length && !(convCheck.rows || []).length) {
+        return res.status(403).json({ error: "Ingen tilgang til dette bryllupet" });
+      }
+
+      const people = await db.select({
+        id: coupleImportantPeople.id,
+        name: coupleImportantPeople.name,
+        role: coupleImportantPeople.role,
+        phone: coupleImportantPeople.phone,
+        email: coupleImportantPeople.email,
+        notes: coupleImportantPeople.notes,
+      })
+        .from(coupleImportantPeople)
+        .where(eq(coupleImportantPeople.coupleId, coupleId))
+        .orderBy(coupleImportantPeople.sortOrder);
+
+      res.json(people);
+    } catch (error) {
+      console.error("Error fetching important people for vendor:", error);
+      res.status(500).json({ error: "Kunne ikke hente viktige personer" });
     }
   });
 

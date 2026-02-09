@@ -273,6 +273,87 @@ export async function deleteImportantPerson(id: string): Promise<void> {
   if (!res.ok) throw new Error("Failed to delete important person");
 }
 
+// ===== WEDDING ROLE INVITATIONS API =====
+
+export interface WeddingRoleInvitation {
+  id: string;
+  coupleId: string;
+  importantPersonId?: string | null;
+  email?: string | null;
+  name: string;
+  role: string;
+  accessToken: string;
+  inviteCode: string;
+  canViewTimeline: boolean;
+  canCommentTimeline: boolean;
+  canViewSchedule: boolean;
+  canEditSchedule: boolean;
+  canViewShotlist: boolean;
+  canViewBudget: boolean;
+  canViewGuestlist: boolean;
+  canViewImportantPeople: boolean;
+  canEditPlanning: boolean;
+  status: string;
+  joinedAt?: string | null;
+  expiresAt?: string | null;
+  lastAccessedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function getWeddingInvites(): Promise<WeddingRoleInvitation[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/wedding-invites`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch wedding invites");
+  return res.json();
+}
+
+export async function createWeddingInvite(data: {
+  name: string;
+  email?: string;
+  role?: string;
+  importantPersonId?: string;
+  canViewTimeline?: boolean;
+  canCommentTimeline?: boolean;
+  canViewSchedule?: boolean;
+  canEditSchedule?: boolean;
+  canViewShotlist?: boolean;
+  canViewBudget?: boolean;
+  canViewGuestlist?: boolean;
+  canViewImportantPeople?: boolean;
+  canEditPlanning?: boolean;
+  expiresAt?: string;
+}): Promise<WeddingRoleInvitation> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/wedding-invites`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create wedding invite");
+  return res.json();
+}
+
+export async function updateWeddingInvite(id: string, data: Partial<WeddingRoleInvitation>): Promise<WeddingRoleInvitation> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/wedding-invites/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update wedding invite");
+  return res.json();
+}
+
+export async function deleteWeddingInvite(id: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/wedding-invites/${id}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to delete wedding invite");
+}
+
 // ===== PHOTO SHOTS API =====
 
 export interface PhotoShot {

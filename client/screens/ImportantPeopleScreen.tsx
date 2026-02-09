@@ -7,12 +7,17 @@ import {
   Pressable,
   Alert,
   RefreshControl,
+  Modal,
+  Switch,
+  Share,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Clipboard from "expo-clipboard";
 import Animated, { FadeInRight } from "react-native-reanimated";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -27,6 +32,9 @@ import {
   updateImportantPerson,
   deleteImportantPerson,
   ImportantPerson,
+  getWeddingInvites,
+  createWeddingInvite,
+  WeddingRoleInvitation,
 } from "@/lib/api-couple-data";
 
 const ROLE_SUGGESTIONS = [
@@ -86,6 +94,122 @@ export default function ImportantPeopleScreen() {
   const [newRole, setNewRole] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [editingPerson, setEditingPerson] = useState<ImportantPerson | null>(null);
+
+  // Invite state
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [invitePerson, setInvitePerson] = useState<ImportantPerson | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteResult, setInviteResult] = useState<WeddingRoleInvitation | null>(null);
+  const [invitePerms, setInvitePerms] = useState({
+    canViewTimeline: true,
+    canCommentTimeline: false,
+    canViewSchedule: true,
+    canEditSchedule: false,
+    canViewShotlist: false,
+    canViewBudget: false,
+    canViewGuestlist: false,
+    canViewImportantPeople: false,
+    canEditPlanning: false,
+  });
+
+  // Wedding invites query
+  const { data: invitesData } = useQuery({
+    queryKey: ["wedding-invites"],
+    queryFn: getWeddingInvites,
+  });
+  const existingInvites = invitesData ?? [];
+
+  const inviteMutation = useMutation({
+    mutationFn: createWeddingInvite,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wedding-invites"] }),
+  });
+
+  const roleToInviteRole = (role: string): string => {
+    const map: Record<string, string> = {
+      Toastmaster: "toastmaster",
+      Bestmann: "bestman",
+      Forlover: "maidofhonor",
+      Brudepike: "bridesmaid",
+      Koordinator: "coordinator",
+    };
+    return map[role] || "other";
+  };
+
+  const handleOpenInvite = (person: ImportantPerson) => {
+    // Check if already invited
+    const existing = existingInvites.find(
+      (inv) => inv.importantPersonId === person.id && inv.status !== "revoked"
+    );
+    if (existing) {
+      Alert.alert(
+        "Allerede invitert",
+        `${person.name} har allerede en invitasjon (kode: ${existing.inviteCode}). Vil du kopiere koden?`,
+        [
+          { text: "Avbryt", style: "cancel" },
+          {
+            text: "Kopier kode",
+            onPress: async () => {
+              await Clipboard.setStringAsync(existing.inviteCode);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert("Kopiert!", `Kode: ${existing.inviteCode}`);
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    setInvitePerson(person);
+    setInviteResult(null);
+    // Set default permissions based on role
+    const isKey = ["Toastmaster", "Koordinator", "Bestmann", "Forlover"].includes(person.role);
+    setInvitePerms({
+      canViewTimeline: true,
+      canCommentTimeline: isKey,
+      canViewSchedule: true,
+      canEditSchedule: false,
+      canViewShotlist: isKey,
+      canViewBudget: false,
+      canViewGuestlist: false,
+      canViewImportantPeople: false,
+      canEditPlanning: false,
+    });
+    setShowInviteModal(true);
+  };
+
+  const handleSendInvite = async () => {
+    if (!invitePerson) return;
+    setInviteLoading(true);
+    try {
+      const result = await inviteMutation.mutateAsync({
+        name: invitePerson.name,
+        email: invitePerson.email || "",
+        role: roleToInviteRole(invitePerson.role),
+        importantPersonId: invitePerson.id,
+        ...invitePerms,
+      });
+      setInviteResult(result);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert("Feil", "Kunne ikke opprette invitasjon");
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const handleShareInviteCode = async (code: string, personName: string) => {
+    try {
+      await Share.share({
+        message: `Hei ${personName}! Du er invitert til bryllupet vårt på Wedflow 💍\n\nDin invitasjonskode: ${code}\n\nLast ned Wedflow-appen og skriv inn koden for å få tilgang:\n• App Store: https://apps.apple.com/app/wedflow\n• Google Play: https://play.google.com/store/apps/details?id=com.wedflow`,
+      });
+    } catch {}
+  };
+
+  const handleCopyInviteCode = async (code: string) => {
+    await Clipboard.setStringAsync(code);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert("Kopiert!", `Invitasjonskode ${code} kopiert`);
+  };
 
   const handleAddPerson = async () => {
     if (!newName.trim() || !newRole.trim()) {
@@ -239,6 +363,34 @@ export default function ImportantPeopleScreen() {
                       </ThemedText>
                     ) : null}
                   </View>
+                  <Pressable
+                    onPress={() => handleOpenInvite(person)}
+                    style={[styles.inviteChip, {
+                      backgroundColor: existingInvites.find(
+                        (inv) => inv.importantPersonId === person.id && inv.status !== "revoked"
+                      ) ? "#4caf50" + "20" : Colors.dark.accent + "18",
+                    }]}
+                    hitSlop={8}
+                  >
+                    <Feather
+                      name={existingInvites.find(
+                        (inv) => inv.importantPersonId === person.id && inv.status !== "revoked"
+                      ) ? "check-circle" : "send"}
+                      size={14}
+                      color={existingInvites.find(
+                        (inv) => inv.importantPersonId === person.id && inv.status !== "revoked"
+                      ) ? "#4caf50" : Colors.dark.accent}
+                    />
+                    <ThemedText style={[styles.inviteChipText, {
+                      color: existingInvites.find(
+                        (inv) => inv.importantPersonId === person.id && inv.status !== "revoked"
+                      ) ? "#4caf50" : Colors.dark.accent,
+                    }]}>
+                      {existingInvites.find(
+                        (inv) => inv.importantPersonId === person.id && inv.status !== "revoked"
+                      ) ? "Invitert" : "Inviter"}
+                    </ThemedText>
+                  </Pressable>
                   <Feather name="chevron-right" size={20} color={theme.textMuted} />
                 </View>
               </SwipeableRow>
@@ -362,9 +514,119 @@ export default function ImportantPeopleScreen() {
           </ThemedText>
         </Pressable>
       )}
+
+      {/* Invite Modal */}
+      <Modal visible={showInviteModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>
+                {inviteResult ? "Invitasjon opprettet! 🎉" : `Inviter ${invitePerson?.name || ""}`}
+              </ThemedText>
+              <Pressable onPress={() => setShowInviteModal(false)} hitSlop={12}>
+                <Feather name="x" size={22} color={theme.textSecondary} />
+              </Pressable>
+            </View>
+
+            {inviteResult ? (
+              <View style={styles.inviteResultSection}>
+                <View style={[styles.codeBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
+                  <ThemedText style={styles.codeLabel}>Invitasjonskode</ThemedText>
+                  <ThemedText style={[styles.codeValue, { color: Colors.dark.accent }]}>
+                    {inviteResult.inviteCode}
+                  </ThemedText>
+                </View>
+
+                <View style={styles.inviteActions}>
+                  <Pressable
+                    style={[styles.inviteActionBtn, { backgroundColor: Colors.dark.accent }]}
+                    onPress={() => handleCopyInviteCode(inviteResult.inviteCode)}
+                  >
+                    <Feather name="copy" size={16} color="#fff" />
+                    <ThemedText style={styles.inviteActionText}>Kopier</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.inviteActionBtn, { backgroundColor: "#25D366" }]}
+                    onPress={() => handleShareInviteCode(inviteResult.inviteCode, invitePerson?.name || "")}
+                  >
+                    <Feather name="share-2" size={16} color="#fff" />
+                    <ThemedText style={styles.inviteActionText}>Del</ThemedText>
+                  </Pressable>
+                </View>
+
+                <ThemedText style={[styles.inviteHint, { color: theme.textMuted }]}>
+                  {invitePerson?.name} kan bruke denne koden i "Bli med i bryllup"-skjermen i Wedflow-appen.
+                </ThemedText>
+              </View>
+            ) : (
+              <ScrollView style={styles.permsList} showsVerticalScrollIndicator={false}>
+                <ThemedText style={[styles.permsLabel, { color: theme.textSecondary }]}>
+                  Rolle: {invitePerson?.role}
+                </ThemedText>
+
+                <ThemedText style={[styles.permsSectionTitle, { color: theme.text }]}>
+                  Tilgang
+                </ThemedText>
+
+                <PermToggle label="Se tidslinje" value={invitePerms.canViewTimeline} onToggle={(v) => setInvitePerms({ ...invitePerms, canViewTimeline: v })} theme={theme} />
+                <PermToggle label="Kommentere tidslinje" value={invitePerms.canCommentTimeline} onToggle={(v) => setInvitePerms({ ...invitePerms, canCommentTimeline: v })} theme={theme} />
+                <PermToggle label="Se program" value={invitePerms.canViewSchedule} onToggle={(v) => setInvitePerms({ ...invitePerms, canViewSchedule: v })} theme={theme} />
+                <PermToggle label="Redigere program" value={invitePerms.canEditSchedule} onToggle={(v) => setInvitePerms({ ...invitePerms, canEditSchedule: v })} theme={theme} />
+                <PermToggle label="Se fotoliste" value={invitePerms.canViewShotlist} onToggle={(v) => setInvitePerms({ ...invitePerms, canViewShotlist: v })} theme={theme} />
+                <PermToggle label="Se budsjett" value={invitePerms.canViewBudget} onToggle={(v) => setInvitePerms({ ...invitePerms, canViewBudget: v })} theme={theme} />
+                <PermToggle label="Se viktige personer" value={invitePerms.canViewImportantPeople} onToggle={(v) => setInvitePerms({ ...invitePerms, canViewImportantPeople: v })} theme={theme} />
+                <PermToggle label="Full planleggingstilgang" value={invitePerms.canEditPlanning} onToggle={(v) => setInvitePerms({ ...invitePerms, canEditPlanning: v })} theme={theme} />
+
+                <Pressable
+                  style={[styles.sendInviteBtn, { backgroundColor: Colors.dark.accent, opacity: inviteLoading ? 0.7 : 1 }]}
+                  onPress={handleSendInvite}
+                  disabled={inviteLoading}
+                >
+                  {inviteLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Feather name="send" size={16} color="#fff" style={{ marginRight: 8 }} />
+                      <ThemedText style={styles.sendInviteBtnText}>Opprett invitasjon</ThemedText>
+                    </>
+                  )}
+                </Pressable>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
+
+function PermToggle({ label, value, onToggle, theme }: { label: string; value: boolean; onToggle: (v: boolean) => void; theme: any }) {
+  return (
+    <View style={permStyles.row}>
+      <ThemedText style={[permStyles.label, { color: theme.text }]}>{label}</ThemedText>
+      <Switch
+        value={value}
+        onValueChange={onToggle}
+        trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
+        thumbColor={value ? Colors.dark.accent : "#ccc"}
+      />
+    </View>
+  );
+}
+
+const permStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#eee",
+  },
+  label: {
+    fontSize: 15,
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -494,5 +756,110 @@ const styles = StyleSheet.create({
   addButtonText: {
     marginLeft: Spacing.sm,
     fontWeight: "500",
+  },
+  inviteChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.full,
+    marginRight: 8,
+    gap: 4,
+  },
+  inviteChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: Spacing.xl,
+    maxHeight: "80%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.lg,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    flex: 1,
+  },
+  permsList: {
+    maxHeight: 400,
+  },
+  permsLabel: {
+    fontSize: 14,
+    marginBottom: Spacing.sm,
+  },
+  permsSectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  sendInviteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.xl,
+    marginBottom: Spacing.md,
+  },
+  sendInviteBtnText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  inviteResultSection: {
+    alignItems: "center",
+  },
+  codeBox: {
+    alignItems: "center",
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    width: "100%",
+    marginBottom: Spacing.lg,
+  },
+  codeLabel: {
+    fontSize: 13,
+    marginBottom: 6,
+  },
+  codeValue: {
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: 2,
+  },
+  inviteActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: Spacing.lg,
+  },
+  inviteActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: BorderRadius.md,
+    gap: 6,
+  },
+  inviteActionText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  inviteHint: {
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18,
   },
 });
