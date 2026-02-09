@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
 import {
   StyleSheet,
   View,
@@ -8,6 +8,10 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight, HeaderButton } from "@react-navigation/elements";
@@ -66,6 +70,12 @@ export default function VendorChatScreen({ route, navigation }: Props) {
   const [messageText, setMessageText] = useState("");
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [quickReplyCategory, setQuickReplyCategory] = useState<string>("all");
+  const [customQuickReplies, setCustomQuickReplies] = useState<Array<{ id: string; label: string; message: string; category: string; color: string }>>([]);
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
+  const [newTemplateLabel, setNewTemplateLabel] = useState("");
+  const [newTemplateMessage, setNewTemplateMessage] = useState("");
+  const [newTemplateCategory, setNewTemplateCategory] = useState("custom");
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [showCoupleInfo, setShowCoupleInfo] = useState(false);
@@ -358,14 +368,104 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     return date.toLocaleDateString("nb-NO", { day: "numeric", month: "short" });
   };
 
-  const quickReplies = [
-    "Takk for meldingen! Jeg kommer tilbake til deg snart.",
-    "Selvfølgelig! Det ordner vi.",
-    "La meg sjekke og komme tilbake til deg.",
-    "Det høres bra ut! Kan vi avtale et møte?",
-    "Jeg har sendt deg et tilbud. Sjekk meldingene dine.",
-    "Perfekt! Jeg gleder meg til å jobbe med dere.",
+  // ---- Quick Message Templates (built-in + custom) ----
+  // Context: Vendor replying TO a couple — organized by wedding workflow stage
+  const CUSTOM_TEMPLATES_KEY = "wedflow_vendor_custom_quick_templates";
+
+  const builtInTemplates = [
+    // --- Booking & inquiry replies (most common vendor-to-couple context) ---
+    { id: "inq-1", label: "Takk for henvendelsen", message: "Tusen takk for henvendelsen! Jeg er ledig den datoen og vil gjerne høre mer om planene deres. Kan vi avtale et møte?", category: "inquiry", color: "#2196F3" },
+    { id: "inq-2", label: "Pris & pakker", message: "Så hyggelig! Jeg sender over prisinfo og pakketilbudene mine. Ta gjerne en titt og si ifra om noe passer.", category: "inquiry", color: "#9C27B0" },
+    { id: "inq-3", label: "Ikke ledig", message: "Takk for at dere tenkte på meg! Dessverre er jeg booket den datoen. Lykke til med planleggingen! 💛", category: "inquiry", color: "#FF9800" },
+    { id: "inq-4", label: "Avtale møte", message: "Flott! La oss ta et uforpliktende møte. Passer det for dere denne uken? Jeg er fleksibel på tidspunkt.", category: "inquiry", color: "#4CAF50" },
+
+    // --- Booking confirmed ---
+    { id: "book-1", label: "Gleder meg!", message: "Perfekt! Jeg gleder meg til å jobbe med dere. Kontrakten er på vei — sjekk e-posten. 🎉", category: "booking", color: "#E91E63" },
+    { id: "book-2", label: "Tilbud sendt", message: "Tilbudet er sendt — sjekk innboksen din. Si ifra om du har noen spørsmål!", category: "booking", color: "#2196F3" },
+    { id: "book-3", label: "Kontrakt signert", message: "✅ Kontrakten er mottatt og alt er i orden! Jeg kommer tilbake med en detaljert tidsplan etter hvert.", category: "booking", color: "#4CAF50" },
+
+    // --- Pre-wedding planning ---
+    { id: "plan-1", label: "Tidsplan klar", message: "📋 Tidsplanen for bryllupsdagen er klar! Sjekk den og gi meg beskjed om noe bør justeres.", category: "planning", color: "#2196F3" },
+    { id: "plan-2", label: "Trenger info", message: "Hei! Jeg trenger noen detaljer fra dere for å planlegge best mulig. Kan dere sende meg adresse og kontaktinfo for lokalet?", category: "planning", color: "#FF9800" },
+    { id: "plan-3", label: "Befaring avtalt", message: "Befaring av lokalet er avtalt — jeg tar kontakt med dem direkte. Dere trenger ikke gjøre noe mer her!", category: "planning", color: "#4CAF50" },
+
+    // --- Wedding day coordination ---
+    { id: "wd-onway", label: "På vei", message: "🚗 Jeg er på vei til lokalet nå! Regner med å være der ca. kl. {tid}.", category: "weddingday", color: "#2196F3" },
+    { id: "wd-arrived", label: "Er fremme", message: "📍 Jeg er på plass og setter opp utstyret. Alt ser bra ut!", category: "weddingday", color: "#4CAF50" },
+    { id: "wd-ready", label: "Alt klart", message: "✅ Alt er klart fra min side! Bare gi signal når vi skal begynne.", category: "weddingday", color: "#4CAF50" },
+    { id: "wd-delay", label: "Litt forsinket", message: "⏰ Beklager — vi er ca. 15 min forsinket. Holder dere oppdatert!", category: "weddingday", color: "#FF9800" },
+
+    // --- Post-wedding / delivery ---
+    { id: "del-1", label: "Levering snart", message: "Bildene/videoen er nesten ferdig! Dere kan forvente leveranse innen {antall} dager. 📸", category: "delivery", color: "#9C27B0" },
+    { id: "del-2", label: "Galleriet er klart", message: "🎉 Galleriet er klart! Dere finner det her: [link]. Håper dere blir fornøyde!", category: "delivery", color: "#E91E63" },
+    { id: "del-3", label: "Sniktitt", message: "Her er en liten sniktitt fra bryllupet deres! 🫶 Resten kommer snart.", category: "delivery", color: "#E91E63" },
   ];
+
+  const allQuickTemplates = [...builtInTemplates, ...customQuickReplies.map((t) => ({ ...t, isCustom: true }))];
+  const filteredQuickTemplates = quickReplyCategory === "all"
+    ? allQuickTemplates
+    : allQuickTemplates.filter((t) => t.category === quickReplyCategory);
+
+  const quickReplyCategories = [
+    { value: "all", label: "Alle", icon: "grid" as const },
+    { value: "inquiry", label: "Henvendelse", icon: "message-circle" as const },
+    { value: "booking", label: "Booking", icon: "check-square" as const },
+    { value: "planning", label: "Planlegging", icon: "calendar" as const },
+    { value: "weddingday", label: "Bryllupsdag", icon: "heart" as const },
+    { value: "delivery", label: "Levering", icon: "package" as const },
+    ...(customQuickReplies.length > 0 ? [{ value: "custom", label: "Mine", icon: "star" as const }] : []),
+  ];
+
+  // Load custom templates from AsyncStorage
+  useEffect(() => {
+    AsyncStorage.getItem(CUSTOM_TEMPLATES_KEY).then((raw) => {
+      if (raw) {
+        try {
+          setCustomQuickReplies(JSON.parse(raw));
+        } catch (e) {
+          console.warn("Failed to parse custom quick templates:", e);
+        }
+      }
+    });
+  }, []);
+
+  const saveCustomTemplate = useCallback(() => {
+    if (!newTemplateLabel.trim() || !newTemplateMessage.trim()) {
+      Alert.alert("Feil", "Navn og melding er påkrevd");
+      return;
+    }
+    const newTemplate = {
+      id: `custom-${Date.now()}`,
+      label: newTemplateLabel.trim(),
+      message: newTemplateMessage.trim(),
+      category: newTemplateCategory,
+      color: "#9C27B0",
+    };
+    const updated = [...customQuickReplies, newTemplate];
+    setCustomQuickReplies(updated);
+    AsyncStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(updated));
+    setNewTemplateLabel("");
+    setNewTemplateMessage("");
+    setNewTemplateCategory("custom");
+    setShowCreateTemplate(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [newTemplateLabel, newTemplateMessage, newTemplateCategory, customQuickReplies]);
+
+  const deleteCustomTemplate = useCallback((templateId: string) => {
+    Alert.alert("Slett mal", "Er du sikker på at du vil slette denne malen?", [
+      { text: "Avbryt", style: "cancel" },
+      {
+        text: "Slett",
+        style: "destructive",
+        onPress: () => {
+          const updated = customQuickReplies.filter((t) => t.id !== templateId);
+          setCustomQuickReplies(updated);
+          AsyncStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(updated));
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        },
+      },
+    ]);
+  }, [customQuickReplies]);
 
   const sendMutation = useMutation({
     mutationFn: async (messageData: { body: string; attachmentUrl?: string; attachmentType?: string }) => {
@@ -663,25 +763,136 @@ export default function VendorChatScreen({ route, navigation }: Props) {
           <View style={[styles.quickRepliesContainer, { backgroundColor: theme.backgroundRoot, borderBottomColor: theme.border }]}>
             <View style={styles.quickRepliesHeader}>
               <ThemedText style={[styles.quickRepliesTitle, { color: theme.textSecondary }]}>
-                Hurtigsvar
+                ⚡ Hurtigmeldinger
               </ThemedText>
-              <Pressable onPress={() => setShowQuickReplies(false)}>
-                <Feather name="x" size={16} color={theme.textMuted} />
-              </Pressable>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Pressable onPress={() => setShowCreateTemplate(true)}>
+                  <Feather name="plus" size={16} color={Colors.dark.accent} />
+                </Pressable>
+                <Pressable onPress={() => setShowQuickReplies(false)}>
+                  <Feather name="x" size={16} color={theme.textMuted} />
+                </Pressable>
+              </View>
             </View>
-            <View style={styles.quickRepliesGrid}>
-              {quickReplies.map((reply, index) => (
+            {/* Category Filters */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+              {quickReplyCategories.map((cat) => (
                 <Pressable
-                  key={index}
-                  onPress={() => handleQuickReply(reply)}
-                  style={[styles.quickReplyChip, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+                  key={cat.value}
+                  onPress={() => { setQuickReplyCategory(cat.value); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                  style={[
+                    styles.categoryChip,
+                    {
+                      backgroundColor: quickReplyCategory === cat.value ? Colors.dark.accent + "20" : theme.backgroundDefault,
+                      borderColor: quickReplyCategory === cat.value ? Colors.dark.accent : theme.border,
+                    },
+                  ]}
                 >
-                  <ThemedText style={styles.quickReplyText}>{reply}</ThemedText>
+                  <Feather name={cat.icon} size={12} color={quickReplyCategory === cat.value ? Colors.dark.accent : theme.textMuted} />
+                  <ThemedText style={[styles.categoryChipText, { color: quickReplyCategory === cat.value ? Colors.dark.accent : theme.textSecondary }]}>
+                    {cat.label}
+                  </ThemedText>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
+            {/* Template Chips */}
+            <ScrollView style={{ maxHeight: 200 }}>
+              <View style={styles.quickRepliesGrid}>
+                {filteredQuickTemplates.map((template) => (
+                  <Pressable
+                    key={template.id}
+                    onPress={() => handleQuickReply(template.message)}
+                    onLongPress={() => {
+                      if ("isCustom" in template && template.isCustom) {
+                        deleteCustomTemplate(template.id);
+                      }
+                    }}
+                    style={[styles.quickReplyChip, { backgroundColor: template.color + "15", borderColor: template.color }]}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <ThemedText style={[styles.quickReplyLabel, { color: template.color }]}>{template.label}</ThemedText>
+                      {"isCustom" in template && template.isCustom && (
+                        <Feather name="star" size={10} color={template.color} />
+                      )}
+                    </View>
+                    <ThemedText style={[styles.quickReplyText, { color: theme.textSecondary }]} numberOfLines={1}>{template.message}</ThemedText>
+                  </Pressable>
+                ))}
+                {filteredQuickTemplates.length === 0 && (
+                  <ThemedText style={{ fontSize: 13, color: theme.textMuted, textAlign: "center", paddingVertical: 8 }}>
+                    Ingen maler i denne kategorien
+                  </ThemedText>
+                )}
+              </View>
+            </ScrollView>
+            {/* Create new template button */}
+            <Pressable
+              onPress={() => setShowCreateTemplate(true)}
+              style={[styles.addTemplateBtn, { borderColor: Colors.dark.accent }]}
+            >
+              <Feather name="plus" size={14} color={Colors.dark.accent} />
+              <ThemedText style={{ fontSize: 12, color: Colors.dark.accent, fontWeight: "600" }}>Ny mal</ThemedText>
+            </Pressable>
           </View>
         )}
+
+        {/* Create Custom Template Modal */}
+        <Modal visible={showCreateTemplate} animationType="slide" transparent>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+                <View style={styles.modalHeader}>
+                  <ThemedText style={styles.modalTitle}>Opprett ny hurtigmelding</ThemedText>
+                  <Pressable onPress={() => setShowCreateTemplate(false)}>
+                    <Feather name="x" size={20} color={theme.textSecondary} />
+                  </Pressable>
+                </View>
+                <TextInput
+                  style={[styles.modalInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                  placeholder="Navn / Label (f.eks. Fremme)"
+                  placeholderTextColor={theme.textMuted}
+                  value={newTemplateLabel}
+                  onChangeText={setNewTemplateLabel}
+                  maxLength={40}
+                />
+                <TextInput
+                  style={[styles.modalInput, styles.modalTextArea, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+                  placeholder="Melding (f.eks. 🏛️ Vi er fremme og klare!)"
+                  placeholderTextColor={theme.textMuted}
+                  value={newTemplateMessage}
+                  onChangeText={setNewTemplateMessage}
+                  multiline
+                  maxLength={200}
+                />
+                <ThemedText style={[styles.charCount, { color: theme.textMuted }]}>{newTemplateMessage.length}/200</ThemedText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                  {["general", "status", "timing", "location", "coordination", "custom"].map((cat) => (
+                    <Pressable
+                      key={cat}
+                      onPress={() => setNewTemplateCategory(cat)}
+                      style={[styles.categoryChip, {
+                        backgroundColor: newTemplateCategory === cat ? Colors.dark.accent + "20" : theme.backgroundRoot,
+                        borderColor: newTemplateCategory === cat ? Colors.dark.accent : theme.border,
+                      }]}
+                    >
+                      <ThemedText style={{ fontSize: 12, color: newTemplateCategory === cat ? Colors.dark.accent : theme.textSecondary }}>
+                        {cat === "general" ? "Svar" : cat === "status" ? "Status" : cat === "timing" ? "Tid" : cat === "location" ? "Sted" : cat === "coordination" ? "Team" : "Egen"}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+                <Pressable
+                  onPress={saveCustomTemplate}
+                  style={[styles.saveTemplateBtn, { backgroundColor: Colors.dark.accent, opacity: (!newTemplateLabel.trim() || !newTemplateMessage.trim()) ? 0.5 : 1 }]}
+                  disabled={!newTemplateLabel.trim() || !newTemplateMessage.trim()}
+                >
+                  <Feather name="save" size={16} color="#1A1A1A" />
+                  <ThemedText style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A" }}>Lagre</ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
 
         {isCoupleTyping() && (
           <View style={[styles.typingIndicator, { backgroundColor: theme.backgroundDefault }]}>
@@ -1013,5 +1224,80 @@ const styles = StyleSheet.create({
   imagePickerBtn: {
     padding: Spacing.sm,
     marginRight: Spacing.xs,
+  },
+  categoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  categoryChipText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  quickReplyLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  addTemplateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    marginTop: 8,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderStyle: "dashed",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: Spacing.sm,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  modalInput: {
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontSize: 15,
+    borderWidth: 1,
+  },
+  modalTextArea: {
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  charCount: {
+    fontSize: 11,
+    textAlign: "right",
+    marginTop: -4,
+  },
+  saveTemplateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    marginTop: 8,
   },
 });
