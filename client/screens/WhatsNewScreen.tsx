@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { View, ScrollView, StyleSheet, RefreshControl, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -7,6 +7,7 @@ import type { RouteProp } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
@@ -17,6 +18,8 @@ import type { WhatsNewItem } from "../../shared/schema";
 
 type WhatsNewScreenRouteProp = RouteProp<{ WhatsNew: { category?: "vendor" | "couple" } }, "WhatsNew">;
 
+const WHATS_NEW_CATEGORY_KEY = "wedflow_whats_new_category";
+
 export default function WhatsNewScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -24,7 +27,36 @@ export default function WhatsNewScreen() {
   const route = useRoute<WhatsNewScreenRouteProp>();
   
   // Default to vendor if not specified
-  const category = route.params?.category || "vendor";
+  const [category, setCategory] = useState<"vendor" | "couple">(
+    route.params?.category || "vendor"
+  );
+
+  useEffect(() => {
+    const loadCategory = async () => {
+      if (route.params?.category) return;
+      try {
+        const stored = await AsyncStorage.getItem(WHATS_NEW_CATEGORY_KEY);
+        if (stored === "vendor" || stored === "couple") {
+          setCategory(stored);
+        }
+      } catch (error) {
+        console.warn("Failed to load whats new category", error);
+      }
+    };
+
+    loadCategory();
+  }, [route.params?.category]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(WHATS_NEW_CATEGORY_KEY, category).catch((error) => {
+      console.warn("Failed to store whats new category", error);
+    });
+  }, [category]);
+
+  const categoryLabel = useMemo(
+    () => (category === "vendor" ? "Leverandører" : "Brudepar"),
+    [category]
+  );
 
   const {
     data: items = [],
@@ -40,11 +72,42 @@ export default function WhatsNewScreen() {
     },
   });
 
+  const isFeatherIcon = useCallback(
+    (icon: string): icon is keyof typeof Feather.glyphMap =>
+      Object.prototype.hasOwnProperty.call(Feather.glyphMap, icon),
+    []
+  );
+
+  const resolveIcon = useCallback(
+    (icon: string): keyof typeof Feather.glyphMap => (isFeatherIcon(icon) ? icon : "star"),
+    [isFeatherIcon]
+  );
+
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [items]);
+
+  const newestId = useMemo(() => {
+    if (sortedItems.length === 0) return null;
+    return sortedItems[0].id;
+  }, [sortedItems]);
+
+  const handleCategoryPress = (next: "vendor" | "couple") => {
+    if (next === category) return;
+    setCategory(next);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView
         contentContainerStyle={{
-          paddingTop: Spacing.lg,
+          paddingTop: headerHeight + Spacing.lg,
           paddingBottom: insets.bottom + Spacing.xl,
           paddingHorizontal: Spacing.lg,
           gap: Spacing.md,
@@ -60,22 +123,52 @@ export default function WhatsNewScreen() {
         <View>
           <ThemedText style={styles.title}>Hva er nytt</ThemedText>
           <ThemedText style={[styles.subtitle, { color: theme.textMuted }]}>
-            Se de siste oppdateringene og nye funksjoner
+            Siste oppdateringer for {categoryLabel.toLowerCase()}
           </ThemedText>
+          <View style={styles.categoryToggle}>
+            {([
+              { key: "vendor", label: "Leverandør" },
+              { key: "couple", label: "Brudepar" },
+            ] as const).map((option) => {
+              const isActive = option.key === category;
+              return (
+                <Pressable
+                  key={option.key}
+                  onPress={() => handleCategoryPress(option.key)}
+                  style={[
+                    styles.categoryChip,
+                    {
+                      borderColor: theme.border,
+                      backgroundColor: isActive ? theme.accent : theme.backgroundSecondary,
+                    },
+                  ]}
+                >
+                  <ThemedText
+                    style={[
+                      styles.categoryChipText,
+                      { color: isActive ? "#FFFFFF" : theme.text },
+                    ]}
+                  >
+                    {option.label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
-        {items.length === 0 && !isLoading ? (
+        {sortedItems.length === 0 && !isLoading ? (
           <View style={[styles.emptyState, { backgroundColor: theme.backgroundSecondary }]}>
             <Feather name="inbox" size={48} color={theme.accent} />
             <ThemedText style={[styles.emptyTitle, { marginTop: Spacing.md }]}>
-              Ingen nyheter ennå
+              Ingen nyheter for {categoryLabel.toLowerCase()}
             </ThemedText>
             <ThemedText style={[styles.emptyText, { color: theme.textMuted, marginTop: Spacing.sm }]}>
               Vi jobber konstant med å forbedre Wedflow. Kom tilbake snart for nyheter!
             </ThemedText>
           </View>
         ) : (
-          items.map((item, index) => (
+          sortedItems.map((item) => (
             <View key={item.id}>
               <View
                 style={[
@@ -94,7 +187,7 @@ export default function WhatsNewScreen() {
                     },
                   ]}
                 >
-                  <Feather name={item.icon as any} size={24} color={theme.accent} />
+                  <Feather name={resolveIcon(item.icon)} size={24} color={theme.accent} />
                 </View>
 
                 <View style={styles.itemContent}>
@@ -124,7 +217,7 @@ export default function WhatsNewScreen() {
                         v{item.minAppVersion}+
                       </ThemedText>
                     </View>
-                    {index === 0 && (
+                    {newestId === item.id && (
                       <View
                         style={[
                           styles.newBadge,
@@ -166,6 +259,21 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     marginTop: Spacing.xs,
+  },
+  categoryToggle: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  categoryChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
   emptyState: {
     borderRadius: BorderRadius.lg,

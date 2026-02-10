@@ -5,7 +5,6 @@ import {
   ScrollView,
   Pressable,
   RefreshControl,
-  Alert,
   TextInput,
   Modal,
   TouchableOpacity,
@@ -33,6 +32,8 @@ import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
 import { getApiUrl } from '@/lib/query-client';
 import { getSpeeches } from '@/lib/storage';
 import { Speech } from '@/lib/types';
+import { showToast } from '@/lib/toast';
+import { showConfirm, showOptions } from '@/lib/dialogs';
 import {
   getVenueBookings,
   getVenueTimeline,
@@ -308,16 +309,16 @@ export function VenueScreen() {
 
   const saveBooking = async () => {
     if (!venueName.trim() || !date.trim()) {
-      Alert.alert('Feil', 'Vennligst fyll inn lokalnavn og dato');
+      showToast('Vennligst fyll inn lokalnavn og dato');
       return;
     }
     const datePattern = /^\d{2}\.\d{2}\.\d{4}$/;
     if (!datePattern.test(date.trim())) {
-      Alert.alert('Feil', 'Bruk datoformat DD.MM.YYYY');
+      showToast('Bruk datoformat DD.MM.YYYY');
       return;
     }
     if (capacity && isNaN(Number(capacity))) {
-      Alert.alert('Feil', 'Kapasitet må være et tall');
+      showToast('Kapasitet må være et tall');
       return;
     }
 
@@ -363,20 +364,19 @@ export function VenueScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
-  const deleteBooking = (id: string) => {
-    Alert.alert('Slett lokale', 'Er du sikker på at du vil slette denne lokalereservasjonen?', [
-      { text: 'Avbryt', style: 'cancel' },
-      {
-        text: 'Slett',
-        style: 'destructive',
-        onPress: () => {
-          const next = bookings.filter(b => b.id !== id);
-          setBookings(next);
-          persistAndCache('bookings', next);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        },
-      },
-    ]);
+  const deleteBooking = async (id: string) => {
+    const confirmed = await showConfirm({
+      title: 'Slett lokale',
+      message: 'Er du sikker på at du vil slette denne lokalereservasjonen?',
+      confirmLabel: 'Slett',
+      cancelLabel: 'Avbryt',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const next = bookings.filter(b => b.id !== id);
+    setBookings(next);
+    persistAndCache('bookings', next);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const duplicateBooking = async (booking: VenueBooking) => {
@@ -393,7 +393,7 @@ export function VenueScreen() {
       persistAndCache('bookings', next);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert('Feil', 'Kunne ikke duplisere lokale');
+      showToast('Kunne ikke duplisere lokale');
     }
   };
 
@@ -520,12 +520,16 @@ export function VenueScreen() {
                 onPress={() => openBookingModal(booking)}
                 onLongPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert('Alternativer', booking.venueName, [
-                    { text: 'Avbryt', style: 'cancel' },
-                    { text: 'Rediger', onPress: () => openBookingModal(booking) },
-                    { text: 'Dupliser', onPress: () => duplicateBooking(booking) },
-                    { text: 'Slett', style: 'destructive', onPress: () => deleteBooking(booking.id) },
-                  ]);
+                  showOptions({
+                    title: 'Alternativer',
+                    message: booking.venueName,
+                    cancelLabel: 'Avbryt',
+                    options: [
+                      { label: 'Rediger', onPress: () => openBookingModal(booking) },
+                      { label: 'Dupliser', onPress: () => duplicateBooking(booking) },
+                      { label: 'Slett', destructive: true, onPress: () => deleteBooking(booking.id) },
+                    ],
+                  });
                 }}
                 style={[styles.bookingCard, { backgroundColor: theme.backgroundDefault }]}
               >

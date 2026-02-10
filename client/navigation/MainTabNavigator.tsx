@@ -22,22 +22,23 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export default function MainTabNavigator() {
   const { theme, isDark } = useTheme();
+  const palette = isDark ? Colors.dark : Colors.light;
 
   return (
     <Tab.Navigator
       initialRouteName="PlanningTab"
       screenOptions={{
-        tabBarActiveTintColor: theme.accent,
-        tabBarInactiveTintColor: theme.tabIconDefault,
+        tabBarActiveTintColor: theme.accent ?? palette.accent,
+        tabBarInactiveTintColor: theme.tabIconDefault ?? palette.tabIconDefault,
         tabBarStyle: {
           position: "absolute",
           backgroundColor: Platform.select({
             ios: "transparent",
-            android: theme.backgroundRoot,
-            web: theme.backgroundRoot,
+            android: theme.backgroundRoot ?? palette.backgroundRoot,
+            web: theme.backgroundRoot ?? palette.backgroundRoot,
           }),
           borderTopWidth: 0,
-          borderTopColor: theme.border,
+          borderTopColor: theme.border ?? palette.border,
           elevation: 0,
         },
         tabBarBackground: () =>

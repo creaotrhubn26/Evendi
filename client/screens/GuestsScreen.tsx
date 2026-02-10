@@ -5,7 +5,6 @@ import {
   View,
   TextInput,
   Pressable,
-  Alert,
   Share,
   Modal,
   Linking,
@@ -22,14 +21,16 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
 import * as Clipboard from "expo-clipboard";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
+import { useToast } from "@/components/ToastProvider";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { GuestsStackParamList } from "@/navigation/GuestsStackNavigator";
-import { getCoupleSession } from "@/lib/storage";
+import { getCoupleSession, getAppLanguage, type AppLanguage } from "@/lib/storage";
 import { getGuests, createGuest, updateGuest, deleteGuest } from "@/lib/api-guests";
 import { GUEST_CATEGORIES } from "@/lib/types";
 import { searchContacts, requestContactsPermission, ContactResult } from "@/lib/contacts";
@@ -38,6 +39,10 @@ import type { GuestInvitation, WeddingGuest } from "@shared/schema";
 
 type NavigationProp = NativeStackNavigationProp<GuestsStackParamList>;
 
+const GUESTS_RSVP_FILTER_KEY = "wedflow_guests_rsvp_filter";
+const GUESTS_QUICK_FILTER_KEY = "wedflow_guests_quick_filter";
+const GUESTS_SEARCH_QUERY_KEY = "wedflow_guests_search_query";
+
 // Use theme tokens for status colors instead of hardcoded values
 const getStatusColor = (status: string, isDark: boolean): string => {
   if (status === "confirmed") return "#4CAF50";
@@ -45,10 +50,13 @@ const getStatusColor = (status: string, isDark: boolean): string => {
   return isDark ? Colors.dark.accent : Colors.light.accent;
 };
 
-const STATUS_LABELS: { [key: string]: string } = {
-  confirmed: "Bekreftet",
-  pending: "Venter",
-  declined: "Avslått",
+const GUEST_CATEGORY_LABELS_EN: Record<string, string> = {
+  bride_family: "Bride's family",
+  groom_family: "Groom's family",
+  friends: "Friends",
+  colleagues: "Colleagues",
+  reserved: "Reserved",
+  other: "Other",
 };
 
 // Platform-safe URL builders for SMS and Email
@@ -72,6 +80,10 @@ export default function GuestsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
+  const { showToast } = useToast();
+
+  const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
+  const t = useCallback((nb: string, en: string) => (appLanguage === "en" ? en : nb), [appLanguage]);
 
   const [guests, setGuests] = useState<WeddingGuest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,6 +104,8 @@ export default function GuestsScreen() {
   const [contactSearchDebounceTimer, setContactSearchDebounceTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [contactsPermissionGranted, setContactsPermissionGranted] = useState(false);
   const [quickFilter, setQuickFilter] = useState<"all" | "confirmed" | "pending" | "dietary" | "plusOne" | "noContact">("all");
+  const [statusMenuGuest, setStatusMenuGuest] = useState<WeddingGuest | null>(null);
+  const [deleteGuestConfirm, setDeleteGuestConfirm] = useState<WeddingGuest | null>(null);
   
   const [formName, setFormName] = useState("");
   const [formCategory, setFormCategory] = useState<string>("other");
@@ -102,6 +116,14 @@ export default function GuestsScreen() {
   const [formPlusOne, setFormPlusOne] = useState(false);
   const [formPlusOneName, setFormPlusOneName] = useState("");
   const [formNotes, setFormNotes] = useState("");
+
+  useEffect(() => {
+    async function loadLanguage() {
+      const language = await getAppLanguage();
+      setAppLanguage(language);
+    }
+    loadLanguage();
+  }, []);
 
   const resetForm = () => {
     setFormName("");
@@ -123,11 +145,11 @@ export default function GuestsScreen() {
       setGuests(data);
     } catch (err) {
       console.warn("Kunne ikke hente gjester", err);
-      Alert.alert("Feil", "Kunne ikke laste gjester fra server");
+      showToast(t("Kunne ikke laste gjester fra server", "Could not load guests from server"));
     } finally {
       setLoading(false);
     }
-  }, [sessionToken]);
+  }, [sessionToken, showToast, t]);
 
   useEffect(() => {
     const initSession = async () => {
@@ -163,6 +185,52 @@ export default function GuestsScreen() {
   useEffect(() => {
     refreshInvitations();
   }, [refreshInvitations]);
+
+  useEffect(() => {
+    const loadFilters = async () => {
+      try {
+        const [savedRsvp, savedQuick, savedSearch] = await Promise.all([
+          AsyncStorage.getItem(GUESTS_RSVP_FILTER_KEY),
+          AsyncStorage.getItem(GUESTS_QUICK_FILTER_KEY),
+          AsyncStorage.getItem(GUESTS_SEARCH_QUERY_KEY),
+        ]);
+
+        if (savedRsvp === "all" || savedRsvp === "hasInvite" || savedRsvp === "responded" || savedRsvp === "declined") {
+          setRsvpFilter(savedRsvp);
+        }
+
+        if (savedQuick === "all" || savedQuick === "confirmed" || savedQuick === "pending" || savedQuick === "dietary" || savedQuick === "plusOne" || savedQuick === "noContact") {
+          setQuickFilter(savedQuick);
+        }
+
+        if (savedSearch) {
+          setSearchQuery(savedSearch);
+        }
+      } catch (error) {
+        console.warn("Failed to load guest filters", error);
+      }
+    };
+
+    loadFilters();
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(GUESTS_RSVP_FILTER_KEY, rsvpFilter).catch((error) => {
+      console.warn("Failed to store RSVP filter", error);
+    });
+  }, [rsvpFilter]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(GUESTS_QUICK_FILTER_KEY, quickFilter).catch((error) => {
+      console.warn("Failed to store quick filter", error);
+    });
+  }, [quickFilter]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(GUESTS_SEARCH_QUERY_KEY, searchQuery).catch((error) => {
+      console.warn("Failed to store search query", error);
+    });
+  }, [searchQuery]);
 
   const handleSearchChange = async (query: string) => {
     setSearchQuery(query);
@@ -205,11 +273,11 @@ export default function GuestsScreen() {
 
   const handleSendInvitation = async () => {
     if (!formName.trim()) {
-      Alert.alert("Feil", "Legg inn et navn før du sender invitasjon");
+      showToast(t("Legg inn et navn før du sender invitasjon", "Add a name before sending an invitation"));
       return;
     }
     if (!sessionToken) {
-      Alert.alert("Ikke innlogget", "Logg inn som par for å sende invitasjoner.");
+      showToast(t("Logg inn som par for å sende invitasjoner.", "Log in as a couple to send invitations."));
       return;
     }
 
@@ -227,13 +295,16 @@ export default function GuestsScreen() {
       await refreshInvitations();
 
       await Share.share({
-        message: `Invitasjon til ${formName.trim()}: ${invitation.inviteUrl}`,
+        message: t(
+          `Invitasjon til ${formName.trim()}: ${invitation.inviteUrl}`,
+          `Invitation for ${formName.trim()}: ${invitation.inviteUrl}`
+        ),
       });
 
-      Alert.alert("Sendt", "Lenken er klar til deling. Du kan dele den senere også.");
+      showToast(t("Lenken er klar til deling. Du kan dele den senere også.", "The link is ready to share. You can share it later as well."));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Kunne ikke sende invitasjon";
-      Alert.alert("Feil", message);
+      const message = error instanceof Error ? error.message : t("Kunne ikke sende invitasjon", "Could not send invitation");
+      showToast(message);
     } finally {
       setSendingInvite(false);
     }
@@ -242,23 +313,43 @@ export default function GuestsScreen() {
   const handleShareExisting = async (invite: GuestInvitation & { inviteUrl: string }) => {
     try {
       await Share.share({
-        message: `Invitasjon til ${invite.name}: ${invite.inviteUrl}`,
+        message: t(
+          `Invitasjon til ${invite.name}: ${invite.inviteUrl}`,
+          `Invitation for ${invite.name}: ${invite.inviteUrl}`
+        ),
       });
     } catch (error) {
       console.warn("Share error", error);
     }
   };
 
+  const openInviteModal = useCallback((invite: GuestInvitation & { inviteUrl: string }) => {
+    setSelectedInvite(invite);
+    setInviteModalVisible(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
   const invitationStatusLabel = (status?: string) => {
     switch (status) {
       case "responded":
-        return "Svar mottatt";
+        return t("Svar mottatt", "Response received");
       case "declined":
-        return "Kan ikke komme";
+        return t("Kan ikke komme", "Cannot attend");
       case "sent":
-        return "Sendt";
+        return t("Sendt", "Sent");
       default:
-        return "Venter";
+        return t("Venter", "Pending");
+    }
+  };
+
+  const getStatusLabel = (status: WeddingGuest["status"]) => {
+    switch (status) {
+      case "confirmed":
+        return t("Bekreftet", "Confirmed");
+      case "declined":
+        return t("Avslått", "Declined");
+      default:
+        return t("Venter", "Pending");
     }
   };
 
@@ -305,12 +396,12 @@ export default function GuestsScreen() {
 
   const handleAddGuest = async () => {
     if (!formName.trim()) {
-      Alert.alert("Feil", "Vennligst skriv inn et navn");
+      showToast(t("Vennligst skriv inn et navn", "Please enter a name"));
       return;
     }
 
     if (!sessionToken) {
-      Alert.alert("Ikke innlogget", "Logg inn som par for å legge til gjester.");
+      showToast(t("Logg inn som par for å legge til gjester.", "Log in as a couple to add guests."));
       return;
     }
 
@@ -350,8 +441,8 @@ export default function GuestsScreen() {
       setShowAddForm(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Kunne ikke lagre gjest";
-      Alert.alert("Feil", message);
+      const message = error instanceof Error ? error.message : t("Kunne ikke lagre gjest", "Could not save guest");
+      showToast(message);
     } finally {
       setIsSaving(false);
     }
@@ -371,68 +462,64 @@ export default function GuestsScreen() {
     setShowAddForm(true);
   };
 
-  const handleToggleStatus = async (guest: WeddingGuest) => {
-    // Show menu instead of immediately toggling
-    const statusOptions = [
-      { label: "Venter", value: "pending" },
-      { label: "Bekreftet", value: "confirmed" },
-      { label: "Avslått", value: "declined" },
-    ];
-    
-    Alert.alert(
-      "Endre status",
-      `Hva er status for ${guest.name}?`,
-      [
-        ...statusOptions.map((opt) => ({
-          text: opt.label,
-          onPress: async () => {
-            if (opt.value === guest.status) return; // No change
-            if (!sessionToken) return;
-            
-            setIsSaving(true);
-            try {
-              await updateGuest(sessionToken, guest.id, { status: opt.value as WeddingGuest["status"] });
-              await loadData();
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            } catch (error) {
-              Alert.alert("Feil", "Kunne ikke oppdatere status");
-            } finally {
-              setIsSaving(false);
-            }
-          },
-        })),
-        { text: "Avbryt", style: "cancel" },
-      ]
-    );
+  const handleToggleStatus = (guest: WeddingGuest) => {
+    setStatusMenuGuest(guest);
+  };
+
+  const applyStatusChange = async (guest: WeddingGuest, value: WeddingGuest["status"]) => {
+    if (value === guest.status) {
+      setStatusMenuGuest(null);
+      return;
+    }
+    if (!sessionToken) {
+      showToast(t("Logg inn som par for å endre status.", "Log in as a couple to change status."));
+      setStatusMenuGuest(null);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await updateGuest(sessionToken, guest.id, { status: value });
+      await loadData();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      showToast(t("Kunne ikke oppdatere status", "Could not update status"));
+    } finally {
+      setIsSaving(false);
+      setStatusMenuGuest(null);
+    }
   };
 
   const handleDeleteGuest = async (id: string) => {
     if (!sessionToken) return;
 
-    Alert.alert("Slett gjest", "Er du sikker på at du vil slette denne gjesten?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Slett",
-        style: "destructive",
-        onPress: async () => {
-          setIsSaving(true);
-          try {
-            await deleteGuest(sessionToken, id);
-            await loadData();
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          } catch (error) {
-            Alert.alert("Feil", "Kunne ikke slette gjest");
-          } finally {
-            setIsSaving(false);
-          }
-        },
-      },
-    ]);
+    const guest = guests.find((g) => g.id === id) || null;
+    setDeleteGuestConfirm(guest);
+  };
+
+  const confirmDeleteGuest = async () => {
+    if (!sessionToken || !deleteGuestConfirm) {
+      setDeleteGuestConfirm(null);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await deleteGuest(sessionToken, deleteGuestConfirm.id);
+      await loadData();
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (error) {
+      showToast(t("Kunne ikke slette gjest", "Could not delete guest"));
+    } finally {
+      setIsSaving(false);
+      setDeleteGuestConfirm(null);
+    }
   };
 
   const getCategoryLabel = (category?: string | null) => {
     const cat = GUEST_CATEGORIES.find((c) => c.value === category);
-    return cat?.label || "";
+    if (!cat) return "";
+    return appLanguage === "en" ? (GUEST_CATEGORY_LABELS_EN[cat.value] || cat.label) : cat.label;
   };
 
   const normalize = (s?: string | null) => (s || "").replace(/\s+/g, "").toLowerCase();
@@ -462,7 +549,7 @@ export default function GuestsScreen() {
     const label = invitationStatusLabel(status);
     return (
       <Pressable
-        onPress={() => handleShareExisting(inv)}
+        onPress={() => openInviteModal(inv)}
         style={[styles.rsvpBadge, { backgroundColor: color + "20" }]}
       >
         <View style={[styles.rsvpDot, { backgroundColor: color }]} />
@@ -545,6 +632,7 @@ export default function GuestsScreen() {
           </View>
           <Pressable
             onPress={() => handleToggleStatus(item)}
+            disabled={isSaving}
             style={[
               styles.statusBadge,
               { backgroundColor: getStatusColor(item.status, false) + "20" },
@@ -559,7 +647,7 @@ export default function GuestsScreen() {
             <ThemedText
               style={[styles.statusText, { color: getStatusColor(item.status, false) }]}
             >
-              {STATUS_LABELS[item.status]}
+              {getStatusLabel(item.status)}
             </ThemedText>
           </Pressable>
         </Pressable>
@@ -595,6 +683,12 @@ export default function GuestsScreen() {
           </ThemedText>
         </View>
       </View>
+
+      {isSaving && (
+        <ThemedText style={[styles.savingText, { color: theme.textMuted }]}>
+          Oppdaterer gjesteliste...
+        </ThemedText>
+      )}
 
       {/* Smart matching CTA - show when there are guests */}
       {guests.length > 0 && (
@@ -795,8 +889,9 @@ export default function GuestsScreen() {
           <ThemedText style={{ color: theme.textSecondary }}>Ingen invitasjoner enda</ThemedText>
         ) : (
           invitations.slice(0, 5).map((inv) => (
-            <View
+            <Pressable
               key={inv.id}
+              onPress={() => openInviteModal(inv)}
               style={[styles.inviteRow, { borderColor: theme.border }]}
             >
               <View style={{ flex: 1 }}>
@@ -814,7 +909,7 @@ export default function GuestsScreen() {
               >
                 <Feather name="share-2" size={16} color={theme.text} />
               </Pressable>
-            </View>
+            </Pressable>
           ))
         )}
       </View>
@@ -1019,12 +1114,13 @@ export default function GuestsScreen() {
                 setShowAddForm(false);
                 resetForm();
               }}
-              style={[styles.cancelButton, { borderColor: theme.border }]}
+              disabled={isSaving}
+              style={[styles.cancelButton, { borderColor: theme.border, opacity: isSaving ? 0.6 : 1 }]}
             >
               <ThemedText style={{ color: theme.textSecondary }}>Avbryt</ThemedText>
             </Pressable>
-            <Button onPress={handleAddGuest} style={styles.saveButton}>
-              {editingGuest ? "Oppdater" : "Legg til"}
+            <Button onPress={handleAddGuest} style={styles.saveButton} disabled={isSaving}>
+              {isSaving ? "Lagrer..." : editingGuest ? "Oppdater" : "Legg til"}
             </Button>
           </View>
         </Animated.View>
@@ -1092,6 +1188,79 @@ export default function GuestsScreen() {
       />
 
       <Modal
+        animationType="fade"
+        transparent
+        visible={!!statusMenuGuest}
+        onRequestClose={() => setStatusMenuGuest(null)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View style={[styles.dialogCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+          >
+            <ThemedText style={[styles.dialogTitle, { color: theme.text }]}> 
+              {t("Endre status", "Change status")}
+            </ThemedText>
+            {statusMenuGuest ? (
+              <ThemedText style={[styles.dialogSubtitle, { color: theme.textSecondary }]}> 
+                {t(`Hva er status for ${statusMenuGuest.name}?`, `What is the status for ${statusMenuGuest.name}?`)}
+              </ThemedText>
+            ) : null}
+            {[
+              { label: t("Venter", "Pending"), value: "pending" as const },
+              { label: t("Bekreftet", "Confirmed"), value: "confirmed" as const },
+              { label: t("Avslått", "Declined"), value: "declined" as const },
+            ].map((option) => (
+              <Pressable
+                key={option.value}
+                onPress={() => statusMenuGuest && applyStatusChange(statusMenuGuest, option.value)}
+                style={[styles.dialogOption, { borderColor: theme.border }]}
+              >
+                <ThemedText style={{ color: theme.text }}>{option.label}</ThemedText>
+              </Pressable>
+            ))}
+            <Pressable
+              onPress={() => setStatusMenuGuest(null)}
+              style={[styles.dialogCancel, { borderColor: theme.border }]}
+            >
+              <ThemedText style={{ color: theme.textSecondary }}>{t("Avbryt", "Cancel")}</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={!!deleteGuestConfirm}
+        onRequestClose={() => setDeleteGuestConfirm(null)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View style={[styles.dialogCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+          >
+            <ThemedText style={[styles.dialogTitle, { color: theme.text }]}> 
+              {t("Slett gjest", "Delete guest")}
+            </ThemedText>
+            <ThemedText style={[styles.dialogSubtitle, { color: theme.textSecondary }]}> 
+              {t("Er du sikker på at du vil slette denne gjesten?", "Are you sure you want to delete this guest?")}
+            </ThemedText>
+            <View style={styles.dialogButtons}>
+              <Pressable
+                onPress={() => setDeleteGuestConfirm(null)}
+                style={[styles.dialogCancelButton, { borderColor: theme.border }]}
+              >
+                <ThemedText style={{ color: theme.textSecondary }}>{t("Avbryt", "Cancel")}</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={confirmDeleteGuest}
+                style={[styles.dialogDeleteButton, { backgroundColor: theme.error }]}
+              >
+                <ThemedText style={{ color: "#FFFFFF" }}>{t("Slett", "Delete")}</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         animationType="slide"
         transparent
         visible={inviteModalVisible}
@@ -1134,7 +1303,7 @@ export default function GuestsScreen() {
                       if (selectedInvite?.inviteUrl) {
                         await Clipboard.setStringAsync(selectedInvite.inviteUrl);
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        Alert.alert("Kopiert", "Lenken er kopiert til utklippstavlen.");
+                        showToast(t("Lenken er kopiert til utklippstavlen.", "Link copied to clipboard."));
                       }
                     }}
                     style={styles.saveButton}
@@ -1163,7 +1332,7 @@ export default function GuestsScreen() {
                         const smsUrl = buildSmsUrl(selectedInvite.phone, selectedInvite.inviteUrl);
                         Linking.openURL(smsUrl);
                       } else {
-                        Alert.alert("Mangler telefon", "Legg til telefonnummer for å sende SMS.");
+                        showToast(t("Legg til telefonnummer for å sende SMS.", "Add a phone number to send SMS."));
                       }
                     }}
                     style={styles.saveButton}
@@ -1175,12 +1344,15 @@ export default function GuestsScreen() {
                   <Button
                     onPress={() => {
                       if (selectedInvite?.email && selectedInvite?.inviteUrl) {
-                        const subject = "Bryllupsinvitasjon";
-                        const body = `Hei ${selectedInvite.name},\n\nHer er din invitasjon: ${selectedInvite.inviteUrl}\n`;
+                        const subject = t("Bryllupsinvitasjon", "Wedding invitation");
+                        const body = t(
+                          `Hei ${selectedInvite.name},\n\nHer er din invitasjon: ${selectedInvite.inviteUrl}\n`,
+                          `Hi ${selectedInvite.name},\n\nHere is your invitation: ${selectedInvite.inviteUrl}\n`
+                        );
                         const mailto = buildMailtoUrl(selectedInvite.email, subject, body);
                         Linking.openURL(mailto);
                       } else {
-                        Alert.alert("Mangler e-post", "Legg til e-postadresse for å sende e-post.");
+                        showToast(t("Legg til e-postadresse for å sende e-post.", "Add an email address to send email."));
                       }
                     }}
                     style={styles.saveButton}
@@ -1230,6 +1402,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: Spacing.md,
     marginBottom: Spacing.lg,
+  },
+  savingText: {
+    fontSize: 12,
+    marginBottom: Spacing.md,
+    textAlign: "center",
   },
   statCard: {
     flex: 1,
@@ -1672,5 +1849,57 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     alignItems: "center",
     marginLeft: Spacing.sm,
+  },
+  dialogOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.lg,
+  },
+  dialogCard: {
+    width: "100%",
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    padding: Spacing.lg,
+  },
+  dialogTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: Spacing.sm,
+  },
+  dialogSubtitle: {
+    fontSize: 14,
+    marginBottom: Spacing.md,
+  },
+  dialogOption: {
+    paddingVertical: Spacing.sm,
+    borderTopWidth: 1,
+  },
+  dialogCancel: {
+    marginTop: Spacing.md,
+    borderTopWidth: 1,
+    paddingTop: Spacing.md,
+    alignItems: "center",
+  },
+  dialogButtons: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  dialogCancelButton: {
+    flex: 1,
+    height: Spacing.buttonHeight,
+    borderRadius: BorderRadius.full,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  dialogDeleteButton: {
+    flex: 1,
+    height: Spacing.buttonHeight,
+    borderRadius: BorderRadius.full,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

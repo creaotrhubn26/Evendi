@@ -5,7 +5,6 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,6 +22,8 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -261,7 +262,7 @@ export default function OfferCreateScreen() {
       navigation.goBack();
     },
     onError: (error: Error) => {
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
@@ -290,19 +291,20 @@ export default function OfferCreateScreen() {
       navigation.goBack();
     },
     onError: (error: Error) => {
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
-  const handleDelete = () => {
-    Alert.alert(
-      "Slett tilbud",
-      "Er du sikker på at du vil slette dette tilbudet?",
-      [
-        { text: "Avbryt", style: "cancel" },
-        { text: "Slett", style: "destructive", onPress: () => deleteMutation.mutate() },
-      ]
-    );
+  const handleDelete = async () => {
+    const confirmed = await showConfirm({
+      title: "Slett tilbud",
+      message: "Er du sikker på at du vil slette dette tilbudet?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    deleteMutation.mutate();
   };
 
   const addProductToOffer = (product: VendorProduct) => {

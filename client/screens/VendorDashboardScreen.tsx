@@ -5,7 +5,6 @@ import {
   Pressable,
   ActivityIndicator,
   FlatList,
-  Alert,
   ScrollView,
   Dimensions,
   RefreshControl,
@@ -28,6 +27,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig, getEnabledTabs, type VendorTab } from "@/lib/vendor-adapter";
+import { showToast } from "@/lib/toast";
+import { showConfirm, showOptions } from "@/lib/dialogs";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -465,11 +466,11 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     },
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Sendt!", "Påminnelse om anmeldelse er sendt til brudeparet.");
+      showToast("Påminnelse om anmeldelse er sendt til brudeparet.");
       refetchContracts();
     },
     onError: (error: any) => {
-      Alert.alert("Feil", error.message || "Kunne ikke sende påminnelse");
+      showToast(error.message || "Kunne ikke sende påminnelse");
     },
   });
 
@@ -656,31 +657,22 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       navigation.replace("VendorLogin");
     };
 
-    // Use window.confirm on web for better compatibility
-    if (typeof window !== "undefined" && window.confirm) {
-      if (window.confirm("Er du sikker på at du vil logge ut?")) {
-        await performLogout();
-      }
-    } else {
-      Alert.alert(
-        "Logg ut",
-        "Er du sikker på at du vil logge ut?",
-        [
-          { text: "Avbryt", style: "cancel" },
-          {
-            text: "Logg ut",
-            style: "destructive",
-            onPress: performLogout,
-          },
-        ]
-      );
+    const confirmed = await showConfirm({
+      title: "Logg ut",
+      message: "Er du sikker på at du vil logge ut?",
+      confirmLabel: "Logg ut",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (confirmed) {
+      await performLogout();
     }
   };
 
   const copyAccessCode = async (code: string) => {
     await Clipboard.setStringAsync(code);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert("Kopiert!", `Tilgangskode ${code} er kopiert.`);
+    showToast(`Tilgangskode ${code} er kopiert.`);
   };
 
   const getTypeIcon = (type: string): keyof typeof Feather.glyphMap => {
@@ -857,15 +849,15 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           }}
           onLongPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            Alert.alert(
-              item.title,
-              "Velg handling",
-              [
-                { text: "Rediger", onPress: () => navigation.navigate("DeliveryCreate", { delivery: item }) },
-                { text: "Dupliser", onPress: duplicateDelivery },
-                { text: "Avbryt", style: "cancel" },
-              ]
-            );
+            showOptions({
+              title: item.title,
+              message: "Velg handling",
+              cancelLabel: "Avbryt",
+              options: [
+                { label: "Rediger", onPress: () => navigation.navigate("DeliveryCreate", { delivery: item }) },
+                { label: "Dupliser", onPress: duplicateDelivery },
+              ],
+            });
           }}
           style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
@@ -1037,15 +1029,15 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           }}
           onLongPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            Alert.alert(
-              item.title,
-              "Velg handling",
-              [
-                { text: "Rediger", onPress: () => navigation.navigate("ProductCreate", { product: item }) },
-                { text: "Dupliser", onPress: duplicateProduct },
-                { text: "Avbryt", style: "cancel" },
-              ]
-            );
+            showOptions({
+              title: item.title,
+              message: "Velg handling",
+              cancelLabel: "Avbryt",
+              options: [
+                { label: "Rediger", onPress: () => navigation.navigate("ProductCreate", { product: item }) },
+                { label: "Dupliser", onPress: duplicateProduct },
+              ],
+            });
           }}
           style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
@@ -1126,15 +1118,15 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           }}
           onLongPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            Alert.alert(
-              item.title,
-              "Velg handling",
-              [
-                { text: "Rediger", onPress: () => navigation.navigate("OfferCreate", { offer: item }) },
-                { text: "Dupliser", onPress: duplicateOffer },
-                { text: "Avbryt", style: "cancel" },
-              ]
-            );
+            showOptions({
+              title: item.title,
+              message: "Velg handling",
+              cancelLabel: "Avbryt",
+              options: [
+                { label: "Rediger", onPress: () => navigation.navigate("OfferCreate", { offer: item }) },
+                { label: "Dupliser", onPress: duplicateOffer },
+              ],
+            });
           }}
           style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
@@ -1212,7 +1204,11 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.navigate("VendorChat", { conversationId: item.id, coupleName: item.couple?.displayName || "Unknown" });
+            navigation.navigate("VendorChat", {
+              conversationId: item.id,
+              coupleName: item.couple?.displayName || "Unknown",
+              chatType: "couple",
+            });
           }}
           style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
@@ -1381,15 +1377,19 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             } else if (days <= 14) {
               message = `${days} dager til prøveperioden utløper. Ikke gå glipp av potensielle kunder!`;
             }
-            
-            Alert.alert(
-              days <= 7 ? "Prøveperioden går snart ut!" : "Prøveperiode aktiv",
-              message,
-              [
-                { text: "OK" },
-                ...(days <= 14 ? [{ text: "Betal nå", onPress: () => navigation.navigate("VendorPayment") }] : [])
-              ]
-            );
+
+            if (days <= 14) {
+              showOptions({
+                title: days <= 7 ? "Prøveperioden går snart ut!" : "Prøveperiode aktiv",
+                message,
+                cancelLabel: "OK",
+                options: [
+                  { label: "Betal nå", onPress: () => navigation.navigate("VendorPayment") },
+                ],
+              });
+            } else {
+              showToast(message);
+            }
           }}
           style={[
             styles.trialBanner, 
@@ -1809,7 +1809,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                       try {
                         await Linking.openURL(vendorProfile.googleReviewUrl!);
                       } catch (e) {
-                        Alert.alert("Feil", "Kunne ikke åpne lenken");
+                        showToast("Kunne ikke åpne lenken");
                       }
                     }}
                   >
@@ -1901,7 +1901,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                         if (canSend) {
                           sendReminderMutation.mutate(contract.id);
                         } else {
-                          Alert.alert("Vent litt", "Du kan kun sende påminnelse én gang per 14 dager.");
+                          showToast("Du kan kun sende påminnelse én gang per 14 dager.");
                         }
                       }}
                       disabled={sendReminderMutation.isPending}

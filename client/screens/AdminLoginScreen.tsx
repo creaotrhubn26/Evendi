@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   View,
@@ -21,15 +21,22 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 interface Props {
   navigation: NativeStackNavigationProp<any>;
-  onLoginSuccess?: () => void;
+  initialAdminKey?: string;
+  onLoginSuccess?: (adminKey: string) => void;
 }
 
-export default function AdminLoginScreen({ navigation, onLoginSuccess }: Props) {
+export default function AdminLoginScreen({ navigation, onLoginSuccess, initialAdminKey }: Props) {
   const { theme } = useTheme();
 
-  const [adminKey, setAdminKey] = useState("");
+  const [adminKey, setAdminKey] = useState(initialAdminKey || "");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (initialAdminKey && adminKey.length === 0) {
+      setAdminKey(initialAdminKey);
+    }
+  }, [initialAdminKey, adminKey]);
 
   const handleLogin = async () => {
     setError("");
@@ -65,7 +72,7 @@ export default function AdminLoginScreen({ navigation, onLoginSuccess }: Props) 
 
       // Store admin key and navigate
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onLoginSuccess?.();
+      onLoginSuccess?.(adminKey);
       navigation.replace("AdminMain", { adminKey });
     } catch (error) {
       setError("Nettverksfeil. Prøv igjen.");

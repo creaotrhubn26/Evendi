@@ -9,7 +9,6 @@ import {
   RefreshControl,
   Modal,
   TextInput,
-  Alert,
   Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,6 +26,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { renderIcon } from "@/lib/custom-icons";
+import { showToast } from "@/lib/toast";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const GRID_GAP = Spacing.sm;
@@ -114,12 +114,12 @@ export default function InspirationScreen() {
     },
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Sendt!", "Din forespørsel er sendt til leverandøren.");
+      showToast("Din forespørsel er sendt til leverandøren.");
       setShowInquiryModal(false);
       resetInquiryForm();
     },
     onError: (error: Error) => {
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
@@ -156,7 +156,7 @@ export default function InspirationScreen() {
   const handleSendInquiry = () => {
     if (!selectedInspiration) return;
     if (!inquiryName.trim() || !inquiryEmail.trim() || !inquiryMessage.trim()) {
-      Alert.alert("Mangler informasjon", "Fyll ut navn, e-post og melding.");
+      showToast("Fyll ut navn, e-post og melding.");
       return;
     }
     inquiryMutation.mutate({

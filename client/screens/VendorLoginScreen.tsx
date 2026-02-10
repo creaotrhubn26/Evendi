@@ -5,7 +5,6 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
   Image,
 } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -21,6 +20,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { signInWithGoogle } from "@/lib/supabase-auth";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { showToast } from "@/lib/toast";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -120,22 +120,22 @@ export default function VendorLoginScreen({ navigation }: Props) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         navigation.replace("VendorDashboard");
       } else if (data.vendor && data.vendor.status === "pending") {
-        Alert.alert("Venter på godkjenning", "Din søknad er under behandling. Du vil få beskjed når den er godkjent.");
+        showToast("Din søknad er under behandling. Du vil få beskjed når den er godkjent.");
       } else if (data.vendor && data.vendor.status === "rejected") {
-        Alert.alert("Søknad avvist", "Din søknad ble dessverre avvist. Ta kontakt for mer informasjon.");
+        showToast("Din søknad ble dessverre avvist. Ta kontakt for mer informasjon.");
       } else {
-        Alert.alert("Feil", "Kunne ikke logge inn. Prøv igjen.");
+        showToast("Kunne ikke logge inn. Prøv igjen.");
       }
     },
     onError: (error: any) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Feil", error.message || "Ugyldig e-post eller passord.");
+      showToast(error.message || "Ugyldig e-post eller passord.");
     },
   });
 
   const handleLogin = () => {
     if (!email || !password) {
-      Alert.alert("Mangler informasjon", "Fyll ut e-post og passord.");
+      showToast("Fyll ut e-post og passord.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -180,22 +180,22 @@ export default function VendorLoginScreen({ navigation }: Props) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             navigation.replace("VendorDashboard");
           } else if (data.status === "pending") {
-            Alert.alert("Søknad mottatt", "Takk for din registrering! Din søknad venter på godkjenning. Du vil motta en e-post når den er behandlet.");
+            showToast("Takk for din registrering! Din søknad venter på godkjenning. Du vil motta en e-post når den er behandlet.");
           }
         } else if (response.status === 403) {
           // Vendor exists but not approved
           if (data.status === "pending") {
-            Alert.alert("Søknad venter", data.message || "Din søknad venter på godkjenning.");
+            showToast(data.message || "Din søknad venter på godkjenning.");
           } else if (data.status === "rejected") {
-            Alert.alert("Søknad avvist", data.message || "Din søknad ble avvist.");
+            showToast(data.message || "Din søknad ble avvist.");
           }
         } else {
-          Alert.alert("Feil", data.error || "Kunne ikke logge inn med Google");
+          showToast(data.error || "Kunne ikke logge inn med Google");
         }
       }
     } catch (error) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Feil", error instanceof Error ? error.message : "Kunne ikke logge inn med Google");
+      showToast(error instanceof Error ? error.message : "Kunne ikke logge inn med Google");
     } finally {
       setIsGoogleLoading(false);
     }

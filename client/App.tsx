@@ -12,6 +12,8 @@ import { queryClient } from "@/lib/query-client";
 import RootStackNavigator from "@/navigation/RootStackNavigator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DesignProvider } from "@/lib/DesignProvider";
+import { ToastProvider } from "@/components/ToastProvider";
+import { DialogProvider } from "@/components/DialogProvider";
 
 export default function App() {
   return (
@@ -19,14 +21,18 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <DesignProvider>
           <SafeAreaProvider>
-            <GestureHandlerRootView style={styles.root}>
-              <KeyboardProvider>
-                <NavigationContainer>
-                  <RootStackNavigator />
-                </NavigationContainer>
-                <StatusBar style="auto" />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
+            <ToastProvider>
+              <DialogProvider>
+                <GestureHandlerRootView style={styles.root}>
+                  <KeyboardProvider>
+                    <NavigationContainer>
+                      <RootStackNavigator />
+                    </NavigationContainer>
+                    <StatusBar style="auto" />
+                  </KeyboardProvider>
+                </GestureHandlerRootView>
+              </DialogProvider>
+            </ToastProvider>
           </SafeAreaProvider>
         </DesignProvider>
       </QueryClientProvider>

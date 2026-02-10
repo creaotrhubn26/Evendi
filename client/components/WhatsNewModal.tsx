@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -26,6 +26,10 @@ interface WhatsNewModalProps {
 
 const STORAGE_KEY_PREFIX = "whats_new_viewed_version_";
 
+const isFeatherIcon = (icon: string): icon is keyof typeof Feather.glyphMap => {
+  return Object.prototype.hasOwnProperty.call(Feather.glyphMap, icon);
+};
+
 export default function WhatsNewModal({
   visible,
   onDismiss,
@@ -34,6 +38,31 @@ export default function WhatsNewModal({
 }: WhatsNewModalProps) {
   const { theme } = useTheme();
   const storageKey = `${STORAGE_KEY_PREFIX}${category}`;
+  const [viewedVersion, setViewedVersion] = useState<string | null>(null);
+  const [checkingStorage, setCheckingStorage] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadViewedVersion = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(storageKey);
+        if (isMounted) {
+          setViewedVersion(stored);
+        }
+      } catch (error) {
+        console.error("Failed to load whats new version", error);
+      } finally {
+        if (isMounted) {
+          setCheckingStorage(false);
+        }
+      }
+    };
+
+    loadViewedVersion();
+    return () => {
+      isMounted = false;
+    };
+  }, [storageKey]);
 
   // Fetch what's new items for specific category
   const { data: allItems = [] } = useQuery<WhatsNewItem[]>({
@@ -66,12 +95,20 @@ export default function WhatsNewModal({
     onDismiss();
   }, [currentAppVersion, onDismiss, storageKey]);
 
-  if (!items.length) {
+  useEffect(() => {
+    if (visible && viewedVersion === currentAppVersion) {
+      onDismiss();
+    }
+  }, [visible, viewedVersion, currentAppVersion, onDismiss]);
+
+  const shouldShow = visible && viewedVersion !== currentAppVersion;
+
+  if (!items.length || checkingStorage || !shouldShow) {
     return null;
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleDismiss}>
+    <Modal visible={shouldShow} transparent animationType="slide" onRequestClose={handleDismiss}>
       <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
         <View style={styles.header}>
           <View>
@@ -110,7 +147,11 @@ export default function WhatsNewModal({
                   },
                 ]}
               >
-                <Feather name={item.icon as any} size={24} color={theme.accent} />
+                <Feather
+                  name={isFeatherIcon(item.icon) ? item.icon : "star"}
+                  size={24}
+                  color={theme.accent}
+                />
               </View>
 
               <View style={styles.itemContent}>

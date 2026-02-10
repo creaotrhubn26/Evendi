@@ -12,7 +12,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { getBudgetItems, getTotalBudget } from "@/lib/storage";
+import { getBudgetItems, getTotalBudget, getAppLanguage, type AppLanguage } from "@/lib/storage";
 import { BudgetItem } from "@/lib/types";
 
 interface ScenarioItem extends BudgetItem {
@@ -23,7 +23,7 @@ interface ScenarioItem extends BudgetItem {
 }
 
 // Use category as key for stable mapping (item.name can vary)
-const ALTERNATIVES_BY_CATEGORY: Record<string, { name: string; cost: number }[]> = {
+const ALTERNATIVES_BY_CATEGORY_NB: Record<string, { name: string; cost: number }[]> = {
   venue: [
     { name: "Premium lokale", cost: 100000 },
     { name: "Standard lokale", cost: 80000 },
@@ -74,6 +74,57 @@ const ALTERNATIVES_BY_CATEGORY: Record<string, { name: string; cost: number }[]>
   ],
 };
 
+const ALTERNATIVES_BY_CATEGORY_EN: Record<string, { name: string; cost: number }[]> = {
+  venue: [
+    { name: "Premium venue", cost: 100000 },
+    { name: "Standard venue", cost: 80000 },
+    { name: "Basic venue", cost: 50000 },
+    { name: "Outdoor/free", cost: 10000 },
+  ],
+  catering: [
+    { name: "Gourmet 3-course", cost: 80000 },
+    { name: "Standard buffet", cost: 60000 },
+    { name: "Simple menu", cost: 40000 },
+    { name: "Cold table", cost: 25000 },
+  ],
+  photo: [
+    { name: "Premium (full day)", cost: 35000 },
+    { name: "Standard (6 hours)", cost: 25000 },
+    { name: "Basic (4 hours)", cost: 15000 },
+    { name: "Hobby photographer", cost: 5000 },
+  ],
+  video: [
+    { name: "Cinematic film", cost: 30000 },
+    { name: "Standard video", cost: 20000 },
+    { name: "Highlights only", cost: 12000 },
+    { name: "Skip video", cost: 0 },
+  ],
+  music: [
+    { name: "Premium DJ + sound", cost: 25000 },
+    { name: "Standard DJ", cost: 15000 },
+    { name: "Basic DJ", cost: 8000 },
+    { name: "Spotify playlist", cost: 0 },
+  ],
+  flowers: [
+    { name: "Luxury bouquet", cost: 5000 },
+    { name: "Standard bouquet", cost: 3000 },
+    { name: "Simple bouquet", cost: 1500 },
+    { name: "DIY flowers", cost: 500 },
+  ],
+  attire: [
+    { name: "Designer dress", cost: 40000 },
+    { name: "Standard store", cost: 20000 },
+    { name: "Second-hand/vintage", cost: 8000 },
+    { name: "Rent a dress", cost: 5000 },
+  ],
+  rings: [
+    { name: "Luxury gold", cost: 25000 },
+    { name: "Standard gold", cost: 15000 },
+    { name: "Simple bands", cost: 8000 },
+    { name: "Silver/alternative", cost: 3000 },
+  ],
+};
+
 // Helper to find best matching alternative based on cost
 const findBestAlternativeIndex = (alternatives: { cost: number }[], targetCost: number): number => {
   let bestIndex = 0;
@@ -95,10 +146,28 @@ export default function BudgetScenariosScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation();
 
+  const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
+  const t = useCallback((nb: string, en: string) => (appLanguage === "en" ? en : nb), [appLanguage]);
+  const locale = appLanguage === "en" ? "en-US" : "nb-NO";
+  const currencyLabel = t("kr", "NOK");
+  const formatCurrency = useCallback(
+    (amount: number) => `${amount.toLocaleString(locale)} ${currencyLabel}`,
+    [currencyLabel, locale]
+  );
+  const alternativesByCategory = appLanguage === "en" ? ALTERNATIVES_BY_CATEGORY_EN : ALTERNATIVES_BY_CATEGORY_NB;
+
   const [items, setItems] = useState<ScenarioItem[]>([]);
   const [totalBudget, setTotalBudget] = useState(300000);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadLanguage() {
+      const language = await getAppLanguage();
+      setAppLanguage(language);
+    }
+    loadLanguage();
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -108,7 +177,7 @@ export default function BudgetScenariosScreen() {
       
       const scenarioItems: ScenarioItem[] = budgetItems.map((item) => {
         // Use category-based alternatives, fallback to item name as single option
-        const alternatives = ALTERNATIVES_BY_CATEGORY[item.category] || [{ name: item.name, cost: item.estimatedCost }];
+        const alternatives = alternativesByCategory[item.category] || [{ name: item.name, cost: item.estimatedCost }];
         // Find best matching alternative based on item's estimated cost
         const bestAltIndex = findBestAlternativeIndex(alternatives, item.estimatedCost);
         
@@ -124,11 +193,11 @@ export default function BudgetScenariosScreen() {
       setItems(scenarioItems);
       setTotalBudget(budget);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Kunne ikke laste budsjettdata");
+      setError(e instanceof Error ? e.message : t("Kunne ikke laste budsjettdata", "Could not load budget data"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [alternativesByCategory, t]);
 
   useEffect(() => {
     loadData();
@@ -189,10 +258,6 @@ export default function BudgetScenariosScreen() {
     return items.some((item) => !item.included || item.selectedAlt !== item.baselineAlt);
   }, [items]);
 
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString("nb-NO") + " kr";
-  };
-
   // Calculate per-item delta (current choice vs baseline)
   const getItemDelta = (item: ScenarioItem): number => {
     if (!item.included) return -(item.alternatives[item.baselineAlt]?.cost || item.estimatedCost);
@@ -206,7 +271,7 @@ export default function BudgetScenariosScreen() {
       <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
         <ActivityIndicator size="large" color={Colors.dark.accent} />
         <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
-          Laster scenario...
+          {t("Laster scenario...", "Loading scenario...")}
         </ThemedText>
       </View>
     );
@@ -220,7 +285,7 @@ export default function BudgetScenariosScreen() {
           {error}
         </ThemedText>
         <Button onPress={loadData} style={{ marginTop: Spacing.lg }}>
-          Prøv igjen
+          {t("Prøv igjen", "Try again")}
         </Button>
       </View>
     );
@@ -231,16 +296,16 @@ export default function BudgetScenariosScreen() {
       <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
         <Feather name="clipboard" size={48} color={theme.textMuted} />
         <ThemedText type="h4" style={{ color: theme.text, marginTop: Spacing.md, textAlign: "center" }}>
-          Ingen budsjettposter
+          {t("Ingen budsjettposter", "No budget items")}
         </ThemedText>
         <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.xs, textAlign: "center", paddingHorizontal: Spacing.xl }}>
-          Legg til poster i budsjettet først for å bruke scenario-kalkulatoren
+          {t("Legg til poster i budsjettet først for å bruke scenario-kalkulatoren", "Add items to the budget first to use the scenario calculator")}
         </ThemedText>
         <Button
           onPress={() => (navigation as any).navigate("Budget")}
           style={{ marginTop: Spacing.lg }}
         >
-          Gå til Budsjett
+          {t("Gå til Budsjett", "Go to Budget")}
         </Button>
       </View>
     );
@@ -260,16 +325,18 @@ export default function BudgetScenariosScreen() {
         <View style={[styles.summaryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <View style={styles.summaryHeader}>
             <View>
-              <ThemedText type="h3" style={styles.summaryTitle}>Scenario-kalkulator</ThemedText>
+              <ThemedText type="h3" style={styles.summaryTitle}>
+                {t("Scenario-kalkulator", "Scenario calculator")}
+              </ThemedText>
               <ThemedText style={[styles.summarySubtitle, { color: theme.textSecondary }]}>
-                Juster valg og se hvordan det påvirker budsjettet
+                {t("Juster valg og se hvordan det påvirker budsjettet", "Adjust choices and see how it affects the budget")}
               </ThemedText>
             </View>
             {hasChanges && (
               <Pressable onPress={handleResetScenario} style={styles.resetButton}>
                 <Feather name="refresh-cw" size={16} color={Colors.dark.accent} />
                 <ThemedText style={{ color: Colors.dark.accent, fontSize: 13, marginLeft: 4 }}>
-                  Nullstill
+                  {t("Nullstill", "Reset")}
                 </ThemedText>
               </Pressable>
             )}
@@ -288,7 +355,10 @@ export default function BudgetScenariosScreen() {
             />
           </View>
           <ThemedText style={[styles.progressLabel, { color: theme.textSecondary }]}>
-            {Math.round(progressPercent)}% av budsjett ({formatCurrency(totalBudget)})
+            {t(
+              `${Math.round(progressPercent)}% av budsjett (${formatCurrency(totalBudget)})`,
+              `${Math.round(progressPercent)}% of budget (${formatCurrency(totalBudget)})`
+            )}
           </ThemedText>
 
           <View style={styles.summaryStats}>
@@ -297,7 +367,7 @@ export default function BudgetScenariosScreen() {
                 {formatCurrency(scenarioTotal)}
               </ThemedText>
               <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
-                Scenario
+                {t("Scenario", "Scenario")}
               </ThemedText>
             </View>
             <View style={styles.statItem}>
@@ -305,7 +375,7 @@ export default function BudgetScenariosScreen() {
                 {savings >= 0 ? "−" : "+"}{formatCurrency(Math.abs(savings))}
               </ThemedText>
               <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
-                {savings > 0 ? "Spart" : savings < 0 ? "Ekstra" : "Ingen endring"}
+                {savings > 0 ? t("Spart", "Saved") : savings < 0 ? t("Ekstra", "Extra") : t("Ingen endring", "No change")}
               </ThemedText>
             </View>
             <View style={styles.statItem}>
@@ -313,7 +383,7 @@ export default function BudgetScenariosScreen() {
                 {remaining >= 0 ? "+" : "−"}{formatCurrency(Math.abs(remaining))}
               </ThemedText>
               <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
-                {remaining >= 0 ? "Buffer" : "Over"}
+                {remaining >= 0 ? t("Buffer", "Buffer") : t("Over", "Over")}
               </ThemedText>
             </View>
           </View>
@@ -344,7 +414,7 @@ export default function BudgetScenariosScreen() {
                 </View>
               </View>
               <ThemedText style={[styles.itemCost, { color: Colors.dark.accent }]}>
-                {item.included ? formatCurrency(item.alternatives[item.selectedAlt]?.cost || 0) : "Fjernet"}
+                {item.included ? formatCurrency(item.alternatives[item.selectedAlt]?.cost || 0) : t("Fjernet", "Removed")}
               </ThemedText>
             </View>
 
@@ -390,23 +460,23 @@ export default function BudgetScenariosScreen() {
 
       <Animated.View entering={FadeInDown.delay(600).duration(400)}>
         <View style={[styles.tipsCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-          <ThemedText type="h4" style={styles.tipsTitle}>Spare-tips</ThemedText>
+          <ThemedText type="h4" style={styles.tipsTitle}>{t("Spare-tips", "Savings tips")}</ThemedText>
           <View style={styles.tipItem}>
             <Feather name="calendar" size={16} color={Colors.dark.accent} />
             <ThemedText style={[styles.tipText, { color: theme.textSecondary }]}>
-              Velg lavssong (jan-mar, nov) for lavere priser
+              {t("Velg lavssong (jan-mar, nov) for lavere priser", "Choose off-season (Jan-Mar, Nov) for lower prices")}
             </ThemedText>
           </View>
           <View style={styles.tipItem}>
             <Feather name="users" size={16} color={Colors.dark.accent} />
             <ThemedText style={[styles.tipText, { color: theme.textSecondary }]}>
-              Færre gjester = mer per person i budsjettet
+              {t("Færre gjester = mer per person i budsjettet", "Fewer guests = more per person in the budget")}
             </ThemedText>
           </View>
           <View style={styles.tipItem}>
             <Feather name="sun" size={16} color={Colors.dark.accent} />
             <ThemedText style={[styles.tipText, { color: theme.textSecondary }]}>
-              Søndager og hverdager er billigere
+              {t("Søndager og hverdager er billigere", "Sundays and weekdays are cheaper")}
             </ThemedText>
           </View>
         </View>

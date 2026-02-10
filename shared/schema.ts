@@ -618,6 +618,27 @@ export const conversations = pgTable("conversations", {
   vendorDeletedAt: timestamp("vendor_deleted_at"),
 });
 
+// Conversations between vendors (optional couple context)
+export const vendorVendorConversations = pgTable("vendor_vendor_conversations", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  vendorOneId: varchar("vendor_one_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  vendorTwoId: varchar("vendor_two_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  coupleId: varchar("couple_id").references(() => coupleProfiles.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("active"),
+  lastMessageAt: timestamp("last_message_at").defaultNow(),
+  vendorOneUnreadCount: integer("vendor_one_unread_count").default(0),
+  vendorTwoUnreadCount: integer("vendor_two_unread_count").default(0),
+  vendorOneTypingAt: timestamp("vendor_one_typing_at"),
+  vendorTwoTypingAt: timestamp("vendor_two_typing_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  deletedByVendorOne: boolean("deleted_by_vendor_one").default(false),
+  deletedByVendorTwo: boolean("deleted_by_vendor_two").default(false),
+  vendorOneDeletedAt: timestamp("vendor_one_deleted_at"),
+  vendorTwoDeletedAt: timestamp("vendor_two_deleted_at"),
+});
+
 export const messages = pgTable("messages", {
   id: varchar("id")
     .primaryKey()
@@ -635,6 +656,24 @@ export const messages = pgTable("messages", {
   deletedByVendor: boolean("deleted_by_vendor").default(false),
   coupleDeletedAt: timestamp("couple_deleted_at"),
   vendorDeletedAt: timestamp("vendor_deleted_at"),
+});
+
+export const vendorVendorMessages = pgTable("vendor_vendor_messages", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => vendorVendorConversations.id, { onDelete: "cascade" }),
+  senderVendorId: varchar("sender_vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  readAt: timestamp("read_at"),
+  editedAt: timestamp("edited_at"),
+  attachmentUrl: text("attachment_url"),
+  attachmentType: text("attachment_type"),
+  deletedByVendorOne: boolean("deleted_by_vendor_one").default(false),
+  deletedByVendorTwo: boolean("deleted_by_vendor_two").default(false),
+  vendorOneDeletedAt: timestamp("vendor_one_deleted_at"),
+  vendorTwoDeletedAt: timestamp("vendor_two_deleted_at"),
 });
 
 // Admin conversations with vendors
@@ -703,6 +742,8 @@ export type CoupleProfile = typeof coupleProfiles.$inferSelect;
 export type CoupleSession = typeof coupleSessions.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
+export type VendorVendorConversation = typeof vendorVendorConversations.$inferSelect;
+export type VendorVendorMessage = typeof vendorVendorMessages.$inferSelect;
 export type CoupleLogin = z.infer<typeof coupleLoginSchema>;
 export type SendMessage = z.infer<typeof sendMessageSchema>;
 
@@ -2185,9 +2226,24 @@ export const coupleMusicTimeline = pgTable("couple_music_timeline", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const coupleMusicPreferences = pgTable("couple_music_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
+  spotifyPlaylistUrl: text("spotify_playlist_url"),
+  youtubePlaylistUrl: text("youtube_playlist_url"),
+  entranceSong: text("entrance_song"),
+  firstDanceSong: text("first_dance_song"),
+  lastSong: text("last_song"),
+  doNotPlay: text("do_not_play"),
+  additionalNotes: text("additional_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export type CoupleMusicPerformance = typeof coupleMusicPerformances.$inferSelect;
 export type CoupleMusicSetlist = typeof coupleMusicSetlists.$inferSelect;
 export type CoupleMusicTimeline = typeof coupleMusicTimeline.$inferSelect;
+export type CoupleMusicPreferences = typeof coupleMusicPreferences.$inferSelect;
 
 // ===== CATERING PLANNING =====
 

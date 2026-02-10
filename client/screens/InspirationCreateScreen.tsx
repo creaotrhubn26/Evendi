@@ -5,7 +5,6 @@ import {
   Pressable,
   TextInput,
   ScrollView,
-  Alert,
   ActivityIndicator,
   Switch,
   Image,
@@ -27,6 +26,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
+import { showToast } from "@/lib/toast";
+import { showConfirm, showOptions } from "@/lib/dialogs";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -146,14 +147,15 @@ export default function InspirationCreateScreen() {
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/inspirations"] });
-      Alert.alert(
-        "Suksess!", 
-        isEditMode ? "Showcasen er oppdatert og sendt til godkjenning." : "Showcasen er sendt til godkjenning.", 
-        [{ text: "OK", onPress: () => navigation.goBack() }]
+      showToast(
+        isEditMode
+          ? "Showcasen er oppdatert og sendt til godkjenning."
+          : "Showcasen er sendt til godkjenning."
       );
+      navigation.goBack();
     },
     onError: (error: Error) => {
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
@@ -185,19 +187,20 @@ export default function InspirationCreateScreen() {
       navigation.goBack();
     },
     onError: (error: Error) => {
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
   const handleDelete = () => {
-    Alert.alert(
-      "Slett showcase",
-      `Er du sikker på at du vil slette "${title}"?`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        { text: "Slett", style: "destructive", onPress: () => deleteMutation.mutate() },
-      ]
-    );
+    showConfirm({
+      title: "Slett showcase",
+      message: `Er du sikker på at du vil slette "${title}"?`,
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    }).then((confirmed) => {
+      if (confirmed) deleteMutation.mutate();
+    });
   };
 
   const handleAddMedia = () => {
@@ -224,62 +227,51 @@ export default function InspirationCreateScreen() {
   };
 
   const handlePickImage = async (index: number) => {
-    // Show options: pick from gallery or use Google Drive
-    Alert.alert(
-      "Legg til bilde",
-      "Velg hvordan du vil legge til bildet:",
-      [
-        {
-          text: "Google Drive",
-          onPress: () => {
-            Alert.alert(
-              "Bruk Google Drive",
-              "1. Åpne Google Drive\n" +
-              "2. Høyreklikk på bildet → Del\n" +
-              "3. Endre til 'Alle med lenken'\n" +
-              "4. Kopier lenken\n" +
-              "5. Lim inn i URL-feltet\n\n" +
-              "Lenken konverteres automatisk til bildevisning!",
-              [{ text: "OK" }]
-            );
-          }
-        },
-        {
-          text: "Fra galleri",
-          onPress: async () => {
-            try {
-              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (status !== "granted") {
-                Alert.alert(
-                  "Tillatelse kreves",
-                  "Vi trenger tilgang til bildegalleriet."
-                );
-                return;
-              }
+    const choice = await showOptions({
+      title: "Legg til bilde",
+      message: "Velg hvordan du vil legge til bildet:",
+      options: [
+        { label: "Google Drive" },
+        { label: "Fra galleri" },
+      ],
+      cancelLabel: "Avbryt",
+    });
 
-              const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [16, 9],
-                quality: 0.8,
-              });
+    if (choice === 0) {
+      showToast(
+        "1. Åpne Google Drive\n" +
+        "2. Høyreklikk på bildet → Del\n" +
+        "3. Endre til 'Alle med lenken'\n" +
+        "4. Kopier lenken\n" +
+        "5. Lim inn i URL-feltet\n\n" +
+        "Lenken konverteres automatisk til bildevisning!"
+      );
+      return;
+    }
 
-              if (!result.canceled && result.assets[0]) {
-                Alert.alert(
-                  "Bilde valgt",
-                  "Last opp bildet til Google Drive eller imgbb.com, og lim inn lenken i URL-feltet.",
-                  [{ text: "OK" }]
-                );
-              }
-            } catch (error) {
-              console.error("Error picking image:", error);
-              Alert.alert("Feil", "Kunne ikke velge bilde");
-            }
-          }
-        },
-        { text: "Avbryt", style: "cancel" }
-      ]
-    );
+    if (choice !== 1) return;
+
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        showToast("Vi trenger tilgang til bildegalleriet.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        showToast("Last opp bildet til Google Drive eller imgbb.com, og lim inn lenken i URL-feltet.");
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      showToast("Kunne ikke velge bilde");
+    }
   };
 
   const handleRemoveMedia = (index: number) => {
@@ -302,16 +294,16 @@ export default function InspirationCreateScreen() {
 
   const handleSubmit = () => {
     if (!selectedCategory) {
-      Alert.alert("Mangler kategori", "Velg en kategori for showcasen.");
+      showToast("Velg en kategori for showcasen.");
       return;
     }
     if (!title.trim()) {
-      Alert.alert("Mangler tittel", "Skriv inn en tittel.");
+      showToast("Skriv inn en tittel.");
       return;
     }
     const validMedia = mediaItems.filter((m) => m.url.trim());
     if (validMedia.length === 0) {
-      Alert.alert("Mangler media", "Legg til minst ett bilde eller video.");
+      showToast("Legg til minst ett bilde eller video.");
       return;
     }
 

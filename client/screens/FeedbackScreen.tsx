@@ -3,7 +3,6 @@ import {
   View,
   StyleSheet,
   TextInput,
-  Alert,
   Pressable,
 } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -24,6 +23,7 @@ import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import type { AppSetting } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { showToast } from "@/lib/toast";
 
 const CATEGORIES = [
   { id: "bug", label: "Feil/problem", icon: "alert-circle" as const },
@@ -54,12 +54,39 @@ export default function FeedbackScreen() {
     },
   });
 
-  const hasActiveStatus = useMemo(() => {
-    if (!appSettings) return false;
-    const maintenanceMode = appSettings.find((s) => s.key === "maintenance_mode")?.value === "true";
-    const statusMessage = appSettings.find((s) => s.key === "status_message")?.value;
-    return maintenanceMode || !!statusMessage;
+  const settingsByKey = useMemo(() => {
+    return (
+      appSettings?.reduce<Record<string, string>>((acc, setting) => {
+        acc[setting.key] = setting.value;
+        return acc;
+      }, {}) ?? {}
+    );
   }, [appSettings]);
+
+  const getSetting = (key: string, fallback = "") => settingsByKey[key] ?? fallback;
+  const maintenanceMode = getSetting("maintenance_mode") === "true";
+  const maintenanceMessage = getSetting("maintenance_message");
+  const statusMessage = getSetting("status_message").trim();
+  const statusType = getSetting("status_type", "info");
+  const statusColor =
+    maintenanceMode || statusType === "error"
+      ? theme.error
+      : statusType === "warning"
+      ? "#FF8C00"
+      : statusType === "success"
+      ? "#51CF66"
+      : theme.accent || Colors.dark.accent;
+  const statusIcon: keyof typeof Feather.glyphMap =
+    maintenanceMode
+      ? "tool"
+      : statusType === "warning"
+      ? "alert-triangle"
+      : statusType === "error"
+      ? "alert-circle"
+      : statusType === "success"
+      ? "check-circle"
+      : "info";
+  const hasActiveStatus = maintenanceMode || statusMessage.length > 0;
 
   const submitMutation = useMutation({
     mutationFn: async (data: { category: string; subject: string; message: string }) => {
@@ -70,21 +97,21 @@ export default function FeedbackScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (error: any) => {
-      Alert.alert("Feil", error.message || "Kunne ikke sende tilbakemelding");
+      showToast(error.message || "Kunne ikke sende tilbakemelding");
     },
   });
 
   const handleSubmit = () => {
     if (!category) {
-      Alert.alert("Velg kategori", "Velg hva tilbakemeldingen handler om");
+      showToast("Velg hva tilbakemeldingen handler om");
       return;
     }
     if (!subject.trim()) {
-      Alert.alert("Mangler emne", "Skriv inn et kort emne");
+      showToast("Skriv inn et kort emne");
       return;
     }
     if (!message.trim()) {
-      Alert.alert("Mangler melding", "Skriv inn din tilbakemelding");
+      showToast("Skriv inn din tilbakemelding");
       return;
     }
 
@@ -139,43 +166,31 @@ export default function FeedbackScreen() {
     >
       {hasActiveStatus && (
         <View style={[styles.statusNotice, { 
-          backgroundColor: appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" 
-            ? theme.error + "15" 
-            : appSettings?.find(s => s.key === "status_type")?.value === "warning"
-            ? "#FF8C00" + "15"
-            : theme.accent + "15",
-          borderColor: appSettings?.find(s => s.key === "maintenance_mode")?.value === "true"
-            ? theme.error
-            : appSettings?.find(s => s.key === "status_type")?.value === "warning"
-            ? "#FF8C00"
-            : theme.accent,
+          backgroundColor: statusColor + "15",
+          borderColor: statusColor,
         }]}>
           <Feather 
-            name={appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" ? "tool" : "info"} 
+            name={statusIcon} 
             size={20} 
-            color={appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" 
-              ? theme.error 
-              : appSettings?.find(s => s.key === "status_type")?.value === "warning"
-              ? "#FF8C00"
-              : theme.accent
-            } 
+            color={statusColor} 
           />
           <View style={{ flex: 1 }}>
             <ThemedText style={[styles.statusNoticeTitle, { color: theme.text, fontWeight: "600" }]}>
-              {appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" 
+              {maintenanceMode 
                 ? "⚠️ Vedlikeholdsmodus"
                 : "Systemmelding"}
             </ThemedText>
             <ThemedText style={[styles.statusNoticeText, { color: theme.text }]}>
-              {appSettings?.find(s => s.key === "maintenance_mode")?.value === "true"
-                ? appSettings?.find(s => s.key === "maintenance_message")?.value || "Wedflow er for øyeblikket under vedlikehold. Noen funksjoner kan være utilgjengelige."
-                : appSettings?.find(s => s.key === "status_message")?.value || ""}
+              {maintenanceMode
+                ? maintenanceMessage ||
+                  "Wedflow er for oyeblikket under vedlikehold. Noen funksjoner kan vaere utilgjengelige."
+                : statusMessage}
             </ThemedText>
             <Pressable 
               onPress={() => navigation.navigate("Status")}
               style={{ marginTop: 8 }}
             >
-              <ThemedText style={[styles.statusNoticeLink, { color: theme.accent }]}>
+              <ThemedText style={[styles.statusNoticeLink, { color: statusColor }]}>
                 Se full status →
               </ThemedText>
             </Pressable>

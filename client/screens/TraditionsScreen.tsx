@@ -13,6 +13,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getCoupleProfile, updateCoupleProfile } from "@/lib/api-couples";
 import { getCoupleSession } from "@/lib/storage";
+import { showToast } from "@/lib/toast";
 
 interface Tradition {
   id: string;
@@ -249,8 +250,8 @@ export default function TraditionsScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["coupleProfile"] });
     },
-    onError: (error) => {
-      Alert.alert("Feil", error instanceof Error ? error.message : "Kunne ikke lagre valg");
+    onError: (error) => { 
+      showToast(error instanceof Error ? error.message : "Kunne ikke lagre valg");
     },
   });
 

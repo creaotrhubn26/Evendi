@@ -3,7 +3,6 @@ import {
   StyleSheet,
   View,
   Pressable,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -19,6 +18,7 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import { getApiUrl } from "@/lib/query-client";
 import type { VendorSuggestion } from "@/hooks/useVendorSearch";
+import { showToast } from "@/lib/toast";
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 const COUPLE_STORAGE_KEY = "wedflow_couple_session";
@@ -85,7 +85,7 @@ export function VendorActionBar({
     try {
       const sessionData = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
       if (!sessionData) {
-        Alert.alert("Logg inn", "Du må logge inn som par for å sende meldinger.");
+        showToast("Du må logge inn som par for å sende meldinger.");
         return;
       }
       const { sessionToken } = JSON.parse(sessionData);
@@ -118,7 +118,7 @@ export function VendorActionBar({
         vendorName: vendor.businessName,
       });
     } catch (e: any) {
-      Alert.alert("Feil", e.message || "Kunne ikke starte samtale");
+      showToast(e.message || "Kunne ikke starte samtale");
     } finally {
       setIsSendingMessage(false);
     }

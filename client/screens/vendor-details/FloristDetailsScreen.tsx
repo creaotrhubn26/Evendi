@@ -5,7 +5,6 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
   Switch,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +19,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { showToast } from "@/lib/toast";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -187,11 +187,11 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/florist-details"] });
-      Alert.alert("Lagret", "Blomsterdetaljene er oppdatert");
+      showToast("Blomsterdetaljene er oppdatert");
     },
     onError: (error: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 

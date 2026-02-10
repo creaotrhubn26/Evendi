@@ -18,6 +18,7 @@ import AboutScreen from "@/screens/AboutScreen";
 import SharePartnerScreen from "@/screens/SharePartnerScreen";
 import VendorReviewsScreen from "@/screens/VendorReviewsScreen";
 import VendorProfileScreen from "@/screens/VendorProfileScreen";
+import VendorDetailScreen from "@/screens/VendorDetailScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
 import StatusScreen from "@/screens/StatusScreen";
 import WhatsNewScreen from "@/screens/WhatsNewScreen";
@@ -34,7 +35,16 @@ export type ProfileStackParamList = {
   ProductCreate: { product?: any } | undefined;
   OfferCreate: { offer?: any } | undefined;
   VendorRegistration: undefined;
-  VendorChat: { conversationId: string; coupleName: string };
+  VendorChat: { conversationId: string; coupleName?: string; chatType?: "couple" | "vendor" };
+  VendorPublicProfile: {
+    vendorId: string;
+    vendorName: string;
+    vendorDescription?: string | null;
+    vendorLocation?: string | null;
+    vendorPriceRange?: string | null;
+    vendorCategory?: string | null;
+    readOnly?: boolean;
+  };
   VendorCoupleSchedule: { coupleId: string; coupleName: string };
   VendorProfile: undefined;
   NotificationSettings: undefined;
@@ -90,7 +100,7 @@ export default function ProfileStackNavigator() {
       />
       <Stack.Screen
         name="DeliveryCreate"
-        component={DeliveryCreateScreen as any}
+        component={DeliveryCreateScreen}
         options={{
           headerShown: false,
         }}
@@ -104,7 +114,7 @@ export default function ProfileStackNavigator() {
       />
       <Stack.Screen
         name="ProductCreate"
-        component={ProductCreateScreen as any}
+        component={ProductCreateScreen}
         options={{
           headerShown: false,
         }}
@@ -127,9 +137,16 @@ export default function ProfileStackNavigator() {
         name="VendorChat"
         component={VendorChatScreen}
         options={({ route }) => ({
-          title: route.params.coupleName,
+          title: route.params.coupleName || "Samtale",
           headerBackVisible: false,
         })}
+      />
+      <Stack.Screen
+        name="VendorPublicProfile"
+        component={VendorDetailScreen}
+        options={{
+          headerShown: false,
+        }}
       />
       <Stack.Screen
         name="VendorCoupleSchedule"

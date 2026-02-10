@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, Pressable, TextInput, Alert, ActivityIndicator, Switch } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, TextInput, ActivityIndicator, Switch } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -12,6 +12,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -70,7 +72,7 @@ export default function AdminFAQScreen({ route }: { route: { params: { adminKey:
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-faq"] });
       resetForm();
-      Alert.alert("Suksess", "FAQ opprettet");
+      showToast("FAQ opprettet");
     },
   });
 
@@ -92,7 +94,7 @@ export default function AdminFAQScreen({ route }: { route: { params: { adminKey:
       queryClient.invalidateQueries({ queryKey: ["admin-faq"] });
       setEditingId(null);
       resetForm();
-      Alert.alert("Suksess", "FAQ oppdatert");
+      showToast("FAQ oppdatert");
     },
   });
 
@@ -108,7 +110,7 @@ export default function AdminFAQScreen({ route }: { route: { params: { adminKey:
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-faq"] });
-      Alert.alert("Suksess", "FAQ slettet");
+      showToast("FAQ slettet");
     },
   });
 
@@ -130,7 +132,7 @@ export default function AdminFAQScreen({ route }: { route: { params: { adminKey:
 
   const handleSubmit = () => {
     if (!formData.icon || !formData.question || !formData.answer) {
-      Alert.alert("Feil", "Alle felter må fylles ut");
+      showToast("Alle felter må fylles ut");
       return;
     }
 
@@ -143,22 +145,17 @@ export default function AdminFAQScreen({ route }: { route: { params: { adminKey:
     }
   };
 
-  const handleDelete = (id: string) => {
-    Alert.alert(
-      "Slett FAQ",
-      "Er du sikker på at du vil slette dette spørsmålet?",
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Slett",
-          style: "destructive",
-          onPress: () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-            deleteMutation.mutate(id);
-          },
-        },
-      ]
-    );
+  const handleDelete = async (id: string) => {
+    const confirmed = await showConfirm({
+      title: "Slett FAQ",
+      message: "Er du sikker på at du vil slette dette spørsmålet?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    deleteMutation.mutate(id);
   };
 
   return (

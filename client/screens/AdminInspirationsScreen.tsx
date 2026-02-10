@@ -7,6 +7,10 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Modal,
+  TextInput,
+  Platform,
+  KeyboardAvoidingView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -15,12 +19,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { AdminHeader } from "@/components/AdminHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 interface Inspiration {
   id: string;
@@ -39,10 +45,13 @@ export default function AdminInspirationsScreen() {
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
-  const route = useRoute();
-  const adminKey = (route.params as any)?.adminKey || "";
+  const route = useRoute<RouteProp<RootStackParamList, "AdminInspirations">>();
+  const adminKey = route.params?.adminKey || "";
 
   const [selectedTab, setSelectedTab] = useState<"pending" | "approved" | "rejected">("pending");
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
 
   const { data: inspirations = [], isLoading } = useQuery<Inspiration[]>({
     queryKey: ["/api/admin/inspirations", selectedTab, adminKey],
@@ -94,19 +103,40 @@ export default function AdminInspirationsScreen() {
   });
 
   const handleReject = (id: string) => {
-    Alert.prompt(
-      "Avvis showcase",
-      "Oppgi en begrunnelse (valgfritt):",
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Avvis",
-          style: "destructive",
-          onPress: (reason: string | undefined) => rejectMutation.mutate({ id, reason: reason || "" }),
-        },
-      ],
-      "plain-text"
-    );
+    if (Platform.OS === "ios") {
+      Alert.prompt(
+        "Avvis showcase",
+        "Oppgi en begrunnelse (valgfritt):",
+        [
+          { text: "Avbryt", style: "cancel" },
+          {
+            text: "Avvis",
+            style: "destructive",
+            onPress: (reason: string | undefined) => rejectMutation.mutate({ id, reason: reason || "" }),
+          },
+        ],
+        "plain-text"
+      );
+      return;
+    }
+
+    setRejectTargetId(id);
+    setRejectReason("");
+    setRejectModalVisible(true);
+  };
+
+  const handleConfirmReject = () => {
+    if (!rejectTargetId) return;
+    rejectMutation.mutate({ id: rejectTargetId, reason: rejectReason.trim() });
+    setRejectModalVisible(false);
+    setRejectTargetId(null);
+    setRejectReason("");
+  };
+
+  const handleCancelReject = () => {
+    setRejectModalVisible(false);
+    setRejectTargetId(null);
+    setRejectReason("");
   };
 
   const tabs = [
@@ -165,7 +195,7 @@ export default function AdminInspirationsScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+    <View style={[styles.container, { backgroundColor: theme.backgroundRoot, paddingTop: headerHeight }]}>
       <AdminHeader 
         title="Showcases" 
         subtitle={`${inspirations.length} ${selectedTab === "pending" ? "venter" : selectedTab === "approved" ? "godkjent" : "avvist"}`}
@@ -217,6 +247,49 @@ export default function AdminInspirationsScreen() {
           }
         />
       )}
+
+      <Modal
+        visible={rejectModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelReject}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={[styles.modalCard, { backgroundColor: theme.backgroundDefault }]}
+          >
+            <ThemedText style={styles.modalTitle}>Avvis showcase</ThemedText>
+            <ThemedText style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+              Oppgi en begrunnelse (valgfritt):
+            </ThemedText>
+            <TextInput
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              placeholder="F.eks. lav bildekvalitet"
+              placeholderTextColor={theme.textMuted}
+              style={[styles.modalInput, { borderColor: theme.border, color: theme.text }]}
+              multiline
+            />
+            <View style={styles.modalActions}>
+              <Pressable style={[styles.modalButton, { borderColor: theme.border }]} onPress={handleCancelReject}>
+                <ThemedText style={styles.modalButtonText}>Avbryt</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonDanger]}
+                onPress={handleConfirmReject}
+                disabled={rejectMutation.isPending}
+              >
+                {rejectMutation.isPending ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <ThemedText style={styles.modalButtonTextDanger}>Avvis</ThemedText>
+                )}
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -317,5 +390,57 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing.lg,
+  },
+  modalCard: {
+    width: "100%",
+    backgroundColor: Colors.dark.backgroundDefault,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalSubtitle: {
+    fontSize: 13,
+  },
+  modalInput: {
+    minHeight: 80,
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.sm,
+    textAlignVertical: "top",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    justifyContent: "flex-end",
+  },
+  modalButton: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+  },
+  modalButtonDanger: {
+    backgroundColor: "#FF6B6B",
+    borderColor: "#FF6B6B",
+  },
+  modalButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  modalButtonTextDanger: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });

@@ -22,7 +22,10 @@ const KEYS = {
   BUDGET_ITEMS: "@wedflow/budget_items",
   TOTAL_BUDGET: "@wedflow/total_budget",
   COUPLE_SESSION: "wedflow_couple_session",
+  APP_LANGUAGE: "@wedflow/app_language",
 };
+
+export type AppLanguage = "nb" | "en";
 
 export async function getCoupleSession(): Promise<{ token: string } | null> {
   try {
@@ -173,6 +176,19 @@ export async function getTotalBudget(): Promise<number> {
 
 export async function saveTotalBudget(budget: number): Promise<void> {
   await AsyncStorage.setItem(KEYS.TOTAL_BUDGET, JSON.stringify(budget));
+}
+
+export async function getAppLanguage(): Promise<AppLanguage> {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.APP_LANGUAGE);
+    return data === "en" ? "en" : "nb";
+  } catch {
+    return "nb";
+  }
+}
+
+export async function saveAppLanguage(language: AppLanguage): Promise<void> {
+  await AsyncStorage.setItem(KEYS.APP_LANGUAGE, language);
 }
 
 export async function clearAllData(): Promise<void> {

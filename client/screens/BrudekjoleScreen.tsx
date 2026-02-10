@@ -5,7 +5,6 @@ import {
   View,
   TextInput,
   Pressable,
-  Alert,
   Modal,
   Image,
   RefreshControl,
@@ -33,6 +32,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
+import { showToast } from "@/lib/toast";
+import { showOptions } from "@/lib/dialogs";
 import {
   getDressData,
   createDressAppointment,
@@ -189,7 +190,7 @@ export default function BrudekjoleScreen() {
 
   const saveAppointment = async () => {
     if (!shopSearch.searchText.trim() || !appointmentDate.trim()) {
-      Alert.alert("Feil", "Vennligst fyll inn butikknavn og dato");
+      showToast("Vennligst fyll inn butikknavn og dato");
       return;
     }
 
@@ -211,7 +212,7 @@ export default function BrudekjoleScreen() {
       setShowAppointmentModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre avtale");
+      showToast("Kunne ikke lagre avtale");
     }
   };
 
@@ -239,7 +240,7 @@ export default function BrudekjoleScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke duplisere avtale");
+      showToast("Kunne ikke duplisere avtale");
     }
   };
 
@@ -280,7 +281,7 @@ export default function BrudekjoleScreen() {
 
   const saveDress = async () => {
     if (!dressName.trim()) {
-      Alert.alert("Feil", "Vennligst gi kjolen et navn");
+      showToast("Vennligst gi kjolen et navn");
       return;
     }
 
@@ -311,7 +312,7 @@ export default function BrudekjoleScreen() {
       setShowDressModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre kjole");
+      showToast("Kunne ikke lagre kjole");
     }
   };
 
@@ -341,7 +342,7 @@ export default function BrudekjoleScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke duplisere kjole");
+      showToast("Kunne ikke duplisere kjole");
     }
   };
 
@@ -356,7 +357,7 @@ export default function BrudekjoleScreen() {
       });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke oppdatere tidslinje");
+      showToast("Kunne ikke oppdatere tidslinje");
     }
   };
 
@@ -368,7 +369,7 @@ export default function BrudekjoleScreen() {
       setShowBudgetModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre budsjett");
+      showToast("Kunne ikke lagre budsjett");
     }
   };
 
@@ -517,16 +518,16 @@ export default function BrudekjoleScreen() {
                         onPress={() => toggleAppointmentComplete(appointment.id)}
                         onLongPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                          Alert.alert(
-                            appointment.shopName,
-                            "Velg en handling",
-                            [
-                              { text: "Avbryt", style: "cancel" },
-                              { text: "Rediger", onPress: () => openAppointmentModal(appointment) },
-                              { text: "Dupliser", onPress: () => duplicateAppointment(appointment) },
-                              { text: "Slett", style: "destructive", onPress: () => handleDeleteAppointment(appointment.id) },
-                            ]
-                          );
+                          showOptions({
+                            title: appointment.shopName,
+                            message: "Velg en handling",
+                            options: [
+                              { label: "Rediger", onPress: () => openAppointmentModal(appointment) },
+                              { label: "Dupliser", onPress: () => duplicateAppointment(appointment) },
+                              { label: "Slett", destructive: true, onPress: () => handleDeleteAppointment(appointment.id) },
+                            ],
+                            cancelLabel: "Avbryt",
+                          });
                         }}
                         style={[
                           styles.checkbox,
@@ -610,16 +611,16 @@ export default function BrudekjoleScreen() {
                       onPress={() => openDressModal(dress)} 
                       onLongPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        Alert.alert(
-                          dress.name,
-                          "Velg en handling",
-                          [
-                            { text: "Avbryt", style: "cancel" },
-                            { text: "Rediger", onPress: () => openDressModal(dress) },
-                            { text: "Dupliser", onPress: () => duplicateDress(dress) },
-                            { text: "Slett", style: "destructive", onPress: () => handleDeleteDress(dress.id) },
-                          ]
-                        );
+                        showOptions({
+                          title: dress.name,
+                          message: "Velg en handling",
+                          options: [
+                            { label: "Rediger", onPress: () => openDressModal(dress) },
+                            { label: "Dupliser", onPress: () => duplicateDress(dress) },
+                            { label: "Slett", destructive: true, onPress: () => handleDeleteDress(dress.id) },
+                          ],
+                          cancelLabel: "Avbryt",
+                        });
                       }}
                     >
                       <View style={[styles.dressCard, { backgroundColor: theme.backgroundDefault }]}>

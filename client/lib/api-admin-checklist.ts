@@ -12,7 +12,7 @@ interface CoupleChecklistData {
   tasks: ChecklistTask[];
 }
 
-interface AdminChecklistItem {
+export interface AdminChecklistItem {
   taskId: string;
   taskTitle: string;
   taskMonthsBefore: number;

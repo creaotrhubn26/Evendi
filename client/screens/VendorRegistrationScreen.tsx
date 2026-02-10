@@ -5,7 +5,6 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
   ScrollView,
   Image,
 } from "react-native";
@@ -21,6 +20,7 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
 
 interface BrregEntity {
   organizationNumber: string;
@@ -241,7 +241,7 @@ export default function VendorRegistrationScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (error: any) => {
-      Alert.alert("Feil", error.message || "Kunne ikke registrere. Prøv igjen.");
+      showToast(error.message || "Kunne ikke registrere. Prøv igjen.");
     },
   });
 

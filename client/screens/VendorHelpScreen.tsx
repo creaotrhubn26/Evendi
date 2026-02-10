@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, View, Pressable, Linking, ActivityIndicator, Re
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -13,6 +14,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { AppSetting } from "../../shared/schema";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { showToast } from "@/lib/toast";
 
 type FAQCategory = "vendor" | "couple";
 
@@ -39,13 +42,13 @@ interface SupportLink {
 export default function VendorHelpScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { theme } = useTheme();
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<FAQCategory>("vendor");
 
   // Fetch app settings to control visibility of support links
-  const { data: appSettings } = useQuery<AppSetting[]>({
+  const { data: appSettings, refetch: refetchSettings, isFetching: isSettingsFetching } = useQuery<AppSetting[]>({
     queryKey: ["app-settings"],
     queryFn: async () => {
       const res = await fetch(`${getApiUrl()}/api/app-settings`);
@@ -61,7 +64,7 @@ export default function VendorHelpScreen() {
         icon: "book-open" as const,
         description: "Alt om Wedflow for leverandører",
         url: null,
-        onPress: () => (navigation as any).navigate("Documentation"),
+        onPress: () => navigation.navigate("Documentation", {}),
         settingKey: "help_show_documentation",
         defaultVisible: "true",
       },
@@ -70,7 +73,7 @@ export default function VendorHelpScreen() {
         icon: "video" as const,
         description: "Lær hvordan funksjoner brukes",
         url: null,
-        onPress: () => (navigation as any).navigate("VideoGuides"),
+        onPress: () => navigation.navigate("VideoGuides"),
         settingKey: "help_show_videoguides",
         defaultVisible: "false",
       },
@@ -79,7 +82,7 @@ export default function VendorHelpScreen() {
         icon: "activity" as const,
         description: "Se systemstatus og planlagt vedlikehold",
         url: null,
-        onPress: () => (navigation as any).navigate("Status"),
+        onPress: () => navigation.navigate("Status"),
         settingKey: "help_show_status",
         defaultVisible: "true",
       },
@@ -100,7 +103,7 @@ export default function VendorHelpScreen() {
         defaultVisible: "true",
       },
     ],
-    []
+    [navigation]
   );
 
   const visibleSupportLinks = useMemo(() => {
@@ -124,15 +127,26 @@ export default function VendorHelpScreen() {
 
   const handleToggle = (index: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setExpandedId(expandedId === index ? null : index);
+    const nextId = faqData[index]?.id;
+    if (!nextId) return;
+    setExpandedId(expandedId === nextId ? null : nextId);
   };
 
-  const handleOpenLink = (url: string | null, onPress?: () => void) => {
+  const handleOpenLink = async (url: string | null, onPress?: () => void) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (onPress) {
       onPress();
     } else if (url) {
-      Linking.openURL(url);
+      try {
+        const canOpen = await Linking.canOpenURL(url);
+        if (!canOpen) {
+          showToast("Enheten din kan ikke åpne denne lenken.");
+          return;
+        }
+        await Linking.openURL(url);
+      } catch (error) {
+        showToast("Kunne ikke åpne lenken akkurat nå.");
+      }
     }
   };
 
@@ -145,7 +159,14 @@ export default function VendorHelpScreen() {
         paddingHorizontal: Spacing.lg,
       }}
       refreshControl={
-        <RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} tintColor={theme.accent} />
+        <RefreshControl
+          refreshing={isRefetching || isSettingsFetching}
+          onRefresh={() => {
+            refetchSettings();
+            refetch();
+          }}
+          tintColor={theme.accent}
+        />
       }
     >
       <Animated.View entering={FadeInDown.duration(400)}>
@@ -245,13 +266,13 @@ export default function VendorHelpScreen() {
                     </View>
                     <ThemedText style={styles.faqQuestionText}>{item.question}</ThemedText>
                     <Feather 
-                      name={expandedId === index ? "chevron-up" : "chevron-down"} 
+                      name={expandedId === item.id ? "chevron-up" : "chevron-down"} 
                       size={18} 
                       color={theme.textMuted} 
                     />
                   </View>
                 </Pressable>
-                {expandedId === index && (
+                {expandedId === item.id && (
                   <View style={[styles.faqAnswer, { backgroundColor: theme.backgroundSecondary }]}>
                     <ThemedText style={[styles.faqAnswerText, { color: theme.textSecondary }]}>
                       {item.answer}

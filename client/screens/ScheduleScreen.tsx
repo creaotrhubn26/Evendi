@@ -5,7 +5,6 @@ import {
   View,
   TextInput,
   Pressable,
-  Alert,
   Image,
   RefreshControl,
 } from "react-native";
@@ -30,7 +29,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { getWeddingDetails, getSpeeches } from "@/lib/storage";
+import { getWeddingDetails, getSpeeches, getAppLanguage, type AppLanguage } from "@/lib/storage";
 import { useSession } from "@/hooks/useSession";
 import {
   getScheduleEvents,
@@ -38,12 +37,14 @@ import {
   updateScheduleEvent,
   deleteScheduleEvent,
 } from "@/lib/api-schedule-events";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 import type { ScheduleEvent } from "@shared/schema";
 import { Speech } from "@/lib/types";
 
 const emptyScheduleImage = require("../../assets/images/empty-schedule.png");
 
-const ICON_OPTIONS: ScheduleEvent["icon"][] = [
+const ICON_OPTIONS = [
   "heart",
   "camera",
   "music",
@@ -52,7 +53,14 @@ const ICON_OPTIONS: ScheduleEvent["icon"][] = [
   "sun",
   "moon",
   "star",
-];
+ ] as const;
+
+type IconName = typeof ICON_OPTIONS[number];
+
+const resolveIcon = (icon?: string | null): IconName => {
+  if (!icon) return "heart";
+  return (ICON_OPTIONS as readonly string[]).includes(icon) ? (icon as IconName) : "heart";
+};
 
 const SWIPE_THRESHOLD = -80;
 const ACTION_WIDTH = 140;
@@ -61,11 +69,12 @@ interface SwipeableEventItemProps {
   event: ScheduleEvent;
   index: number;
   theme: any;
+  t: (nb: string, en: string) => string;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-function SwipeableEventItem({ event, index, theme, onEdit, onDelete }: SwipeableEventItemProps) {
+function SwipeableEventItem({ event, index, theme, t, onEdit, onDelete }: SwipeableEventItemProps) {
   const translateX = useSharedValue(0);
   const isOpen = useSharedValue(false);
 
@@ -113,14 +122,14 @@ function SwipeableEventItem({ event, index, theme, onEdit, onDelete }: Swipeable
             onPress={handleEdit}
           >
             <Feather name="edit-2" size={18} color="#FFF" />
-            <ThemedText style={styles.actionText}>Endre</ThemedText>
+            <ThemedText style={styles.actionText}>{t("Endre", "Edit")}</ThemedText>
           </Pressable>
           <Pressable
             style={[styles.actionButton, styles.deleteButton]}
             onPress={handleDelete}
           >
             <Feather name="trash-2" size={18} color="#FFF" />
-            <ThemedText style={styles.actionText}>Slett</ThemedText>
+            <ThemedText style={styles.actionText}>{t("Slett", "Delete")}</ThemedText>
           </Pressable>
         </View>
         <GestureDetector gesture={panGesture}>
@@ -137,7 +146,7 @@ function SwipeableEventItem({ event, index, theme, onEdit, onDelete }: Swipeable
               </ThemedText>
             </View>
             <View style={[styles.eventIcon, { backgroundColor: theme.backgroundSecondary }]}>
-              <Feather name={event.icon} size={18} color={Colors.dark.accent} />
+              <Feather name={resolveIcon(event.icon)} size={18} color={Colors.dark.accent} />
             </View>
             <ThemedText style={styles.eventTitle}>{event.title}</ThemedText>
           </Animated.View>
@@ -156,14 +165,15 @@ export default function ScheduleScreen() {
   const { session } = useSession();
   const queryClient = useQueryClient();
 
+  const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
+  const t = useCallback((nb: string, en: string) => (appLanguage === "en" ? en : nb), [appLanguage]);
+  const locale = appLanguage === "en" ? "en-US" : "nb-NO";
+
   // Query for schedule events from server - only if we have a valid token
   const { data: eventsData, isLoading: loadingEvents, refetch, error: queryError } = useQuery({
     queryKey: ["schedule-events", session?.token],
-    queryFn: () => {
-      const token = session?.token || session?.sessionToken;
-      return token ? getScheduleEvents(token) : Promise.resolve([]);
-    },
-    enabled: !!(session?.token || session?.sessionToken),
+    queryFn: () => (session?.token ? getScheduleEvents(session.token) : Promise.resolve([])),
+    enabled: !!session?.token,
     retry: false,
   });
 
@@ -173,7 +183,7 @@ export default function ScheduleScreen() {
   const loading = loadingEvents || loadingOther;
 
   // Safe token getter
-  const getToken = () => session?.token || session?.sessionToken;
+  const getToken = () => session?.token;
 
   // Mutations
   const createMutation = useMutation({
@@ -215,9 +225,17 @@ export default function ScheduleScreen() {
   const [editingEvent, setEditingEvent] = useState<ScheduleEvent | null>(null);
   const [newTime, setNewTime] = useState("");
   const [newTitle, setNewTitle] = useState("");
-  const [selectedIcon, setSelectedIcon] = useState<string>("heart");
+  const [selectedIcon, setSelectedIcon] = useState<IconName>("heart");
   const [weddingDate, setWeddingDate] = useState("");
   const [showSpeeches, setShowSpeeches] = useState(true);
+
+  React.useEffect(() => {
+    async function loadLanguage() {
+      const language = await getAppLanguage();
+      setAppLanguage(language);
+    }
+    loadLanguage();
+  }, []);
 
   // Load other data (speeches, wedding date) on mount
   React.useEffect(() => {
@@ -230,7 +248,7 @@ export default function ScheduleScreen() {
       if (wedding) {
         const date = new Date(wedding.weddingDate);
         setWeddingDate(
-          date.toLocaleDateString("nb-NO", {
+          date.toLocaleDateString(locale, {
             weekday: "long",
             day: "numeric",
             month: "long",
@@ -245,7 +263,7 @@ export default function ScheduleScreen() {
 
   const handleAddEvent = async () => {
     if (!newTime.trim() || !newTitle.trim()) {
-      Alert.alert("Feil", "Vennligst fyll ut tid og tittel");
+      showToast(t("Vennligst fyll ut tid og tittel", "Please fill in time and title"));
       return;
     }
 
@@ -270,7 +288,7 @@ export default function ScheduleScreen() {
       setShowForm(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre hendelse");
+      showToast(t("Kunne ikke lagre hendelse", "Could not save event"));
     }
   };
 
@@ -278,27 +296,26 @@ export default function ScheduleScreen() {
     setEditingEvent(event);
     setNewTime(event.time);
     setNewTitle(event.title);
-    setSelectedIcon(event.icon || "heart");
+    setSelectedIcon(resolveIcon(event.icon));
     setShowForm(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleDeleteEvent = async (id: string) => {
-    Alert.alert("Slett hendelse", "Er du sikker på at du vil slette denne?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Slett",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteMutation.mutateAsync(id);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          } catch (e) {
-            Alert.alert("Feil", "Kunne ikke slette hendelse");
-          }
-        },
-      },
-    ]);
+    const confirmed = await showConfirm({
+      title: t("Slett hendelse", "Delete event"),
+      message: t("Er du sikker på at du vil slette denne?", "Are you sure you want to delete this?"),
+      confirmLabel: t("Slett", "Delete"),
+      cancelLabel: t("Avbryt", "Cancel"),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteMutation.mutateAsync(id);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (e) {
+      showToast(t("Kunne ikke slette hendelse", "Could not delete event"));
+    }
   };
 
   if (loading) {
@@ -310,9 +327,7 @@ export default function ScheduleScreen() {
           { backgroundColor: theme.backgroundRoot },
         ]}
       >
-        <ThemedText style={{ color: theme.textSecondary }}>
-          Laster...
-        </ThemedText>
+        <ThemedText style={{ color: theme.textSecondary }}>{t("Laster...", "Loading...")}</ThemedText>
       </View>
     );
   }
@@ -329,6 +344,21 @@ export default function ScheduleScreen() {
       scrollIndicatorInsets={{ bottom: insets.bottom }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.dark.accent} />}
     >
+      {queryError && (
+        <View style={[styles.errorBanner, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}> 
+          <Feather name="alert-triangle" size={16} color={theme.textSecondary} />
+          <View style={{ flex: 1 }}>
+            <ThemedText style={[styles.errorBannerText, { color: theme.textSecondary }]}> 
+              {queryError instanceof Error ? queryError.message : t("Kunne ikke laste tidsplan", "Could not load schedule")}
+            </ThemedText>
+          </View>
+          <Pressable onPress={() => refetch()}>
+            <ThemedText style={{ color: Colors.dark.accent, fontWeight: "600" }}>
+              {t("Prøv igjen", "Try again")}
+            </ThemedText>
+          </Pressable>
+        </View>
+      )}
       {weddingDate ? (
         <ThemedText
           style={[styles.dateHeader, { color: theme.textSecondary }]}
@@ -352,9 +382,12 @@ export default function ScheduleScreen() {
           <Feather name="mic" size={18} color={Colors.dark.accent} />
         </View>
         <View style={styles.speechHeaderContent}>
-          <ThemedText style={styles.speechTitle}>Taleliste</ThemedText>
+          <ThemedText style={styles.speechTitle}>{t("Taleliste", "Speech list")}</ThemedText>
           <ThemedText style={[styles.speechCount, { color: theme.textSecondary }]}>
-            {speeches.length} taler - {speeches.reduce((sum, s) => sum + (s.durationMinutes || 5), 0)} min totalt
+            {t(
+              `${speeches.length} taler - ${speeches.reduce((sum, s) => sum + (s.durationMinutes || 5), 0)} min totalt`,
+              `${speeches.length} speeches - ${speeches.reduce((sum, s) => sum + (s.durationMinutes || 5), 0)} min total`
+            )}
           </ThemedText>
         </View>
         <Feather
@@ -384,7 +417,7 @@ export default function ScheduleScreen() {
                 </ThemedText>
               </View>
               <ThemedText style={[styles.speechDuration, { color: theme.textSecondary }]}>
-                {speech.durationMinutes || 5} min
+                {t(`${speech.durationMinutes || 5} min`, `${speech.durationMinutes || 5} min`)}
               </ThemedText>
             </View>
           ))}
@@ -394,7 +427,7 @@ export default function ScheduleScreen() {
               style={styles.viewAllButton}
             >
               <ThemedText style={[styles.viewAllText, { color: Colors.dark.accent }]}>
-                Se alle {speeches.length} taler
+                {t(`Se alle ${speeches.length} taler`, `View all ${speeches.length} speeches`)}
               </ThemedText>
               <Feather name="arrow-right" size={16} color={Colors.dark.accent} />
             </Pressable>
@@ -404,7 +437,7 @@ export default function ScheduleScreen() {
               style={styles.viewAllButton}
             >
               <ThemedText style={[styles.viewAllText, { color: Colors.dark.accent }]}>
-                Rediger taleliste
+                {t("Rediger taleliste", "Edit speech list")}
               </ThemedText>
               <Feather name="edit-2" size={14} color={Colors.dark.accent} />
             </Pressable>
@@ -417,7 +450,7 @@ export default function ScheduleScreen() {
         >
           <Feather name="plus" size={16} color={Colors.dark.accent} />
           <ThemedText style={[styles.addSpeechText, { color: Colors.dark.accent }]}>
-            Legg til taler
+            {t("Legg til taler", "Add speeches")}
           </ThemedText>
         </Pressable>
       ) : null}
@@ -429,9 +462,9 @@ export default function ScheduleScreen() {
       >
         <Feather name="share-2" size={18} color={Colors.dark.accent} />
         <View style={styles.shareButtonContent}>
-          <ThemedText style={styles.shareButtonTitle}>Del med toastmaster</ThemedText>
+          <ThemedText style={styles.shareButtonTitle}>{t("Del med toastmaster", "Share with toastmaster")}</ThemedText>
           <ThemedText style={[styles.shareButtonSubtitle, { color: theme.textMuted }]}>
-            Gi koordinatorer tilgang til taler og program
+            {t("Gi koordinatorer tilgang til taler og program", "Give coordinators access to speeches and schedule")}
           </ThemedText>
         </View>
         <Feather name="chevron-right" size={18} color={theme.textMuted} />
@@ -447,18 +480,18 @@ export default function ScheduleScreen() {
           <ThemedText
             style={[styles.emptyText, { color: theme.textSecondary }]}
           >
-            Ingen hendelser lagt til ennå
+            {t("Ingen hendelser lagt til ennå", "No events added yet")}
           </ThemedText>
           <ThemedText
             style={[styles.emptySubtext, { color: theme.textMuted }]}
           >
-            Legg til din første hendelse for bryllupsdagen
+            {t("Legg til din første hendelse for bryllupsdagen", "Add your first event for the wedding day")}
           </ThemedText>
         </View>
       ) : (
         <View style={styles.timeline}>
           <ThemedText style={[styles.swipeHint, { color: theme.textMuted }]}>
-            Sveip til venstre for å endre eller slette
+            {t("Sveip til venstre for å endre eller slette", "Swipe left to edit or delete")}
           </ThemedText>
           {events.map((event, index) => (
             <SwipeableEventItem
@@ -466,6 +499,7 @@ export default function ScheduleScreen() {
               event={event}
               index={index}
               theme={theme}
+              t={t}
               onEdit={() => handleEditEvent(event)}
               onDelete={() => handleDeleteEvent(event.id)}
             />
@@ -482,7 +516,7 @@ export default function ScheduleScreen() {
           ]}
         >
           <ThemedText type="h3" style={styles.formTitle}>
-            {editingEvent ? "Endre hendelse" : "Legg til hendelse"}
+            {editingEvent ? t("Endre hendelse", "Edit event") : t("Legg til hendelse", "Add event")}
           </ThemedText>
 
           <View style={styles.inputRow}>
@@ -495,7 +529,7 @@ export default function ScheduleScreen() {
                   borderColor: theme.border,
                 },
               ]}
-              placeholder="14:00"
+              placeholder={t("14:00", "14:00")}
               placeholderTextColor={theme.textMuted}
               value={newTime}
               onChangeText={setNewTime}
@@ -510,7 +544,7 @@ export default function ScheduleScreen() {
                   borderColor: theme.border,
                 },
               ]}
-              placeholder="F.eks. Fotografering av brudepar"
+              placeholder={t("F.eks. Fotografering av brudepar", "e.g. Couple photos")}
               placeholderTextColor={theme.textMuted}
               value={newTitle}
               onChangeText={setNewTitle}
@@ -518,7 +552,10 @@ export default function ScheduleScreen() {
           </View>
 
           <ThemedText style={[styles.helpText, { color: theme.textMuted }]}>
-            Tips: Bruk kamera-ikon for foto/video, så finner Foto & Video Tidsplan det automatisk
+            {t(
+              "Tips: Bruk kamera-ikon for foto/video, så finner Foto & Video Tidsplan det automatisk",
+              "Tip: Use the camera icon for photo/video so the Photo & Video Timeline finds it automatically"
+            )}
           </ThemedText>
 
           <View style={styles.iconPicker}>
@@ -556,12 +593,10 @@ export default function ScheduleScreen() {
               }}
               style={[styles.cancelButton, { borderColor: theme.border }]}
             >
-              <ThemedText style={{ color: theme.textSecondary }}>
-                Avbryt
-              </ThemedText>
+              <ThemedText style={{ color: theme.textSecondary }}>{t("Avbryt", "Cancel")}</ThemedText>
             </Pressable>
             <Button onPress={handleAddEvent} style={styles.saveButton}>
-              {editingEvent ? "Oppdater" : "Lagre"}
+              {editingEvent ? t("Oppdater", "Update") : t("Lagre", "Save")}
             </Button>
           </View>
         </Animated.View>
@@ -575,7 +610,7 @@ export default function ScheduleScreen() {
         >
           <Feather name="plus" size={20} color={Colors.dark.accent} />
           <ThemedText style={[styles.addButtonText, { color: Colors.dark.accent }]}>
-            Legg til hendelse
+            {t("Legg til hendelse", "Add event")}
           </ThemedText>
         </Pressable>
       )}
@@ -625,6 +660,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: "center",
     marginBottom: Spacing.sm,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  errorBannerText: {
+    fontSize: 12,
   },
   swipeContainer: {
     position: "relative",

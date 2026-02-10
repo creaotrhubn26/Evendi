@@ -5,7 +5,6 @@ import {
   View,
   TextInput,
   Pressable,
-  Alert,
   RefreshControl,
   ActivityIndicator,
 } from "react-native";
@@ -32,6 +31,8 @@ import {
   getVendorPlannedShots,
   PhotoShot,
 } from "@/lib/api-couple-data";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 
 const CATEGORY_LABELS: Record<string, string> = {
   ceremony: "Seremoni",
@@ -176,7 +177,7 @@ export default function PhotoPlanScreen() {
 
   const handleAddShot = async () => {
     if (!newTitle.trim()) {
-      Alert.alert("Feil", "Vennligst skriv inn en tittel");
+      showToast("Vennligst skriv inn en tittel");
       return;
     }
 
@@ -226,7 +227,7 @@ export default function PhotoPlanScreen() {
       clearLocationSelection();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre bildet");
+      showToast("Kunne ikke lagre bildet");
     }
   };
 
@@ -254,21 +255,20 @@ export default function PhotoPlanScreen() {
   };
 
   const handleDeleteShot = async (id: string) => {
-    Alert.alert("Slett bilde", "Er du sikker på at du vil slette dette bildet?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Slett",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteMutation.mutateAsync(id);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          } catch (e) {
-            Alert.alert("Feil", "Kunne ikke slette bildet");
-          }
-        },
-      },
-    ]);
+    const confirmed = await showConfirm({
+      title: "Slett bilde",
+      message: "Er du sikker på at du vil slette dette bildet?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteMutation.mutateAsync(id);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (e) {
+      showToast("Kunne ikke slette bildet");
+    }
   };
 
   const groupedShots = shots.reduce((acc, shot) => {

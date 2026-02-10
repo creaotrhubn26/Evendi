@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, View, TextInput, Pressable, ActivityIndicator, Alert, Switch } from "react-native";
+import { StyleSheet, View, TextInput, Pressable, ActivityIndicator, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { showToast } from "@/lib/toast";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -112,11 +113,11 @@ export default function MusicDetailsScreen({ navigation }: { navigation: NativeS
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/music-details"] });
-      Alert.alert("Lagret", "Musikkdetaljene er oppdatert");
+      showToast("Musikkdetaljene er oppdatert");
     },
     onError: (error: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 

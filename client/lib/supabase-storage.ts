@@ -1,5 +1,6 @@
 import * as FileSystem from "expo-file-system";
 import { supabase } from "./supabase-auth";
+export { isSupabaseConfigured } from "./supabase-auth";
 
 const BUCKET_NAME = "chat-attachments";
 
@@ -67,10 +68,6 @@ export const deleteChatImage = async (imageUrl: string): Promise<void> => {
   } catch (error) {
     console.error("Error deleting image from Supabase:", error);
   }
-};
-
-export const isSupabaseConfigured = (): boolean => {
-  return !!supabase && !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
 };
 
 export default supabase;

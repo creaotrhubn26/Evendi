@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { View, ScrollView, StyleSheet, TextInput, Pressable, Alert, Switch, FlatList } from "react-native";
+import { View, ScrollView, StyleSheet, TextInput, Pressable, Switch, FlatList } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -12,6 +12,8 @@ import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors, Typography } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 import type { WhatsNewItem } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
@@ -76,7 +78,7 @@ export default function AdminWhatsNewScreen({ route }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (error: any) => {
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
@@ -101,7 +103,7 @@ export default function AdminWhatsNewScreen({ route }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (error: any) => {
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
@@ -121,7 +123,7 @@ export default function AdminWhatsNewScreen({ route }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (error: any) => {
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
@@ -155,11 +157,11 @@ export default function AdminWhatsNewScreen({ route }: Props) {
 
   const handleSave = () => {
     if (!formData.title.trim()) {
-      Alert.alert("Validering", "Tittel er påkrevd");
+      showToast("Tittel er påkrevd");
       return;
     }
     if (!formData.description.trim()) {
-      Alert.alert("Validering", "Beskrivelse er påkrevd");
+      showToast("Beskrivelse er påkrevd");
       return;
     }
 
@@ -170,15 +172,16 @@ export default function AdminWhatsNewScreen({ route }: Props) {
     }
   };
 
-  const handleDelete = (id: string) => {
-    Alert.alert("Slett", "Er du sikker på at du vil slette dette?", [
-      { text: "Avbryt", onPress: () => {} },
-      {
-        text: "Slett",
-        onPress: () => deleteMutation.mutate(id),
-        style: "destructive",
-      },
-    ]);
+  const handleDelete = async (id: string) => {
+    const confirmed = await showConfirm({
+      title: "Slett",
+      message: "Er du sikker på at du vil slette dette?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    deleteMutation.mutate(id);
   };
 
   return (

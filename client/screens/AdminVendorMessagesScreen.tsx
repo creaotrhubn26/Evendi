@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
   StyleSheet,
   View,
@@ -6,10 +6,10 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
   RefreshControl,
   Modal,
   ScrollView,
+  Linking,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,13 +21,10 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import type { VideoGuide } from "@shared/schema";
-
-interface AdminConvWithVendor {
-  conv: { id: string; vendorId: string; lastMessageAt: string; adminUnreadCount: number };
-  vendor: { id: string; email: string; businessName: string } | null;
-}
 
 interface AdminMessage {
   id: string;
@@ -39,10 +36,12 @@ interface AdminMessage {
   videoGuideId?: string;
 }
 
-type Props = NativeStackScreenProps<any, "AdminVendorMessages">;
+type Props = NativeStackScreenProps<RootStackParamList, "AdminVendorMessages">;
+
+type WsMessageEvent = { data: string };
 
 export default function AdminVendorMessagesScreen({ route, navigation }: Props) {
-  const { conversationId, vendorName, adminKey } = route.params as any;
+  const { conversationId, vendorName, adminKey } = route.params;
   const { theme } = useTheme();
   const headerHeight = useHeaderHeight();
 
@@ -53,11 +52,11 @@ export default function AdminVendorMessagesScreen({ route, navigation }: Props) 
   const [refreshing, setRefreshing] = useState(false);
   const [selectedGuideId, setSelectedGuideId] = useState<string | null>(null);
   const [showGuideModal, setShowGuideModal] = useState(false);
-  const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const wsTypingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const wsTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [vendorTypingWs, setVendorTypingWs] = useState(false);
-  const listRef = useRef<FlatList<any> | null>(null);
+  const listRef = useRef<FlatList<{ type: "sep"; id: string; label: string } | { type: "msg"; id: string; m: AdminMessage }> | null>(null);
 
   const { data: videoGuides = [] } = useQuery<VideoGuide[], Error>({
     queryKey: ["video-guides"],
@@ -94,7 +93,11 @@ export default function AdminVendorMessagesScreen({ route, navigation }: Props) 
     return out;
   }, [messages]);
 
-  const fetchMessages = async (showSpinner = true) => {
+  const fetchMessages = useCallback(async (showSpinner = true) => {
+    if (!adminKey) {
+      setLoading(false);
+      return;
+    }
     try {
       if (showSpinner) setLoading(true);
       const url = new URL(`/api/admin/vendor-admin-conversations/${conversationId}/messages`, getApiUrl());
@@ -106,15 +109,19 @@ export default function AdminVendorMessagesScreen({ route, navigation }: Props) 
       setMessages(data.reverse());
     } catch (e) {
       console.error(e);
-      Alert.alert("Feil", (e as Error).message);
+      showToast((e as Error).message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [adminKey, conversationId]);
 
   const sendReply = async () => {
     if (!replyText.trim() && !selectedGuideId) return;
+    if (!adminKey) {
+      showToast("Logg inn som admin for a sende svar.");
+      return;
+    }
     try {
       setSending(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -136,7 +143,7 @@ export default function AdminVendorMessagesScreen({ route, navigation }: Props) 
       setReplyText("");
       setSelectedGuideId(null);
     } catch (e) {
-      Alert.alert("Feil", (e as Error).message);
+      showToast((e as Error).message);
     } finally {
       setSending(false);
     }
@@ -154,12 +161,14 @@ export default function AdminVendorMessagesScreen({ route, navigation }: Props) 
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     // Fire immediately and then debounce further calls for 2s
     notifyTyping();
-    typingTimerRef.current = setTimeout(() => {}, 2000) as unknown as NodeJS.Timeout;
+    typingTimerRef.current = setTimeout(() => {
+      typingTimerRef.current = null;
+    }, 2000);
   };
 
   useEffect(() => {
     fetchMessages();
-  }, [conversationId]);
+  }, [fetchMessages]);
 
   useEffect(() => {
     // Auto-scroll to bottom when new content arrives
@@ -172,23 +181,28 @@ export default function AdminVendorMessagesScreen({ route, navigation }: Props) 
   useEffect(() => {
     if (!adminKey || !conversationId) return;
     let closedByUs = false;
-    let reconnectTimer: any = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     const connect = () => {
       try {
         const wsUrl = getApiUrl().replace(/^http/, "ws") + `/ws/admin/vendor-admin?adminKey=${encodeURIComponent(adminKey)}&conversationId=${encodeURIComponent(conversationId)}`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
-        ws.onmessage = (event) => {
+        ws.onmessage = (event: WsMessageEvent) => {
           try {
-            const data = JSON.parse((event as any).data);
+            const payloadText = typeof event.data === "string" ? event.data : "";
+            if (!payloadText) return;
+            const data = JSON.parse(payloadText) as {
+              type?: string;
+              payload?: AdminMessage & { sender?: string };
+            };
             if (data?.type === "message" && data.payload) {
               const msg = data.payload as AdminMessage;
               setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
             } else if (data?.type === "typing" && data.payload?.sender === "vendor") {
               setVendorTypingWs(true);
               if (wsTypingTimerRef.current) clearTimeout(wsTypingTimerRef.current);
-              wsTypingTimerRef.current = setTimeout(() => setVendorTypingWs(false), 4000) as unknown as NodeJS.Timeout;
+              wsTypingTimerRef.current = setTimeout(() => setVendorTypingWs(false), 4000);
             }
           } catch {}
         };
@@ -209,9 +223,27 @@ export default function AdminVendorMessagesScreen({ route, navigation }: Props) 
     };
   }, [adminKey, conversationId]);
 
+  const openGuide = async (guideId: string) => {
+    const guide = videoGuides.find((g) => g.id === guideId);
+    if (!guide?.videoUrl) {
+      showToast("Denne videoguiden mangler URL.");
+      return;
+    }
+    try {
+      const canOpen = await Linking.canOpenURL(guide.videoUrl);
+      if (!canOpen) {
+        showToast("Enheten din kan ikke åpne denne lenken.");
+        return;
+      }
+      await Linking.openURL(guide.videoUrl);
+    } catch (error) {
+      showToast("Kunne ikke åpne videoguiden akkurat nå.");
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={["top", "bottom"]}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: headerHeight + Spacing.md }]}>
         <ThemedText style={styles.title}>{vendorName || "Leverandør"}</ThemedText>
         <ThemedText style={styles.subtitle}>Wedflow Support Chat</ThemedText>
       </View>
@@ -219,7 +251,7 @@ export default function AdminVendorMessagesScreen({ route, navigation }: Props) 
       {loading && <ActivityIndicator style={{ marginTop: Spacing.lg }} color={theme.accent} />}
       {!loading && (
         <FlatList
-          ref={listRef as any}
+          ref={listRef}
           data={items}
           keyExtractor={(it) => it.id}
           contentContainerStyle={{ padding: Spacing.md, paddingTop: 0 }}
@@ -255,13 +287,16 @@ export default function AdminVendorMessagesScreen({ route, navigation }: Props) 
                 </ThemedText>
                 {m.body && <ThemedText style={styles.body}>{m.body}</ThemedText>}
                 {m.videoGuideId && (
-                  <View style={[styles.guideRef, { backgroundColor: theme.accent + "15", borderColor: theme.accent }]}>
+                  <Pressable
+                    onPress={() => openGuide(m.videoGuideId || "")}
+                    style={[styles.guideRef, { backgroundColor: theme.accent + "15", borderColor: theme.accent }]}
+                  >
                     <Feather name="video" size={14} color={theme.accent} />
                     <ThemedText style={[styles.guideRefText, { color: theme.accent }]}>
                       {videoGuides.find((g) => g.id === m.videoGuideId)?.title || "Videoguide"}
                     </ThemedText>
                     <Feather name="external-link" size={12} color={theme.accent} />
-                  </View>
+                  </Pressable>
                 )}
                 <ThemedText style={styles.meta}>{new Date(m.createdAt).toLocaleString()}</ThemedText>
               </Pressable>

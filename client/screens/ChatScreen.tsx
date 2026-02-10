@@ -6,7 +6,6 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
   Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,6 +23,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { showToast } from "@/lib/toast";
+import { showConfirm, showOptions } from "@/lib/dialogs";
 
 const COUPLE_STORAGE_KEY = "wedflow_couple_session";
 
@@ -124,19 +125,16 @@ export default function ChatScreen({ route, navigation }: Props) {
     },
   });
 
-  const handleDeleteMessage = (messageId: string) => {
-    Alert.alert(
-      "Slett melding",
-      "Er du sikker på at du vil slette denne meldingen? Dette kan ikke angres.",
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Slett",
-          style: "destructive",
-          onPress: () => deleteMessageMutation.mutate(messageId),
-        },
-      ]
-    );
+  const handleDeleteMessage = async (messageId: string) => {
+    const confirmed = await showConfirm({
+      title: "Slett melding",
+      message: "Er du sikker på at du vil slette denne meldingen? Dette kan ikke angres.",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    deleteMessageMutation.mutate(messageId);
   };
 
   const handleEditMessage = (message: Message) => {
@@ -150,37 +148,27 @@ export default function ChatScreen({ route, navigation }: Props) {
   };
 
   const handleMessageAction = (message: Message) => {
-    Alert.alert(
-      "Meldingshandlinger",
-      message.body,
-      [
-        {
-          text: "Rediger",
-          onPress: () => handleEditMessage(message),
-        },
-        {
-          text: "Slett",
-          style: "destructive",
-          onPress: () => handleDeleteMessage(message.id),
-        },
-        { text: "Avbryt", style: "cancel" },
-      ]
-    );
+    showOptions({
+      title: "Meldingshandlinger",
+      message: message.body,
+      cancelLabel: "Avbryt",
+      options: [
+        { label: "Rediger", onPress: () => handleEditMessage(message) },
+        { label: "Slett", destructive: true, onPress: () => handleDeleteMessage(message.id) },
+      ],
+    });
   };
 
-  const handleDeleteConversation = () => {
-    Alert.alert(
-      "Slett samtale",
-      "Er du sikker på at du vil slette hele samtalen og alle meldinger? Dette kan ikke angres (GDPR).",
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Slett alt",
-          style: "destructive",
-          onPress: () => deleteConversationMutation.mutate(),
-        },
-      ]
-    );
+  const handleDeleteConversation = async () => {
+    const confirmed = await showConfirm({
+      title: "Slett samtale",
+      message: "Er du sikker på at du vil slette hele samtalen og alle meldinger? Dette kan ikke angres (GDPR).",
+      confirmLabel: "Slett alt",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    deleteConversationMutation.mutate();
   };
 
   useLayoutEffect(() => {
@@ -281,7 +269,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Tillatelse nødvendig", "Vi trenger tilgang til bildene dine for å kunne sende bilder.");
+      showToast("Vi trenger tilgang til bildene dine for å kunne sende bilder.");
       return;
     }
 
@@ -394,7 +382,7 @@ export default function ChatScreen({ route, navigation }: Props) {
         });
       }
     } catch (error) {
-      Alert.alert("Feil", "Kunne ikke laste opp bildet. Prøv igjen.");
+      showToast("Kunne ikke laste opp bildet. Prøv igjen.");
     } finally {
       setIsUploading(false);
     }

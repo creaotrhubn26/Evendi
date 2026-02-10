@@ -5,7 +5,6 @@ import {
   ScrollView,
   Pressable,
   RefreshControl,
-  Alert,
   TextInput,
   Modal,
   TouchableOpacity,
@@ -27,6 +26,8 @@ import { useTheme } from '../hooks/useTheme';
 import { useVendorSearch } from '../hooks/useVendorSearch';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
+import { showToast } from '@/lib/toast';
+import { showConfirm, showOptions } from '@/lib/dialogs';
 import {
   getPlannerData,
   createPlannerMeeting,
@@ -186,7 +187,7 @@ export function PlanleggerScreen() {
 
   const saveMeeting = async () => {
     if (!plannerSearch.searchText.trim() || !meetingDate.trim()) {
-      Alert.alert('Feil', 'Vennligst fyll inn planleggernavn og dato');
+      showToast('Vennligst fyll inn planleggernavn og dato');
       return;
     }
 
@@ -209,26 +210,26 @@ export function PlanleggerScreen() {
       setShowMeetingModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert('Feil', 'Kunne ikke lagre møte');
+      showToast('Kunne ikke lagre møte');
     }
   };
 
-  const deleteMeeting = (id: string) => {
-    Alert.alert('Slett møte', 'Er du sikker på at du vil slette dette møtet?', [
-      { text: 'Avbryt', style: 'cancel' },
-      {
-        text: 'Slett',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await meetingDeleteMut.mutateAsync(id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          } catch (e) {
-            Alert.alert('Feil', 'Kunne ikke slette møte');
-          }
-        },
-      },
-    ]);
+  const deleteMeeting = async (id: string) => {
+    const confirmed = await showConfirm({
+      title: 'Slett møte',
+      message: 'Er du sikker på at du vil slette dette møtet?',
+      confirmLabel: 'Slett',
+      cancelLabel: 'Avbryt',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    try {
+      await meetingDeleteMut.mutateAsync(id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      showToast('Kunne ikke slette møte');
+    }
   };
 
   const duplicateMeeting = async (meeting: PlannerMeeting) => {
@@ -244,7 +245,7 @@ export function PlanleggerScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert('Feil', 'Kunne ikke duplisere møte');
+      showToast('Kunne ikke duplisere møte');
     }
   };
 
@@ -281,7 +282,7 @@ export function PlanleggerScreen() {
 
   const saveTask = async () => {
     if (!taskTitle.trim() || !taskDueDate.trim()) {
-      Alert.alert('Feil', 'Vennligst fyll inn oppgavenavn og forfallsdato');
+      showToast('Vennligst fyll inn oppgavenavn og forfallsdato');
       return;
     }
 
@@ -303,26 +304,26 @@ export function PlanleggerScreen() {
       setShowTaskModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert('Feil', 'Kunne ikke lagre oppgave');
+      showToast('Kunne ikke lagre oppgave');
     }
   };
 
-  const deleteTask = (id: string) => {
-    Alert.alert('Slett oppgave', 'Er du sikker på at du vil slette denne oppgaven?', [
-      { text: 'Avbryt', style: 'cancel' },
-      {
-        text: 'Slett',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await taskDeleteMut.mutateAsync(id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          } catch (e) {
-            Alert.alert('Feil', 'Kunne ikke slette oppgave');
-          }
-        },
-      },
-    ]);
+  const deleteTask = async (id: string) => {
+    const confirmed = await showConfirm({
+      title: 'Slett oppgave',
+      message: 'Er du sikker på at du vil slette denne oppgaven?',
+      confirmLabel: 'Slett',
+      cancelLabel: 'Avbryt',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    try {
+      await taskDeleteMut.mutateAsync(id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      showToast('Kunne ikke slette oppgave');
+    }
   };
 
   const duplicateTask = async (task: PlannerTask) => {
@@ -337,7 +338,7 @@ export function PlanleggerScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert('Feil', 'Kunne ikke duplisere oppgave');
+      showToast('Kunne ikke duplisere oppgave');
     }
   };
 
@@ -387,12 +388,16 @@ export function PlanleggerScreen() {
                 onPress={() => openMeetingModal(meeting)}
                 onLongPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert('Alternativer', meeting.plannerName, [
-                    { text: 'Avbryt', style: 'cancel' },
-                    { text: 'Rediger', onPress: () => openMeetingModal(meeting) },
-                    { text: 'Dupliser', onPress: () => duplicateMeeting(meeting) },
-                    { text: 'Slett', style: 'destructive', onPress: () => deleteMeeting(meeting.id) },
-                  ]);
+                  showOptions({
+                    title: 'Alternativer',
+                    message: meeting.plannerName,
+                    cancelLabel: 'Avbryt',
+                    options: [
+                      { label: 'Rediger', onPress: () => openMeetingModal(meeting) },
+                      { label: 'Dupliser', onPress: () => duplicateMeeting(meeting) },
+                      { label: 'Slett', destructive: true, onPress: () => deleteMeeting(meeting.id) },
+                    ],
+                  });
                 }}
                 style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
               >
@@ -467,12 +472,16 @@ export function PlanleggerScreen() {
                 onPress={() => openTaskModal(task)}
                 onLongPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert('Alternativer', task.title, [
-                    { text: 'Avbryt', style: 'cancel' },
-                    { text: 'Rediger', onPress: () => openTaskModal(task) },
-                    { text: 'Dupliser', onPress: () => duplicateTask(task) },
-                    { text: 'Slett', style: 'destructive', onPress: () => deleteTask(task.id) },
-                  ]);
+                  showOptions({
+                    title: 'Alternativer',
+                    message: task.title,
+                    cancelLabel: 'Avbryt',
+                    options: [
+                      { label: 'Rediger', onPress: () => openTaskModal(task) },
+                      { label: 'Dupliser', onPress: () => duplicateTask(task) },
+                      { label: 'Slett', destructive: true, onPress: () => deleteTask(task.id) },
+                    ],
+                  });
                 }}
                 style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
               >

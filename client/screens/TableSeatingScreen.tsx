@@ -4,7 +4,6 @@ import {
   StyleSheet,
   View,
   Pressable,
-  Alert,
   TextInput,
   Modal,
   LayoutRectangle,
@@ -37,6 +36,8 @@ import { Table, TABLE_CATEGORIES, Speech } from "@/lib/types";
 import { apiRequest } from "@/lib/query-client";
 import { getSpeeches } from "@/lib/storage";
 import type { WeddingGuest } from "@shared/schema";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 
 export default function TableSeatingScreen() {
   const insets = useSafeAreaInsets();
@@ -191,18 +192,17 @@ export default function TableSeatingScreen() {
     assignGuestMutation.mutate({ tableId, guestId: selectedGuest.id });
   };
 
-  const handleRemoveGuest = (guest: WeddingGuest, tableId: string) => {
-    Alert.alert(
-      "Fjern fra bord",
-      `Fjerne ${guest.name} fra bordet?`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Fjern",
-          onPress: () => removeGuestMutation.mutate({ tableId, guestId: guest.id }),
-        },
-      ]
-    );
+  const handleRemoveGuest = async (guest: WeddingGuest, tableId: string) => {
+    const confirmed = await showConfirm({
+      title: "Fjern fra bord",
+      message: `Fjerne ${guest.name} fra bordet?`,
+      confirmLabel: "Fjern",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (confirmed) {
+      removeGuestMutation.mutate({ tableId, guestId: guest.id });
+    }
   };
 
   const getGuestsByTable = useCallback((tableId: string) => {
@@ -229,7 +229,7 @@ export default function TableSeatingScreen() {
     if (!targetTable) return;
     const tableGuests = getGuestsByTable(targetTableId);
     if (tableGuests.length >= targetTable.seats) {
-      Alert.alert("Ingen ledige plasser", `"${targetTable.name}" er fullt.`);
+      showToast(`"${targetTable.name}" er fullt.`);
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -308,14 +308,15 @@ export default function TableSeatingScreen() {
   };
 
   const handleDeleteTable = (table: Table) => {
-    Alert.alert(
-      "Slett bord",
-      `Er du sikker på at du vil slette "${table.name}"? Gjestene vil bli fjernet fra bordet.`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        { text: "Slett", style: "destructive", onPress: () => deleteTableMutation.mutate(table.id) },
-      ]
-    );
+    showConfirm({
+      title: "Slett bord",
+      message: `Er du sikker på at du vil slette "${table.name}"? Gjestene vil bli fjernet fra bordet.`,
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    }).then((confirmed) => {
+      if (confirmed) deleteTableMutation.mutate(table.id);
+    });
   };
 
   const getCategoryLabel = (category?: string) => {

@@ -1,8 +1,11 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { clearCoupleSession, getCoupleSession } from "@/lib/storage";
 
 interface Session {
   userId?: string;
   userEmail?: string;
+  token?: string;
+  sessionToken?: string;
   isAuthenticated: boolean;
 }
 
@@ -11,13 +14,29 @@ interface Session {
  * Returns current session information and logout function
  */
 export function useSession() {
-  const logout = useCallback(async () => {
-    // Session logout logic
+  const [session, setSession] = useState<Session>({ isAuthenticated: false });
+
+  const loadSession = useCallback(async () => {
+    const stored = await getCoupleSession();
+    if (stored?.token) {
+      setSession({
+        token: stored.token,
+        sessionToken: stored.token,
+        isAuthenticated: true,
+      });
+      return;
+    }
+    setSession({ isAuthenticated: false });
   }, []);
 
-  const session: Session = {
-    isAuthenticated: false,
-  };
+  useEffect(() => {
+    loadSession();
+  }, [loadSession]);
 
-  return { session, logout };
+  const logout = useCallback(async () => {
+    await clearCoupleSession();
+    setSession({ isAuthenticated: false });
+  }, []);
+
+  return { session, logout, refreshSession: loadSession };
 }

@@ -1,7 +1,9 @@
 import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
-import { getWeddingDetails } from "./storage";
+import { getWeddingDetails, getCoupleSession, getAppLanguage, type AppLanguage } from "./storage";
+import { getChecklistTasks } from "./api-checklist";
+import { showToast as showToastNative } from "@/lib/toast";
 
 const isWeb = Platform.OS === "web";
 
@@ -9,6 +11,65 @@ const NOTIFICATION_SETTINGS_KEY = "@wedflow/notification_settings";
 const COUNTDOWN_NOTIFICATIONS_KEY = "@wedflow/countdown_notifications";
 const CHECKLIST_NOTIFICATIONS_KEY = "@wedflow/checklist_notifications";
 const CUSTOM_REMINDERS_KEY = "@wedflow/custom_reminders";
+
+type NotificationCopy = {
+  toastChecklistFailed: string;
+  toastUpdated: string;
+  toastPermissionGranted: string;
+  checklistTitle: string;
+  checklistBody: (taskTitle: string) => string;
+  countdownTitle: (daysBefore: number) => string;
+  countdownBody: (daysBefore: number) => string;
+};
+
+const NOTIFICATION_COPY: Record<AppLanguage, NotificationCopy> = {
+  nb: {
+    toastChecklistFailed: "Noen sjekkliste-varsler kunne ikke planlegges.",
+    toastUpdated: "Varsler oppdatert.",
+    toastPermissionGranted: "Varsler tillatt.",
+    checklistTitle: "Påminnelse om gjøremål",
+    checklistBody: (taskTitle) => `Husk: "${taskTitle}" bør gjøres snart!`,
+    countdownTitle: (daysBefore) =>
+      daysBefore === 1
+        ? "Bryllupet er i morgen!"
+        : daysBefore === 0
+          ? "Gratulerer med dagen!"
+          : `${daysBefore} dager til bryllupet!`,
+    countdownBody: (daysBefore) =>
+      daysBefore === 1
+        ? "Siste sjekk av alle detaljer. Vi gleder oss med dere!"
+        : daysBefore === 0
+          ? "I dag er den store dagen. Nyt hvert øyeblikk!"
+          : "Ikke glem å sjekke gjoremalsslisten din.",
+  },
+  en: {
+    toastChecklistFailed: "Some checklist reminders could not be scheduled.",
+    toastUpdated: "Notifications updated.",
+    toastPermissionGranted: "Notifications allowed.",
+    checklistTitle: "Checklist reminder",
+    checklistBody: (taskTitle) => `Remember: "${taskTitle}" should be done soon!`,
+    countdownTitle: (daysBefore) =>
+      daysBefore === 1
+        ? "The wedding is tomorrow!"
+        : daysBefore === 0
+          ? "Congratulations on your big day!"
+          : `${daysBefore} days until the wedding!`,
+    countdownBody: (daysBefore) =>
+      daysBefore === 1
+        ? "Final check of all details. We are excited for you!"
+        : daysBefore === 0
+          ? "Today is the big day. Enjoy every moment!"
+          : "Don't forget to review your checklist.",
+  },
+};
+
+const CATEGORY_LABELS_EN: Record<string, string> = {
+  general: "General",
+  vendor: "Vendor",
+  budget: "Budget",
+  guest: "Guests",
+  planning: "Planning",
+};
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -101,17 +162,102 @@ export async function cancelAllChecklistReminders(): Promise<void> {
   } catch {}
 }
 
-export async function scheduleAllNotifications(settings: NotificationSettings): Promise<void> {
-  if (!settings.enabled) return;
+export async function scheduleAllNotifications(settings: NotificationSettings): Promise<{ checklistFailed: number }> {
+  if (!settings.enabled) return { checklistFailed: 0 };
 
-  await scheduleCountdownNotifications(settings);
+  const language = await getAppLanguage();
 
+  await scheduleCountdownNotifications(settings, language);
+
+  let checklistFailed = 0;
   if (!settings.checklistReminders) {
     await cancelAllChecklistReminders();
+  } else {
+    const { failed } = await scheduleChecklistRemindersFromTasks(settings, language);
+    checklistFailed = failed;
+    if (failed > 0) {
+      showToast(getNotificationCopy(language).toastChecklistFailed);
+    }
+  }
+
+  return { checklistFailed };
+}
+
+export async function rescheduleChecklistReminders(): Promise<void> {
+  const settings = await getNotificationSettings();
+  if (!settings.enabled || !settings.checklistReminders) {
+    await cancelAllChecklistReminders();
+    return;
+  }
+
+  const language = await getAppLanguage();
+  const { failed } = await scheduleChecklistRemindersFromTasks(settings, language);
+  if (failed > 0) {
+    showToast(getNotificationCopy(language).toastChecklistFailed);
   }
 }
 
-async function scheduleCountdownNotifications(settings: NotificationSettings): Promise<void> {
+export async function rescheduleAllNotifications(showSuccess = false): Promise<void> {
+  const settings = await getNotificationSettings();
+  if (!settings.enabled) {
+    await cancelAllScheduledNotifications();
+    return;
+  }
+
+  const language = await getAppLanguage();
+  const result = await scheduleAllNotifications(settings);
+  if (showSuccess && result?.checklistFailed === 0) {
+    showToast(getNotificationCopy(language).toastUpdated);
+  }
+}
+
+async function scheduleChecklistRemindersFromTasks(
+  settings: NotificationSettings,
+  language: AppLanguage
+): Promise<{ failed: number }> {
+  await cancelAllChecklistReminders();
+
+  if (!settings.enabled || !settings.checklistReminders || isWeb) return { failed: 0 };
+
+  const session = await getCoupleSession();
+  if (!session) return { failed: 0 };
+
+  const wedding = await getWeddingDetails();
+  if (!wedding?.weddingDate) return { failed: 0 };
+
+  let tasks = [] as Awaited<ReturnType<typeof getChecklistTasks>>;
+  try {
+    tasks = await getChecklistTasks(session.token);
+  } catch (error) {
+    console.log("Failed to load checklist tasks for reminders:", error);
+    return { failed: 0 };
+  }
+
+  const weddingDate = new Date(wedding.weddingDate);
+  if (Number.isNaN(weddingDate.getTime())) return { failed: 0 };
+
+  let failed = 0;
+
+  for (const task of tasks) {
+    if (task.completed) continue;
+
+    const dueDate = new Date(weddingDate);
+    dueDate.setMonth(dueDate.getMonth() - (task.monthsBefore ?? 0));
+    dueDate.setHours(9, 0, 0, 0);
+
+    const result = await scheduleChecklistReminder(task.title, dueDate, language);
+    if (result.status === "failed") {
+      failed += 1;
+    }
+  }
+
+  return { failed };
+}
+
+async function scheduleCountdownNotifications(
+  settings: NotificationSettings,
+  language: AppLanguage
+): Promise<void> {
   await cancelCountdownNotifications();
 
   if (!settings.weddingCountdown) return;
@@ -122,23 +268,16 @@ async function scheduleCountdownNotifications(settings: NotificationSettings): P
   const weddingDate = new Date(wedding.weddingDate);
   const scheduledIds: string[] = [];
 
+  const copy = getNotificationCopy(language);
+
   for (const daysBefore of settings.daysBefore) {
     const notificationDate = new Date(weddingDate);
     notificationDate.setDate(notificationDate.getDate() - daysBefore);
     notificationDate.setHours(9, 0, 0, 0);
 
     if (notificationDate > new Date()) {
-      const title = daysBefore === 1 
-        ? "Bryllupet er i morgen!" 
-        : daysBefore === 0 
-          ? "Gratulerer med dagen!" 
-          : `${daysBefore} dager til bryllupet!`;
-
-      const body = daysBefore === 1
-        ? "Siste sjekk av alle detaljer. Vi gleder oss med dere!"
-        : daysBefore === 0
-          ? "I dag er den store dagen. Nyt hvert øyeblikk!"
-          : `Ikke glem å sjekke gjøremålslisten din.`;
+      const title = copy.countdownTitle(daysBefore);
+      const body = copy.countdownBody(daysBefore);
 
       try {
         const id = await Notifications.scheduleNotificationAsync({
@@ -164,22 +303,25 @@ async function scheduleCountdownNotifications(settings: NotificationSettings): P
 
 export async function scheduleChecklistReminder(
   taskTitle: string,
-  dueDate: Date
-): Promise<string | null> {
+  dueDate: Date,
+  language?: AppLanguage
+): Promise<{ status: "scheduled" | "skipped" | "failed"; id?: string }> {
   const settings = await getNotificationSettings();
-  if (!settings.enabled || !settings.checklistReminders) return null;
+  if (!settings.enabled || !settings.checklistReminders) return { status: "skipped" };
+
+  const copy = getNotificationCopy(language || (await getAppLanguage()));
 
   const reminderDate = new Date(dueDate);
   reminderDate.setDate(reminderDate.getDate() - 7);
   reminderDate.setHours(10, 0, 0, 0);
 
-  if (reminderDate <= new Date()) return null;
+  if (reminderDate <= new Date()) return { status: "skipped" };
 
   try {
     const id = await Notifications.scheduleNotificationAsync({
       content: {
-        title: "Påminnelse om gjøremål",
-        body: `Husk: "${taskTitle}" bør gjøres snart!`,
+        title: copy.checklistTitle,
+        body: copy.checklistBody(taskTitle),
         data: { type: "checklist", task: taskTitle },
       },
       trigger: {
@@ -193,9 +335,9 @@ export async function scheduleChecklistReminder(
     existingIds.push(id);
     await AsyncStorage.setItem(CHECKLIST_NOTIFICATIONS_KEY, JSON.stringify(existingIds));
 
-    return id;
+    return { status: "scheduled", id };
   } catch {
-    return null;
+    return { status: "failed" };
   }
 }
 
@@ -253,10 +395,13 @@ export async function scheduleCustomReminder(
   if (reminderDate <= new Date()) return null;
 
   try {
-    const categoryLabel = CATEGORY_LABELS[reminder.category] || "Generell";
-    const body = reminder.description 
-      ? reminder.description 
-      : `${categoryLabel} påminnelse`;
+    const language = await getAppLanguage();
+    const categoryLabel = getCategoryLabel(reminder.category, language);
+    const body = reminder.description
+      ? reminder.description
+      : language === "en"
+        ? `${categoryLabel} reminder`
+        : `${categoryLabel} påminnelse`;
 
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
@@ -321,3 +466,14 @@ export async function cancelAllCustomReminders(): Promise<void> {
 }
 
 export { CATEGORY_LABELS, CATEGORY_ICONS };
+export const getNotificationCopy = (language: AppLanguage) => NOTIFICATION_COPY[language] || NOTIFICATION_COPY.nb;
+export const getCategoryLabel = (category: string, language: AppLanguage) => {
+  if (language === "en") {
+    return CATEGORY_LABELS_EN[category] || "General";
+  }
+  return CATEGORY_LABELS[category] || "Generell";
+};
+
+function showToast(message: string) {
+  showToastNative(message);
+}

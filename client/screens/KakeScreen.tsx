@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
-  Alert,
   RefreshControl,
   Image,
   Pressable,
@@ -34,6 +33,8 @@ import { useTheme } from '../hooks/useTheme';
 import { useVendorSearch } from '@/hooks/useVendorSearch';
 import { Colors } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
+import { showToast } from '@/lib/toast';
+import { showConfirm, showOptions } from '@/lib/dialogs';
 import {
   getCakeData,
   createCakeTasting,
@@ -190,7 +191,7 @@ export function KakeScreen() {
       closeTastingModal();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: () => Alert.alert('Feil', 'Kunne ikke lagre smaksprøve'),
+    onError: () => showToast('Kunne ikke lagre smaksprøve'),
   });
 
   const updateTastingMutation = useMutation({
@@ -201,7 +202,7 @@ export function KakeScreen() {
       closeTastingModal();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: () => Alert.alert('Feil', 'Kunne ikke oppdatere smaksprøve'),
+    onError: () => showToast('Kunne ikke oppdatere smaksprøve'),
   });
 
   const deleteTastingMutation = useMutation({
@@ -210,7 +211,7 @@ export function KakeScreen() {
       queryClient.invalidateQueries({ queryKey: ['couple-cake-data'] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: () => Alert.alert('Feil', 'Kunne ikke slette smaksprøve'),
+    onError: () => showToast('Kunne ikke slette smaksprøve'),
   });
 
   const createDesignMutation = useMutation({
@@ -220,7 +221,7 @@ export function KakeScreen() {
       closeDesignModal();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: () => Alert.alert('Feil', 'Kunne ikke lagre design'),
+    onError: () => showToast('Kunne ikke lagre design'),
   });
 
   const updateDesignMutation = useMutation({
@@ -231,7 +232,7 @@ export function KakeScreen() {
       closeDesignModal();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: () => Alert.alert('Feil', 'Kunne ikke oppdatere design'),
+    onError: () => showToast('Kunne ikke oppdatere design'),
   });
 
   const deleteDesignMutation = useMutation({
@@ -240,7 +241,7 @@ export function KakeScreen() {
       queryClient.invalidateQueries({ queryKey: ['couple-cake-data'] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: () => Alert.alert('Feil', 'Kunne ikke slette design'),
+    onError: () => showToast('Kunne ikke slette design'),
   });
 
   const updateTimelineMutation = useMutation({
@@ -249,7 +250,7 @@ export function KakeScreen() {
       queryClient.invalidateQueries({ queryKey: ['couple-cake-data'] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: () => Alert.alert('Feil', 'Kunne ikke oppdatere tidslinje'),
+    onError: () => showToast('Kunne ikke oppdatere tidslinje'),
   });
 
   // Modal functions
@@ -315,15 +316,15 @@ export function KakeScreen() {
 
   const handleSaveTasting = async () => {
     if (!bakeryName.trim()) {
-      Alert.alert('Feil', 'Vennligst fyll inn bakeri navn');
+      showToast('Vennligst fyll inn bakeri navn');
       return;
     }
     if (!tastingDate.trim()) {
-      Alert.alert('Feil', 'Vennligst fyll inn dato');
+      showToast('Vennligst fyll inn dato');
       return;
     }
     if (!isValidDate(tastingDate.trim())) {
-      Alert.alert('Ugyldig dato', 'Bruk format YYYY-MM-DD eller DD.MM.YYYY');
+      showToast('Ugyldig dato. Bruk format YYYY-MM-DD eller DD.MM.YYYY');
       return;
     }
 
@@ -352,7 +353,7 @@ export function KakeScreen() {
 
   const handleSaveDesign = async () => {
     if (!designName.trim()) {
-      Alert.alert('Feil', 'Vennligst fyll inn design navn');
+      showToast('Vennligst fyll inn design navn');
       return;
     }
 
@@ -400,18 +401,28 @@ export function KakeScreen() {
     }
   };
 
-  const handleDeleteTasting = (id: string) => {
-    Alert.alert('Slett smaksprøve', 'Er du sikker på at du vil slette denne smaksprøven?', [
-      { text: 'Avbryt', style: 'cancel' },
-      { text: 'Slett', style: 'destructive', onPress: () => deleteTastingMutation.mutate(id) },
-    ]);
+  const handleDeleteTasting = async (id: string) => {
+    const confirmed = await showConfirm({
+      title: 'Slett smaksprøve',
+      message: 'Er du sikker på at du vil slette denne smaksprøven?',
+      confirmLabel: 'Slett',
+      cancelLabel: 'Avbryt',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    deleteTastingMutation.mutate(id);
   };
 
-  const handleDeleteDesign = (id: string) => {
-    Alert.alert('Slett design', 'Er du sikker på at du vil slette dette designet?', [
-      { text: 'Avbryt', style: 'cancel' },
-      { text: 'Slett', style: 'destructive', onPress: () => deleteDesignMutation.mutate(id) },
-    ]);
+  const handleDeleteDesign = async (id: string) => {
+    const confirmed = await showConfirm({
+      title: 'Slett design',
+      message: 'Er du sikker på at du vil slette dette designet?',
+      confirmLabel: 'Slett',
+      cancelLabel: 'Avbryt',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    deleteDesignMutation.mutate(id);
   };
 
   const duplicateTasting = async (tasting: CakeTasting) => {
@@ -427,7 +438,7 @@ export function KakeScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert('Feil', 'Kunne ikke duplisere smaksprøve');
+      showToast('Kunne ikke duplisere smaksprøve');
     }
   };
 
@@ -447,7 +458,7 @@ export function KakeScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert('Feil', 'Kunne ikke duplisere design');
+      showToast('Kunne ikke duplisere design');
     }
   };
 
@@ -486,7 +497,7 @@ export function KakeScreen() {
   const pickDesignImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Tillatelse kreves', 'Vi trenger tilgang til bildegalleriet for å velge bilder.');
+      showToast('Vi trenger tilgang til bildegalleriet for å velge bilder.');
       return;
     }
 
@@ -580,12 +591,16 @@ export function KakeScreen() {
                 onPress={() => openEditTasting(tasting)}
                 onLongPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert('Alternativer', tasting.bakeryName, [
-                    { text: 'Avbryt', style: 'cancel' },
-                    { text: 'Rediger', onPress: () => openEditTasting(tasting) },
-                    { text: 'Dupliser', onPress: () => duplicateTasting(tasting) },
-                    { text: 'Slett', style: 'destructive', onPress: () => handleDeleteTasting(tasting.id) },
-                  ]);
+                  showOptions({
+                    title: 'Alternativer',
+                    message: tasting.bakeryName,
+                    cancelLabel: 'Avbryt',
+                    options: [
+                      { label: 'Rediger', onPress: () => openEditTasting(tasting) },
+                      { label: 'Dupliser', onPress: () => duplicateTasting(tasting) },
+                      { label: 'Slett', destructive: true, onPress: () => handleDeleteTasting(tasting.id) },
+                    ],
+                  });
                 }}
                 activeOpacity={0.7}
               >
@@ -714,12 +729,16 @@ export function KakeScreen() {
                 onPress={() => openEditDesign(design)}
                 onLongPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert('Alternativer', design.name, [
-                    { text: 'Avbryt', style: 'cancel' },
-                    { text: 'Rediger', onPress: () => openEditDesign(design) },
-                    { text: 'Dupliser', onPress: () => duplicateDesign(design) },
-                    { text: 'Slett', style: 'destructive', onPress: () => handleDeleteDesign(design.id) },
-                  ]);
+                  showOptions({
+                    title: 'Alternativer',
+                    message: design.name,
+                    cancelLabel: 'Avbryt',
+                    options: [
+                      { label: 'Rediger', onPress: () => openEditDesign(design) },
+                      { label: 'Dupliser', onPress: () => duplicateDesign(design) },
+                      { label: 'Slett', destructive: true, onPress: () => handleDeleteDesign(design.id) },
+                    ],
+                  });
                 }}
                 activeOpacity={0.7}
               >

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -16,6 +16,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
+import { showConfirm } from "@/lib/dialogs";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -105,10 +106,16 @@ export default function VendorHaarMakeupScreen() {
   };
 
   const handleDelete = (id: string, type: 'product' | 'offer') => {
-    Alert.alert(`Slett ${type === 'product' ? 'produkt' : 'tilbud'}`, "Er du sikker?", [
-      { text: "Avbryt", style: "cancel" },
-      { text: "Slett", style: "destructive", onPress: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success) },
-    ]);
+    showConfirm({
+      title: `Slett ${type === 'product' ? 'produkt' : 'tilbud'}`,
+      message: "Er du sikker?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    }).then((confirmed) => {
+      if (!confirmed) return;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    });
   };
 
   if (!sessionToken) return null;

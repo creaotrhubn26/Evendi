@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, RefreshControl, Alert, TouchableOpacity, TextInput } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, RefreshControl, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -32,6 +32,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useVendorSearch } from '@/hooks/useVendorSearch';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
+import { showToast } from '@/lib/toast';
 
 type TabType = 'sessions' | 'timeline';
 type NavigationProp = NativeStackNavigationProp<PlanningStackParamList>;
@@ -140,7 +141,7 @@ export function FotografScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert('Feil', 'Kunne ikke duplisere sesjon');
+      showToast('Kunne ikke duplisere sesjon');
     }
   };
 
@@ -153,7 +154,7 @@ export function FotografScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert('Feil', 'Kunne ikke duplisere bilde');
+      showToast('Kunne ikke duplisere bilde');
     }
   };
 

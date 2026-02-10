@@ -4,7 +4,6 @@ import {
   View,
   Pressable,
   ActivityIndicator,
-  Alert,
   RefreshControl,
   FlatList,
   ScrollView,
@@ -23,6 +22,8 @@ import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { showConfirm } from "@/lib/dialogs";
+import { showToast } from "@/lib/toast";
 
 const COUPLE_STORAGE_KEY = "wedflow_couple_session";
 
@@ -136,24 +137,23 @@ export default function CoupleOffersScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/couple/offers"] });
     },
     onError: (error: Error) => {
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
-  const handleRespond = (offerId: string, response: "accept" | "decline") => {
+  const handleRespond = async (offerId: string, response: "accept" | "decline") => {
     const actionText = response === "accept" ? "akseptere" : "avslå";
-    Alert.alert(
-      response === "accept" ? "Aksepter tilbud" : "Avslå tilbud",
-      `Er du sikker på at du vil ${actionText} dette tilbudet?`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: response === "accept" ? "Aksepter" : "Avslå",
-          style: response === "accept" ? "default" : "destructive",
-          onPress: () => respondMutation.mutate({ offerId, response }),
-        },
-      ]
-    );
+    const confirmed = await showConfirm({
+      title: response === "accept" ? "Aksepter tilbud" : "Avslå tilbud",
+      message: `Er du sikker på at du vil ${actionText} dette tilbudet?`,
+      confirmLabel: response === "accept" ? "Aksepter" : "Avslå",
+      cancelLabel: "Avbryt",
+      destructive: response !== "accept",
+    });
+
+    if (confirmed) {
+      respondMutation.mutate({ offerId, response });
+    }
   };
 
   const formatPrice = (priceInOre: number) => {

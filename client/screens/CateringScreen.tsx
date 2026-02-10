@@ -5,7 +5,6 @@ import {
   View,
   TextInput,
   Pressable,
-  Alert,
   Modal,
   RefreshControl,
   ActivityIndicator,
@@ -34,6 +33,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
+import { showToast } from "@/lib/toast";
+import { showConfirm, showOptions } from "@/lib/dialogs";
 import {
   getCateringData,
   createCateringTasting,
@@ -308,15 +309,15 @@ export default function CateringScreen() {
 
   const saveTasting = async () => {
     if (!catererSearch.searchText.trim()) {
-      Alert.alert("Feil", "Vennligst fyll inn caterer");
+      showToast("Vennligst fyll inn caterer");
       return;
     }
     if (!tastingDate.trim() || !isValidDateString(tastingDate)) {
-      Alert.alert("Feil", "Dato må være på format DD.MM.ÅÅÅÅ");
+      showToast("Dato må være på format DD.MM.ÅÅÅÅ");
       return;
     }
     if (!isValidTimeString(tastingTime)) {
-      Alert.alert("Feil", "Tid må være på format HH:MM");
+      showToast("Tid må være på format HH:MM");
       return;
     }
 
@@ -347,7 +348,7 @@ export default function CateringScreen() {
       setShowTastingModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre smaksprøve");
+      showToast("Kunne ikke lagre smaksprøve");
     }
   };
 
@@ -360,17 +361,17 @@ export default function CateringScreen() {
   };
 
   const handleDeleteTasting = async (id: string) => {
-    Alert.alert("Slett smaksprøve", "Vil du slette denne smaksprøven?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Slett",
-        style: "destructive",
-        onPress: async () => {
-          await deleteTastingMutation.mutateAsync(id);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        },
-      },
-    ]);
+    const confirmed = await showConfirm({
+      title: "Slett smaksprøve",
+      message: "Vil du slette denne smaksprøven?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (confirmed) {
+      await deleteTastingMutation.mutateAsync(id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
   };
 
   // Menu handlers
@@ -401,7 +402,7 @@ export default function CateringScreen() {
 
   const saveMenuItem = async () => {
     if (!menuDishName.trim() || !menuCourseType.trim()) {
-      Alert.alert("Feil", "Vennligst fyll inn rettnavn og type");
+      showToast("Vennligst fyll inn rettnavn og type");
       return;
     }
 
@@ -429,7 +430,7 @@ export default function CateringScreen() {
       setShowMenuModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre rett");
+      showToast("Kunne ikke lagre rett");
     }
   };
 
@@ -454,17 +455,17 @@ export default function CateringScreen() {
   };
 
   const handleDeleteMenu = async (id: string) => {
-    Alert.alert("Slett rett", "Vil du slette denne retten?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Slett",
-        style: "destructive",
-        onPress: async () => {
-          await deleteMenuMutation.mutateAsync(id);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        },
-      },
-    ]);
+    const confirmed = await showConfirm({
+      title: "Slett rett",
+      message: "Vil du slette denne retten?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (confirmed) {
+      await deleteMenuMutation.mutateAsync(id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
   };
 
   // Dietary handlers
@@ -504,15 +505,15 @@ export default function CateringScreen() {
     try {
       await updateTimelineMutation.mutateAsync({ guestCount: confirmedGuestCount });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Oppdatert", `Antall gjester synkronisert: ${confirmedGuestCount} bekreftede gjester`);
+      showToast(`Antall gjester synkronisert: ${confirmedGuestCount} bekreftede gjester`);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke synkronisere antall gjester");
+      showToast("Kunne ikke synkronisere antall gjester");
     }
   };
 
   const saveDietary = async () => {
     if (!dietaryGuestName.trim() || !dietaryType.trim()) {
-      Alert.alert("Feil", "Vennligst fyll inn gjestens navn og kostbehov");
+      showToast("Vennligst fyll inn gjestens navn og kostbehov");
       return;
     }
 
@@ -536,22 +537,22 @@ export default function CateringScreen() {
       setShowDietaryModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre kostbehov");
+      showToast("Kunne ikke lagre kostbehov");
     }
   };
 
   const handleDeleteDietary = async (id: string) => {
-    Alert.alert("Slett kostbehov", "Vil du slette dette kostbehovet?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Slett",
-        style: "destructive",
-        onPress: async () => {
-          await deleteDietaryMutation.mutateAsync(id);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        },
-      },
-    ]);
+    const confirmed = await showConfirm({
+      title: "Slett kostbehov",
+      message: "Vil du slette dette kostbehovet?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (confirmed) {
+      await deleteDietaryMutation.mutateAsync(id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
   };
 
   const duplicateTasting = async (tasting: CateringTasting) => {
@@ -567,7 +568,7 @@ export default function CateringScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke duplisere smaksprøve");
+      showToast("Kunne ikke duplisere smaksprøve");
     }
   };
 
@@ -586,7 +587,7 @@ export default function CateringScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke duplisere rett");
+      showToast("Kunne ikke duplisere rett");
     }
   };
 
@@ -599,7 +600,7 @@ export default function CateringScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke duplisere kostbehov");
+      showToast("Kunne ikke duplisere kostbehov");
     }
   };
 
@@ -637,7 +638,7 @@ export default function CateringScreen() {
     try {
       await updateTimelineMutation.mutateAsync({ cuisineTypes: next } as Partial<CateringTimeline> & { cuisineTypes: string[] });
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre mattype-valg");
+      showToast("Kunne ikke lagre mattype-valg");
     }
   };
 
@@ -719,12 +720,16 @@ export default function CateringScreen() {
                 onPress={() => openTastingModal(tasting)}
                 onLongPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert("Alternativer", tasting.catererName, [
-                    { text: "Avbryt", style: "cancel" },
-                    { text: "Rediger", onPress: () => openTastingModal(tasting) },
-                    { text: "Dupliser", onPress: () => duplicateTasting(tasting) },
-                    { text: "Slett", style: "destructive", onPress: () => handleDeleteTasting(tasting.id) },
-                  ]);
+                  showOptions({
+                    title: "Alternativer",
+                    message: tasting.catererName,
+                    options: [
+                      { label: "Rediger", onPress: () => openTastingModal(tasting) },
+                      { label: "Dupliser", onPress: () => duplicateTasting(tasting) },
+                      { label: "Slett", destructive: true, onPress: () => handleDeleteTasting(tasting.id) },
+                    ],
+                    cancelLabel: "Avbryt",
+                  });
                 }}
                 style={[styles.tastingCard, { backgroundColor: theme.backgroundDefault }]}
               >
@@ -832,12 +837,16 @@ export default function CateringScreen() {
                       onPress={() => openMenuModal(menuItem)}
                       onLongPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        Alert.alert("Alternativer", menuItem.dishName, [
-                          { text: "Avbryt", style: "cancel" },
-                          { text: "Rediger", onPress: () => openMenuModal(menuItem) },
-                          { text: "Dupliser", onPress: () => duplicateMenuItem(menuItem) },
-                          { text: "Slett", style: "destructive", onPress: () => handleDeleteMenu(menuItem.id) },
-                        ]);
+                        showOptions({
+                          title: "Alternativer",
+                          message: menuItem.dishName,
+                          options: [
+                            { label: "Rediger", onPress: () => openMenuModal(menuItem) },
+                            { label: "Dupliser", onPress: () => duplicateMenuItem(menuItem) },
+                            { label: "Slett", destructive: true, onPress: () => handleDeleteMenu(menuItem.id) },
+                          ],
+                          cancelLabel: "Avbryt",
+                        });
                       }}
                       style={[
                         styles.menuCard,
@@ -959,12 +968,16 @@ export default function CateringScreen() {
                 onPress={() => openDietaryModal(dietary)}
                 onLongPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert("Alternativer", dietary.guestName, [
-                    { text: "Avbryt", style: "cancel" },
-                    { text: "Rediger", onPress: () => openDietaryModal(dietary) },
-                    { text: "Dupliser", onPress: () => duplicateDietaryNeed(dietary) },
-                    { text: "Slett", style: "destructive", onPress: () => handleDeleteDietary(dietary.id) },
-                  ]);
+                  showOptions({
+                    title: "Alternativer",
+                    message: dietary.guestName,
+                    options: [
+                      { label: "Rediger", onPress: () => openDietaryModal(dietary) },
+                      { label: "Dupliser", onPress: () => duplicateDietaryNeed(dietary) },
+                      { label: "Slett", destructive: true, onPress: () => handleDeleteDietary(dietary.id) },
+                    ],
+                    cancelLabel: "Avbryt",
+                  });
                 }}
                 style={[styles.dietaryCard, { backgroundColor: theme.backgroundDefault }]}
               >

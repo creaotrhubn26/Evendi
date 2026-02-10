@@ -5,7 +5,6 @@ import {
   View,
   TextInput,
   Pressable,
-  Alert,
   Modal,
   RefreshControl,
   ActivityIndicator,
@@ -27,6 +26,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
+import { showToast } from "@/lib/toast";
+import { showConfirm, showOptions } from "@/lib/dialogs";
 import {
   getTransportData,
   createTransportBooking,
@@ -184,17 +185,17 @@ export default function TransportScreen() {
 
   const saveBooking = async () => {
     if (!bookingVehicleType.trim()) {
-      Alert.alert("Feil", "Vennligst velg type kjøretøy");
+      showToast("Vennligst velg type kjøretøy");
       return;
     }
 
     if (bookingPickupTime && !isValidTime(bookingPickupTime)) {
-      Alert.alert("Ugyldig tid", "Bruk format HH:MM (f.eks. 14:30)");
+      showToast("Ugyldig tid. Bruk format HH:MM (f.eks. 14:30)");
       return;
     }
 
     if (bookingDropoffTime && !isValidTime(bookingDropoffTime)) {
-      Alert.alert("Ugyldig tid", "Bruk format HH:MM (f.eks. 16:00)");
+      showToast("Ugyldig tid. Bruk format HH:MM (f.eks. 16:00)");
       return;
     }
 
@@ -226,7 +227,7 @@ export default function TransportScreen() {
       setShowBookingModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre booking");
+      showToast("Kunne ikke lagre booking");
     } finally {
       setIsSavingBooking(false);
     }
@@ -248,27 +249,22 @@ export default function TransportScreen() {
     }
   };
 
-  const handleDeleteBooking = (id: string) => {
+  const handleDeleteBooking = async (id: string) => {
     const booking = bookings.find(b => b.id === id);
-    Alert.alert(
-      "Slett booking",
-      `Er du sikker på at du vil slette ${booking ? getVehicleLabel(booking.vehicleType) : 'denne bookingen'}?`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Slett",
-          style: "destructive",
-          onPress: async () => {
-            await deleteBookingMutation.mutateAsync(id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            // Close modal if open
-            if (showBookingModal && editingBooking?.id === id) {
-              setShowBookingModal(false);
-            }
-          },
-        },
-      ]
-    );
+    const confirmed = await showConfirm({
+      title: "Slett booking",
+      message: `Er du sikker på at du vil slette ${booking ? getVehicleLabel(booking.vehicleType) : 'denne bookingen'}?`,
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    await deleteBookingMutation.mutateAsync(id);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (showBookingModal && editingBooking?.id === id) {
+      setShowBookingModal(false);
+    }
   };
 
   const duplicateBooking = async (booking: TransportBooking) => {
@@ -289,7 +285,7 @@ export default function TransportScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke duplisere booking");
+      showToast("Kunne ikke duplisere booking");
     }
   };
 
@@ -395,16 +391,16 @@ export default function TransportScreen() {
                 onPress={() => openBookingModal(booking)}
                 onLongPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert(
-                    getVehicleLabel(booking.vehicleType),
-                    "Velg en handling",
-                    [
-                      { text: "Avbryt", style: "cancel" },
-                      { text: "Rediger", onPress: () => openBookingModal(booking) },
-                      { text: "Dupliser", onPress: () => duplicateBooking(booking) },
-                      { text: "Slett", style: "destructive", onPress: () => handleDeleteBooking(booking.id) },
-                    ]
-                  );
+                  showOptions({
+                    title: getVehicleLabel(booking.vehicleType),
+                    message: "Velg en handling",
+                    cancelLabel: "Avbryt",
+                    options: [
+                      { label: "Rediger", onPress: () => openBookingModal(booking) },
+                      { label: "Dupliser", onPress: () => duplicateBooking(booking) },
+                      { label: "Slett", destructive: true, onPress: () => handleDeleteBooking(booking.id) },
+                    ],
+                  });
                 }}
                 style={[styles.bookingCard, { backgroundColor: theme.backgroundDefault }]}
               >

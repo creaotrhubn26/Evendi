@@ -6,7 +6,6 @@ import {
   Pressable,
   Switch,
   Modal,
-  Alert,
   Platform,
   TextInput,
 } from "react-native";
@@ -31,6 +30,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { showToast } from "@/lib/toast";
 
 const BREATHING_PHASES = [
   { phase: "inhale", label: "Pust inn", duration: 4000 },
@@ -66,15 +66,6 @@ const STRESS_TIPS: Array<{ icon: FeatherIconName; title: string; desc: string }>
   { icon: "coffee", title: "Ta pauser", desc: "Planlegging-frie kvelder" },
   { icon: "heart", title: "Partnertid", desc: "Date nights uten bryllupsprat" },
 ];
-
-function showToast(message: string) {
-  if (Platform.OS === "android") {
-    const ToastAndroid = require("react-native").ToastAndroid;
-    ToastAndroid.show(message, ToastAndroid.SHORT);
-  } else {
-    Alert.alert("", message, [{ text: "OK" }], { cancelable: true });
-  }
-}
 
 export default function StressTrackerScreen() {
   const insets = useSafeAreaInsets();
@@ -396,11 +387,11 @@ export default function StressTrackerScreen() {
   const applyCustomSession = () => {
     const parsed = Number.parseInt(customSessionInput, 10);
     if (Number.isNaN(parsed) || parsed <= 0) {
-      Alert.alert("Ugyldig lengde", "Skriv inn antall minutter over 0.");
+      showToast("Skriv inn antall minutter over 0.");
       return;
     }
     if (parsed > 120) {
-      Alert.alert("For lang", "Velg 120 minutter eller mindre.");
+      showToast("Velg 120 minutter eller mindre.");
       return;
     }
     setSessionMinutes(parsed);

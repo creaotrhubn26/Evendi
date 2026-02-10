@@ -6,7 +6,6 @@ import {
   Pressable,
   Modal,
   TextInput,
-  Alert,
   RefreshControl,
   ActivityIndicator,
 } from "react-native";
@@ -24,6 +23,7 @@ import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -156,15 +156,18 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
       return response.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/vendor/couple-schedule", coupleId],
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Sendt!", "Forslaget ditt er sendt til brudeparet.");
+      showToast("Forslaget ditt er sendt til brudeparet.");
       setShowSuggestionModal(false);
       setSelectedEvent(null);
       setSuggestionMessage("");
       setSuggestedTime("");
     },
     onError: (error: any) => {
-      Alert.alert("Feil", error.message || "Kunne ikke sende forslag");
+      showToast(error.message || "Kunne ikke sende forslag");
     },
   });
 
@@ -182,16 +185,26 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
   };
 
   const handleSendSuggestion = () => {
+    const trimmedMessage = suggestionMessage.trim();
+    const trimmedSuggestedTime = suggestedTime.trim();
     if (!suggestionMessage.trim()) {
-      Alert.alert("Feil", "Skriv en melding med forslaget ditt");
+      showToast("Skriv en melding med forslaget ditt");
+      return;
+    }
+
+    if (trimmedSuggestedTime && !/^\d{2}:\d{2}$/.test(trimmedSuggestedTime)) {
+      showToast("Tid må være i formatet HH:MM");
       return;
     }
 
     const payload: SuggestionPayload = {
       type: "schedule_change",
       eventId: selectedEvent?.id,
-      suggestedTime: suggestedTime !== selectedEvent?.time ? suggestedTime : undefined,
-      message: suggestionMessage.trim(),
+      suggestedTime:
+        trimmedSuggestedTime && trimmedSuggestedTime !== selectedEvent?.time
+          ? trimmedSuggestedTime
+          : undefined,
+      message: trimmedMessage,
     };
 
     sendSuggestionMutation.mutate(payload);

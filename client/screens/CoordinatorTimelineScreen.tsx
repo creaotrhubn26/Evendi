@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, StyleSheet, TextInput, Alert, FlatList, Platform, TouchableOpacity, ScrollView } from "react-native";
+import { View, StyleSheet, TextInput, FlatList, Platform, TouchableOpacity, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -14,6 +14,7 @@ import { getSpeeches } from "@/lib/storage";
 import { Speech } from "@/lib/types";
 import { useQuery } from "@tanstack/react-query";
 import { SeatingChart, Table } from "@/components/SeatingChart";
+import { showToast } from "@/lib/toast";
 
 type FeatherIconName = keyof typeof Feather.glyphMap;
 
@@ -110,7 +111,7 @@ export default function CoordinatorTimelineScreen() {
     } catch (err) {
       const errorMsg = (err as Error).message || "Kunne ikke hente program";
       setError(errorMsg);
-      Alert.alert("Feil", errorMsg);
+      showToast(errorMsg);
     } finally {
       setLoadingSchedule(false);
     }
@@ -132,7 +133,7 @@ export default function CoordinatorTimelineScreen() {
 
   const handleExchange = async () => {
     if (!code.trim()) {
-      Alert.alert("Feil", "Angi tilgangskode");
+      showToast("Angi tilgangskode");
       return;
     }
     setLoading(true);
@@ -145,7 +146,7 @@ export default function CoordinatorTimelineScreen() {
     } catch (err) {
       const errorMsg = (err as Error).message || "Kunne ikke hente program";
       setError(errorMsg);
-      Alert.alert("Feil", errorMsg);
+      showToast(errorMsg);
     } finally {
       setLoading(false);
     }

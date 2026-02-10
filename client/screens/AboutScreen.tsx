@@ -6,6 +6,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import Constants from "expo-constants";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
 
@@ -15,11 +16,14 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import type { AppSetting } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
+
+type Theme = ReturnType<typeof useTheme>["theme"];
 
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const { theme } = useTheme();
+  const { theme, designSettings } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   // Fetch app settings to check for active status messages
@@ -32,28 +36,91 @@ export default function AboutScreen() {
     },
   });
 
-  const hasActiveStatus = useMemo(() => {
-    if (!appSettings) return false;
-    const maintenanceMode = appSettings.find((s) => s.key === "maintenance_mode")?.value === "true";
-    const statusMessage = appSettings.find((s) => s.key === "status_message")?.value;
-    return maintenanceMode || !!statusMessage;
+  const settingsByKey = useMemo(() => {
+    return (
+      appSettings?.reduce<Record<string, string>>((acc, setting) => {
+        acc[setting.key] = setting.value;
+        return acc;
+      }, {}) ?? {}
+    );
   }, [appSettings]);
+
+  const getSetting = (key: string, fallback = "") => settingsByKey[key] ?? fallback;
+
+  const maintenanceMode = getSetting("maintenance_mode") === "true";
+  const maintenanceMessage = getSetting("maintenance_message");
+  const statusMessage = getSetting("status_message").trim();
+  const statusType = getSetting("status_type", "info");
+  const appName = getSetting("app_name", designSettings.appName ?? "Wedflow");
+  const appTagline = getSetting("app_tagline", designSettings.appTagline ?? "Din bryllupsplanlegger");
+  const appDescription = getSetting(
+    "app_description",
+    "Wedflow er en komplett bryllupsplattform for par og leverandorer i Skandinavia. Planlegg gjestelister, bordplassering, budsjett, timeline og samarbeid med leverandorer i en felles oversikt."
+  );
+  const companyDescription = getSetting(
+    "app_company_description",
+    "Appen er laget av Norwedfilm, et team med erfaring fra bryllupsbransjen som forstar hva par trenger for en stressfri planleggingsprosess."
+  );
+  const supportEmail = getSetting("support_email", "contact@norwedfilm.no");
+  const supportPhone = getSetting("support_phone");
+  const dialablePhone = supportPhone.replace(/[^\d+]/g, "");
+  const websiteUrl = getSetting("app_website", "https://norwedfilm.no");
+  const instagramUrl = getSetting("app_instagram_url", "https://instagram.com/norwedfilm");
+  const instagramHandle = getSetting("app_instagram_handle", "@norwedfilm");
+  const appVersionSetting = getSetting("app_version");
+  const runtimeVersion = Constants.expoConfig?.runtimeVersion;
+  const resolvedRuntimeVersion = typeof runtimeVersion === "string" ? runtimeVersion : "";
+  const appVersion = appVersionSetting || Constants.expoConfig?.version || resolvedRuntimeVersion || "1.0.0";
+  const accentColor = theme.accent || Colors.dark.accent;
+
+  const hasActiveStatus = maintenanceMode || statusMessage.length > 0;
+
+  const statusColor = useMemo(() => {
+    if (maintenanceMode || statusType === "error") return theme.error;
+    if (statusType === "warning") return "#FF8C00";
+    if (statusType === "success") return "#51CF66";
+    return accentColor;
+  }, [maintenanceMode, statusType, theme.error, accentColor]);
+
+  const statusIcon = useMemo(() => {
+    if (maintenanceMode) return "tool";
+    if (statusType === "warning") return "alert-triangle";
+    if (statusType === "error") return "alert-circle";
+    if (statusType === "success") return "check-circle";
+    return "info";
+  }, [maintenanceMode, statusType]);
+
+  const logoSource = useMemo(() => {
+    if (designSettings.logoUrl) {
+      return { uri: designSettings.logoUrl };
+    }
+    return require("../../assets/images/wedflow-logo.png");
+  }, [designSettings.logoUrl]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: () => (
         <Image
-          source={require("../../assets/images/wedflow-logo.png")}
+          source={logoSource}
           style={styles.headerLogo}
           resizeMode="contain"
         />
       ),
     });
-  }, [navigation]);
+  }, [navigation, logoSource]);
 
-  const handleOpenLink = (url: string) => {
+  const handleOpenLink = async (url: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Linking.openURL(url);
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        showToast("Enheten din kan ikke apne denne lenken.");
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (error) {
+      showToast("Kunne ikke apne lenken akkurat na.");
+    }
   };
 
   return (
@@ -66,38 +133,25 @@ export default function AboutScreen() {
       }}
     >
       {hasActiveStatus && (
-        <View style={[styles.statusNotice, { 
-          backgroundColor: appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" 
-            ? theme.error + "15" 
-            : appSettings?.find(s => s.key === "status_type")?.value === "warning"
-            ? "#FF8C00" + "15"
-            : theme.accent + "15",
-          borderColor: appSettings?.find(s => s.key === "maintenance_mode")?.value === "true"
-            ? theme.error
-            : appSettings?.find(s => s.key === "status_type")?.value === "warning"
-            ? "#FF8C00"
-            : theme.accent,
-        }]}>
-          <Feather 
-            name={appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" ? "tool" : "info"} 
-            size={20} 
-            color={appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" 
-              ? theme.error 
-              : appSettings?.find(s => s.key === "status_type")?.value === "warning"
-              ? "#FF8C00"
-              : theme.accent
-            } 
-          />
+        <View
+          style={[
+            styles.statusNotice,
+            {
+              backgroundColor: statusColor + "15",
+              borderColor: statusColor,
+            },
+          ]}
+        >
+          <Feather name={statusIcon as keyof typeof Feather.glyphMap} size={20} color={statusColor} />
           <View style={{ flex: 1 }}>
             <ThemedText style={[styles.statusNoticeTitle, { color: theme.text, fontWeight: "600" }]}>
-              {appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" 
-                ? "⚠️ Vedlikeholdsmodus"
-                : "Systemmelding"}
+              {maintenanceMode ? "⚠️ Vedlikeholdsmodus" : "Systemmelding"}
             </ThemedText>
             <ThemedText style={[styles.statusNoticeText, { color: theme.text }]}>
-              {appSettings?.find(s => s.key === "maintenance_mode")?.value === "true"
-                ? appSettings?.find(s => s.key === "maintenance_message")?.value || "Wedflow er for øyeblikket under vedlikehold. Noen funksjoner kan være utilgjengelige."
-                : appSettings?.find(s => s.key === "status_message")?.value || ""}
+              {maintenanceMode
+                ? maintenanceMessage ||
+                  "Wedflow er for oyeblikket under vedlikehold. Noen funksjoner kan vaere utilgjengelige."
+                : statusMessage}
             </ThemedText>
             <Pressable 
               onPress={() => navigation.navigate("Status")}
@@ -112,13 +166,11 @@ export default function AboutScreen() {
       )}
       <Animated.View entering={FadeInDown.duration(400)}>
         <View style={[styles.logoSection, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-          <Image
-            source={require("../../assets/images/wedflow-logo.png")}
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
+          <Image source={logoSource} style={styles.logoImage} resizeMode="contain" />
+          <ThemedText style={[styles.version, { color: theme.textMuted }]}>{appName}</ThemedText>
+          <ThemedText style={[styles.tagline, { color: theme.textSecondary }]}>{appTagline}</ThemedText>
           <ThemedText style={[styles.version, { color: theme.textMuted }]}>
-            Versjon 1.0.0
+            Versjon {appVersion}
           </ThemedText>
         </View>
       </Animated.View>
@@ -127,10 +179,10 @@ export default function AboutScreen() {
         <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <ThemedText style={styles.sectionTitle}>Om appen</ThemedText>
           <ThemedText style={[styles.description, { color: theme.textSecondary }]}>
-            Wedflow er din personlige bryllupsplanlegger, utviklet spesielt for skandinaviske par. Vi hjelper deg med alt fra gjestelister og bordplassering til leverandørkontakt og dagsplan.
+            {appDescription}
           </ThemedText>
           <ThemedText style={[styles.description, { color: theme.textSecondary, marginTop: Spacing.md }]}>
-            Appen er laget av Norwedfilm, et team med erfaring fra bryllupsbransjen som forstår hva par trenger for en stressfri planleggingsprosess.
+            {companyDescription}
           </ThemedText>
         </View>
       </Animated.View>
@@ -159,49 +211,61 @@ export default function AboutScreen() {
           <ThemedText style={styles.sectionTitle}>Kontakt oss</ThemedText>
           
           <Pressable
-            onPress={() => handleOpenLink("mailto:contact@norwedfilm.no")}
+            onPress={() => handleOpenLink(`mailto:${supportEmail}`)}
             style={[styles.contactRow, { borderColor: theme.border }]}
           >
             <View style={[styles.contactIcon, { backgroundColor: theme.backgroundSecondary }]}>
-              <Feather name="mail" size={18} color={Colors.dark.accent} />
+              <Feather name="mail" size={18} color={accentColor} />
             </View>
             <View style={styles.contactInfo}>
               <ThemedText style={styles.contactLabel}>E-post</ThemedText>
-              <ThemedText style={[styles.contactValue, { color: Colors.dark.accent }]}>
-                contact@norwedfilm.no
-              </ThemedText>
+              <ThemedText style={[styles.contactValue, { color: accentColor }]}>{supportEmail}</ThemedText>
             </View>
             <Feather name="chevron-right" size={18} color={theme.textMuted} />
           </Pressable>
 
+          {supportPhone.length > 0 && dialablePhone.length > 0 && (
+            <Pressable
+              onPress={() => handleOpenLink(`tel:${dialablePhone}`)}
+              style={[styles.contactRow, { borderColor: theme.border }]}
+            >
+              <View style={[styles.contactIcon, { backgroundColor: theme.backgroundSecondary }]}>
+                <Feather name="phone" size={18} color={accentColor} />
+              </View>
+              <View style={styles.contactInfo}>
+                <ThemedText style={styles.contactLabel}>Telefon</ThemedText>
+                <ThemedText style={[styles.contactValue, { color: accentColor }]}>{supportPhone}</ThemedText>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.textMuted} />
+            </Pressable>
+          )}
+
           <Pressable
-            onPress={() => handleOpenLink("https://norwedfilm.no")}
+            onPress={() => handleOpenLink(websiteUrl)}
             style={[styles.contactRow, { borderColor: theme.border }]}
           >
             <View style={[styles.contactIcon, { backgroundColor: theme.backgroundSecondary }]}>
-              <Feather name="globe" size={18} color={Colors.dark.accent} />
+              <Feather name="globe" size={18} color={accentColor} />
             </View>
             <View style={styles.contactInfo}>
               <ThemedText style={styles.contactLabel}>Nettside</ThemedText>
-              <ThemedText style={[styles.contactValue, { color: Colors.dark.accent }]}>
-                norwedfilm.no
+              <ThemedText style={[styles.contactValue, { color: accentColor }]}>
+                {websiteUrl.replace(/^https?:\/\//, "")}
               </ThemedText>
             </View>
             <Feather name="chevron-right" size={18} color={theme.textMuted} />
           </Pressable>
 
           <Pressable
-            onPress={() => handleOpenLink("https://instagram.com/norwedfilm")}
+            onPress={() => handleOpenLink(instagramUrl)}
             style={[styles.contactRow, { borderColor: theme.border }]}
           >
             <View style={[styles.contactIcon, { backgroundColor: theme.backgroundSecondary }]}>
-              <Feather name="instagram" size={18} color={Colors.dark.accent} />
+              <Feather name="instagram" size={18} color={accentColor} />
             </View>
             <View style={styles.contactInfo}>
               <ThemedText style={styles.contactLabel}>Instagram</ThemedText>
-              <ThemedText style={[styles.contactValue, { color: Colors.dark.accent }]}>
-                @norwedfilm
-              </ThemedText>
+              <ThemedText style={[styles.contactValue, { color: accentColor }]}>{instagramHandle}</ThemedText>
             </View>
             <Feather name="chevron-right" size={18} color={theme.textMuted} />
           </Pressable>
@@ -217,10 +281,10 @@ export default function AboutScreen() {
   );
 }
 
-function FeatureItem({ icon, text, theme }: { icon: keyof typeof Feather.glyphMap; text: string; theme: any }) {
+function FeatureItem({ icon, text, theme }: { icon: keyof typeof Feather.glyphMap; text: string; theme: Theme }) {
   return (
     <View style={styles.featureItem}>
-      <Feather name={icon} size={16} color={Colors.dark.accent} />
+      <Feather name={icon} size={16} color={theme.accent || Colors.dark.accent} />
       <ThemedText style={[styles.featureText, { color: theme.textSecondary }]}>{text}</ThemedText>
     </View>
   );
@@ -247,6 +311,11 @@ const styles = StyleSheet.create({
   version: {
     fontSize: 14,
     marginTop: Spacing.sm,
+  },
+  tagline: {
+    fontSize: 14,
+    marginTop: 2,
+    textAlign: "center",
   },
   section: {
     padding: Spacing.lg,

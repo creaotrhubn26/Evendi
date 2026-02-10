@@ -5,7 +5,6 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  Alert,
   ActivityIndicator,
   Switch,
 } from "react-native";
@@ -16,12 +15,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { AdminHeader } from "@/components/AdminHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { showToast } from "@/lib/toast";
 
 const useFieldValidation = () => {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -57,7 +59,23 @@ const useFieldValidation = () => {
     return {};
   }, [touched, errors]);
 
-  return { touched, errors, handleBlur, getFieldStyle };
+  const validateAll = (fields: Record<string, string>) => {
+    const nextTouched: Record<string, boolean> = {};
+    const nextErrors: Record<string, string> = {};
+
+    Object.entries(fields).forEach(([field, value]) => {
+      nextTouched[field] = true;
+      const error = validateField(field, value);
+      if (error) nextErrors[field] = error;
+    });
+
+    setTouched((prev) => ({ ...prev, ...nextTouched }));
+    setErrors((prev) => ({ ...prev, ...nextErrors }));
+
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  return { touched, errors, handleBlur, getFieldStyle, validateAll };
 };
 
 interface AppSetting {
@@ -72,9 +90,9 @@ export default function AdminSettingsScreen() {
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
-  const route = useRoute();
-  const adminKey = (route.params as any)?.adminKey || "";
-  const { touched, errors, handleBlur, getFieldStyle } = useFieldValidation();
+  const route = useRoute<RouteProp<RootStackParamList, "AdminSettings">>();
+  const adminKey = route.params?.adminKey || "";
+  const { touched, errors, handleBlur, getFieldStyle, validateAll } = useFieldValidation();
 
   const [enableVendorRegistration, setEnableVendorRegistration] = useState(true);
   const [requireInspirationApproval, setRequireInspirationApproval] = useState(true);
@@ -140,10 +158,10 @@ export default function AdminSettingsScreen() {
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
-      Alert.alert("Lagret", "Innstillinger er oppdatert");
+      showToast("Innstillinger er oppdatert");
     },
     onError: () => {
-      Alert.alert("Feil", "Kunne ikke lagre innstillinger");
+      showToast("Kunne ikke lagre innstillinger");
     },
   });
 
@@ -164,7 +182,7 @@ export default function AdminSettingsScreen() {
       <ScrollView
         style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
         contentContainerStyle={{
-          paddingTop: Spacing.lg,
+          paddingTop: headerHeight + Spacing.lg,
           paddingBottom: insets.bottom + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
@@ -308,7 +326,19 @@ export default function AdminSettingsScreen() {
       <Animated.View entering={FadeInDown.delay(400).duration(400)}>
         <Pressable
           style={[styles.saveButton, { backgroundColor: Colors.dark.accent }]}
-          onPress={() => saveMutation.mutate()}
+          onPress={() => {
+            const isValid = validateAll({
+              supportEmail,
+              privacyPolicyUrl,
+              termsUrl,
+              maxFileUploadMb,
+            });
+            if (!isValid) {
+              showToast("Rett opp feltene som er markert i rodt.");
+              return;
+            }
+            saveMutation.mutate();
+          }}
           disabled={saveMutation.isPending}
         >
           {saveMutation.isPending ? (

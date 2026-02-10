@@ -8,8 +8,6 @@ import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { Alert } from "react-native";
-
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
@@ -17,6 +15,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -139,45 +139,35 @@ export default function VendorCateringScreen() {
   };
 
   const handleDeleteProduct = async (productId: string) => {
-    Alert.alert(
-      "Slett produkt",
-      "Er du sikker på at du vil slette dette produktet?",
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Slett",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteProductMutation.mutateAsync(productId);
-            } catch (error) {
-              Alert.alert('Feil', 'Kunne ikke slette produkt');
-            }
-          },
-        },
-      ]
-    );
+    const confirmed = await showConfirm({
+      title: "Slett produkt",
+      message: "Er du sikker på at du vil slette dette produktet?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteProductMutation.mutateAsync(productId);
+    } catch (error) {
+      showToast('Kunne ikke slette produkt');
+    }
   };
 
   const handleDeleteOffer = async (offerId: string) => {
-    Alert.alert(
-      "Slett tilbud",
-      "Er du sikker på at du vil slette dette tilbudet?",
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Slett",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteOfferMutation.mutateAsync(offerId);
-            } catch (error) {
-              Alert.alert('Feil', 'Kunne ikke slette tilbud');
-            }
-          },
-        },
-      ]
-    );
+    const confirmed = await showConfirm({
+      title: "Slett tilbud",
+      message: "Er du sikker på at du vil slette dette tilbudet?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteOfferMutation.mutateAsync(offerId);
+    } catch (error) {
+      showToast('Kunne ikke slette tilbud');
+    }
   };
 
   const handleEditProduct = (product: VendorProduct) => {

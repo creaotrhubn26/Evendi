@@ -5,12 +5,14 @@ import {
   Pressable,
   FlatList,
   TextInput,
-  Alert,
   ActivityIndicator,
   Modal,
   ScrollView,
   Switch,
   Image,
+  RefreshControl,
+  Platform,
+  KeyboardAvoidingView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -19,12 +21,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { AdminHeader } from "@/components/AdminHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { showToast } from "@/lib/toast";
 
 interface PendingVendor {
   id: string;
@@ -57,8 +62,8 @@ export default function AdminVendorsScreen() {
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
-  const route = useRoute();
-  const passedAdminKey = (route.params as any)?.adminKey || "";
+  const route = useRoute<RouteProp<RootStackParamList, "AdminVendors">>();
+  const passedAdminKey = route.params?.adminKey || "";
 
   const [adminKey, setAdminKey] = useState("");
   const [storedKey, setStoredKey] = useState(passedAdminKey);
@@ -72,6 +77,10 @@ export default function AdminVendorsScreen() {
   const [vendorCategories, setVendorCategories] = useState<string[]>([]);
   const [approvingVendor, setApprovingVendor] = useState<PendingVendor | null>(null);
   const [selectedTierId, setSelectedTierId] = useState<string>("");
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectTarget, setRejectTarget] = useState<PendingVendor | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const { data: vendors = [], isLoading, refetch } = useQuery<PendingVendor[]>({
     queryKey: ["/api/admin/vendors", selectedTab, storedKey],
@@ -232,7 +241,7 @@ export default function AdminVendorsScreen() {
 
   const handleApprove = (vendor: PendingVendor) => {
     if (subscriptionTiers.length === 0) {
-      Alert.alert("Feil", "Ingen abonnementstier konfigurert. Konfigurer tiers først.");
+      showToast("Ingen abonnementstier konfigurert. Konfigurer tiers først.");
       return;
     }
     setApprovingVendor(vendor);
@@ -245,19 +254,41 @@ export default function AdminVendorsScreen() {
   };
 
   const handleReject = (vendor: PendingVendor) => {
-    Alert.prompt(
-      "Avvis leverandør",
-      `Oppgi årsak for avvisning av "${vendor.businessName}":`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Avvis",
-          style: "destructive",
-          onPress: (reason: string | undefined) => rejectMutation.mutate({ vendorId: vendor.id, reason: reason || "" }),
-        },
-      ],
-      "plain-text"
-    );
+    if (Platform.OS === "ios") {
+      Alert.prompt(
+        "Avvis leverandør",
+        `Oppgi årsak for avvisning av "${vendor.businessName}":`,
+        [
+          { text: "Avbryt", style: "cancel" },
+          {
+            text: "Avvis",
+            style: "destructive",
+            onPress: (reason: string | undefined) =>
+              rejectMutation.mutate({ vendorId: vendor.id, reason: reason || "" }),
+          },
+        ],
+        "plain-text"
+      );
+      return;
+    }
+
+    setRejectTarget(vendor);
+    setRejectReason("");
+    setRejectModalVisible(true);
+  };
+
+  const confirmReject = () => {
+    if (!rejectTarget) return;
+    rejectMutation.mutate({ vendorId: rejectTarget.id, reason: rejectReason.trim() });
+    setRejectTarget(null);
+    setRejectReason("");
+    setRejectModalVisible(false);
+  };
+
+  const cancelReject = () => {
+    setRejectTarget(null);
+    setRejectReason("");
+    setRejectModalVisible(false);
   };
 
   const openEditModal = async (vendor: PendingVendor) => {
@@ -302,7 +333,7 @@ export default function AdminVendorsScreen() {
     await updateCategoriesMutation.mutateAsync({ vendorId: editingVendor.id, categoryIds: vendorCategories });
 
     setEditingVendor(null);
-    Alert.alert("Suksess", "Innstillinger lagret!");
+    showToast("Innstillinger lagret!");
   };
 
   const toggleCategory = (categoryId: string) => {
@@ -373,6 +404,16 @@ export default function AdminVendorsScreen() {
             </ThemedText>
           </View>
         </View>
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={() => {
+                    setRefreshing(true);
+                    refetch().finally(() => setRefreshing(false));
+                  }}
+                  tintColor={theme.accent}
+                />
+              }
 
         {item.description ? (
           <ThemedText style={[styles.description, { color: theme.textMuted }]} numberOfLines={2}>
@@ -535,6 +576,23 @@ export default function AdminVendorsScreen() {
             </View>
 
             <ScrollView style={styles.modalScroll}>
+                    <ThemedText style={[styles.sectionTitle, { marginBottom: Spacing.sm }]}>Abonnement</ThemedText>
+                    <View style={[styles.featureRow, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}> 
+                      <View style={styles.featureInfo}>
+                        <Feather name="package" size={18} color={Colors.dark.accent} />
+                        <ThemedText style={styles.featureLabel}>Abonnementstier</ThemedText>
+                      </View>
+                      <Pressable
+                          onPress={() => {
+                            if (editingVendor) handleApprove(editingVendor);
+                          }}
+                        style={[styles.settingsBtn, { borderColor: Colors.dark.accent }]}
+                          disabled={!editingVendor}
+                      >
+                        <ThemedText style={[styles.settingsBtnText, { color: Colors.dark.accent }]}>Endre</ThemedText>
+                      </Pressable>
+                    </View>
+
               <ThemedText style={styles.sectionTitle}>Funksjoner</ThemedText>
               <View style={[styles.featureRow, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
                 <View style={styles.featureInfo}>
@@ -681,6 +739,54 @@ export default function AdminVendorsScreen() {
               </Pressable>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={rejectModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={cancelReject}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.5)" }]}> 
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
+          >
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Avvis leverandør</ThemedText>
+              <Pressable onPress={cancelReject}>
+                <Feather name="x" size={20} color={theme.text} />
+              </Pressable>
+            </View>
+            <View style={{ padding: Spacing.lg, gap: Spacing.sm }}>
+              <ThemedText style={[styles.sectionSubtitle, { color: theme.textSecondary }]}> 
+                Oppgi årsak for avvisning av "{rejectTarget?.businessName}":
+              </ThemedText>
+              <TextInput
+                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                placeholder="Valgfritt"
+                placeholderTextColor={theme.textMuted}
+                value={rejectReason}
+                onChangeText={setRejectReason}
+                multiline
+              />
+            </View>
+            <View style={styles.modalFooter}>
+              <Pressable
+                onPress={cancelReject}
+                style={[styles.modalBtn, { backgroundColor: theme.backgroundRoot, borderColor: theme.border, borderWidth: 1 }]}
+              >
+                <ThemedText style={{ color: theme.text }}>Avbryt</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={confirmReject}
+                style={[styles.modalBtn, { backgroundColor: "#EF5350" }]}
+              >
+                <ThemedText style={{ color: "#FFFFFF", fontWeight: "600" }}>Avvis</ThemedText>
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>

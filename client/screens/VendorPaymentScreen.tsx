@@ -4,7 +4,6 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
-  Alert,
   ActivityIndicator,
   Linking,
   Image,
@@ -17,6 +16,8 @@ import { ThemedText } from "../components/ThemedText";
 import { ThemedView } from "../components/ThemedView";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "../constants/theme";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 
 interface SubscriptionTier {
   id: string;
@@ -97,7 +98,7 @@ export default function VendorPaymentScreen() {
         if (supported) {
           await Linking.openURL(vippsUrl);
         } else {
-          Alert.alert("Feil", "Kunne ikke åpne Vipps");
+          showToast("Kunne ikke åpne Vipps");
         }
       }
 
@@ -105,7 +106,7 @@ export default function VendorPaymentScreen() {
       queryClient.invalidateQueries({ queryKey: ["vendor", "subscription"] });
     },
     onError: (error: Error) => {
-      Alert.alert("Betalingsfeil", error.message);
+      showToast(error.message);
     },
     onSettled: () => {
       setIsProcessing(false);
@@ -124,21 +125,16 @@ export default function VendorPaymentScreen() {
    * 6. Webhook updates subscription to "active"
    * 7. Refresh status on return
    */
-  const handleVippsPayment = () => {
-    Alert.alert(
-      "Start abonnement med Vipps",
-      `Du starter et abonnement på ${subscriptionStatus?.tier.displayName} for ${subscriptionStatus?.tier.priceNok} NOK/måned.\n\nDu kan administrere eller kansellere abonnementet når som helst i Vipps-appen.`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Bekreft betaling",
-          onPress: () => {
-            setIsProcessing(true);
-            vippsMutation.mutate();
-          },
-        },
-      ]
-    );
+  const handleVippsPayment = async () => {
+    const confirmed = await showConfirm({
+      title: "Start abonnement med Vipps",
+      message: `Du starter et abonnement på ${subscriptionStatus?.tier.displayName} for ${subscriptionStatus?.tier.priceNok} NOK/måned.\n\nDu kan administrere eller kansellere abonnementet når som helst i Vipps-appen.`,
+      confirmLabel: "Bekreft betaling",
+      cancelLabel: "Avbryt",
+    });
+    if (!confirmed) return;
+    setIsProcessing(true);
+    vippsMutation.mutate();
   };
 
   if (isLoading) {
@@ -385,7 +381,7 @@ export default function VendorPaymentScreen() {
               onPress={() => {
                 const url = "https://wedflow.no/terms-of-sale";
                 Linking.openURL(url).catch(() => {
-                  Alert.alert("Feil", "Kunne ikke åpne vilkårene");
+                  showToast("Kunne ikke åpne vilkårene");
                 });
               }}
             >

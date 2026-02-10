@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -20,6 +20,7 @@ import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -44,7 +45,7 @@ interface VendorProduct {
 }
 
 interface Props {
-  navigation: NativeStackNavigationProp<any>;
+  navigation: NativeStackNavigationProp<RootStackParamList>;
 }
 
 export default function VendorInventoryScreen({ navigation }: Props) {
@@ -83,13 +84,29 @@ export default function VendorInventoryScreen({ navigation }: Props) {
     return "#F44336";
   };
 
+  const inventorySummary = useMemo(() => {
+    return inventoryProducts.reduce(
+      (acc, product) => {
+        const total = product.availableQuantity || 0;
+        const available = Math.max(total - product.bookingBuffer, 0);
+        acc.totalStock += total;
+        acc.totalAvailable += available;
+        acc.totalBuffer += product.bookingBuffer;
+        acc.totalReserved += product.reservedQuantity || 0;
+        return acc;
+      },
+      { totalStock: 0, totalAvailable: 0, totalBuffer: 0, totalReserved: 0 }
+    );
+  }, [inventoryProducts]);
+
   const renderProductCard = ({ item, index }: { item: VendorProduct; index: number }) => {
     const total = item.availableQuantity || 0;
-    const available = total - item.bookingBuffer;
+    const available = Math.max(total - item.bookingBuffer, 0);
     const percentage = total > 0 ? (available / total) * 100 : 0;
     const statusColor = getStatusColor(available, total);
-    const percentage = total > 0 ? (available / total) * 100 : 0;
-    const statusColor = getStatusColor(available, total);
+    const warningPercent = percentage;
+    const warningColor = statusColor;
+    const isLowStock = total > 0 && warningPercent <= 10;
 
     return (
       <Animated.View entering={FadeInDown.duration(300).delay(index * 50)}>
@@ -174,8 +191,17 @@ export default function VendorInventoryScreen({ navigation }: Props) {
             </ThemedText>
           </View>
 
+          {isLowStock && (
+            <View style={[styles.warningBadge, { backgroundColor: warningColor + "20" }]}> 
+              <Feather name="alert-triangle" size={14} color={warningColor} />
+              <ThemedText style={[styles.warningText, { color: warningColor }]}>
+                Lav beholdning
+              </ThemedText>
+            </View>
+          )}
+
           {/* Venue-specific details */}
-          {item.categoryTag === 'venue' && (item.venueMaxGuests || item.venueAddress) && (
+          {item.categoryTag && item.categoryTag.toLowerCase() === "venue" && (item.venueMaxGuests || item.venueAddress) && (
             <View style={[styles.venueDetailsBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
               {item.venueMaxGuests && (
                 <View style={styles.venueDetailRow}>
@@ -307,10 +333,43 @@ export default function VendorInventoryScreen({ navigation }: Props) {
           data={inventoryProducts}
           renderItem={renderProductCard}
           keyExtractor={(item) => item.id}
+          ListHeaderComponent={
+            <Card elevation={2} style={{ ...styles.summaryCard, borderColor: theme.border }}> 
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryItem}>
+                  <ThemedText style={[styles.summaryLabel, { color: theme.textMuted }]}>Totalt</ThemedText>
+                  <ThemedText style={[styles.summaryValue, { color: theme.text }]}> 
+                    {inventorySummary.totalStock}
+                  </ThemedText>
+                </View>
+                <View style={styles.summaryItem}>
+                  <ThemedText style={[styles.summaryLabel, { color: theme.textMuted }]}>Tilgjengelig</ThemedText>
+                  <ThemedText style={[styles.summaryValue, { color: theme.text }]}> 
+                    {inventorySummary.totalAvailable}
+                  </ThemedText>
+                </View>
+              </View>
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryItem}>
+                  <ThemedText style={[styles.summaryLabel, { color: theme.textMuted }]}>Buffer</ThemedText>
+                  <ThemedText style={[styles.summaryValue, { color: theme.text }]}> 
+                    {inventorySummary.totalBuffer}
+                  </ThemedText>
+                </View>
+                <View style={styles.summaryItem}>
+                  <ThemedText style={[styles.summaryLabel, { color: theme.textMuted }]}>Reservert</ThemedText>
+                  <ThemedText style={[styles.summaryValue, { color: theme.text }]}> 
+                    {inventorySummary.totalReserved}
+                  </ThemedText>
+                </View>
+              </View>
+            </Card>
+          }
           contentContainerStyle={[
             styles.listContent,
             { paddingBottom: insets.bottom + Spacing.xl },
           ]}
+          scrollIndicatorInsets={{ top: headerHeight, bottom: insets.bottom }}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -369,6 +428,30 @@ const styles = StyleSheet.create({
   listContent: {
     padding: Spacing.lg,
     gap: Spacing.md,
+  },
+  summaryCard: {
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  summaryItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  summaryLabel: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 4,
   },
   productCard: {
     padding: Spacing.lg,

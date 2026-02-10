@@ -7,7 +7,6 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
-  Alert,
   Switch,
   FlatList,
 } from "react-native";
@@ -20,10 +19,13 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { SubscriptionTier } from "@shared/schema";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
-type Props = NativeStackScreenProps<any, "AdminSubscriptions">;
+type Props = NativeStackScreenProps<RootStackParamList, "AdminSubscriptions">;
 
 interface TierForm {
   name: string;
@@ -53,7 +55,7 @@ interface TierForm {
 }
 
 export default function AdminSubscriptionsScreen({ route }: Props) {
-  const { adminKey } = route.params as any;
+  const { adminKey } = route.params;
   const { theme } = useTheme();
   const queryClient = useQueryClient();
 
@@ -62,6 +64,18 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"tiers" | "vendors">("tiers");
   const [searchVendor, setSearchVendor] = useState("");
+
+  type VendorSubscription = {
+    id: string;
+    status: "active" | "inactive" | string;
+    vendor?: {
+      businessName?: string | null;
+      email?: string | null;
+    } | null;
+    tier?: {
+      displayName?: string | null;
+    } | null;
+  };
 
   const [form, setForm] = useState<TierForm>({
     name: "",
@@ -100,7 +114,7 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
     },
   });
 
-  const { data: vendorSubs = [], isLoading: vendorLoading } = useQuery<any[]>({
+  const { data: vendorSubs = [], isLoading: vendorLoading } = useQuery<VendorSubscription[]>({
     queryKey: ["admin-vendor-subscriptions", adminKey],
     queryFn: async () => {
       const url = new URL("/api/admin/subscription/vendors", getApiUrl());
@@ -114,10 +128,11 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
 
   const filteredVendors = useMemo(() => {
     const q = searchVendor.toLowerCase();
-    return vendorSubs.filter((v) => 
-      v.vendor?.businessName?.toLowerCase().includes(q) ||
-      v.vendor?.email?.toLowerCase().includes(q)
-    );
+    return vendorSubs.filter((v) => {
+      const name = v.vendor?.businessName?.toLowerCase() ?? "";
+      const email = v.vendor?.email?.toLowerCase() ?? "";
+      return name.includes(q) || email.includes(q);
+    });
   }, [vendorSubs, searchVendor]);
 
   const openNewTierModal = () => {
@@ -180,7 +195,7 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
 
   const saveTier = async () => {
     if (!form.name.trim() || !form.displayName.trim()) {
-      Alert.alert("Feil", "Navn og visningsnavn er påkrevd");
+      showToast("Navn og visningsnavn er påkrevd");
       return;
     }
 
@@ -232,34 +247,34 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
       queryClient.invalidateQueries({ queryKey: ["admin-subscription-tiers"] });
       setShowModal(false);
     } catch (e) {
-      Alert.alert("Feil", (e as Error).message);
+      showToast((e as Error).message);
     } finally {
       setSaving(false);
     }
   };
 
   const deleteTier = (tierId: string) => {
-    Alert.alert("Slett abonnementstier", "Er du sikker? Dette kan ikke angres.", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Slett",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            const url = new URL(`/api/admin/subscription/tiers/${tierId}`, getApiUrl());
-            const res = await fetch(url, {
-              method: "DELETE",
-              headers: { Authorization: `Bearer ${adminKey}` },
-            });
-            if (!res.ok) throw new Error("Kunne ikke slette tier");
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            queryClient.invalidateQueries({ queryKey: ["admin-subscription-tiers"] });
-          } catch (e) {
-            Alert.alert("Feil", (e as Error).message);
-          }
-        },
-      },
-    ]);
+    showConfirm({
+      title: "Slett abonnementstier",
+      message: "Er du sikker? Dette kan ikke angres.",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    }).then(async (confirmed) => {
+      if (!confirmed) return;
+      try {
+        const url = new URL(`/api/admin/subscription/tiers/${tierId}`, getApiUrl());
+        const res = await fetch(url, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${adminKey}` },
+        });
+        if (!res.ok) throw new Error("Kunne ikke slette tier");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        queryClient.invalidateQueries({ queryKey: ["admin-subscription-tiers"] });
+      } catch (e) {
+        showToast((e as Error).message);
+      }
+    });
   };
 
   return (
@@ -352,25 +367,28 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
       )}
 
       {tab === "vendors" && (
-        <ScrollView style={styles.content} contentContainerStyle={{ padding: Spacing.md }}>
+        <View style={styles.content}>
           {vendorLoading ? (
             <ActivityIndicator color={theme.accent} size="large" style={{ marginTop: Spacing.lg }} />
           ) : (
-            <>
-              <View style={[styles.searchBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-                <Feather name="search" size={16} color={theme.textMuted} />
-                <TextInput
-                  style={[styles.searchInput, { color: theme.text, flex: 1 }]}
-                  placeholder="Søk leverandør..."
-                  placeholderTextColor={theme.textMuted}
-                  value={searchVendor}
-                  onChangeText={setSearchVendor}
-                />
-              </View>
-
-              {filteredVendors.map((sub) => (
+            <FlatList
+              data={filteredVendors}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ padding: Spacing.md }}
+              ListHeaderComponent={
+                <View style={[styles.searchBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}> 
+                  <Feather name="search" size={16} color={theme.textMuted} />
+                  <TextInput
+                    style={[styles.searchInput, { color: theme.text, flex: 1 }]}
+                    placeholder="Søk leverandør..."
+                    placeholderTextColor={theme.textMuted}
+                    value={searchVendor}
+                    onChangeText={setSearchVendor}
+                  />
+                </View>
+              }
+              renderItem={({ item: sub }) => (
                 <ThemedView
-                  key={sub.id}
                   style={[styles.vendorCard, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
                 >
                   <View style={{ flex: 1 }}>
@@ -386,16 +404,15 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
                     </View>
                   </View>
                 </ThemedView>
-              ))}
-
-              {filteredVendors.length === 0 && (
-                <ThemedText style={[styles.emptyText, { color: theme.textMuted, textAlign: "center", marginTop: Spacing.lg }]}>
+              )}
+              ListEmptyComponent={
+                <ThemedText style={[styles.emptyText, { color: theme.textMuted, textAlign: "center", marginTop: Spacing.lg }]}> 
                   Ingen leverandører funnet
                 </ThemedText>
-              )}
-            </>
+              }
+            />
           )}
-        </ScrollView>
+        </View>
       )}
 
       <Modal visible={showModal} transparent animationType="slide">
@@ -548,13 +565,13 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
 
             <ThemedText style={[styles.sectionTitle, { marginTop: Spacing.md }]}>Kjernefunksjoner</ThemedText>
 
-            {[
+            {( [
               { key: "canSendMessages", label: "Send meldinger til par" },
               { key: "canReceiveInquiries", label: "Motta henvendelser fra par" },
               { key: "canCreateOffers", label: "Opprett tilbud" },
               { key: "canCreateDeliveries", label: "Opprett deliveries" },
               { key: "canShowcaseWork", label: "Vis inspirasjon/gallerier" },
-            ].map((feature) => (
+            ] as Array<{ key: "canSendMessages" | "canReceiveInquiries" | "canCreateOffers" | "canCreateDeliveries" | "canShowcaseWork"; label: string }>).map((feature) => (
               <View
                 key={feature.key}
                 style={{
@@ -568,7 +585,7 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
               >
                 <ThemedText>{feature.label}</ThemedText>
                 <Switch
-                  value={form[feature.key as keyof typeof form] as boolean}
+                  value={form[feature.key]}
                   onValueChange={(val) => setForm({ ...form, [feature.key]: val })}
                   disabled={saving}
                 />
@@ -577,14 +594,14 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
 
             <ThemedText style={[styles.sectionTitle, { marginTop: Spacing.md }]}>Premiumfunksjoner</ThemedText>
 
-            {[
+            {( [
               { key: "hasAdvancedAnalytics", label: "Avansert analyse" },
               { key: "hasPrioritizedSearch", label: "Prioritert søk i katalog" },
               { key: "canHighlightProfile", label: "Fremhevet profil" },
               { key: "canUseVideoGallery", label: "Videogalleri" },
               { key: "hasReviewBadge", label: "Anmeldelsesmerke" },
               { key: "hasMultipleCategories", label: "Flere kategorier" },
-            ].map((feature) => (
+            ] as Array<{ key: "hasAdvancedAnalytics" | "hasPrioritizedSearch" | "canHighlightProfile" | "canUseVideoGallery" | "hasReviewBadge" | "hasMultipleCategories"; label: string }>).map((feature) => (
               <View
                 key={feature.key}
                 style={{
@@ -598,7 +615,7 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
               >
                 <ThemedText>{feature.label}</ThemedText>
                 <Switch
-                  value={form[feature.key as keyof typeof form] as boolean}
+                  value={form[feature.key]}
                   onValueChange={(val) => setForm({ ...form, [feature.key]: val })}
                   disabled={saving}
                 />

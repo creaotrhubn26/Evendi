@@ -4,7 +4,6 @@ import {
   View,
   Pressable,
   ScrollView,
-  Alert,
   ActivityIndicator,
   FlatList,
   TextInput,
@@ -14,6 +13,7 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -21,6 +21,9 @@ import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { AdminHeader } from "@/components/AdminHeader";
+import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
 
 interface PreviewMode {
   type: "couple" | "vendor";
@@ -37,7 +40,9 @@ interface PreviewUser {
   category?: string;
 }
 
-export default function AdminPreviewScreen({ route }: any) {
+type Theme = ReturnType<typeof useTheme>["theme"];
+
+export default function AdminPreviewScreen({ route }: { route: RouteProp<RootStackParamList, "AdminPreview"> }) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
@@ -68,12 +73,13 @@ export default function AdminPreviewScreen({ route }: any) {
   ];
 
   const loadUsers = async (mode: "couple" | "vendor") => {
+    if (!adminKey) {
+      showToast("Logg inn som admin for å bruke forhåndsvisning.");
+      return;
+    }
     setIsLoading(true);
     try {
-      const url = new URL(
-        `/api/admin/preview/${mode}/users`,
-        process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000"
-      );
+      const url = new URL(`/api/admin/preview/${mode}/users`, getApiUrl());
 
       const response = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${adminKey}` },
@@ -91,10 +97,7 @@ export default function AdminPreviewScreen({ route }: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert(
-        "Feil",
-        `Kunne ikke laste ${mode}-liste. Sjekk at det finnes data i systemet.`
-      );
+      showToast(`Kunne ikke laste ${mode}-liste. Sjekk at det finnes data i systemet.`);
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -103,13 +106,14 @@ export default function AdminPreviewScreen({ route }: any) {
 
   const handleEnterAsUser = async (user: PreviewUser) => {
     if (!selectedMode) return;
+    if (!adminKey) {
+      showToast("Logg inn som admin for å bruke forhåndsvisning.");
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const url = new URL(
-        `/api/admin/preview/${selectedMode}/impersonate`,
-        process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000"
-      );
+      const url = new URL(`/api/admin/preview/${selectedMode}/impersonate`, getApiUrl());
 
       const response = await fetch(url.toString(), {
         method: "POST",
@@ -136,22 +140,13 @@ export default function AdminPreviewScreen({ route }: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       // Navigate to the appropriate screen
-      if (selectedMode === "couple") {
-        // @ts-ignore
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "Main" }],
-        });
-      } else {
-        // @ts-ignore
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "VendorDashboard" }],
-        });
-      }
+      navigation.reset({
+        index: 0,
+        routes: [{ name: selectedMode === "couple" ? "Main" : "VendorDashboard" }],
+      });
     } catch (error) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Feil", "Kunne ikke logge inn som denne brukeren");
+      showToast("Kunne ikke logge inn som denne brukeren");
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -164,16 +159,27 @@ export default function AdminPreviewScreen({ route }: any) {
       user.email.toLowerCase().includes(searchText.toLowerCase())
   );
 
+  const useCases: Array<{ icon: keyof typeof Feather.glyphMap; text: string }> = [
+    { icon: "eye", text: "Kvalitetssikre nye funksjoner uten å endre ekte data" },
+    { icon: "message-square", text: "Se nøyaktig hva brukeren rapporterer i support" },
+    { icon: "shield", text: "Test tilganger og flyt for både par og leverandorer" },
+  ];
+
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
-      contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: insets.bottom + Spacing.xl,
-        paddingHorizontal: Spacing.lg,
-      }}
-    >
-      {!selectedMode ? (
+    <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+      <AdminHeader
+        title="Forhandsvisning"
+        subtitle="Logg inn som par eller leverandor"
+      />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{
+          paddingTop: headerHeight + Spacing.lg,
+          paddingBottom: insets.bottom + Spacing.xl,
+          paddingHorizontal: Spacing.lg,
+        }}
+      >
+        {!selectedMode ? (
         // Mode selection view
         <>
           <View style={{ marginBottom: Spacing.xl }}>
@@ -222,7 +228,7 @@ export default function AdminPreviewScreen({ route }: any) {
             </Pressable>
           ))}
 
-          <View style={[styles.infoBox, { backgroundColor: Colors.dark.accent + "10", borderColor: Colors.dark.accent }]}>
+          <View style={[styles.infoBox, { backgroundColor: Colors.dark.accent + "10", borderColor: Colors.dark.accent }]}> 
             <Feather name="alert-circle" size={18} color={Colors.dark.accent} />
             <View style={{ flex: 1, marginLeft: Spacing.md }}>
               <ThemedText style={[styles.infoBoxTitle, { color: Colors.dark.accent }]}>
@@ -238,6 +244,15 @@ export default function AdminPreviewScreen({ route }: any) {
               </ThemedText>
             </View>
           </View>
+
+          <View style={[styles.useCaseBox, { borderColor: theme.border, backgroundColor: theme.backgroundDefault }]}> 
+            <ThemedText style={styles.useCaseTitle}>Typiske brukstilfeller</ThemedText>
+            <View style={styles.useCaseList}>
+              {useCases.map((useCase) => (
+                <UseCaseItem key={useCase.text} icon={useCase.icon} text={useCase.text} theme={theme} />
+              ))}
+            </View>
+          </View>
         </>
       ) : (
         // User selection view
@@ -248,6 +263,7 @@ export default function AdminPreviewScreen({ route }: any) {
                 setSelectedMode(null);
                 setUsers([]);
                 setSelectedUser(null);
+                setSearchText("");
               }}
               style={styles.backButton}
             >
@@ -299,13 +315,21 @@ export default function AdminPreviewScreen({ route }: any) {
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <Pressable
-                  onPress={() => handleEnterAsUser(item)}
+                  onPress={() => {
+                    if (selectedUser?.id === item.id) {
+                      handleEnterAsUser(item);
+                      return;
+                    }
+                    setSelectedUser(item);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
                   disabled={isLoading}
                   style={[
                     styles.userCard,
                     {
                       backgroundColor: theme.backgroundDefault,
                       borderColor: theme.border,
+                      borderWidth: selectedUser?.id === item.id ? 2 : 1,
                       opacity: isLoading ? 0.5 : 1,
                     },
                   ]}
@@ -360,6 +384,30 @@ export default function AdminPreviewScreen({ route }: any) {
             />
           )}
 
+          {selectedUser && (
+            <View style={[styles.selectedCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}> 
+              <ThemedText style={styles.selectedTitle}>Valgt bruker</ThemedText>
+              <ThemedText style={styles.selectedName}>{selectedUser.name}</ThemedText>
+              <ThemedText style={[styles.selectedMeta, { color: theme.textSecondary }]}> 
+                {selectedUser.email}
+              </ThemedText>
+              <Pressable
+                onPress={() => handleEnterAsUser(selectedUser)}
+                style={[styles.enterButton, { backgroundColor: Colors.dark.accent }]}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#000" />
+                ) : (
+                  <>
+                    <Feather name="log-in" size={16} color="#000" />
+                    <ThemedText style={styles.enterButtonText}>Logg inn som valgt</ThemedText>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          )}
+
           <View
             style={[
               styles.infoBox,
@@ -380,14 +428,15 @@ export default function AdminPreviewScreen({ route }: any) {
           </View>
         </>
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
-function UseCaseItem({ icon, text, theme }: any) {
+function UseCaseItem({ icon, text, theme }: { icon: keyof typeof Feather.glyphMap; text: string; theme: Theme }) {
   return (
     <View style={styles.useCaseItem}>
-      <Feather name={icon as any} size={16} color={Colors.dark.accent} />
+      <Feather name={icon} size={16} color={Colors.dark.accent} />
       <ThemedText
         style={[
           styles.useCaseItemText,
@@ -530,5 +579,37 @@ const styles = StyleSheet.create({
   useCaseItemText: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  selectedCard: {
+    marginTop: Spacing.lg,
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    gap: Spacing.xs,
+  },
+  selectedTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  selectedName: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  selectedMeta: {
+    fontSize: 12,
+    marginBottom: Spacing.sm,
+  },
+  enterButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  enterButtonText: {
+    color: "#000",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

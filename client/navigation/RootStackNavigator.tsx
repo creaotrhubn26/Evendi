@@ -23,6 +23,7 @@ import VendorMusikkScreen from "@/screens/VendorMusikkScreen";
 import VendorVenueScreen from "@/screens/VendorVenueScreen";
 import VendorPlanleggerScreen from "@/screens/VendorPlanleggerScreen";
 import VendorFotoVideografScreen from "@/screens/VendorFotoVideografScreen";
+import VendorDetailScreen from "@/screens/VendorDetailScreen";
 import DeliveryCreateScreen from "@/screens/DeliveryCreateScreen";
 import InspirationCreateScreen from "@/screens/InspirationCreateScreen";
 import ProductCreateScreen from "@/screens/ProductCreateScreen";
@@ -48,6 +49,7 @@ import StatusScreen from "@/screens/StatusScreen";
 import VendorHelpScreen from "@/screens/VendorHelpScreen";
 import WhatsNewScreen from "@/screens/WhatsNewScreen";
 import DocumentationScreen from "@/screens/DocumentationScreen";
+import VideoGuidesScreen from "@/screens/VideoGuidesScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import {
   VenueDetailsScreen,
@@ -94,7 +96,21 @@ export type RootStackParamList = {
   InspirationCreate: undefined;
   ProductCreate: { product?: any };
   OfferCreate: undefined;
-  VendorChat: { conversationId: string; coupleName: string };
+  VendorChat: {
+    conversationId: string;
+    coupleName?: string;
+    chatType?: "couple" | "vendor";
+    conversationType?: "couple" | "vendor";
+  };
+  VendorPublicProfile: {
+    vendorId: string;
+    vendorName: string;
+    vendorDescription?: string | null;
+    vendorLocation?: string | null;
+    vendorPriceRange?: string | null;
+    vendorCategory?: string | null;
+    readOnly?: boolean;
+  };
   VendorAdminChat: undefined;
   VendorHelp: undefined;
   AdminLogin: undefined;
@@ -115,27 +131,35 @@ export type RootStackParamList = {
   AdminVendorMessages: { conversationId: string; vendorName: string; adminKey: string };
   Status: undefined;
   WhatsNew: { category?: "vendor" | "couple" };
-  Documentation: undefined;
+  Documentation: { adminKey?: string };
+  VideoGuides: undefined;
   Main: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const ADMIN_STORAGE_KEY = "wedflow_admin_key";
 
 export default function RootStackNavigator() {
   const screenOptions = useScreenOptions();
   const [showSplash, setShowSplash] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [storedAdminKey, setStoredAdminKey] = useState("");
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const session = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
+        const [session, adminKey] = await Promise.all([
+          AsyncStorage.getItem(COUPLE_STORAGE_KEY),
+          AsyncStorage.getItem(ADMIN_STORAGE_KEY),
+        ]);
         setIsLoggedIn(!!session);
+        setStoredAdminKey(adminKey || "");
       } catch {
         setIsLoggedIn(false);
+        setStoredAdminKey("");
       }
       setIsLoading(false);
     };
@@ -186,6 +210,13 @@ export default function RootStackNavigator() {
             options={{
               headerShown: false,
               presentation: "modal",
+            }}
+          />
+          <Stack.Screen
+            name="VendorPublicProfile"
+            component={VendorDetailScreen}
+            options={{
+              headerShown: false,
             }}
           />
           <Stack.Screen
@@ -403,7 +434,7 @@ export default function RootStackNavigator() {
           />
           <Stack.Screen
             name="VendorChat"
-            component={VendorChatScreen as any}
+            component={VendorChatScreen}
             options={({ route }) => ({
               title: route.params?.coupleName || "Chat",
               headerBackVisible: false,
@@ -420,7 +451,15 @@ export default function RootStackNavigator() {
             {(props) => (
               <AdminLoginScreen
                 {...props}
-                onLoginSuccess={() => {}}
+                initialAdminKey={storedAdminKey}
+                onLoginSuccess={async (adminKey) => {
+                  setStoredAdminKey(adminKey);
+                  try {
+                    await AsyncStorage.setItem(ADMIN_STORAGE_KEY, adminKey);
+                  } catch {
+                    // Best-effort persistence
+                  }
+                }}
               />
             )}
           </Stack.Screen>
@@ -573,14 +612,14 @@ export default function RootStackNavigator() {
           />
           <Stack.Screen
             name="AdminVendorChats"
-            component={AdminVendorChatsScreen as any}
+            component={AdminVendorChatsScreen}
             options={{
               headerShown: false,
             }}
           />
           <Stack.Screen
             name="AdminVendorMessages"
-            component={AdminVendorMessagesScreen as any}
+            component={AdminVendorMessagesScreen}
             options={{
               headerShown: false,
             }}
@@ -627,6 +666,19 @@ export default function RootStackNavigator() {
           <Stack.Screen
             name="Documentation"
             component={DocumentationScreen}
+            options={{
+              headerTitle: () => (
+                <Image
+                  source={require("../../assets/images/wedflow-logo.png")}
+                  style={{ width: 300, height: 80 }}
+                  resizeMode="contain"
+                />
+              ),
+            }}
+          />
+          <Stack.Screen
+            name="VideoGuides"
+            component={VideoGuidesScreen}
             options={{
               headerTitle: () => (
                 <Image

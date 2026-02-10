@@ -4,7 +4,6 @@ import {
   View,
   Pressable,
   ActivityIndicator,
-  Alert,
   RefreshControl,
   FlatList,
   TextInput,
@@ -28,6 +27,8 @@ import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 
 const COUPLE_STORAGE_KEY = "wedflow_couple_session";
 
@@ -36,22 +37,14 @@ async function getCoupleSession(): Promise<{ sessionToken: string; weddingId?: s
   try {
     const sessionData = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
     if (!sessionData) return null;
-    return JSON.parse(sessionData);
+    const session = JSON.parse(sessionData) as { sessionToken: string; weddingId?: string };
+    if (session?.sessionToken) {
+      await AsyncStorage.setItem("session_token", session.sessionToken);
+    }
+    return session;
   } catch (error) {
     console.error("Failed to parse couple session:", error);
     return null;
-  }
-}
-
-// Helper: Non-blocking toast notification
-function showToast(message: string) {
-  if (Platform.OS === "android") {
-    // Use ToastAndroid on Android for native toast
-    const ToastAndroid = require("react-native").ToastAndroid;
-    ToastAndroid.show(message, ToastAndroid.SHORT);
-  } else {
-    // Fallback to Alert on iOS (could use a custom toast library)
-    Alert.alert("", message, [{ text: "OK" }], { cancelable: true });
   }
 }
 
@@ -91,16 +84,16 @@ export default function CoordinatorSharingScreen() {
     queryFn: async () => {
       const session = await getCoupleSession();
       if (!session) throw new Error("Ikke innlogget. Vennligst logg inn på nytt.");
-      const response = await fetch(new URL("/api/couple/coordinators", getApiUrl()).toString(), {
-        headers: { Authorization: `Bearer ${session.sessionToken}` },
-      });
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
+      try {
+        const response = await apiRequest("GET", "/api/couple/coordinators");
+        return response.json();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (message.startsWith("401") || message.startsWith("403")) {
           throw new Error("Sesjon utløpt. Vennligst logg inn på nytt.");
         }
         throw new Error("Kunne ikke hente koordinatorer");
       }
-      return response.json();
     },
   });
 
@@ -108,23 +101,16 @@ export default function CoordinatorSharingScreen() {
     mutationFn: async (data: { name: string; roleLabel: string; canViewSpeeches: boolean; canViewSchedule: boolean; canEditSpeeches: boolean; canEditSchedule: boolean }) => {
       const session = await getCoupleSession();
       if (!session) throw new Error("Ikke innlogget. Vennligst logg inn på nytt.");
-
-      const response = await fetch(new URL("/api/couple/coordinators", getApiUrl()).toString(), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
+      try {
+        const response = await apiRequest("POST", "/api/couple/coordinators", data);
+        return response.json();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (message.startsWith("401") || message.startsWith("403")) {
           throw new Error("Sesjon utløpt. Vennligst logg inn på nytt.");
         }
         throw new Error("Kunne ikke opprette invitasjon");
       }
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["coordinators", "couple"] });
@@ -143,30 +129,23 @@ export default function CoordinatorSharingScreen() {
     mutationFn: async (data: { id: string; name: string; roleLabel: string; canViewSpeeches: boolean; canViewSchedule: boolean; canEditSpeeches: boolean; canEditSchedule: boolean }) => {
       const session = await getCoupleSession();
       if (!session) throw new Error("Ikke innlogget. Vennligst logg inn på nytt.");
-
-      const response = await fetch(new URL(`/api/couple/coordinators/${data.id}`, getApiUrl()).toString(), {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({
+      try {
+        const response = await apiRequest("PATCH", `/api/couple/coordinators/${data.id}`, {
           name: data.name,
           roleLabel: data.roleLabel,
           canViewSpeeches: data.canViewSpeeches,
           canViewSchedule: data.canViewSchedule,
           canEditSpeeches: data.canEditSpeeches,
           canEditSchedule: data.canEditSchedule,
-        }),
-      });
-
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
+        });
+        return response.json();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (message.startsWith("401") || message.startsWith("403")) {
           throw new Error("Sesjon utløpt. Vennligst logg inn på nytt.");
         }
         throw new Error("Kunne ikke oppdatere koordinator");
       }
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["coordinators", "couple"] });
@@ -185,19 +164,16 @@ export default function CoordinatorSharingScreen() {
     mutationFn: async (id: string) => {
       const session = await getCoupleSession();
       if (!session) throw new Error("Ikke innlogget. Vennligst logg inn på nytt.");
-
-      const response = await fetch(new URL(`/api/couple/coordinators/${id}`, getApiUrl()).toString(), {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${session.sessionToken}` },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
+      try {
+        const response = await apiRequest("DELETE", `/api/couple/coordinators/${id}`);
+        return response.json();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (message.startsWith("401") || message.startsWith("403")) {
           throw new Error("Sesjon utløpt. Vennligst logg inn på nytt.");
         }
         throw new Error("Kunne ikke slette invitasjon");
       }
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["coordinators", "couple"] });
@@ -219,7 +195,7 @@ export default function CoordinatorSharingScreen() {
 
   const handleSubmit = () => {
     if (!newName.trim()) {
-      Alert.alert("Feil", "Navn er påkrevd");
+      showToast("Navn er påkrevd");
       return;
     }
 
@@ -240,18 +216,15 @@ export default function CoordinatorSharingScreen() {
   };
 
   const handleDelete = (id: string, name: string) => {
-    Alert.alert(
-      "Fjern tilgang",
-      `Er du sikker på at du vil fjerne ${name} sin tilgang?`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Fjern",
-          style: "destructive",
-          onPress: () => deleteMutation.mutate(id),
-        },
-      ]
-    );
+    showConfirm({
+      title: "Fjern tilgang",
+      message: `Er du sikker på at du vil fjerne ${name} sin tilgang?`,
+      confirmLabel: "Fjern",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    }).then((confirmed) => {
+      if (confirmed) deleteMutation.mutate(id);
+    });
   };
 
   const copyLink = async (token: string) => {

@@ -18,6 +18,10 @@ export function getSupabaseClient() {
 // Export default instance for immediate use
 export const supabase = getSupabaseClient();
 
+export const isSupabaseConfigured = (): boolean => {
+  return !!supabase && !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
+};
+
 // Configure redirect URL for OAuth
 WebBrowser.maybeCompleteAuthSession();
 

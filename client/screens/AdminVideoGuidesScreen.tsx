@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { ScrollView, StyleSheet, View, Pressable, TextInput, Alert, ActivityIndicator, Switch } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, TextInput, ActivityIndicator, Switch } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -9,7 +9,11 @@ import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 import type { VideoGuide } from "../../shared/schema";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 type Category = "vendor" | "couple";
 
@@ -25,9 +29,18 @@ interface VideoGuideForm {
   isActive: boolean;
 }
 
-const FEATHER_ICONS = ["video", "play-circle", "youtube", "film", "monitor", "camera"];
+const FEATHER_ICONS: Array<keyof typeof Feather.glyphMap> = [
+  "video",
+  "play-circle",
+  "youtube",
+  "film",
+  "monitor",
+  "camera",
+];
 
-export default function AdminVideoGuidesScreen({ route }: { route: { params: { adminKey: string } } }) {
+type Props = NativeStackScreenProps<RootStackParamList, "AdminVideoGuides">;
+
+export default function AdminVideoGuidesScreen({ route }: Props) {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
   const { adminKey } = route.params;
@@ -75,10 +88,10 @@ export default function AdminVideoGuidesScreen({ route }: { route: { params: { a
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-video-guides"] });
       resetForm();
-      Alert.alert("Suksess", "Videoguide opprettet");
+      showToast("Videoguide opprettet");
     },
     onError: (error) => {
-      Alert.alert("Feil", (error as Error).message);
+      showToast((error as Error).message);
     },
   });
 
@@ -99,10 +112,10 @@ export default function AdminVideoGuidesScreen({ route }: { route: { params: { a
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-video-guides"] });
       resetForm();
-      Alert.alert("Suksess", "Videoguide oppdatert");
+      showToast("Videoguide oppdatert");
     },
     onError: (error) => {
-      Alert.alert("Feil", (error as Error).message);
+      showToast((error as Error).message);
     },
   });
 
@@ -118,10 +131,10 @@ export default function AdminVideoGuidesScreen({ route }: { route: { params: { a
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-video-guides"] });
-      Alert.alert("Suksess", "Videoguide slettet");
+      showToast("Videoguide slettet");
     },
     onError: (error) => {
-      Alert.alert("Feil", (error as Error).message);
+      showToast((error as Error).message);
     },
   });
 
@@ -157,7 +170,7 @@ export default function AdminVideoGuidesScreen({ route }: { route: { params: { a
 
   const handleSave = () => {
     if (!formData.title || !formData.description || !formData.videoUrl) {
-      Alert.alert("Feil", "Tittel, beskrivelse og video-URL er påkrevd");
+      showToast("Tittel, beskrivelse og video-URL er påkrevd");
       return;
     }
 
@@ -172,11 +185,22 @@ export default function AdminVideoGuidesScreen({ route }: { route: { params: { a
   };
 
   const handleDelete = (id: string) => {
-    Alert.alert("Slett videoguide", "Er du sikker?", [
-      { text: "Avbryt", onPress: () => {} },
-      { text: "Slett", onPress: () => deleteMutation.mutate(id) },
-    ]);
+    showConfirm({
+      title: "Slett videoguide",
+      message: "Er du sikker?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    }).then((confirmed) => {
+      if (confirmed) deleteMutation.mutate(id);
+    });
   };
+
+  const iconChoices = useMemo(() => FEATHER_ICONS, []);
+  const hasFormOpen = editingId !== null || formData.title.trim().length > 0;
+  const filteredGuides = useMemo(() => {
+    return guides.filter((guide) => guide.category === activeCategory);
+  }, [guides, activeCategory]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={["bottom"]}>
@@ -222,7 +246,7 @@ export default function AdminVideoGuidesScreen({ route }: { route: { params: { a
         </View>
 
         {/* Form */}
-        {(editingId || formData.title) && (
+        {hasFormOpen && (
           <View style={[styles.form, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <ThemedText style={styles.formTitle}>{editingId ? "Rediger videoguide" : "Ny videoguide"}</ThemedText>
 
@@ -261,6 +285,18 @@ export default function AdminVideoGuidesScreen({ route }: { route: { params: { a
               />
             </View>
 
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.label}>Thumbnail URL</ThemedText>
+              <TextInput
+                style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+                value={formData.thumbnail}
+                onChangeText={(val) => setFormData({ ...formData, thumbnail: val })}
+                placeholder="https://..."
+                placeholderTextColor={theme.textMuted}
+                autoCapitalize="none"
+              />
+            </View>
+
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.label}>Varighet (optional)</ThemedText>
@@ -295,6 +331,27 @@ export default function AdminVideoGuidesScreen({ route }: { route: { params: { a
               />
             </View>
 
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.label}>Ikon</ThemedText>
+              <View style={styles.iconRow}>
+                {iconChoices.map((iconName) => (
+                  <Pressable
+                    key={iconName}
+                    onPress={() => setFormData({ ...formData, icon: iconName })}
+                    style={[
+                      styles.iconButton,
+                      {
+                        backgroundColor: formData.icon === iconName ? theme.accent + "20" : theme.backgroundSecondary,
+                        borderColor: formData.icon === iconName ? theme.accent : theme.border,
+                      },
+                    ]}
+                  >
+                    <Feather name={iconName} size={16} color={formData.icon === iconName ? theme.accent : theme.textMuted} />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
             <View style={styles.formButtons}>
               <Pressable
                 onPress={resetForm}
@@ -314,7 +371,7 @@ export default function AdminVideoGuidesScreen({ route }: { route: { params: { a
         )}
 
         {/* Add Button */}
-        {!editingId && !formData.title && (
+        {!hasFormOpen && (
           <Pressable
             onPress={() => setFormData({ ...formData, category: activeCategory })}
             style={[styles.addButton, { backgroundColor: theme.accent }]}
@@ -327,14 +384,14 @@ export default function AdminVideoGuidesScreen({ route }: { route: { params: { a
         {/* Guides List */}
         {isLoading ? (
           <ActivityIndicator style={{ marginTop: Spacing.xl }} color={theme.accent} />
-        ) : guides.length === 0 ? (
+        ) : filteredGuides.length === 0 ? (
           <View style={[styles.emptyContainer, { backgroundColor: theme.backgroundSecondary }]}>
             <Feather name="video" size={48} color={theme.textMuted} />
             <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.md }}>Ingen videoguider</ThemedText>
           </View>
         ) : (
           <View style={styles.guidesList}>
-            {guides.map((guide) => (
+            {filteredGuides.map((guide) => (
               <View
                 key={guide.id}
                 style={[styles.guideItem, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
@@ -343,7 +400,7 @@ export default function AdminVideoGuidesScreen({ route }: { route: { params: { a
                   <View>
                     <ThemedText style={styles.guideTitle}>{guide.title}</ThemedText>
                     <ThemedText style={[styles.guideDesc, { color: theme.textSecondary }]}>
-                      {guide.description.substring(0, 50)}...
+                      {guide.description.length > 50 ? `${guide.description.substring(0, 50)}...` : guide.description}
                     </ThemedText>
                   </View>
                   {!guide.isActive && (
@@ -469,6 +526,19 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     justifyContent: "center",
     alignItems: "center",
+  },
+  iconRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyContainer: {
     alignItems: "center",

@@ -5,7 +5,6 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
   Modal,
   Image,
   ScrollView,
@@ -26,9 +25,10 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type { RouteProp } from "@react-navigation/native";
-import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import type { RouteProp, ParamListBase } from "@react-navigation/native";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -41,9 +41,11 @@ interface DeliveryItemInput {
   urlError?: string; // Validation error state
 }
 
+type DeliveryCreateRouteParams = { delivery?: any } | undefined;
+
 interface Props {
-  navigation: NativeStackNavigationProp<RootStackParamList, "DeliveryCreate">;
-  route: RouteProp<RootStackParamList, "DeliveryCreate">;
+  navigation: NativeStackNavigationProp<ParamListBase>;
+  route: RouteProp<{ DeliveryCreate: DeliveryCreateRouteParams }, "DeliveryCreate">;
 }
 
 const ITEM_TYPES = [
@@ -61,6 +63,12 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
+
+  const driveAppHint = Platform.OS === "ios"
+    ? "Åpne Google Drive-appen på iPhone eller iPad"
+    : Platform.OS === "android"
+      ? "Åpne Google Drive-appen på Android"
+      : "Åpne Google Drive i nettleseren";
   
   const editingDelivery = route.params?.delivery;
   const isEditMode = !!editingDelivery;
@@ -162,7 +170,7 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
       setSessionToken(parsed.sessionToken);
     } catch (error) {
       console.error("Failed to parse session:", error);
-      Alert.alert("Sesjonsfeil", "Vennligst logg inn på nytt.");
+      showToast("Vennligst logg inn på nytt.");
     }
   }, []);
 
@@ -254,9 +262,8 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           navigation.goBack();
         }, 5000);
       } else {
-        Alert.alert("Oppdatert!", "Leveransen er oppdatert.", [
-          { text: "OK", onPress: () => navigation.goBack() }
-        ]);
+        showToast("Leveransen er oppdatert.");
+        navigation.goBack();
       }
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/deliveries"] });
     },
@@ -264,10 +271,10 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const errorMsg = error.message || "En feil oppstod";
       if (errorMsg.includes("401")) {
-        Alert.alert("Autentisering kreves", "Vennligst logg inn på nytt.");
+        showToast("Vennligst logg inn på nytt.");
         return;
       }
-      Alert.alert("Feil", errorMsg);
+      showToast(errorMsg);
     },
   });
 
@@ -298,19 +305,20 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
       navigation.goBack();
     },
     onError: (error: Error) => {
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
-  const handleDelete = () => {
-    Alert.alert(
-      "Slett leveranse",
-      `Er du sikker på at du vil slette "${title}"?`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        { text: "Slett", style: "destructive", onPress: () => deleteMutation.mutate() },
-      ]
-    );
+  const handleDelete = async () => {
+    const confirmed = await showConfirm({
+      title: "Slett leveranse",
+      message: `Er du sikker på at du vil slette "${title}"?`,
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    deleteMutation.mutate();
   };
 
   const addItem = () => {
@@ -362,59 +370,70 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
 
   const handleTestLink = useCallback((url: string, itemType: string) => {
     if (!url.trim()) {
-      Alert.alert("Tom URL", "Legg inn en URL først.");
+      showToast("Legg inn en URL først.");
       return;
     }
     const testUrl = itemType === "gallery" ? convertGoogleDriveUrl(url) : url;
     if (isValidUrl(testUrl)) {
       const finalUrl = testUrl.startsWith("http") ? testUrl : `https://${testUrl}`;
       Linking.openURL(finalUrl).catch(() => {
-        Alert.alert("Feil", "Kunne ikke åpne lenken.");
+        showToast("Kunne ikke åpne lenken.");
       });
     } else {
-      Alert.alert("Ugyldig URL", "Lenken er ikke gyldig.");
+      showToast("Lenken er ikke gyldig.");
     }
   }, [isValidUrl]);
 
   const handleSubmit = useCallback(() => {
     if (!sessionToken) {
-      Alert.alert("Feil", "Vennligst logg inn på nytt.");
+      showToast("Vennligst logg inn på nytt.");
       return;
     }
 
     if (!coupleName || !title) {
-      Alert.alert("Mangler informasjon", "Fyll ut navn på brudeparet og tittel.");
+      showToast("Fyll ut navn på brudeparet og tittel.");
       return;
     }
 
     if (!isValidDateString(weddingDate)) {
-      Alert.alert("Ugyldig dato", "Bruk format YYYY-MM-DD eller DD.MM.YYYY.");
+      showToast("Ugyldig dato. Bruk format YYYY-MM-DD eller DD.MM.YYYY.");
       return;
     }
 
     // Validate all items with labels
     const itemsWithLabels = items.filter((i) => i.label?.trim());
     if (itemsWithLabels.length === 0) {
-      Alert.alert("Mangler lenker", "Legg til minst én lenke med etikett.");
+      showToast("Legg til minst én lenke med etikett.");
       return;
     }
 
     // Check URLs on items with labels
     const invalidUrls = itemsWithLabels.filter((i) => i.url?.trim() && !isValidUrl(i.url));
     if (invalidUrls.length > 0) {
-      Alert.alert("Ugyldige URLer", "Sjekk at alle lenker er gyldige.");
+      showToast("Sjekk at alle lenker er gyldige.");
       return;
     }
 
     const itemsWithValidUrl = itemsWithLabels.filter((i) => i.url?.trim());
     if (itemsWithValidUrl.length === 0) {
-      Alert.alert("Mangler URLer", "Legg til minst én URL for en lenke med etikett.");
+      showToast("Legg til minst én URL for en lenke med etikett.");
       return;
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     saveMutation.mutate();
   }, [sessionToken, coupleName, title, weddingDate, items, isValidDateString, isValidUrl, saveMutation]);
+
+  const weddingDateHelp = useCallback(() => {
+    if (!weddingDate.trim()) return "Format: YYYY-MM-DD eller DD.MM.YYYY";
+    return isValidDateString(weddingDate)
+      ? "Datoformat ser riktig ut"
+      : "Ugyldig datoformat (YYYY-MM-DD eller DD.MM.YYYY)";
+  }, [isValidDateString, weddingDate]);
+
+  const weddingDateHelpColor = weddingDate.trim() && !isValidDateString(weddingDate)
+    ? "#EF5350"
+    : theme.textMuted;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -524,6 +543,9 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
               onChangeText={setWeddingDate}
             />
           </View>
+          <ThemedText style={[styles.helperText, { color: weddingDateHelpColor }]}>
+            {weddingDateHelp()}
+          </ThemedText>
           </View>
         </View>
 
@@ -861,7 +883,7 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
                     Åpne Google Drive
                   </ThemedText>
                   <ThemedText style={[styles.stepDesc, { color: theme.textMuted }]}>
-                    Gå til drive.google.com eller åpne Google Drive-appen
+                    Gå til drive.google.com eller {driveAppHint.toLowerCase()}
                   </ThemedText>
                 </View>
               </View>
@@ -1181,6 +1203,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     marginBottom: Spacing.sm,
+  },
+  helperText: {
+    fontSize: 12,
+    marginTop: Spacing.xs,
   },
   // Test link button styles
   testLinkBtn: {

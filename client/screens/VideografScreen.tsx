@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, RefreshControl, Alert, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -29,6 +29,7 @@ import { VendorSearchField } from '@/components/VendorSearchField';
 import { useTheme } from '../hooks/useTheme';
 import { Colors, Spacing } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
+import { showToast } from '@/lib/toast';
 
 type TabType = 'sessions' | 'timeline';
 type NavigationProp = NativeStackNavigationProp<PlanningStackParamList>;
@@ -134,7 +135,7 @@ export function VideografScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert('Feil', 'Kunne ikke duplisere sesjon');
+      showToast('Kunne ikke duplisere sesjon');
     }
   };
 
@@ -148,7 +149,7 @@ export function VideografScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert('Feil', 'Kunne ikke duplisere leveranse');
+      showToast('Kunne ikke duplisere leveranse');
     }
   };
 

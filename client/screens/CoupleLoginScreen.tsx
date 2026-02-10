@@ -5,7 +5,6 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
   Image,
   Platform,
   Modal,
@@ -25,6 +24,8 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
 import { signInWithGoogle } from "@/lib/supabase-auth";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { showToast } from "@/lib/toast";
+import { showOptions } from "@/lib/dialogs";
 
 const COUPLE_STORAGE_KEY = "wedflow_couple_session";
 
@@ -125,12 +126,12 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
         onLoginSuccess?.();
         navigation.replace("Messages");
       } else {
-        Alert.alert("Feil", "Kunne ikke logge inn. Prøv igjen.");
+        showToast("Kunne ikke logge inn. Prøv igjen.");
       }
     },
     onError: (error: any) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Feil", error.message || "Kunne ikke logge inn.");
+      showToast(error.message || "Kunne ikke logge inn.");
     },
   });
 
@@ -170,7 +171,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
 
   const handleContinueWithTraditions = () => {
     if (selectedTraditions.length === 0) {
-      Alert.alert("Velg tradisjon", "Vennligst velg minst én tradisjon for å fortsette, eller trykk 'Hopp over' for å gjøre dette senere.");
+      showToast("Velg minst én tradisjon for å fortsette, eller trykk 'Hopp over' for å gjøre dette senere.");
       return;
     }
     setShowTraditionSelection(false);
@@ -211,7 +212,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
       }
     } catch (error) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Feil", error instanceof Error ? error.message : "Kunne ikke logge inn med Google");
+      showToast(error instanceof Error ? error.message : "Kunne ikke logge inn med Google");
     } finally {
       setIsGoogleLoading(false);
     }
@@ -372,17 +373,14 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
                 return;
               }
 
-              Alert.alert(
-                "Leverandør?",
-                "Leverandører logger inn via leverandør-portalen.",
-                [
-                  { text: "Avbryt", style: "cancel" },
-                  { 
-                    text: "Gå til leverandør-innlogging", 
-                    onPress: () => navigation.navigate?.("VendorLogin")
-                  }
-                ]
-              );
+              showOptions({
+                title: "Leverandør?",
+                message: "Leverandører logger inn via leverandør-portalen.",
+                cancelLabel: "Avbryt",
+                options: [
+                  { label: "Gå til leverandør-innlogging", onPress: () => navigation.navigate?.("VendorLogin") },
+                ],
+              });
             }}
             style={styles.vendorLink}
           >

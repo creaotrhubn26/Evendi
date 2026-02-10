@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -15,6 +15,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
@@ -130,39 +132,39 @@ export default function VendorBlomsterScreen() {
   };
 
   const handleDeleteProduct = (id: string) => {
-    Alert.alert("Slett produkt", "Er du sikker?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Slett",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteProductMutation.mutateAsync(id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          } catch {
-            Alert.alert("Feil", "Kunne ikke slette produkt");
-          }
-        },
-      },
-    ]);
+    showConfirm({
+      title: "Slett produkt",
+      message: "Er du sikker?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    }).then(async (confirmed) => {
+      if (!confirmed) return;
+      try {
+        await deleteProductMutation.mutateAsync(id);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {
+        showToast("Kunne ikke slette produkt");
+      }
+    });
   };
 
   const handleDeleteOffer = (id: string) => {
-    Alert.alert("Slett tilbud", "Er du sikker?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Slett",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteOfferMutation.mutateAsync(id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          } catch {
-            Alert.alert("Feil", "Kunne ikke slette tilbud");
-          }
-        },
-      },
-    ]);
+    showConfirm({
+      title: "Slett tilbud",
+      message: "Er du sikker?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    }).then(async (confirmed) => {
+      if (!confirmed) return;
+      try {
+        await deleteOfferMutation.mutateAsync(id);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {
+        showToast("Kunne ikke slette tilbud");
+      }
+    });
   };
 
   if (!sessionToken) return null;

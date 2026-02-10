@@ -20,6 +20,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -65,15 +66,55 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
     setIsRefreshing(true);
     await refetch();
     setIsRefreshing(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const openEmail = async (email: string) => {
     try {
-      await Linking.openURL(`mailto:${email}`);
+      const mailUrl = `mailto:${email}`;
+      const canOpen = await Linking.canOpenURL(mailUrl);
+      if (!canOpen) {
+        showToast("E-postklienten er ikke tilgjengelig.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+      await Linking.openURL(mailUrl);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
       console.error("Could not open email", error);
+      showToast("Noe gikk galt. Prov igjen.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
+  };
+
+  const openMap = async (address: string) => {
+    try {
+      const encodedAddress = encodeURIComponent(address);
+      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`;
+      const canOpen = await Linking.canOpenURL(mapsUrl);
+      if (!canOpen) {
+        showToast("Karttjenesten er ikke tilgjengelig.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+      await Linking.openURL(mapsUrl);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (error) {
+      console.error("Could not open map", error);
+      showToast("Noe gikk galt. Prov igjen.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    const parsed = new Date(dateStr);
+    if (Number.isNaN(parsed.getTime())) return dateStr;
+    return parsed.toLocaleDateString("nb-NO", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -94,6 +135,7 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
 
   const renderSiteVisit = ({ item, index }: { item: SiteVisit; index: number }) => {
     const statusColor = getStatusColor(item.status);
+    const address = item.address;
 
     return (
       <Animated.View entering={FadeInDown.duration(300).delay(index * 50)}>
@@ -123,7 +165,8 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
             <View style={styles.infoRow}>
               <Feather name="calendar" size={14} color={theme.accent} />
               <ThemedText style={[styles.infoText, { color: theme.text }]}>
-                {item.siteVisitDate}{item.siteVisitTime && ` kl. ${item.siteVisitTime}`}
+                {formatDate(item.siteVisitDate)}
+                {item.siteVisitTime && ` kl. ${item.siteVisitTime}`}
               </ThemedText>
             </View>
 
@@ -131,18 +174,24 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
               <View style={styles.infoRow}>
                 <Feather name="heart" size={14} color={theme.textSecondary} />
                 <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>
-                  Bryllup: {item.weddingDate}
+                  Bryllup: {formatDate(item.weddingDate)}
                 </ThemedText>
               </View>
             )}
 
-            {item.address && (
-              <View style={styles.infoRow}>
+            {address && (
+              <Pressable
+                onPress={() => openMap(address)}
+                style={({ pressed }) => [
+                  styles.infoRow,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
                 <Feather name="map-pin" size={14} color={theme.textSecondary} />
                 <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>
-                  {item.address}
+                  {address}
                 </ThemedText>
-              </View>
+              </Pressable>
             )}
 
             {(item.invitedGuests || item.maxGuests) && (

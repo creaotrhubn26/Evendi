@@ -4,7 +4,6 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  Alert,
   Pressable,
   Switch,
   ActivityIndicator,
@@ -23,6 +22,7 @@ import { Button } from "@/components/Button";
 import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { apiRequest, queryClient } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
 
 interface ReviewableContract {
   id: string;
@@ -87,17 +87,17 @@ export default function VendorReviewsScreen() {
       setBody("");
       setIsAnonymous(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Takk!", "Din anmeldelse er sendt og vil bli gjennomgått før publisering.");
+      showToast("Din anmeldelse er sendt og vil bli gjennomgått før publisering.");
     },
     onError: (error: any) => {
-      Alert.alert("Feil", error.message || "Kunne ikke sende anmeldelse");
+      showToast(error.message || "Kunne ikke sende anmeldelse");
     },
   });
 
   const handleSubmitReview = () => {
     if (!selectedContract) return;
     if (rating < 1 || rating > 5) {
-      Alert.alert("Velg vurdering", "Velg antall stjerner (1-5)");
+      showToast("Velg antall stjerner (1-5)");
       return;
     }
 

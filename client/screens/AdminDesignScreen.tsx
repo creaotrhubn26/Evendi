@@ -5,7 +5,6 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  Alert,
   ActivityIndicator,
   Switch,
   Image,
@@ -18,12 +17,15 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from 'expo-image-picker';
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { AdminHeader } from "@/components/AdminHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { showToast } from "@/lib/toast";
 
 interface AppSetting {
   id: string;
@@ -70,8 +72,8 @@ export default function AdminDesignScreen() {
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
-  const route = useRoute();
-  const adminKey = (route.params as any)?.adminKey || "";
+  const route = useRoute<RouteProp<RootStackParamList, "AdminDesign">>();
+  const adminKey = route.params?.adminKey || "";
 
   const [primaryColor, setPrimaryColor] = useState("#C9A962");
   const [backgroundColor, setBackgroundColor] = useState("#1A1A1A");
@@ -85,6 +87,17 @@ export default function AdminDesignScreen() {
   const [buttonRadius, setButtonRadius] = useState("8");
   const [cardRadius, setCardRadius] = useState("12");
   const [borderWidth, setBorderWidth] = useState("1");
+
+  const numericFontSize = Number.parseInt(fontSize, 10);
+  const safeFontSize = Number.isFinite(numericFontSize) ? numericFontSize : 16;
+  const numericButtonRadius = Number.parseInt(buttonRadius, 10);
+  const safeButtonRadius = Number.isFinite(numericButtonRadius) ? numericButtonRadius : 8;
+  const numericCardRadius = Number.parseInt(cardRadius, 10);
+  const safeCardRadius = Number.isFinite(numericCardRadius) ? numericCardRadius : 12;
+  const numericBorderWidth = Number.parseInt(borderWidth, 10);
+  const safeBorderWidth = Number.isFinite(numericBorderWidth) ? numericBorderWidth : 1;
+  const densityScale = layoutDensity === "compact" ? 0.85 : layoutDensity === "spacious" ? 1.2 : 1;
+  const previewFontFamily = fontFamily === "System" ? undefined : fontFamily;
 
   const { data: settings, isLoading } = useQuery<AppSetting[]>({
     queryKey: ["/api/admin/settings", adminKey],
@@ -163,11 +176,11 @@ export default function AdminDesignScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
       queryClient.invalidateQueries({ queryKey: ["design-settings"] });
-      Alert.alert("Lagret", "Designinnstillinger er oppdatert");
+      showToast("Designinnstillinger er oppdatert");
     },
     onError: (error) => {
       console.error("Save failed:", error);
-      Alert.alert("Feil", "Kunne ikke lagre innstillinger");
+      showToast("Kunne ikke lagre innstillinger");
     },
   });
 
@@ -175,7 +188,7 @@ export default function AdminDesignScreen() {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
     if (permissionResult.granted === false) {
-      Alert.alert("Tillatelse kreves", "Du må gi tilgang til bildebiblioteket");
+      showToast("Du må gi tilgang til bildebiblioteket");
       return;
     }
 
@@ -217,7 +230,7 @@ export default function AdminDesignScreen() {
       <ScrollView
         style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
         contentContainerStyle={{
-          paddingTop: Spacing.lg,
+          paddingTop: headerHeight + Spacing.lg,
           paddingBottom: insets.bottom + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
@@ -525,18 +538,58 @@ export default function AdminDesignScreen() {
 
       <Animated.View entering={FadeInDown.delay(275).duration(400)}>
         <View style={[styles.previewSection, { backgroundColor: backgroundColor, borderColor: theme.border }]}>
-          <ThemedText style={[styles.previewTitle, { color: primaryColor }]}>
+          <ThemedText style={[styles.previewTitle, { color: primaryColor, fontFamily: previewFontFamily }]}>
             Forhåndsvisning
           </ThemedText>
-          <View style={styles.previewContent}>
-            <View style={[styles.previewButton, { backgroundColor: primaryColor }]}>
-              <ThemedText style={[styles.previewButtonText, { color: backgroundColor }]}>
+          <View style={[styles.previewContent, { gap: Spacing.md * densityScale }]}>
+            <View
+              style={[
+                styles.previewButton,
+                {
+                  backgroundColor: primaryColor,
+                  borderRadius: safeButtonRadius,
+                  paddingHorizontal: Spacing.xl * densityScale,
+                  paddingVertical: Spacing.md * densityScale,
+                },
+              ]}
+            >
+              <ThemedText
+                style={[
+                  styles.previewButtonText,
+                  {
+                    color: backgroundColor,
+                    fontSize: safeFontSize,
+                    fontFamily: previewFontFamily,
+                  },
+                ]}
+              >
                 Eksempel-knapp
               </ThemedText>
             </View>
-            <View style={[styles.previewCard, { backgroundColor: backgroundColor === "#1A1A1A" ? "#2A2A2A" : "#FFFFFF", borderColor: primaryColor }]}>
+            <View
+              style={[
+                styles.previewCard,
+                {
+                  backgroundColor: backgroundColor === "#1A1A1A" ? "#2A2A2A" : "#FFFFFF",
+                  borderColor: primaryColor,
+                  borderRadius: safeCardRadius,
+                  borderWidth: safeBorderWidth,
+                  padding: Spacing.md * densityScale,
+                  gap: Spacing.sm * densityScale,
+                },
+              ]}
+            >
               <Feather name="heart" size={24} color={primaryColor} />
-              <ThemedText style={[styles.previewCardText, { color: backgroundColor === "#1A1A1A" ? "#FFFFFF" : "#1A1A1A" }]}>
+              <ThemedText
+                style={[
+                  styles.previewCardText,
+                  {
+                    color: backgroundColor === "#1A1A1A" ? "#FFFFFF" : "#1A1A1A",
+                    fontSize: safeFontSize,
+                    fontFamily: previewFontFamily,
+                  },
+                ]}
+              >
                 {appName}
               </ThemedText>
             </View>

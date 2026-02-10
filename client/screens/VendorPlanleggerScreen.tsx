@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, TextInput, Modal } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, TextInput, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -16,6 +16,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
+import { showToast } from "@/lib/toast";
+import { showConfirm, showOptions } from "@/lib/dialogs";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -262,7 +264,7 @@ export default function VendorPlanleggerScreen() {
 
   const saveMeeting = () => {
     if (!coupleName.trim() || !meetingDate.trim()) {
-      Alert.alert('Feil', 'Vennligst fyll inn parnavn og dato');
+      showToast('Vennligst fyll inn parnavn og dato');
       return;
     }
 
@@ -290,16 +292,19 @@ export default function VendorPlanleggerScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
-  const deleteMeeting = (id: string) => {
-    Alert.alert('Slett møte', 'Er du sikker på at du vil slette dette møtet?', [
-      { text: 'Avbryt', style: 'cancel' },
-      { text: 'Slett', style: 'destructive', onPress: () => {
-        const next = meetings.filter(m => m.id !== id);
-        setMeetings(next);
-        persistAndCache("meetings", next);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }},
-    ]);
+  const deleteMeeting = async (id: string) => {
+    const confirmed = await showConfirm({
+      title: 'Slett møte',
+      message: 'Er du sikker på at du vil slette dette møtet?',
+      confirmLabel: 'Slett',
+      cancelLabel: 'Avbryt',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const next = meetings.filter(m => m.id !== id);
+    setMeetings(next);
+    persistAndCache("meetings", next);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const duplicateMeeting = (meeting: PlannerMeeting) => {
@@ -344,7 +349,7 @@ export default function VendorPlanleggerScreen() {
 
   const saveTask = () => {
     if (!taskTitle.trim() || !taskDueDate.trim()) {
-      Alert.alert('Feil', 'Vennligst fyll inn oppgavenavn og forfallsdato');
+      showToast('Vennligst fyll inn oppgavenavn og forfallsdato');
       return;
     }
 
@@ -371,16 +376,19 @@ export default function VendorPlanleggerScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
-  const deleteTask = (id: string) => {
-    Alert.alert('Slett oppgave', 'Er du sikker på at du vil slette denne oppgaven?', [
-      { text: 'Avbryt', style: 'cancel' },
-      { text: 'Slett', style: 'destructive', onPress: () => {
-        const next = tasks.filter(t => t.id !== id);
-        setTasks(next);
-        persistAndCache("tasks", next);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }},
-    ]);
+  const deleteTask = async (id: string) => {
+    const confirmed = await showConfirm({
+      title: 'Slett oppgave',
+      message: 'Er du sikker på at du vil slette denne oppgaven?',
+      confirmLabel: 'Slett',
+      cancelLabel: 'Avbryt',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const next = tasks.filter(t => t.id !== id);
+    setTasks(next);
+    persistAndCache("tasks", next);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const duplicateTask = (task: PlannerTask) => {
@@ -413,11 +421,16 @@ export default function VendorPlanleggerScreen() {
     navigation.navigate("OfferCreate");
   };
 
-  const handleDelete = (id: string, type: 'product' | 'offer') => {
-    Alert.alert(`Slett ${type === 'product' ? 'produkt' : 'tilbud'}`, "Er du sikker?", [
-      { text: "Avbryt", style: "cancel" },
-      { text: "Slett", style: "destructive", onPress: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success) },
-    ]);
+  const handleDelete = async (id: string, type: 'product' | 'offer') => {
+    const confirmed = await showConfirm({
+      title: `Slett ${type === 'product' ? 'produkt' : 'tilbud'}`,
+      message: "Er du sikker?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   if (!sessionToken) return null;
@@ -568,12 +581,16 @@ export default function VendorPlanleggerScreen() {
                   onPress={() => openMeetingModal(m)}
                   onLongPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    Alert.alert('Alternativer', m.coupleName, [
-                      { text: 'Avbryt', style: 'cancel' },
-                      { text: 'Rediger', onPress: () => openMeetingModal(m) },
-                      { text: 'Dupliser', onPress: () => duplicateMeeting(m) },
-                      { text: 'Slett', style: 'destructive', onPress: () => deleteMeeting(m.id) },
-                    ]);
+                    showOptions({
+                      title: 'Alternativer',
+                      message: m.coupleName,
+                      cancelLabel: 'Avbryt',
+                      options: [
+                        { label: 'Rediger', onPress: () => openMeetingModal(m) },
+                        { label: 'Dupliser', onPress: () => duplicateMeeting(m) },
+                        { label: 'Slett', destructive: true, onPress: () => deleteMeeting(m.id) },
+                      ],
+                    });
                   }}
                   style={[styles.meetingRow, { backgroundColor: theme.backgroundDefault }]}
                 >
@@ -630,12 +647,16 @@ export default function VendorPlanleggerScreen() {
                   onPress={() => openTaskModal(t)}
                   onLongPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    Alert.alert('Alternativer', t.title, [
-                      { text: 'Avbryt', style: 'cancel' },
-                      { text: 'Rediger', onPress: () => openTaskModal(t) },
-                      { text: 'Dupliser', onPress: () => duplicateTask(t) },
-                      { text: 'Slett', style: 'destructive', onPress: () => deleteTask(t.id) },
-                    ]);
+                    showOptions({
+                      title: 'Alternativer',
+                      message: t.title,
+                      cancelLabel: 'Avbryt',
+                      options: [
+                        { label: 'Rediger', onPress: () => openTaskModal(t) },
+                        { label: 'Dupliser', onPress: () => duplicateTask(t) },
+                        { label: 'Slett', destructive: true, onPress: () => deleteTask(t.id) },
+                      ],
+                    });
                   }}
                   style={[styles.meetingRow, { backgroundColor: theme.backgroundDefault }]}
                 >

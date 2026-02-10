@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { StyleSheet, View, FlatList, TextInput, Pressable, ActivityIndicator, Alert, Linking, ScrollView, Text, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
+import { StyleSheet, View, FlatList, TextInput, Pressable, ActivityIndicator, Linking, ScrollView, Text, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -14,6 +14,7 @@ import { getApiUrl } from "@/lib/query-client";
 import { useQuery } from "@tanstack/react-query";
 import type { AppSetting } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { showToast } from "@/lib/toast";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 const WELCOME_MESSAGE = "Velkommen til Wedflow Support!\n\nHer kan du kontakte oss direkte med spørsmål, problemer eller tilbakemeldinger. Vi svarer vanligvis innen 24 timer.\n\nFør du sender melding, sjekk våre ressurser:";
@@ -104,7 +105,7 @@ export default function VendorAdminChatScreen() {
     setLoading(true);
     try {
       const token = await loadSessionToken();
-      if (!token) { Alert.alert("Ikke innlogget", "Vennligst logg inn som leverandør."); return; }
+      if (!token) { showToast("Vennligst logg inn som leverandør."); return; }
       const url = new URL("/api/vendor/admin/conversation", getApiUrl());
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error("Kunne ikke hente admin-samtale");
@@ -112,7 +113,7 @@ export default function VendorAdminChatScreen() {
       setConv(data);
     } catch (e) {
       console.error(e);
-      Alert.alert("Feil", (e as Error).message);
+      showToast((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -162,7 +163,7 @@ export default function VendorAdminChatScreen() {
     } catch (e) {
       // mark last local as error
       setMessages(prev => prev.map(m => (m.status === "pending" ? { ...m, status: "error" } : m)));
-      Alert.alert("Feil", (e as Error).message);
+      showToast((e as Error).message);
     } finally {
       setSending(false);
     }
@@ -186,7 +187,7 @@ export default function VendorAdminChatScreen() {
       setMessages(prev => prev.map(m => (m.id === msg.id ? { ...saved, status: "sent" } : m)));
     } catch (e) {
       setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, status: "error" } : m)));
-      Alert.alert("Feil", (e as Error).message);
+      showToast((e as Error).message);
     } finally {
       setSending(false);
     }
@@ -365,7 +366,7 @@ export default function VendorAdminChatScreen() {
                               navigation.navigate(link.screen as any);
                             }
                           } else if (link.url) {
-                            Linking.openURL(link.url).catch(() => Alert.alert("Feil", "Kunne ikke åpne lenke"));
+                            Linking.openURL(link.url).catch(() => showToast("Kunne ikke åpne lenke"));
                           }
                         }}
                       >

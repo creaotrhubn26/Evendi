@@ -5,7 +5,6 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -18,7 +17,13 @@ import { ThemedText } from "@/components/ThemedText";
 import { AdminHeader } from "@/components/AdminHeader";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { getAllChecklists, adminUpdateChecklistTask, adminDeleteChecklistTask } from "@/lib/api-admin-checklist";
+import {
+  getAllChecklists,
+  adminUpdateChecklistTask,
+  adminDeleteChecklistTask,
+  type AdminChecklistItem,
+} from "@/lib/api-admin-checklist";
+import { showConfirm } from "@/lib/dialogs";
 
 const ADMIN_SECRET = process.env.EXPO_PUBLIC_ADMIN_SECRET || "dev-admin-secret";
 
@@ -39,7 +44,7 @@ export default function AdminChecklistsScreen() {
   const [selectedCouple, setSelectedCouple] = useState<string | null>(null);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
 
-  const { data: checklists = [], isLoading } = useQuery({
+  const { data: checklists = [], isLoading } = useQuery<AdminChecklistItem[]>({
     queryKey: ["admin-checklists"],
     queryFn: () => getAllChecklists(ADMIN_SECRET),
   });
@@ -66,18 +71,15 @@ export default function AdminChecklistsScreen() {
   };
 
   const handleDelete = (taskId: string, taskTitle: string) => {
-    Alert.alert(
-      "Slett oppgave",
-      `Er du sikker på at du vil slette "${taskTitle}"?`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Slett",
-          style: "destructive",
-          onPress: () => deleteMutation.mutate(taskId),
-        },
-      ]
-    );
+    showConfirm({
+      title: "Slett oppgave",
+      message: `Er du sikker på at du vil slette "${taskTitle}"?`,
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    }).then((confirmed) => {
+      if (confirmed) deleteMutation.mutate(taskId);
+    });
   };
 
   const toggleTaskExpanded = (taskId: string) => {
@@ -92,7 +94,12 @@ export default function AdminChecklistsScreen() {
   };
 
   // Group by couple
-  const coupleGroups = checklists.reduce((acc, item) => {
+  const coupleGroups = checklists.reduce<Record<string, { 
+    coupleName: string;
+    coupleEmail: string;
+    weddingDate: string | null;
+    tasks: AdminChecklistItem[];
+  }>>((acc, item) => {
     if (!acc[item.coupleId]) {
       acc[item.coupleId] = {
         coupleName: item.coupleName,
@@ -103,7 +110,7 @@ export default function AdminChecklistsScreen() {
     }
     acc[item.coupleId].tasks.push(item);
     return acc;
-  }, {} as Record<string, any>);
+  }, {});
 
   const couples = Object.entries(coupleGroups);
 
@@ -124,13 +131,13 @@ export default function AdminChecklistsScreen() {
       <ScrollView
         style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
         contentContainerStyle={{
-          paddingTop: Spacing.lg,
+          paddingTop: headerHeight + Spacing.lg,
           paddingBottom: insets.bottom + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
       >
         {couples.map(([coupleId, data], index) => {
-        const completed = data.tasks.filter((t: any) => t.taskCompleted).length;
+        const completed = data.tasks.filter((task) => task.taskCompleted).length;
         const total = data.tasks.length;
         const progress = total > 0 ? (completed / total) * 100 : 0;
         const isExpanded = selectedCouple === coupleId;
@@ -183,7 +190,7 @@ export default function AdminChecklistsScreen() {
 
               {isExpanded && (
                 <View style={{ marginTop: Spacing.md }}>
-                  {data.tasks.map((task: any) => {
+                  {data.tasks.map((task) => {
                     const catInfo = CATEGORY_INFO[task.taskCategory] || CATEGORY_INFO.planning;
                     const isTaskExpanded = expandedTasks.has(task.taskId);
 

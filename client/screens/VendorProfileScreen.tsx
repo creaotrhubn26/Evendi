@@ -5,7 +5,6 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
   ScrollView,
   Switch,
 } from "react-native";
@@ -20,6 +19,7 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
@@ -265,11 +265,11 @@ export default function VendorProfileScreen({ navigation }: Props) {
       }
       
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/profile"] });
-      Alert.alert("Lagret", "Profilen din er oppdatert");
+      showToast("Profilen din er oppdatert");
     },
     onError: (error: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
@@ -296,17 +296,17 @@ export default function VendorProfileScreen({ navigation }: Props) {
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/category-details"] });
-      Alert.alert("Lagret", "Kategori-detaljene dine er oppdatert");
+      showToast("Kategori-detaljene dine er oppdatert");
     },
     onError: (error: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
   const handleSave = () => {
     if (!businessName.trim()) {
-      Alert.alert("Ugyldig", "Bedriftsnavn er påkrevd");
+      showToast("Bedriftsnavn er påkrevd");
       return;
     }
     saveMutation.mutate();

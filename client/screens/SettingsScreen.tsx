@@ -1,5 +1,5 @@
-import React from "react";
-import { ScrollView, StyleSheet, View, Pressable, Alert, Switch } from "react-native";
+import React, { useEffect, useState, useRef } from "react";
+import { ScrollView, StyleSheet, View, Pressable, Switch, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -10,31 +10,75 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { clearAllData } from "@/lib/storage";
+import { clearAllData, getAppLanguage, saveAppLanguage, type AppLanguage } from "@/lib/storage";
+import { showToast } from "@/lib/toast";
+import { showConfirm, showOptions } from "@/lib/dialogs";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
+  const hasShownWebToast = useRef(false);
 
-  const handleClearData = () => {
-    Alert.alert(
-      "Slett alle data",
-      "Er du sikker på at du vil slette alle data? Dette kan ikke angres.",
-      [
-        { text: "Avbryt", style: "cancel" },
+  useEffect(() => {
+    async function loadLanguage() {
+      const storedLanguage = await getAppLanguage();
+      setAppLanguage(storedLanguage);
+    }
+    loadLanguage();
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === "web" && !hasShownWebToast.current) {
+      showToast("ToastProvider web test");
+      hasShownWebToast.current = true;
+    }
+  }, []);
+
+  const handleClearData = async () => {
+    const confirmed = await showConfirm({
+      title: "Slett alle data",
+      message: "Er du sikker på at du vil slette alle data? Dette kan ikke angres.",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    await clearAllData();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    showToast("Alle data er slettet. Start appen på nytt for å begynne på nytt.");
+  };
+
+  const languageLabel = appLanguage === "en" ? "English" : "Norsk";
+
+  const handleLanguageSelect = () => {
+    showOptions({
+      title: "Sprak",
+      message: "Velg språk for appen",
+      cancelLabel: "Avbryt",
+      options: [
         {
-          text: "Slett",
-          style: "destructive",
+          label: "Norsk",
           onPress: async () => {
-            await clearAllData();
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert("Ferdig", "Alle data er slettet. Start appen på nytt for å begynne på nytt.");
+            await saveAppLanguage("nb");
+            setAppLanguage("nb");
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            showToast("Sprak oppdatert.");
           },
         },
-      ]
-    );
+        {
+          label: "English",
+          onPress: async () => {
+            await saveAppLanguage("en");
+            setAppLanguage("en");
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            showToast("Language updated.");
+          },
+        },
+      ],
+    });
   };
 
   return (
@@ -76,8 +120,8 @@ export default function SettingsScreen() {
             icon="globe"
             label="Språk"
             theme={theme}
-            value="Norsk"
-            onPress={() => Alert.alert("Språk", "Kun norsk er tilgjengelig nå")}
+            value={languageLabel}
+            onPress={handleLanguageSelect}
           />
         </View>
       </Animated.View>
@@ -91,7 +135,7 @@ export default function SettingsScreen() {
             icon="download"
             label="Eksporter data"
             theme={theme}
-            onPress={() => Alert.alert("Eksporter", "Eksportfunksjon kommer snart")}
+            onPress={() => showToast("Eksportfunksjon kommer snart")}
           />
           <SettingRow
             icon="trash-2"
@@ -118,13 +162,13 @@ export default function SettingsScreen() {
             icon="file-text"
             label="Personvern"
             theme={theme}
-            onPress={() => Alert.alert("Personvern", "Personvernerklæring kommer snart")}
+            onPress={() => showToast("Personvernerklæring kommer snart")}
           />
           <SettingRow
             icon="book"
             label="Vilkår"
             theme={theme}
-            onPress={() => Alert.alert("Vilkår", "Vilkår for bruk kommer snart")}
+            onPress={() => showToast("Vilkår for bruk kommer snart")}
           />
         </View>
       </Animated.View>

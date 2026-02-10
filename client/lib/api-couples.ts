@@ -2,6 +2,7 @@ export interface CoupleProfile {
   id: string;
   displayName: string;
   email: string;
+  partnerEmail?: string | null;
   weddingDate?: string | null;
   selectedTraditions?: string[] | null;
   expectedGuests?: number | null;
@@ -29,6 +30,7 @@ export async function updateCoupleProfile(
   updates: {
     displayName?: string;
     weddingDate?: string;
+    partnerEmail?: string | null;
     selectedTraditions?: string[];
     expectedGuests?: number;
   }

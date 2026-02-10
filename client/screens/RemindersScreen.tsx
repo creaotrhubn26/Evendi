@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, Pressable, TextInput, Alert, Platform } from "react-native";
+import React, { useEffect, useState } from "react";
+import { ScrollView, StyleSheet, View, Pressable, TextInput, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -18,10 +18,13 @@ import { apiRequest, getApiUrl } from "@/lib/query-client";
 import {
   scheduleCustomReminder,
   cancelCustomReminder,
-  CATEGORY_LABELS,
   CATEGORY_ICONS,
   getNotificationSettings,
+  getCategoryLabel,
 } from "@/lib/notifications";
+import { getAppLanguage, type AppLanguage } from "@/lib/storage";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 
 interface Reminder {
   id: string;
@@ -59,6 +62,97 @@ export default function RemindersScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string>("general");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
+  const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
+
+  const copy = appLanguage === "en"
+    ? {
+      loading: "Loading...",
+      upcoming: "Upcoming",
+      completed: "Completed",
+      emptyTitle: "No reminders",
+      emptyText: "Create a reminder to track important deadlines and tasks.",
+      summaryTitle: "Reminders",
+      summaryStatus: (completed: number, total: number) => `${completed} of ${total} completed`,
+      summaryEmpty: "No reminders yet",
+      statsThisWeek: (count: number) => `${count} due this week`,
+      statsOverdue: (count: number) => `${count} overdue`,
+      filterAll: "All",
+      errorTitleMissing: "Title is required",
+      deleteTitle: "Delete reminder",
+      deleteConfirm: (title: string) => `Are you sure you want to delete "${title}"?`,
+      deleteCancel: "Cancel",
+      deleteConfirmAction: "Delete",
+      overdueTitle: (count: number) => `${count} overdue reminder${count === 1 ? "" : "s"}`,
+      overdueSubtitle: "Mark as completed or snooze",
+      addReminder: "Add reminder",
+      addReminderCta: "Add a new reminder",
+      allCompleted: "All reminders are completed",
+      newReminder: "New reminder",
+      quickPick: "Quick picks:",
+      titleLabel: "Title",
+      titlePlaceholder: "What should we remind you about?",
+      descriptionLabel: "Description (optional)",
+      descriptionPlaceholder: "Add more information...",
+      dateLabel: "Date",
+      datePlaceholder: "YYYY-MM-DD",
+      categoryLabel: "Category",
+      cancel: "Cancel",
+      create: "Create",
+      saving: "Saving...",
+      templatePayVendor: "Pay vendor",
+      templateVendorMeeting: "Vendor meeting",
+      templateSendRsvp: "Send RSVP",
+      templateCheckBudget: "Check budget",
+    }
+    : {
+      loading: "Laster...",
+      upcoming: "Kommende",
+      completed: "Fullført",
+      emptyTitle: "Ingen påminnelser",
+      emptyText: "Opprett en påminnelse for å holde styr på viktige frister og oppgaver.",
+      summaryTitle: "Påminnelser",
+      summaryStatus: (completed: number, total: number) => `${completed} av ${total} fullført`,
+      summaryEmpty: "Ingen påminnelser ennå",
+      statsThisWeek: (count: number) => `${count} denne uken`,
+      statsOverdue: (count: number) => `${count} forfalt`,
+      filterAll: "Alle",
+      errorTitleMissing: "Tittel er påkrevd",
+      deleteTitle: "Slett påminnelse",
+      deleteConfirm: (title: string) => `Er du sikker på at du vil slette "${title}"?`,
+      deleteCancel: "Avbryt",
+      deleteConfirmAction: "Slett",
+      overdueTitle: (count: number) => `${count} forfalt${count === 1 ? "" : "e"} påminnelse${count === 1 ? "" : "r"}`,
+      overdueSubtitle: "Marker som fullført eller utsett",
+      addReminder: "Legg til påminnelse",
+      addReminderCta: "Legg til ny påminnelse",
+      allCompleted: "Alle påminnelser er fullført",
+      newReminder: "Ny påminnelse",
+      quickPick: "Hurtigvalg:",
+      titleLabel: "Tittel",
+      titlePlaceholder: "Hva vil du bli påminnet om?",
+      descriptionLabel: "Beskrivelse (valgfritt)",
+      descriptionPlaceholder: "Legg til mer informasjon...",
+      dateLabel: "Dato",
+      datePlaceholder: "YYYY-MM-DD",
+      categoryLabel: "Kategori",
+      cancel: "Avbryt",
+      create: "Opprett",
+      saving: "Lagrer...",
+      templatePayVendor: "Betal leverandør",
+      templateVendorMeeting: "Møte leverandør",
+      templateSendRsvp: "Send RSVP",
+      templateCheckBudget: "Sjekk budsjett",
+    };
+
+  const locale = appLanguage === "en" ? "en-US" : "nb-NO";
+
+  useEffect(() => {
+    async function loadLanguage() {
+      const language = await getAppLanguage();
+      setAppLanguage(language);
+    }
+    loadLanguage();
+  }, []);
 
   const { data: reminders = [], isLoading } = useQuery<Reminder[]>({
     queryKey: ["/api/reminders"],
@@ -120,7 +214,7 @@ export default function RemindersScreen() {
 
   const handleCreateReminder = () => {
     if (!title.trim()) {
-      Alert.alert("Feil", "Tittel er påkrevd");
+      showToast(copy.errorTitleMissing);
       return;
     }
     createMutation.mutate({
@@ -132,19 +226,20 @@ export default function RemindersScreen() {
   };
 
   const handleDeleteReminder = (reminder: Reminder) => {
-    Alert.alert(
-      "Slett påminnelse",
-      `Er du sikker på at du vil slette "${reminder.title}"?`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        { text: "Slett", style: "destructive", onPress: () => deleteMutation.mutate(reminder.id) },
-      ]
-    );
+    showConfirm({
+      title: copy.deleteTitle,
+      message: copy.deleteConfirm(reminder.title),
+      confirmLabel: copy.deleteConfirmAction,
+      cancelLabel: copy.deleteCancel,
+      destructive: true,
+    }).then((confirmed) => {
+      if (confirmed) deleteMutation.mutate(reminder.id);
+    });
   };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString("nb-NO", {
+    return date.toLocaleDateString(locale, {
       weekday: "short",
       day: "numeric",
       month: "short",
@@ -157,6 +252,15 @@ export default function RemindersScreen() {
     const now = new Date();
     const diffTime = date.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (appLanguage === "en") {
+      if (diffDays < 0) return "Overdue";
+      if (diffDays === 0) return "Today";
+      if (diffDays === 1) return "Tomorrow";
+      if (diffDays < 7) return `In ${diffDays} days`;
+      if (diffDays < 30) return `In ${Math.ceil(diffDays / 7)} weeks`;
+      return `In ${Math.ceil(diffDays / 30)} months`;
+    }
 
     if (diffDays < 0) return "Forfalt";
     if (diffDays === 0) return "I dag";
@@ -204,7 +308,7 @@ export default function RemindersScreen() {
     if (overdueReminders.length > 0) {
       suggestions.push({
         icon: "alert-circle" as const,
-        label: `${overdueReminders.length} forfalt${overdueReminders.length > 1 ? 'e' : ''}`,
+        label: copy.statsOverdue(overdueReminders.length),
         color: "#FF3B30",
         priority: "urgent",
         action: () => {
@@ -216,7 +320,7 @@ export default function RemindersScreen() {
     if (dueThisWeekReminders.length > 0) {
       suggestions.push({
         icon: "clock" as const,
-        label: `${dueThisWeekReminders.length} denne uken`,
+        label: copy.statsThisWeek(dueThisWeekReminders.length),
         color: "#FFB74D",
         priority: "high",
         action: () => {
@@ -233,7 +337,7 @@ export default function RemindersScreen() {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
         <View style={styles.loadingContainer}>
-          <ThemedText style={{ color: theme.textMuted }}>Laster...</ThemedText>
+          <ThemedText style={{ color: theme.textMuted }}>{copy.loading}</ThemedText>
         </View>
       </View>
     );
@@ -256,15 +360,15 @@ export default function RemindersScreen() {
               </View>
               <View style={styles.summaryText}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.sm }}>
-                  <ThemedText style={styles.summaryTitle}>Påminnelser</ThemedText>
+                  <ThemedText style={styles.summaryTitle}>{copy.summaryTitle}</ThemedText>
                   {overdueReminders.length > 0 && (
                     <View style={[styles.urgencyBadge, { backgroundColor: "#FF3B30" }]}>
                       <ThemedText style={styles.urgencyBadgeText}>{overdueReminders.length}</ThemedText>
                     </View>
                   )}
                 </View>
-                <ThemedText style={[styles.summarySubtitle, { color: theme.textMuted }]}>
-                  {totalCount > 0 ? `${completedCount} av ${totalCount} fullført` : "Ingen påminnelser ennå"}
+                <ThemedText style={[styles.summarySubtitle, { color: theme.textMuted }]}> 
+                  {totalCount > 0 ? copy.summaryStatus(completedCount, totalCount) : copy.summaryEmpty}
                 </ThemedText>
               </View>
             </View>
@@ -292,7 +396,7 @@ export default function RemindersScreen() {
                       <View style={styles.statItem}>
                         <Feather name="clock" size={12} color="#FFB74D" />
                         <ThemedText style={[styles.statText, { color: theme.textMuted }]}>
-                          {dueThisWeekReminders.length} denne uken
+                          {copy.statsThisWeek(dueThisWeekReminders.length)}
                         </ThemedText>
                       </View>
                     )}
@@ -300,7 +404,7 @@ export default function RemindersScreen() {
                       <View style={styles.statItem}>
                         <Feather name="alert-circle" size={12} color="#FF3B30" />
                         <ThemedText style={[styles.statText, { color: "#FF3B30" }]}>
-                          {overdueReminders.length} forfalt
+                          {copy.statsOverdue(overdueReminders.length)}
                         </ThemedText>
                       </View>
                     )}
@@ -336,7 +440,7 @@ export default function RemindersScreen() {
                   { color: filterCategory === null ? "#1A1A1A" : theme.textSecondary },
                 ]}
               >
-                Alle
+                {copy.filterAll}
               </ThemedText>
             </Pressable>
             {CATEGORIES.map((cat) => (
@@ -366,7 +470,7 @@ export default function RemindersScreen() {
                     { color: filterCategory === cat ? "#1A1A1A" : theme.textSecondary },
                   ]}
                 >
-                  {CATEGORY_LABELS[cat]}
+                  {getCategoryLabel(cat, appLanguage)}
                 </ThemedText>
               </Pressable>
             ))}
@@ -388,10 +492,10 @@ export default function RemindersScreen() {
               </View>
               <View style={styles.ctaContent}>
                 <ThemedText style={[styles.ctaTitle, { color: "#FF3B30" }]}>
-                  {overdueReminders.length} forfalt{overdueReminders.length > 1 ? 'e' : ''} påminnelse{overdueReminders.length > 1 ? 'r' : ''}
+                  {copy.overdueTitle(overdueReminders.length)}
                 </ThemedText>
                 <ThemedText style={[styles.ctaSubtitle, { color: theme.textMuted }]}>
-                  Marker som fullført eller utsett
+                  {copy.overdueSubtitle}
                 </ThemedText>
               </View>
               <Feather name="arrow-right" size={20} color="#FF3B30" />
@@ -412,9 +516,9 @@ export default function RemindersScreen() {
                 <Feather name="plus" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.ctaContent}>
-                <ThemedText style={[styles.ctaTitle, { color: theme.text }]}>Legg til ny påminnelse</ThemedText>
+                <ThemedText style={[styles.ctaTitle, { color: theme.text }]}>{copy.addReminderCta}</ThemedText>
                 <ThemedText style={[styles.ctaSubtitle, { color: theme.textMuted }]}>
-                  Alle påminnelser er fullført
+                  {copy.allCompleted}
                 </ThemedText>
               </View>
               <Feather name="arrow-right" size={20} color={theme.accent} />
@@ -425,16 +529,16 @@ export default function RemindersScreen() {
         {showForm ? (
           <Animated.View entering={FadeInUp.duration(300)} style={styles.formSection}>
             <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-              <ThemedText style={styles.formTitle}>Ny påminnelse</ThemedText>
+              <ThemedText style={styles.formTitle}>{copy.newReminder}</ThemedText>
 
               {/* Quick templates */}
               <View style={styles.templateRow}>
-                <ThemedText style={[styles.templateLabel, { color: theme.textMuted }]}>Hurtigvalg:</ThemedText>
+                <ThemedText style={[styles.templateLabel, { color: theme.textMuted }]}>{copy.quickPick}</ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.templateScroll}>
                   <Pressable
                     style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
                     onPress={() => {
-                      setTitle("Betal leverandør");
+                      setTitle(copy.templatePayVendor);
                       setSelectedCategory("vendor");
                       const tomorrow = new Date();
                       tomorrow.setDate(tomorrow.getDate() + 7);
@@ -443,12 +547,12 @@ export default function RemindersScreen() {
                     }}
                   >
                     <Feather name="dollar-sign" size={12} color={CATEGORY_COLORS.vendor} />
-                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>Betal leverandør</ThemedText>
+                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>{copy.templatePayVendor}</ThemedText>
                   </Pressable>
                   <Pressable
                     style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
                     onPress={() => {
-                      setTitle("Møte med leverandør");
+                      setTitle(copy.templateVendorMeeting);
                       setSelectedCategory("vendor");
                       const nextWeek = new Date();
                       nextWeek.setDate(nextWeek.getDate() + 7);
@@ -457,12 +561,12 @@ export default function RemindersScreen() {
                     }}
                   >
                     <Feather name="calendar" size={12} color={CATEGORY_COLORS.vendor} />
-                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>Møte leverandør</ThemedText>
+                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>{copy.templateVendorMeeting}</ThemedText>
                   </Pressable>
                   <Pressable
                     style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
                     onPress={() => {
-                      setTitle("Send RSVP til gjester");
+                      setTitle(copy.templateSendRsvp);
                       setSelectedCategory("guest");
                       const twoWeeks = new Date();
                       twoWeeks.setDate(twoWeeks.getDate() + 14);
@@ -471,12 +575,12 @@ export default function RemindersScreen() {
                     }}
                   >
                     <Feather name="users" size={12} color={CATEGORY_COLORS.guest} />
-                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>Send RSVP</ThemedText>
+                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>{copy.templateSendRsvp}</ThemedText>
                   </Pressable>
                   <Pressable
                     style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
                     onPress={() => {
-                      setTitle("Sjekk budsjett");
+                      setTitle(copy.templateCheckBudget);
                       setSelectedCategory("budget");
                       const tomorrow = new Date();
                       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -485,20 +589,20 @@ export default function RemindersScreen() {
                     }}
                   >
                     <Feather name="trending-up" size={12} color={CATEGORY_COLORS.budget} />
-                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>Sjekk budsjett</ThemedText>
+                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>{copy.templateCheckBudget}</ThemedText>
                   </Pressable>
                 </ScrollView>
               </View>
 
               <View style={styles.inputGroup}>
-                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Tittel</ThemedText>
+                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>{copy.titleLabel}</ThemedText>
                 <TextInput
                   testID="input-reminder-title"
                   style={[
                     styles.textInput,
                     { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
                   ]}
-                  placeholder="Hva vil du bli påminnet om?"
+                  placeholder={copy.titlePlaceholder}
                   placeholderTextColor={theme.textMuted}
                   value={title}
                   onChangeText={setTitle}
@@ -506,7 +610,7 @@ export default function RemindersScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Beskrivelse (valgfritt)</ThemedText>
+                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>{copy.descriptionLabel}</ThemedText>
                 <TextInput
                   testID="input-reminder-description"
                   style={[
@@ -514,7 +618,7 @@ export default function RemindersScreen() {
                     styles.textArea,
                     { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
                   ]}
-                  placeholder="Legg til mer informasjon..."
+                  placeholder={copy.descriptionPlaceholder}
                   placeholderTextColor={theme.textMuted}
                   value={description}
                   onChangeText={setDescription}
@@ -524,14 +628,14 @@ export default function RemindersScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Dato</ThemedText>
+                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>{copy.dateLabel}</ThemedText>
                 {Platform.OS === "web" ? (
                   <TextInput
                     style={[
                       styles.textInput,
                       { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
                     ]}
-                    placeholder="YYYY-MM-DD"
+                    placeholder={copy.datePlaceholder}
                     placeholderTextColor={theme.textMuted}
                     value={selectedDate.toISOString().split("T")[0]}
                     onChangeText={(text) => {
@@ -552,7 +656,7 @@ export default function RemindersScreen() {
                     >
                       <Feather name="calendar" size={18} color={Colors.dark.accent} />
                       <ThemedText style={styles.dateButtonText}>
-                        {selectedDate.toLocaleDateString("nb-NO", {
+                        {selectedDate.toLocaleDateString(locale, {
                           weekday: "long",
                           day: "numeric",
                           month: "long",
@@ -577,7 +681,7 @@ export default function RemindersScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Kategori</ThemedText>
+                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>{copy.categoryLabel}</ThemedText>
                 <View style={styles.categoryGrid}>
                   {CATEGORIES.map((cat) => (
                     <Pressable
@@ -606,7 +710,7 @@ export default function RemindersScreen() {
                           { color: selectedCategory === cat ? CATEGORY_COLORS[cat] : theme.textSecondary },
                         ]}
                       >
-                        {CATEGORY_LABELS[cat]}
+                        {getCategoryLabel(cat, appLanguage)}
                       </ThemedText>
                     </Pressable>
                   ))}
@@ -619,14 +723,14 @@ export default function RemindersScreen() {
                   style={[styles.cancelButton, { borderColor: theme.border }]}
                   onPress={resetForm}
                 >
-                  <ThemedText style={{ color: theme.textSecondary }}>Avbryt</ThemedText>
+                  <ThemedText style={{ color: theme.textSecondary }}>{copy.cancel}</ThemedText>
                 </Pressable>
                 <Button
                   onPress={handleCreateReminder}
                   disabled={createMutation.isPending || !title.trim()}
                   style={styles.submitButton}
                 >
-                  {createMutation.isPending ? "Lagrer..." : "Opprett"}
+                  {createMutation.isPending ? copy.saving : copy.create}
                 </Button>
               </View>
             </View>
@@ -643,7 +747,7 @@ export default function RemindersScreen() {
             >
               <Feather name="plus" size={20} color={theme.accent} />
               <ThemedText style={[styles.addButtonText, { color: theme.accent }]}>
-                Legg til påminnelse
+                {copy.addReminder}
               </ThemedText>
             </Pressable>
           </Animated.View>
@@ -651,7 +755,7 @@ export default function RemindersScreen() {
 
         {upcomingReminders.length > 0 ? (
           <Animated.View entering={FadeInDown.duration(300).delay(300)} style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Kommende</ThemedText>
+            <ThemedText style={styles.sectionTitle}>{copy.upcoming}</ThemedText>
             {upcomingReminders.map((reminder, index) => (
               <Animated.View
                 key={reminder.id}
@@ -660,6 +764,7 @@ export default function RemindersScreen() {
                 <ReminderItem
                   reminder={reminder}
                   theme={theme}
+                  appLanguage={appLanguage}
                   onToggle={() => toggleMutation.mutate({ id: reminder.id, isCompleted: true })}
                   onDelete={() => handleDeleteReminder(reminder)}
                   formatDate={formatDate}
@@ -672,7 +777,7 @@ export default function RemindersScreen() {
 
         {completedReminders.length > 0 ? (
           <Animated.View entering={FadeInDown.duration(300).delay(400)} style={styles.section}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.textMuted }]}>Fullført</ThemedText>
+            <ThemedText style={[styles.sectionTitle, { color: theme.textMuted }]}>{copy.completed}</ThemedText>
             {completedReminders.map((reminder, index) => (
               <Animated.View
                 key={reminder.id}
@@ -681,6 +786,7 @@ export default function RemindersScreen() {
                 <ReminderItem
                   reminder={reminder}
                   theme={theme}
+                  appLanguage={appLanguage}
                   onToggle={() => toggleMutation.mutate({ id: reminder.id, isCompleted: false })}
                   onDelete={() => handleDeleteReminder(reminder)}
                   formatDate={formatDate}
@@ -697,9 +803,9 @@ export default function RemindersScreen() {
             <View style={[styles.emptyIcon, { backgroundColor: theme.accent + "20" }]}>
               <Feather name="bell-off" size={32} color={theme.accent} />
             </View>
-            <ThemedText style={styles.emptyTitle}>Ingen påminnelser</ThemedText>
+            <ThemedText style={styles.emptyTitle}>{copy.emptyTitle}</ThemedText>
             <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
-              Opprett en påminnelse for å holde styr på viktige frister og oppgaver.
+              {copy.emptyText}
             </ThemedText>
           </Animated.View>
         ) : null}
@@ -711,6 +817,7 @@ export default function RemindersScreen() {
 function ReminderItem({
   reminder,
   theme,
+  appLanguage,
   onToggle,
   onDelete,
   formatDate,
@@ -719,6 +826,7 @@ function ReminderItem({
 }: {
   reminder: Reminder;
   theme: any;
+  appLanguage: AppLanguage;
   onToggle: () => void;
   onDelete: () => void;
   formatDate: (date: string) => string;
@@ -727,7 +835,7 @@ function ReminderItem({
 }) {
   const categoryColor = CATEGORY_COLORS[reminder.category] || CATEGORY_COLORS.general;
   const timeUntil = getTimeUntil(reminder.reminderDate);
-  const isOverdue = timeUntil === "Forfalt";
+  const isOverdue = new Date(reminder.reminderDate) < new Date();
 
   return (
     <View
@@ -786,7 +894,7 @@ function ReminderItem({
               color={categoryColor}
             />
             <ThemedText style={[styles.categoryBadgeText, { color: categoryColor }]}>
-              {CATEGORY_LABELS[reminder.category]}
+              {getCategoryLabel(reminder.category, appLanguage)}
             </ThemedText>
           </View>
 

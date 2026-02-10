@@ -1,5 +1,5 @@
-import React from "react";
-import { ScrollView, StyleSheet, View, ActivityIndicator, Linking, Pressable } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { ScrollView, StyleSheet, View, ActivityIndicator, Linking, Pressable, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -10,6 +10,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { getAppLanguage, type AppLanguage } from "@/lib/storage";
+import { showToast } from "@/lib/toast";
 
 interface AppSetting {
   id: string;
@@ -21,25 +23,37 @@ interface AppSetting {
 
 export default function StatusScreen() {
   const { theme } = useTheme();
+  const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
+
+  useEffect(() => {
+    async function loadLanguage() {
+      const language = await getAppLanguage();
+      setAppLanguage(language);
+    }
+    loadLanguage();
+  }, []);
+
+  const t = useMemo(() => (nb: string, en: string) => (appLanguage === "en" ? en : nb), [appLanguage]);
+  const locale = appLanguage === "en" ? "en-US" : "nb-NO";
 
   const { data: settings = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["app-settings"],
     queryFn: async () => {
       const url = new URL("/api/app-settings", getApiUrl());
       const res = await fetch(url);
-      if (!res.ok) throw new Error("Kunne ikke hente status");
+      if (!res.ok) throw new Error(t("Kunne ikke hente status", "Could not fetch status"));
       return res.json() as Promise<AppSetting[]>;
     },
   });
 
-  const getSetting = (key: string) => settings.find(s => s.key === key)?.value || "";
+  const getSetting = (key: string, fallback = "") => settings.find(s => s.key === key)?.value || fallback;
 
   const maintenanceMode = getSetting("maintenance_mode") === "true";
   const maintenanceMessage = getSetting("maintenance_message");
   const appVersion = getSetting("app_version");
   const minAppVersion = getSetting("min_app_version");
   const statusMessage = getSetting("status_message");
-  const statusType = getSetting("status_type"); // info, warning, error, success
+  const statusType = getSetting("status_type") || "info"; // info, warning, error, success
   const lastUpdated = settings.find(s => s.key === "maintenance_mode")?.updatedAt;
 
   const getStatusColor = () => {
@@ -50,7 +64,7 @@ export default function StatusScreen() {
     return Colors.dark.accent;
   };
 
-  const getStatusIcon = () => {
+  const getStatusIcon = (): keyof typeof Feather.glyphMap => {
     if (maintenanceMode) return "tool";
     if (statusType === "error") return "alert-circle";
     if (statusType === "warning") return "alert-triangle";
@@ -59,31 +73,58 @@ export default function StatusScreen() {
   };
 
   const getStatusText = () => {
-    if (maintenanceMode) return "Vedlikehold pågår";
+    if (maintenanceMode) return t("Vedlikehold pågår", "Maintenance in progress");
     if (statusMessage) return statusMessage;
-    return "Alt fungerer normalt";
+    return t("Alt fungerer normalt", "All systems operational");
   };
 
   const hasActiveStatus = maintenanceMode || (statusMessage && statusMessage.trim().length > 0);
+
+  const updatedLabel = useMemo(() => {
+    if (!lastUpdated) return "";
+    return new Date(lastUpdated).toLocaleString(locale);
+  }, [lastUpdated]);
+
+  const handleOpenLink = async (url: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        showToast(t("Enheten din kan ikke åpne denne lenken.", "Your device cannot open this link."));
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (error) {
+      showToast(t("Kunne ikke åpne lenken akkurat nå.", "Could not open the link right now."));
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={["bottom"]}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={
-          <Pressable onPress={() => refetch()}>
-            {isRefetching && <ActivityIndicator color={theme.accent} />}
-          </Pressable>
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => refetch()}
+            tintColor={theme.accent}
+          />
         }
       >
         {/* Header */}
         <Animated.View entering={FadeInDown.duration(400)}>
           <View style={[styles.header, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <Feather name="activity" size={32} color={getStatusColor()} />
-            <ThemedText style={styles.headerTitle}>Wedflow Status</ThemedText>
+            <ThemedText style={styles.headerTitle}>{t("Wedflow Status", "Wedflow Status")}</ThemedText>
             <ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-              Sanntidsstatus for tjenesten
+              {t("Sanntidsstatus for tjenesten", "Real-time service status")}
             </ThemedText>
+            {isRefetching && (
+              <View style={styles.refreshRow}>
+                <ActivityIndicator size="small" color={theme.accent} />
+                <ThemedText style={[styles.refreshText, { color: theme.textMuted }]}>{t("Oppdaterer...", "Refreshing...")}</ThemedText>
+              </View>
+            )}
           </View>
         </Animated.View>
 
@@ -105,7 +146,7 @@ export default function StatusScreen() {
               >
                 <View style={styles.statusHeader}>
                   <View style={[styles.statusIconCircle, { backgroundColor: getStatusColor() }]}>
-                    <Feather name={getStatusIcon() as any} size={24} color="#FFFFFF" />
+                    <Feather name={getStatusIcon()} size={24} color="#FFFFFF" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <ThemedText style={[styles.statusTitle, { color: getStatusColor() }]}>
@@ -113,7 +154,7 @@ export default function StatusScreen() {
                     </ThemedText>
                     {lastUpdated && (
                       <ThemedText style={[styles.statusTime, { color: theme.textMuted }]}>
-                        Sist oppdatert: {new Date(lastUpdated).toLocaleString("no-NO")}
+                        {t("Sist oppdatert", "Last updated")}: {updatedLabel}
                       </ThemedText>
                     )}
                   </View>
@@ -132,16 +173,16 @@ export default function StatusScreen() {
             {/* System Info */}
             <Animated.View entering={FadeInDown.delay(200).duration(400)}>
               <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-                <ThemedText style={styles.sectionTitle}>Systeminformasjon</ThemedText>
+                <ThemedText style={styles.sectionTitle}>{t("Systeminformasjon", "System information")}</ThemedText>
 
                 <View style={styles.infoRow}>
                   <View style={[styles.infoIcon, { backgroundColor: theme.accent + "15" }]}>
                     <Feather name="smartphone" size={18} color={theme.accent} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <ThemedText style={styles.infoLabel}>Gjeldende versjon</ThemedText>
+                    <ThemedText style={styles.infoLabel}>{t("Gjeldende versjon", "Current version")}</ThemedText>
                     <ThemedText style={[styles.infoValue, { color: theme.textSecondary }]}>
-                      {appVersion || "Ikke satt"}
+                      {appVersion || t("Ikke satt", "Not set")}
                     </ThemedText>
                   </View>
                 </View>
@@ -152,7 +193,7 @@ export default function StatusScreen() {
                       <Feather name="alert-circle" size={18} color={theme.accent} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.infoLabel}>Minimum versjon</ThemedText>
+                      <ThemedText style={styles.infoLabel}>{t("Minimum versjon", "Minimum version")}</ThemedText>
                       <ThemedText style={[styles.infoValue, { color: theme.textSecondary }]}>
                         {minAppVersion}
                       </ThemedText>
@@ -165,9 +206,9 @@ export default function StatusScreen() {
                     <Feather name="check-circle" size={18} color="#51CF66" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <ThemedText style={styles.infoLabel}>Status</ThemedText>
+                    <ThemedText style={styles.infoLabel}>{t("Status", "Status")}</ThemedText>
                     <ThemedText style={[styles.infoValue, { color: theme.textSecondary }]}>
-                      {maintenanceMode ? "Under vedlikehold" : "Operativ"}
+                      {maintenanceMode ? t("Under vedlikehold", "Under maintenance") : t("Operativ", "Operational")}
                     </ThemedText>
                   </View>
                 </View>
@@ -177,40 +218,37 @@ export default function StatusScreen() {
             {/* Quick Links */}
             <Animated.View entering={FadeInDown.delay(300).duration(400)}>
               <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-                <ThemedText style={styles.sectionTitle}>Trenger du hjelp?</ThemedText>
+                <ThemedText style={styles.sectionTitle}>{t("Trenger du hjelp?", "Need help?")}</ThemedText>
 
                 <Pressable
                   onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    Linking.openURL("https://github.com/creaotrhubn26/wedflow/blob/main/VENDOR_DOCUMENTATION.md");
+                    handleOpenLink("https://github.com/creaotrhubn26/wedflow/blob/main/VENDOR_DOCUMENTATION.md");
                   }}
                   style={[styles.link, { borderColor: theme.border }]}
                 >
                   <View style={[styles.linkIcon, { backgroundColor: theme.accent + "15" }]}>
                     <Feather name="book-open" size={18} color={theme.accent} />
                   </View>
-                  <ThemedText style={styles.linkText}>Dokumentasjon</ThemedText>
+                  <ThemedText style={styles.linkText}>{t("Dokumentasjon", "Documentation")}</ThemedText>
                   <Feather name="external-link" size={16} color={theme.textMuted} />
                 </Pressable>
 
                 <Pressable
                   onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    Linking.openURL("mailto:support@wedflow.no");
+                    handleOpenLink("mailto:support@wedflow.no");
                   }}
                   style={[styles.link, { borderColor: theme.border }]}
                 >
                   <View style={[styles.linkIcon, { backgroundColor: theme.accent + "15" }]}>
                     <Feather name="mail" size={18} color={theme.accent} />
                   </View>
-                  <ThemedText style={styles.linkText}>Kontakt Support</ThemedText>
+                  <ThemedText style={styles.linkText}>{t("Kontakt Support", "Contact support")}</ThemedText>
                   <Feather name="external-link" size={16} color={theme.textMuted} />
                 </Pressable>
 
                 <Pressable
                   onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    Linking.openURL("https://norwedfilm.no");
+                    handleOpenLink("https://norwedfilm.no");
                   }}
                   style={[styles.link, { borderColor: theme.border }]}
                 >
@@ -228,7 +266,7 @@ export default function StatusScreen() {
                 <View style={[styles.infoBox, { backgroundColor: theme.accent + "15", borderColor: theme.accent }]}>
                   <Feather name="info" size={18} color={theme.accent} />
                   <ThemedText style={[styles.infoText, { color: theme.text }]}>
-                    Alle systemer kjører som normalt. Vi overvåker tjenesten kontinuerlig.
+                    {t("Alle systemer kjører som normalt. Vi overvåker tjenesten kontinuerlig.", "All systems are operating normally. We monitor the service continuously.")}
                   </ThemedText>
                 </View>
               </Animated.View>
@@ -252,6 +290,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 24, fontWeight: "700", marginTop: Spacing.sm },
   headerSubtitle: { fontSize: 14, marginTop: Spacing.xs, textAlign: "center" },
+  refreshRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, marginTop: Spacing.sm },
+  refreshText: { fontSize: 12 },
   statusCard: {
     padding: Spacing.lg,
     borderRadius: BorderRadius.md,

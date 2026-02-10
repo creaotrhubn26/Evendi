@@ -5,7 +5,6 @@ import {
   Pressable,
   RefreshControl,
   FlatList,
-  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -22,6 +21,7 @@ import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getCoupleContracts, updateContract, CoupleContract } from "@/lib/api-couple-data";
+import { showConfirm } from "@/lib/dialogs";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ComponentProps<typeof Feather>["name"] }> = {
   active: { label: "Aktiv", color: "#4CAF50", icon: "check-circle" },
@@ -82,18 +82,14 @@ export default function CoupleContractsScreen() {
   const [expandedContract, setExpandedContract] = useState<string | null>(null);
 
   const handleComplete = (contract: CoupleContract) => {
-    Alert.alert(
-      "Fullfør avtale",
-      `Er du sikker på at du vil markere avtalen med ${contract.vendorName} som fullført? Dette betyr at jobben er utført og leveransen mottatt.`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Fullfør",
-          style: "default",
-          onPress: () => completeMutation.mutate(contract.id),
-        },
-      ]
-    );
+    showConfirm({
+      title: "Fullfør avtale",
+      message: `Er du sikker på at du vil markere avtalen med ${contract.vendorName} som fullført? Dette betyr at jobben er utført og leveransen mottatt.`,
+      confirmLabel: "Fullfør",
+      cancelLabel: "Avbryt",
+    }).then((confirmed) => {
+      if (confirmed) completeMutation.mutate(contract.id);
+    });
   };
 
   const formatDate = (dateString: string | null) => {

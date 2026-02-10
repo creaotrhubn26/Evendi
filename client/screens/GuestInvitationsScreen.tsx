@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { StyleSheet, View, Pressable, Share, Linking, ScrollView, ActivityIndicator } from "react-native";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { StyleSheet, View, Pressable, Share, Linking, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -10,6 +10,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getCoupleSession } from "@/lib/storage";
 import { getGuestInvitations } from "@/lib/api-guest-invitations";
 import type { GuestInvitation } from "@shared/schema";
+import { showToast } from "@/lib/toast";
 
 export default function GuestInvitationsScreen() {
   const { theme } = useTheme();
@@ -20,27 +21,40 @@ export default function GuestInvitationsScreen() {
   const [invites, setInvites] = useState<GuestInvitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    getCoupleSession().then(async (session) => {
+  const baseInviteUrl = useMemo(() => {
+    const domain = process.env.EXPO_PUBLIC_DOMAIN;
+    return domain ? `https://${domain}` : "http://localhost:5000";
+  }, []);
+
+  const fetchInvites = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
+    try {
+      const session = await getCoupleSession();
       const token = session?.token ?? null;
       setSessionToken(token);
       if (!token) {
         setError("Du er ikke innlogget som par.");
-        setLoading(false);
         return;
       }
-      try {
-        const data = await getGuestInvitations(token);
-        setInvites(data);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Kunne ikke hente invitasjoner";
-        setError(msg);
-      } finally {
-        setLoading(false);
-      }
-    });
+      const data = await getGuestInvitations(token);
+      setInvites(data);
+      setError(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Kunne ikke hente invitasjoner";
+      setError(msg);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchInvites();
+  }, [fetchInvites]);
+
+  const canShare = sessionToken !== null;
 
   const shareViaSMS = async (url: string) => {
     const smsUrl = `sms:&body=${encodeURIComponent(url)}`;
@@ -80,7 +94,23 @@ export default function GuestInvitationsScreen() {
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} contentContainerStyle={{ paddingTop: headerHeight + insets.top, paddingBottom: insets.bottom + Spacing['2xl'] }}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+      contentContainerStyle={{
+        paddingTop: headerHeight + insets.top,
+        paddingBottom: insets.bottom + Spacing["2xl"],
+      }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            fetchInvites(false);
+          }}
+          tintColor={theme.accent}
+        />
+      }
+    >
       <View style={{ paddingHorizontal: Spacing.md }}>
         <ThemedText type="h3" style={{ marginBottom: Spacing.md }}>Invitasjoner</ThemedText>
         {error ? (
@@ -113,15 +143,44 @@ export default function GuestInvitationsScreen() {
               </View>
             </View>
             <View style={styles.cardActions}>
-              <Pressable onPress={() => Share.share({ message: inv.inviteToken ? `${inv.message || ''}\n${buildInviteUrl(inv)}` : inv.message || '' })} style={[styles.actionBtn, { borderColor: theme.border }]}>
+              <Pressable
+                onPress={() => {
+                  if (!canShare) {
+                    showToast("Logg inn for å dele invitasjoner.");
+                    return;
+                  }
+                  Share.share({
+                    message: inv.inviteToken ? `${inv.message || ""}\n${buildInviteUrl(inv)}` : inv.message || "",
+                  });
+                }}
+                style={[styles.actionBtn, { borderColor: theme.border, opacity: canShare ? 1 : 0.6 }]}
+              >
                 <Feather name="share-2" size={16} color={Colors.dark.accent} />
                 <ThemedText style={styles.actionText}>Del</ThemedText>
               </Pressable>
-              <Pressable onPress={() => shareViaSMS(buildInviteUrl(inv))} style={[styles.actionBtn, { borderColor: theme.border }]}>
+              <Pressable
+                onPress={() => {
+                  if (!canShare) {
+                    showToast("Logg inn for å dele invitasjoner.");
+                    return;
+                  }
+                  shareViaSMS(buildInviteUrl(inv));
+                }}
+                style={[styles.actionBtn, { borderColor: theme.border, opacity: canShare ? 1 : 0.6 }]}
+              >
                 <Feather name="message-square" size={16} color={Colors.dark.accent} />
                 <ThemedText style={styles.actionText}>SMS</ThemedText>
               </Pressable>
-              <Pressable onPress={() => shareViaEmail(inv.email || null, buildInviteUrl(inv))} style={[styles.actionBtn, { borderColor: theme.border }]}>
+              <Pressable
+                onPress={() => {
+                  if (!canShare) {
+                    showToast("Logg inn for å dele invitasjoner.");
+                    return;
+                  }
+                  shareViaEmail(inv.email || null, buildInviteUrl(inv));
+                }}
+                style={[styles.actionBtn, { borderColor: theme.border, opacity: canShare ? 1 : 0.6 }]}
+              >
                 <Feather name="mail" size={16} color={Colors.dark.accent} />
                 <ThemedText style={styles.actionText}>E-post</ThemedText>
               </Pressable>
@@ -133,8 +192,8 @@ export default function GuestInvitationsScreen() {
   );
 
   function buildInviteUrl(inv: GuestInvitation): string {
-    const base = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "http://localhost:5000";
-    return `${base}/invite/${inv.inviteToken}`;
+    if (!inv.inviteToken) return baseInviteUrl;
+    return `${baseInviteUrl}/invite/${inv.inviteToken}`;
   }
 }
 

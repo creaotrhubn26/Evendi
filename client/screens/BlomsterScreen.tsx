@@ -5,7 +5,6 @@ import {
   View,
   TextInput,
   Pressable,
-  Alert,
   Modal,
   Image,
   RefreshControl,
@@ -32,6 +31,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
+import { showToast } from "@/lib/toast";
+import { showConfirm, showOptions } from "@/lib/dialogs";
 import {
   getFlowerData,
   createFlowerAppointment,
@@ -233,51 +234,43 @@ export default function BlomsterScreen() {
   };
 
   const resetAppointmentForm = () => {
-    Alert.alert("Nullstill skjema", "Vil du slette alle feltene i avtalen?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Nullstill",
-        style: "destructive",
-        onPress: () => {
-          setEditingAppointment(null);
-          floristSearch.clearSelection();
-          setAppointmentType("");
-          setAppointmentDate("");
-          setAppointmentTime("");
-          setAppointmentLocation("");
-          setAppointmentNotes("");
-        },
-      },
-      {
-        text: "Nullstill og lukk",
-        style: "destructive",
-        onPress: () => {
-          setEditingAppointment(null);
-          floristSearch.clearSelection();
-          setAppointmentType("");
-          setAppointmentDate("");
-          setAppointmentTime("");
-          setAppointmentLocation("");
-          setAppointmentNotes("");
+    showOptions({
+      title: "Nullstill skjema",
+      message: "Vil du slette alle feltene i avtalen?",
+      options: [
+        { label: "Nullstill", destructive: true },
+        { label: "Nullstill og lukk", destructive: true },
+      ],
+      cancelLabel: "Avbryt",
+    }).then((choice) => {
+      if (choice === 0 || choice === 1) {
+        setEditingAppointment(null);
+        floristSearch.clearSelection();
+        setAppointmentType("");
+        setAppointmentDate("");
+        setAppointmentTime("");
+        setAppointmentLocation("");
+        setAppointmentNotes("");
+        if (choice === 1) {
           setShowAppointmentModal(false);
-        },
+        }
       }
-    ]);
+    });
   };
 
   const saveAppointment = async () => {
     if (!floristSearch.searchText.trim() || !appointmentDate.trim()) {
-      Alert.alert("Feil", "Vennligst fyll inn florist og dato");
+      showToast("Vennligst fyll inn florist og dato");
       return;
     }
 
     if (!isValidDateString(appointmentDate)) {
-      Alert.alert("Feil", "Dato må være på formatet DD.MM.ÅÅÅÅ");
+      showToast("Dato må være på formatet DD.MM.ÅÅÅÅ");
       return;
     }
 
     if (!isValidTimeString(appointmentTime)) {
-      Alert.alert("Feil", "Klokkeslett må være på formatet HH:MM");
+      showToast("Klokkeslett må være på formatet HH:MM");
       return;
     }
 
@@ -314,7 +307,7 @@ export default function BlomsterScreen() {
       setShowAppointmentModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre avtale");
+      showToast("Kunne ikke lagre avtale");
     }
   };
 
@@ -344,7 +337,7 @@ export default function BlomsterScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke duplisere avtale");
+      showToast("Kunne ikke duplisere avtale");
     }
   };
 
@@ -373,44 +366,35 @@ export default function BlomsterScreen() {
   };
 
   const resetSelectionForm = () => {
-    Alert.alert("Nullstill skjema", "Vil du slette alle feltene i valget?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Nullstill",
-        style: "destructive",
-        onPress: () => {
-          setEditingSelection(null);
-          setSelectionItemType("");
-          setSelectionName("");
-          setSelectionDescription("");
-          setSelectionImage(undefined);
-          setSelectionQuantity("");
-          setSelectionPrice("");
-          setSelectionNotes("");
-        },
-      },
-      {
-        text: "Nullstill og lukk",
-        style: "destructive",
-        onPress: () => {
-          setEditingSelection(null);
-          setSelectionItemType("");
-          setSelectionName("");
-          setSelectionDescription("");
-          setSelectionImage(undefined);
-          setSelectionQuantity("");
-          setSelectionPrice("");
-          setSelectionNotes("");
+    showOptions({
+      title: "Nullstill skjema",
+      message: "Vil du slette alle feltene i valget?",
+      options: [
+        { label: "Nullstill", destructive: true },
+        { label: "Nullstill og lukk", destructive: true },
+      ],
+      cancelLabel: "Avbryt",
+    }).then((choice) => {
+      if (choice === 0 || choice === 1) {
+        setEditingSelection(null);
+        setSelectionItemType("");
+        setSelectionName("");
+        setSelectionDescription("");
+        setSelectionImage(undefined);
+        setSelectionQuantity("");
+        setSelectionPrice("");
+        setSelectionNotes("");
+        if (choice === 1) {
           setShowSelectionModal(false);
-        },
+        }
       }
-    ]);
+    });
   };
 
   const pickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("Tilgang nektet", "Gi tilgang til bildebiblioteket for å velge et bilde.");
+      showToast("Gi tilgang til bildebiblioteket for å velge et bilde.");
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -427,7 +411,7 @@ export default function BlomsterScreen() {
 
   const saveSelection = async () => {
     if (!selectionName.trim() || !selectionItemType.trim() || !isFlowerItemType(selectionItemType)) {
-      Alert.alert("Feil", "Vennligst fyll inn navn og type");
+      showToast("Vennligst fyll inn navn og type");
       return;
     }
 
@@ -456,7 +440,7 @@ export default function BlomsterScreen() {
       setShowSelectionModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre valg");
+      showToast("Kunne ikke lagre valg");
     }
   };
 
@@ -487,7 +471,7 @@ export default function BlomsterScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke duplisere utvalg");
+      showToast("Kunne ikke duplisere utvalg");
     }
   };
 
@@ -556,16 +540,16 @@ export default function BlomsterScreen() {
                 onPress={() => openAppointmentModal(appointment)}
                 onLongPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert(
-                    appointment.floristName,
-                    "Velg en handling",
-                    [
-                      { text: "Avbryt", style: "cancel" },
-                      { text: "Rediger", onPress: () => openAppointmentModal(appointment) },
-                      { text: "Dupliser", onPress: () => duplicateAppointment(appointment) },
-                      { text: "Slett", style: "destructive", onPress: () => handleDeleteAppointment(appointment.id) },
-                    ]
-                  );
+                  showOptions({
+                    title: appointment.floristName,
+                    message: "Velg en handling",
+                    options: [
+                      { label: "Rediger", onPress: () => openAppointmentModal(appointment) },
+                      { label: "Dupliser", onPress: () => duplicateAppointment(appointment) },
+                      { label: "Slett", destructive: true, onPress: () => handleDeleteAppointment(appointment.id) },
+                    ],
+                    cancelLabel: "Avbryt",
+                  });
                 }}
                 style={[styles.appointmentCard, { backgroundColor: theme.backgroundDefault }]}
               >
@@ -651,12 +635,16 @@ export default function BlomsterScreen() {
                 onPress={() => openSelectionModal(selection)}
                 onLongPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert("Alternativer", `Valg: ${selection.name}`, [
-                    { text: "Avbryt", style: "cancel" },
-                    { text: "Rediger", onPress: () => openSelectionModal(selection) },
-                    { text: "Dupliser", onPress: () => duplicateSelection(selection) },
-                    { text: "Slett", onPress: () => handleDeleteSelection(selection.id), style: "destructive" },
-                  ]);
+                  showOptions({
+                    title: "Alternativer",
+                    message: `Valg: ${selection.name}`,
+                    options: [
+                      { label: "Rediger", onPress: () => openSelectionModal(selection) },
+                      { label: "Dupliser", onPress: () => duplicateSelection(selection) },
+                      { label: "Slett", destructive: true, onPress: () => handleDeleteSelection(selection.id) },
+                    ],
+                    cancelLabel: "Avbryt",
+                  });
                 }}
                 style={[
                   styles.selectionCard,

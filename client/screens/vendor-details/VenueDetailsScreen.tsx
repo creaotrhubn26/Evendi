@@ -5,7 +5,6 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
   Switch,
   ScrollView,
 } from "react-native";
@@ -21,6 +20,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { showToast } from "@/lib/toast";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -186,11 +186,11 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/venue-details"] });
-      Alert.alert("Lagret", "Lokaldetaljene er oppdatert");
+      showToast("Lokaldetaljene er oppdatert");
     },
     onError: (error: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Feil", error.message);
+      showToast(error.message);
     },
   });
 
@@ -200,7 +200,7 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
 
   const addTableSetup = () => {
     if (!newTable.seatsPerTable || !newTable.quantity) {
-      Alert.alert("Ugyldig", "Fyll inn antall seter og antall bord");
+      showToast("Fyll inn antall seter og antall bord");
       return;
     }
     const table: TableSetup = {

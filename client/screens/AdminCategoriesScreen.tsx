@@ -5,7 +5,6 @@ import {
   Pressable,
   FlatList,
   TextInput,
-  Alert,
   ActivityIndicator,
   Modal,
 } from "react-native";
@@ -23,6 +22,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { renderIcon, getAllIconOptions } from "@/lib/custom-icons";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 
 interface Category {
   id: string;
@@ -138,7 +139,7 @@ export default function AdminCategoriesScreen() {
 
   const handleSave = () => {
     if (!name.trim()) {
-      Alert.alert("Feil", "Navn er påkrevd");
+      showToast("Navn er påkrevd");
       return;
     }
 
@@ -149,19 +150,16 @@ export default function AdminCategoriesScreen() {
     }
   };
 
-  const handleDelete = (category: Category) => {
-    Alert.alert(
-      "Slett kategori",
-      `Er du sikker på at du vil slette "${category.name}"?`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Slett",
-          style: "destructive",
-          onPress: () => deleteMutation.mutate(category.id),
-        },
-      ]
-    );
+  const handleDelete = async (category: Category) => {
+    const confirmed = await showConfirm({
+      title: "Slett kategori",
+      message: `Er du sikker på at du vil slette "${category.name}"?`,
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    deleteMutation.mutate(category.id);
   };
 
   const tabs = [

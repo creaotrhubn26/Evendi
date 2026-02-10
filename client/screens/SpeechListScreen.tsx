@@ -5,7 +5,6 @@ import {
   View,
   TextInput,
   Pressable,
-  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -26,6 +25,8 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getSpeeches, saveSpeeches, generateId } from "@/lib/storage";
 import { Speech } from "@/lib/types";
 import { Table } from "@/components/SeatingChart";
+import { showToast } from "@/lib/toast";
+import { showConfirm } from "@/lib/dialogs";
 
 const DEFAULT_SPEECHES: Speech[] = [
   { id: "1", speakerName: "Mor til bruden", role: "Familie", time: "18:00", order: 1, status: "ready", tableId: null },
@@ -135,7 +136,7 @@ export default function SpeechListScreen() {
 
   const handleExportPdf = async () => {
     if (speeches.length === 0) {
-      Alert.alert("Ingen taler", "Legg til taler før du eksporterer.");
+      showToast("Legg til taler før du eksporterer.");
       return;
     }
 
@@ -199,17 +200,17 @@ export default function SpeechListScreen() {
       if (sharingAvailable) {
         await Sharing.shareAsync(file.uri, { dialogTitle: "Del PDF" });
       } else {
-        Alert.alert("PDF klar", `Fant ikke delingsmulighet. Fil lagret til:\n${file.uri}`);
+        showToast(`Fant ikke delingsmulighet. Fil lagret til:\n${file.uri}`);
       }
     } catch (error) {
       console.warn("PDF export failed", error);
-      Alert.alert("Kunne ikke generere PDF", "Prøv igjen senere.");
+      showToast("Kunne ikke generere PDF. Prøv igjen senere.");
     }
   };
 
   const handleAddSpeech = async () => {
     if (!newName.trim()) {
-      Alert.alert("Feil", "Vennligst skriv inn navnet på taleren");
+      showToast("Vennligst skriv inn navnet på taleren");
       return;
     }
 
@@ -268,22 +269,21 @@ export default function SpeechListScreen() {
   };
 
   const handleDeleteSpeech = async (id: string) => {
-    Alert.alert("Slett tale", "Er du sikker på at du vil slette denne talen?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Slett",
-        style: "destructive",
-        onPress: async () => {
-          const updatedSpeeches = speeches
-            .filter((s) => s.id !== id)
-            .map((s, index) => ({ ...s, order: index + 1 }));
-          setSpeeches(updatedSpeeches);
-          await saveSpeeches(updatedSpeeches);
-          queryClient.invalidateQueries({ queryKey: ['speeches'] });
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        },
-      },
-    ]);
+    const confirmed = await showConfirm({
+      title: "Slett tale",
+      message: "Er du sikker på at du vil slette denne talen?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const updatedSpeeches = speeches
+      .filter((s) => s.id !== id)
+      .map((s, index) => ({ ...s, order: index + 1 }));
+    setSpeeches(updatedSpeeches);
+    await saveSpeeches(updatedSpeeches);
+    queryClient.invalidateQueries({ queryKey: ['speeches'] });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
   const handleMoveUp = async (index: number) => {

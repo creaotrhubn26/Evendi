@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Alert, Modal, TextInput } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Modal, TextInput } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -17,6 +17,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
+import { showToast } from "@/lib/toast";
+import { showConfirm, showOptions } from "@/lib/dialogs";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -300,11 +302,16 @@ export default function VendorVenueScreen() {
     navigation.navigate("OfferCreate");
   };
 
-  const handleDelete = (id: string, type: 'product' | 'offer') => {
-    Alert.alert(`Slett ${type === 'product' ? 'produkt' : 'tilbud'}`, "Er du sikker?", [
-      { text: "Avbryt", style: "cancel" },
-      { text: "Slett", style: "destructive", onPress: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success) },
-    ]);
+  const handleDelete = async (id: string, type: 'product' | 'offer') => {
+    const confirmed = await showConfirm({
+      title: `Slett ${type === 'product' ? 'produkt' : 'tilbud'}`,
+      message: "Er du sikker?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const openBookingModal = (booking?: VendorVenueBooking) => {
@@ -342,7 +349,7 @@ export default function VendorVenueScreen() {
 
   const saveBooking = () => {
     if (!coupleName.trim() || !bookingDate.trim()) {
-      Alert.alert("Feil", "Parnavn og dato er påkrevd");
+      showToast("Parnavn og dato er påkrevd");
       return;
     }
     const nextItem: VendorVenueBooking = {
@@ -369,20 +376,19 @@ export default function VendorVenueScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
-  const deleteBooking = (id: string) => {
-    Alert.alert("Slett booking", "Er du sikker?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Slett",
-        style: "destructive",
-        onPress: () => {
-          const next = bookings.filter((b) => b.id !== id);
-          setBookings(next);
-          persistAndCache("bookings", next);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        },
-      },
-    ]);
+  const deleteBooking = async (id: string) => {
+    const confirmed = await showConfirm({
+      title: "Slett booking",
+      message: "Er du sikker?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const next = bookings.filter((b) => b.id !== id);
+    setBookings(next);
+    persistAndCache("bookings", next);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const updateBookingStatus = (id: string, newStatus: 'considering' | 'booked' | 'confirmed') => {
@@ -442,7 +448,7 @@ export default function VendorVenueScreen() {
 
   const saveAvailability = () => {
     if (!availDate.trim()) {
-      Alert.alert("Feil", "Dato er påkrevd");
+      showToast("Dato er påkrevd");
       return;
     }
     const block: VendorAvailability = {
@@ -461,20 +467,19 @@ export default function VendorVenueScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
-  const deleteAvailability = (id: string) => {
-    Alert.alert("Slett blokkering", "Er du sikker?", [
-      { text: "Avbryt", style: "cancel" },
-      {
-        text: "Slett",
-        style: "destructive",
-        onPress: () => {
-          const next = availability.filter((b) => b.id !== id);
-          setAvailability(next);
-          persistAndCache("availability", next);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        },
-      },
-    ]);
+  const deleteAvailability = async (id: string) => {
+    const confirmed = await showConfirm({
+      title: "Slett blokkering",
+      message: "Er du sikker?",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const next = availability.filter((b) => b.id !== id);
+    setAvailability(next);
+    persistAndCache("availability", next);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const toggleTimeline = (key: keyof VendorVenueTimeline) => {
@@ -516,12 +521,16 @@ export default function VendorVenueScreen() {
                   onPress={() => openBookingModal(b)}
                   onLongPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    Alert.alert('Alternativer', b.coupleName, [
-                      { text: 'Avbryt', style: 'cancel' },
-                      { text: 'Rediger', onPress: () => openBookingModal(b) },
-                      { text: 'Dupliser', onPress: () => duplicateBooking(b) },
-                      { text: 'Slett', style: 'destructive', onPress: () => deleteBooking(b.id) },
-                    ]);
+                    showOptions({
+                      title: 'Alternativer',
+                      message: b.coupleName,
+                      cancelLabel: 'Avbryt',
+                      options: [
+                        { label: 'Rediger', onPress: () => openBookingModal(b) },
+                        { label: 'Dupliser', onPress: () => duplicateBooking(b) },
+                        { label: 'Slett', destructive: true, onPress: () => deleteBooking(b.id) },
+                      ],
+                    });
                   }}
                   style={[styles.listRow, { borderBottomColor: theme.border }]}
                 >

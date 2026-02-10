@@ -38,6 +38,11 @@ const CATEGORY_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
   reception: "music",
 };
 
+type FeatherIconName = keyof typeof Feather.glyphMap;
+
+const isIconKey = (value: string): value is keyof typeof CATEGORY_ICONS =>
+  Object.prototype.hasOwnProperty.call(CATEGORY_ICONS, value);
+
 export default function AITimeScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -47,6 +52,8 @@ export default function AITimeScreen() {
   const [timeSlots, setTimeSlots] = useState<AITimeSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
+  const [expandedSlotId, setExpandedSlotId] = useState<string | null>(null);
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
 
   const categorizeScheduleEvent = (event: ScheduleEvent): string | null => {
     const title = event.title.toLowerCase();
@@ -114,6 +121,8 @@ export default function AITimeScreen() {
         const endHour = Math.floor(endMinutes / 60);
         const endMin = endMinutes % 60;
 
+        const slotIcon = isIconKey(category) ? CATEGORY_ICONS[category] : "clock";
+
         slots.push({
           id: category,
           type: category,
@@ -121,7 +130,7 @@ export default function AITimeScreen() {
           duration,
           startTime: `${startHour.toString().padStart(2, "0")}:${startMin.toString().padStart(2, "0")}`,
           endTime: `${endHour.toString().padStart(2, "0")}:${endMin.toString().padStart(2, "0")}`,
-          icon: CATEGORY_ICONS[category],
+          icon: slotIcon,
         });
 
         currentMinutes = endMinutes + 5;
@@ -131,6 +140,7 @@ export default function AITimeScreen() {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     
     setTimeSlots(slots);
+    setCategoryCounts(photoCounts);
     setCalculating(false);
     setLoading(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -189,57 +199,74 @@ export default function AITimeScreen() {
       ) : (
         <>
           <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-            <View style={[styles.summaryCard, { backgroundColor: Colors.dark.accent + "10", borderColor: Colors.dark.accent }]}>
+            <View
+              style={[
+                styles.summaryCard,
+                { backgroundColor: Colors.dark.accent + "10", borderColor: Colors.dark.accent },
+              ]}
+            >
               <Feather name="clock" size={20} color={Colors.dark.accent} />
               <View style={styles.summaryContent}>
-                <ThemedText style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                <ThemedText style={[styles.summaryLabel, { color: theme.textSecondary }]}> 
                   Total fotograferingstid
                 </ThemedText>
-                <ThemedText style={[styles.summaryValue, { color: Colors.dark.accent }]}>
+                <ThemedText style={[styles.summaryValue, { color: Colors.dark.accent }]}> 
                   {totalDuration} minutter
                 </ThemedText>
               </View>
             </View>
           </Animated.View>
 
-          <View style={styles.slotsContainer}>
-            {timeSlots.map((slot, index) => (
-              <Animated.View
-                key={slot.id}
-                entering={FadeInDown.delay(300 + index * 100).duration(400)}
-              >
-                <View
+          <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+            <View style={styles.slotsContainer}>
+              {timeSlots.map((slot) => {
+                const slotIcon: FeatherIconName = isIconKey(slot.type)
+                  ? CATEGORY_ICONS[slot.type]
+                  : "clock";
+                return (
+                <Pressable
+                  key={slot.id}
+                  onPress={() => {
+                    setExpandedSlotId((prev) => (prev === slot.id ? null : slot.id));
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
                   style={[
                     styles.slotCard,
                     { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
                   ]}
                 >
-                  <View style={[styles.slotIcon, { backgroundColor: theme.backgroundSecondary }]}>
-                    <Feather name={slot.icon as keyof typeof Feather.glyphMap} size={20} color={Colors.dark.accent} />
+                  <View style={[styles.slotIcon, { backgroundColor: theme.backgroundSecondary }]}> 
+                    <Feather name={slotIcon} size={20} color={Colors.dark.accent} />
                   </View>
                   <View style={styles.slotInfo}>
                     <ThemedText style={styles.slotTitle}>{slot.title}</ThemedText>
-                    <ThemedText style={[styles.slotTime, { color: theme.textSecondary }]}>
+                    <ThemedText style={[styles.slotTime, { color: theme.textSecondary }]}> 
                       {slot.startTime} - {slot.endTime}
                     </ThemedText>
+                    {expandedSlotId === slot.id && (
+                      <ThemedText style={[styles.slotMeta, { color: theme.textMuted }]}> 
+                        Basert på {categoryCounts[slot.type] || 0} elementer
+                      </ThemedText>
+                    )}
                   </View>
                   <View style={styles.durationBadge}>
-                    <ThemedText style={[styles.durationText, { color: Colors.dark.success }]}>
+                    <ThemedText style={[styles.durationText, { color: Colors.dark.success }]}> 
                       {slot.duration} min
                     </ThemedText>
                   </View>
-                </View>
-              </Animated.View>
-            ))}
-          </View>
+                </Pressable>
+                );
+              })}
+            </View>
+          </Animated.View>
 
           {timeSlots.length === 0 ? (
             <View style={styles.emptyState}>
               <Feather name="camera-off" size={48} color={theme.textMuted} />
-              <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+              <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}> 
                 Ingen bilder funnet
               </ThemedText>
-              <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
+              <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}> 
                 Legg til bilder i fotoplanen eller foto-hendelser i kjøreplanen
               </ThemedText>
             </View>
@@ -262,19 +289,19 @@ export default function AITimeScreen() {
               <ThemedText type="h4" style={styles.tipsTitle}>Tips</ThemedText>
               <View style={styles.tipItem}>
                 <Feather name="check-circle" size={16} color={Colors.dark.accent} />
-                <ThemedText style={[styles.tipText, { color: theme.textSecondary }]}>
+                <ThemedText style={[styles.tipText, { color: theme.textSecondary }]}> 
                   Legg inn buffer mellom hver sesjon
                 </ThemedText>
               </View>
               <View style={styles.tipItem}>
                 <Feather name="check-circle" size={16} color={Colors.dark.accent} />
-                <ThemedText style={[styles.tipText, { color: theme.textSecondary }]}>
+                <ThemedText style={[styles.tipText, { color: theme.textSecondary }]}> 
                   Gruppebilder tar lengre tid enn du tror
                 </ThemedText>
               </View>
               <View style={styles.tipItem}>
                 <Feather name="check-circle" size={16} color={Colors.dark.accent} />
-                <ThemedText style={[styles.tipText, { color: theme.textSecondary }]}>
+                <ThemedText style={[styles.tipText, { color: theme.textSecondary }]}> 
                   Bruk golden hour for portretter
                 </ThemedText>
               </View>
@@ -350,6 +377,7 @@ const styles = StyleSheet.create({
   slotInfo: { flex: 1 },
   slotTitle: { fontSize: 16, fontWeight: "600" },
   slotTime: { fontSize: 14, marginTop: 2 },
+  slotMeta: { fontSize: 12, marginTop: 4 },
   durationBadge: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,

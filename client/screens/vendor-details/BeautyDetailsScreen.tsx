@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, View, TextInput, Pressable, ActivityIndicator, Alert, Switch } from "react-native";
+import { StyleSheet, View, TextInput, Pressable, ActivityIndicator, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { showToast } from "@/lib/toast";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -113,8 +114,15 @@ export default function BeautyDetailsScreen({ navigation }: { navigation: Native
       if (!response.ok) throw new Error((await response.json()).message || "Kunne ikke lagre");
       return response.json();
     },
-    onSuccess: () => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); queryClient.invalidateQueries({ queryKey: ["/api/vendor/beauty-details"] }); Alert.alert("Lagret", "Hår & Makeup-detaljene er oppdatert"); },
-    onError: (error: Error) => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); Alert.alert("Feil", error.message); },
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      queryClient.invalidateQueries({ queryKey: ["/api/vendor/beauty-details"] });
+      showToast("Hår & Makeup-detaljene er oppdatert");
+    },
+    onError: (error: Error) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast(error.message);
+    },
   });
 
   const updateDetail = <K extends keyof BeautyDetails>(key: K, value: BeautyDetails[K]) => setDetails(prev => ({ ...prev, [key]: value }));

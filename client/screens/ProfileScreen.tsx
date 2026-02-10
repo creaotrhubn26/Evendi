@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   ScrollView,
   StyleSheet,
   View,
   TextInput,
   Pressable,
-  Alert,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -15,6 +15,8 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import { useQuery } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -22,8 +24,13 @@ import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { ProfileStackParamList } from "@/navigation/ProfileStackNavigator";
-import { getWeddingDetails, saveWeddingDetails } from "@/lib/storage";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { getWeddingDetails, saveWeddingDetails, getAppLanguage, type AppLanguage } from "@/lib/storage";
+import { rescheduleAllNotifications } from "@/lib/notifications";
 import { WeddingDetails } from "@/lib/types";
+import type { AppSetting } from "../../shared/schema";
+import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
 
 type NavigationProp = NativeStackNavigationProp<ProfileStackParamList>;
 
@@ -33,6 +40,7 @@ export default function ProfileScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [wedding, setWedding] = useState<WeddingDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,21 +50,99 @@ export default function ProfileScreen() {
   const [editVenue, setEditVenue] = useState("");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
+
+  useEffect(() => {
+    async function loadLanguage() {
+      const language = await getAppLanguage();
+      setAppLanguage(language);
+    }
+    loadLanguage();
+  }, []);
+
+  const t = useCallback((nb: string, en: string) => (appLanguage === "en" ? en : nb), [appLanguage]);
+  const locale = appLanguage === "en" ? "en-US" : "nb-NO";
+
+  const { data: appSettings } = useQuery<AppSetting[]>({
+    queryKey: ["app-settings"],
+    queryFn: async () => {
+      const res = await fetch(`${getApiUrl()}/api/app-settings`);
+      if (!res.ok) throw new Error(t("Kunne ikke hente app-innstillinger", "Failed to fetch app settings"));
+      return res.json();
+    },
+  });
+
+  const settingsByKey = useMemo(() => {
+    return (
+      appSettings?.reduce<Record<string, string>>((acc, setting) => {
+        acc[setting.key] = setting.value;
+        return acc;
+      }, {}) ?? {}
+    );
+  }, [appSettings]);
+
+  const getSetting = useCallback(
+    (key: string, fallback = "") => settingsByKey[key] ?? fallback,
+    [settingsByKey]
+  );
+
+  const formatDateInput = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const parseDateInput = (value: string) => {
+    if (!value) return null;
+    const [year, month, day] = value.split("-").map(Number);
+    if (!year || !month || !day) return null;
+    const date = new Date(year, month - 1, day);
+    if (Number.isNaN(date.getTime())) return null;
+    return date;
+  };
+
+  const getDateBounds = useCallback(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const defaultMax = new Date(today);
+    defaultMax.setFullYear(today.getFullYear() + 5);
+
+    const adminMin = parseDateInput(getSetting("wedding_date_min"));
+    const adminMax = parseDateInput(getSetting("wedding_date_max"));
+    const minDate = adminMin || today;
+    const maxDate = adminMax && adminMax >= minDate ? adminMax : defaultMax;
+
+    return { minDate, maxDate };
+  }, [getSetting]);
 
   const validateField = useCallback((field: string, value: string): string => {
     switch (field) {
       case "coupleNames":
-        if (!value.trim()) return "Navn er påkrevd";
-        if (value.trim().length < 3) return "Navn må være minst 3 tegn";
+        if (!value.trim()) return t("Navn er påkrevd", "Name is required");
+        if (value.trim().length < 3) return t("Navn må være minst 3 tegn", "Name must be at least 3 characters");
         return "";
-      case "weddingDate":
-        if (!value.trim()) return "Dato er påkrevd";
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return "Bruk format ÅÅÅÅ-MM-DD";
+      case "weddingDate": {
+        if (!value.trim()) return t("Dato er påkrevd", "Date is required");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return t("Bruk format ÅÅÅÅ-MM-DD", "Use format YYYY-MM-DD");
+        const parsed = parseDateInput(value.trim());
+        if (!parsed) return t("Ugyldig dato", "Invalid date");
+        const { minDate, maxDate } = getDateBounds();
+        if (parsed < minDate) return t(
+          `Dato kan ikke være før ${formatDate(formatDateInput(minDate))}`,
+          `Date cannot be before ${formatDate(formatDateInput(minDate))}`
+        );
+        if (parsed > maxDate) return t(
+          `Dato kan ikke være etter ${formatDate(formatDateInput(maxDate))}`,
+          `Date cannot be after ${formatDate(formatDateInput(maxDate))}`
+        );
         return "";
+      }
       default:
         return "";
     }
-  }, []);
+  }, [getDateBounds, t]);
 
   const handleBlur = useCallback((field: string, value: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
@@ -87,8 +173,19 @@ export default function ProfileScreen() {
   }, [loadData]);
 
   const handleSave = async () => {
-    if (!editCoupleNames.trim() || !editWeddingDate.trim()) {
-      Alert.alert("Feil", "Vennligst fyll ut navn og dato");
+    const nextTouched: Record<string, boolean> = {
+      coupleNames: true,
+      weddingDate: true,
+    };
+    const nextErrors: Record<string, string> = {
+      coupleNames: validateField("coupleNames", editCoupleNames),
+      weddingDate: validateField("weddingDate", editWeddingDate),
+    };
+    setTouched((prev) => ({ ...prev, ...nextTouched }));
+    setErrors((prev) => ({ ...prev, ...nextErrors }));
+    const hasError = Object.values(nextErrors).some((error) => error);
+    if (hasError) {
+      showToast(t("Vennligst rett opp feilene før du lagrer", "Please fix the errors before saving"));
       return;
     }
 
@@ -99,15 +196,41 @@ export default function ProfileScreen() {
     };
 
     await saveWeddingDetails(updatedWedding);
+    await rescheduleAllNotifications(true);
     setWedding(updatedWedding);
     setEditing(false);
+    setTouched({});
+    setErrors({});
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleCancel = () => {
+    setEditCoupleNames(wedding?.coupleNames || "");
+    setEditWeddingDate(wedding?.weddingDate || "");
+    setEditVenue(wedding?.venue || "");
+    setTouched({});
+    setErrors({});
+    setEditing(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS !== "ios" && event.type === "dismissed") {
+      setShowDatePicker(false);
+      return;
+    }
+    setShowDatePicker(Platform.OS === "ios");
+    if (!selectedDate) return;
+    const nextValue = formatDateInput(selectedDate);
+    setEditWeddingDate(nextValue);
+    setTouched((prev) => ({ ...prev, weddingDate: true }));
+    setErrors((prev) => ({ ...prev, weddingDate: validateField("weddingDate", nextValue) }));
   };
 
   const formatDate = (dateStr: string) => {
     try {
       const date = new Date(dateStr);
-      return date.toLocaleDateString("nb-NO", {
+      return date.toLocaleDateString(locale, {
         day: "numeric",
         month: "long",
         year: "numeric",
@@ -116,6 +239,8 @@ export default function ProfileScreen() {
       return dateStr;
     }
   };
+
+  const dateBounds = getDateBounds();
 
   if (loading) {
     return (
@@ -126,7 +251,7 @@ export default function ProfileScreen() {
           { backgroundColor: theme.backgroundRoot },
         ]}
       >
-        <ThemedText style={{ color: theme.textSecondary }}>Laster...</ThemedText>
+        <ThemedText style={{ color: theme.textSecondary }}>{t("Laster...", "Loading...")}</ThemedText>
       </View>
     );
   }
@@ -170,35 +295,85 @@ export default function ProfileScreen() {
                     },
                     getFieldStyle("coupleNames"),
                   ]}
-                  placeholder="Navn (f.eks. Emma & Erik)"
+                  placeholder={t("Navn (f.eks. Emma & Erik)", "Names (e.g. Emma & Erik)")}
                   placeholderTextColor={theme.textMuted}
                   value={editCoupleNames}
                   onChangeText={setEditCoupleNames}
                   onBlur={() => handleBlur("coupleNames", editCoupleNames)}
                 />
                 {touched.coupleNames && errors.coupleNames ? (
-                  <ThemedText style={styles.errorText}>{errors.coupleNames}</ThemedText>
+                  <ThemedText style={[styles.errorText, { color: theme.error }]}>{errors.coupleNames}</ThemedText>
                 ) : null}
               </View>
               <View>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: theme.backgroundSecondary,
-                      color: theme.text,
-                      borderColor: theme.border,
-                    },
-                    getFieldStyle("weddingDate"),
-                  ]}
-                  placeholder="Dato (ÅÅÅÅ-MM-DD)"
-                  placeholderTextColor={theme.textMuted}
-                  value={editWeddingDate}
-                  onChangeText={setEditWeddingDate}
-                  onBlur={() => handleBlur("weddingDate", editWeddingDate)}
-                />
+                {Platform.OS === "web" ? (
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.backgroundSecondary,
+                        color: theme.text,
+                        borderColor: theme.border,
+                      },
+                      getFieldStyle("weddingDate"),
+                    ]}
+                    placeholder={t("Dato (ÅÅÅÅ-MM-DD)", "Date (YYYY-MM-DD)")}
+                    placeholderTextColor={theme.textMuted}
+                    value={editWeddingDate}
+                    onChangeText={setEditWeddingDate}
+                    onBlur={() => handleBlur("weddingDate", editWeddingDate)}
+                  />
+                ) : (
+                  <>
+                    <Pressable
+                      onPress={() => setShowDatePicker(true)}
+                      onFocus={() => {
+                        if (Platform.OS === "ios") {
+                          setShowDatePicker(true);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (Platform.OS === "ios") {
+                          setShowDatePicker(false);
+                        }
+                        handleBlur("weddingDate", editWeddingDate);
+                      }}
+                      style={[
+                        styles.dateButton,
+                        {
+                          backgroundColor: theme.backgroundSecondary,
+                          borderColor: theme.border,
+                        },
+                        getFieldStyle("weddingDate"),
+                      ]}
+                    >
+                      <Feather name="calendar" size={18} color={theme.accent} />
+                      <ThemedText style={[styles.dateButtonText, { color: theme.text }]}
+                      >
+                        {editWeddingDate ? formatDate(editWeddingDate) : t("Velg dato", "Select date")}
+                      </ThemedText>
+                    </Pressable>
+                    {showDatePicker ? (
+                      <DateTimePicker
+                        value={parseDateInput(editWeddingDate) || dateBounds.minDate}
+                        mode="date"
+                        display={Platform.OS === "ios" ? "inline" : "default"}
+                        onChange={handleDateChange}
+                        minimumDate={dateBounds.minDate}
+                        maximumDate={dateBounds.maxDate}
+                      />
+                    ) : null}
+                  </>
+                )}
+                <ThemedText style={[styles.helperText, { color: theme.textMuted }]}
+                >
+                  {t(
+                    `Tillatt dato: ${formatDate(formatDateInput(dateBounds.minDate))} - ${formatDate(formatDateInput(dateBounds.maxDate))}`,
+                    `Allowed date: ${formatDate(formatDateInput(dateBounds.minDate))} - ${formatDate(formatDateInput(dateBounds.maxDate))}`
+                  )}
+                </ThemedText>
                 {touched.weddingDate && errors.weddingDate ? (
-                  <ThemedText style={styles.errorText}>{errors.weddingDate}</ThemedText>
+                  <ThemedText style={[styles.errorText, { color: theme.error }]}>{errors.weddingDate}</ThemedText>
                 ) : null}
               </View>
               <TextInput
@@ -210,39 +385,39 @@ export default function ProfileScreen() {
                     borderColor: theme.border,
                   },
                 ]}
-                placeholder="Lokale"
+                placeholder={t("Lokale", "Venue")}
                 placeholderTextColor={theme.textMuted}
                 value={editVenue}
                 onChangeText={setEditVenue}
               />
               <View style={styles.editButtons}>
                 <Pressable
-                  onPress={() => setEditing(false)}
+                  onPress={handleCancel}
                   style={[styles.cancelButton, { borderColor: theme.border }]}
                 >
                   <ThemedText style={{ color: theme.textSecondary }}>
-                    Avbryt
+                    {t("Avbryt", "Cancel")}
                   </ThemedText>
                 </Pressable>
                 <Button onPress={handleSave} style={styles.saveButton}>
-                  Lagre
+                  {t("Lagre", "Save")}
                 </Button>
               </View>
             </View>
           ) : (
             <>
               <ThemedText type="h2" style={styles.coupleNames}>
-                {wedding?.coupleNames || "Legg til navn"}
+                {wedding?.coupleNames || t("Legg til navn", "Add names")}
               </ThemedText>
               <ThemedText
                 style={[styles.weddingDate, { color: Colors.dark.accent }]}
               >
-                {wedding?.weddingDate ? formatDate(wedding.weddingDate) : "Legg til dato"}
+                {wedding?.weddingDate ? formatDate(wedding.weddingDate) : t("Legg til dato", "Add date")}
               </ThemedText>
               <ThemedText
                 style={[styles.venue, { color: theme.textSecondary }]}
               >
-                {wedding?.venue || "Legg til lokale"}
+                {wedding?.venue || t("Legg til lokale", "Add venue")}
               </ThemedText>
               <Pressable
                 onPress={() => {
@@ -253,7 +428,7 @@ export default function ProfileScreen() {
               >
                 <Feather name="edit-2" size={16} color={Colors.dark.accent} />
                 <ThemedText style={[styles.editButtonText, { color: Colors.dark.accent }]}>
-                  Rediger
+                  {t("Rediger", "Edit")}
                 </ThemedText>
               </Pressable>
             </>
@@ -263,7 +438,7 @@ export default function ProfileScreen() {
 
       <Animated.View entering={FadeInDown.delay(200).duration(400)}>
         <ThemedText type="h3" style={styles.sectionTitle}>
-          Verktøy
+          {t("Verktøy", "Tools")}
         </ThemedText>
         <View style={styles.toolsGrid}>
           <Card
@@ -279,9 +454,9 @@ export default function ProfileScreen() {
             >
               <Feather name="camera" size={20} color={Colors.dark.accent} />
             </View>
-            <ThemedText style={styles.toolLabel}>Fotoplan</ThemedText>
+            <ThemedText style={styles.toolLabel}>{t("Fotoplan", "Photo plan")}</ThemedText>
             <ThemedText style={[styles.toolDescription, { color: theme.textSecondary }]}>
-              Planlegg hvilke bilder du vil ha
+              {t("Planlegg hvilke bilder du vil ha", "Plan the photos you want")}
             </ThemedText>
           </Card>
 
@@ -298,9 +473,9 @@ export default function ProfileScreen() {
             >
               <Feather name="settings" size={20} color={Colors.dark.accent} />
             </View>
-            <ThemedText style={styles.toolLabel}>Innstillinger</ThemedText>
+            <ThemedText style={styles.toolLabel}>{t("Innstillinger", "Settings")}</ThemedText>
             <ThemedText style={[styles.toolDescription, { color: theme.textSecondary }]}>
-              App-innstillinger
+              {t("App-innstillinger", "App settings")}
             </ThemedText>
           </Card>
         </View>
@@ -310,49 +485,54 @@ export default function ProfileScreen() {
         <View style={styles.menuSection}>
           <MenuItem
             icon="help-circle"
-            label="Hjelp"
+            label={t("Hjelp", "Help")}
             theme={theme}
-            onPress={() => Alert.alert("Kontakt oss", "E-post: contact@norwedfilm.no\nNettside: norwedfilm.no\nInstagram: @norwedfilm")}
+            onPress={() => showToast(
+              t(
+                "E-post: contact@norwedfilm.no\nNettside: norwedfilm.no\nInstagram: @norwedfilm",
+                "Email: contact@norwedfilm.no\nWebsite: norwedfilm.no\nInstagram: @norwedfilm"
+              )
+            )}
           />
           <MenuItem
             icon="info"
-            label="Om Wedflow"
+            label={t("Om Wedflow", "About Wedflow")}
             theme={theme}
             onPress={() => navigation.navigate("About")}
           />
           <MenuItem
             icon="bell"
-            label="Varsler og påminnelser"
+            label={t("Varsler og påminnelser", "Notifications and reminders")}
             theme={theme}
             onPress={() => navigation.navigate("NotificationSettings")}
           />
           <MenuItem
             icon="share-2"
-            label="Del med partner"
+            label={t("Del med partner", "Share with partner")}
             theme={theme}
             onPress={() => navigation.navigate("SharePartner")}
           />
           <MenuItem
             icon="briefcase"
-            label="Leverandørportal"
+            label={t("Leverandørportal", "Vendor portal")}
             theme={theme}
             onPress={() => navigation.navigate("VendorLogin")}
           />
           <MenuItem
             icon="shield"
-            label="Admin"
+            label={t("Admin", "Admin")}
             theme={theme}
-            onPress={() => (navigation as any).navigate("AdminDashboard")}
+            onPress={() => rootNavigation.navigate("AdminLogin")}
           />
           <MenuItem
             icon="star"
-            label="Anmeld leverandører"
+            label={t("Anmeld leverandører", "Review vendors")}
             theme={theme}
             onPress={() => navigation.navigate("VendorReviews")}
           />
           <MenuItem
             icon="message-square"
-            label="Tilbakemelding til Wedflow"
+            label={t("Tilbakemelding til Wedflow", "Feedback to Wedflow")}
             theme={theme}
             onPress={() => navigation.navigate("Feedback")}
           />
@@ -453,6 +633,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: Spacing.md,
   },
+  dateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    height: Spacing.inputHeight,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  dateButtonText: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
   editButtons: {
     flexDirection: "row",
     gap: Spacing.md,
@@ -522,6 +716,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#DC3545",
     marginTop: -8,
+    marginBottom: Spacing.sm,
+    marginLeft: Spacing.sm,
+  },
+  helperText: {
+    fontSize: 12,
+    marginTop: -6,
     marginBottom: Spacing.sm,
     marginLeft: Spacing.sm,
   },

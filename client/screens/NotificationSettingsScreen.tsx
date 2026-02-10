@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { ScrollView, StyleSheet, View, Switch, Pressable, Alert, Platform, Linking } from "react-native";
+import { ScrollView, StyleSheet, View, Switch, Pressable, Platform, Linking } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
@@ -17,8 +17,11 @@ import {
   requestNotificationPermission,
   getScheduledNotifications,
   DEFAULT_NOTIFICATION_SETTINGS,
+  getNotificationCopy,
 } from "@/lib/notifications";
-import { getWeddingDetails } from "@/lib/storage";
+import { getWeddingDetails, getAppLanguage, type AppLanguage } from "@/lib/storage";
+import { showConfirm } from "@/lib/dialogs";
+import { showToast } from "@/lib/toast";
 
 const REMINDER_OPTIONS = [
   { days: 30, label: "30 dager før" },
@@ -38,19 +41,22 @@ export default function NotificationSettingsScreen() {
   const [scheduledCount, setScheduledCount] = useState(0);
   const [permissionStatus, setPermissionStatus] = useState<string>("undetermined");
   const [loading, setLoading] = useState(true);
+  const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
 
   const loadData = useCallback(async () => {
-    const [savedSettings, wedding, scheduled, permission] = await Promise.all([
+    const [savedSettings, wedding, scheduled, permission, language] = await Promise.all([
       getNotificationSettings(),
       getWeddingDetails(),
       getScheduledNotifications(),
       Notifications.getPermissionsAsync(),
+      getAppLanguage(),
     ]);
 
     setSettings(savedSettings);
     setHasWeddingDate(!!wedding?.weddingDate);
     setScheduledCount(scheduled.length);
     setPermissionStatus(permission.status);
+    setAppLanguage(language);
     setLoading(false);
   }, []);
 
@@ -62,26 +68,21 @@ export default function NotificationSettingsScreen() {
     if (value) {
       const granted = await requestNotificationPermission();
       if (!granted) {
-        Alert.alert(
-          "Tillatelse kreves",
-          "Du må tillate varsler for å bruke denne funksjonen. Gå til innstillinger for å aktivere.",
-          [
-            { text: "Avbryt", style: "cancel" },
-            {
-              text: "Åpne innstillinger",
-              onPress: () => {
-                if (Platform.OS !== "web") {
-                  try {
-                    Linking.openSettings();
-                  } catch {}
-                }
-              },
-            },
-          ]
-        );
+        const confirmed = await showConfirm({
+          title: "Tillatelse kreves",
+          message: "Du må tillate varsler for å bruke denne funksjonen. Gå til innstillinger for å aktivere.",
+          confirmLabel: "Åpne innstillinger",
+          cancelLabel: "Avbryt",
+        });
+        if (confirmed && Platform.OS !== "web") {
+          try {
+            Linking.openSettings();
+          } catch {}
+        }
         return;
       }
       setPermissionStatus("granted");
+      showToast(getNotificationCopy(appLanguage).toastPermissionGranted);
     }
 
     const newSettings = { ...settings, enabled: value };
@@ -91,6 +92,7 @@ export default function NotificationSettingsScreen() {
 
     const scheduled = await getScheduledNotifications();
     setScheduledCount(scheduled.length);
+    showToast(getNotificationCopy(appLanguage).toastUpdated);
   };
 
   const handleToggleChecklistReminders = async (value: boolean) => {
@@ -98,6 +100,7 @@ export default function NotificationSettingsScreen() {
     setSettings(newSettings);
     await saveNotificationSettings(newSettings);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    showToast(getNotificationCopy(appLanguage).toastUpdated);
   };
 
   const handleToggleCountdown = async (value: boolean) => {
@@ -108,6 +111,7 @@ export default function NotificationSettingsScreen() {
 
     const scheduled = await getScheduledNotifications();
     setScheduledCount(scheduled.length);
+    showToast(getNotificationCopy(appLanguage).toastUpdated);
   };
 
   const handleToggleDay = async (day: number) => {
@@ -123,6 +127,7 @@ export default function NotificationSettingsScreen() {
 
     const scheduled = await getScheduledNotifications();
     setScheduledCount(scheduled.length);
+    showToast(getNotificationCopy(appLanguage).toastUpdated);
   };
 
   if (loading) {

@@ -1428,10 +1428,25 @@ export interface MusicTimeline {
   updatedAt?: string;
 }
 
+export interface MusicPreferences {
+  id?: string;
+  coupleId?: string;
+  spotifyPlaylistUrl?: string | null;
+  youtubePlaylistUrl?: string | null;
+  entranceSong?: string | null;
+  firstDanceSong?: string | null;
+  lastSong?: string | null;
+  doNotPlay?: string | null;
+  additionalNotes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface MusicData {
   performances: MusicPerformance[];
   setlists: MusicSetlist[];
   timeline: MusicTimeline;
+  preferences: MusicPreferences;
 }
 
 export async function getMusicData(): Promise<MusicData> {
@@ -1511,6 +1526,17 @@ export async function updateMusicTimeline(data: Partial<MusicTimeline>): Promise
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error("Failed to update timeline");
+  return res.json();
+}
+
+export async function updateMusicPreferences(data: Partial<MusicPreferences>): Promise<MusicPreferences> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/preferences`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update preferences");
   return res.json();
 }
 

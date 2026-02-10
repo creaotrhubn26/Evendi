@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   StyleSheet,
   View,
   FlatList,
   Pressable,
   ActivityIndicator,
-  Alert,
   RefreshControl,
   TextInput,
 } from "react-native";
@@ -17,7 +16,9 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 interface AdminConvWithVendor {
   conv: {
@@ -31,10 +32,12 @@ interface AdminConvWithVendor {
   vendor: { id: string; email: string; businessName: string } | null;
 }
 
-type Props = NativeStackScreenProps<any, "AdminVendorChats">;
+type Props = NativeStackScreenProps<RootStackParamList, "AdminVendorChats">;
+
+type WsMessageEvent = { data: string };
 
 export default function AdminVendorChatsScreen({ route, navigation }: Props) {
-  const { adminKey } = route.params as any;
+  const { adminKey } = route.params;
   const { theme } = useTheme();
   const headerHeight = useHeaderHeight();
 
@@ -46,6 +49,10 @@ export default function AdminVendorChatsScreen({ route, navigation }: Props) {
   const wsRef = useRef<WebSocket | null>(null);
 
   const updateConversationStatus = async (convId: string, newStatus: string) => {
+    if (!adminKey) {
+      showToast("Logg inn som admin for a oppdatere status.");
+      return;
+    }
     try {
       const url = new URL(`/api/admin/vendor-admin-conversations/${convId}/status`, getApiUrl());
       const res = await fetch(url, {
@@ -67,11 +74,15 @@ export default function AdminVendorChatsScreen({ route, navigation }: Props) {
       );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", (e as Error).message);
+      showToast((e as Error).message);
     }
   };
 
-  const fetchConversations = async (showSpinner = true) => {
+  const fetchConversations = useCallback(async (showSpinner = true) => {
+    if (!adminKey) {
+      setLoading(false);
+      return;
+    }
     try {
       if (showSpinner) setLoading(true);
       const url = new URL("/api/admin/vendor-admin-conversations", getApiUrl());
@@ -92,27 +103,36 @@ export default function AdminVendorChatsScreen({ route, navigation }: Props) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [adminKey]);
 
   useEffect(() => {
     fetchConversations();
-  }, []);
+  }, [fetchConversations]);
 
   useEffect(() => {
     if (!adminKey) return;
     let closedByUs = false;
-    let reconnectTimer: any = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     const connect = () => {
       try {
         const wsUrl = getApiUrl().replace(/^http/, "ws") + `/ws/admin/vendor-admin-list?adminKey=${encodeURIComponent(adminKey)}`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
-        ws.onmessage = (event) => {
+        ws.onmessage = (event: WsMessageEvent) => {
           try {
-            const data = JSON.parse((event as any).data);
+            const payloadText = typeof event.data === "string" ? event.data : "";
+            if (!payloadText) return;
+            const data = JSON.parse(payloadText) as {
+              type?: string;
+              payload?: {
+                conversationId?: string;
+                lastMessageAt?: string;
+                adminUnreadCount?: number;
+              };
+            };
             if (data?.type === "conv-update" && data.payload?.conversationId) {
-              const { conversationId, lastMessageAt, adminUnreadCount } = data.payload as { conversationId: string; lastMessageAt?: string; adminUnreadCount?: number };
+              const { conversationId, lastMessageAt, adminUnreadCount } = data.payload;
               setConversations((prev) => {
                 const list = [...prev];
                 const idx = list.findIndex((c) => c.conv.id === conversationId);
@@ -121,8 +141,9 @@ export default function AdminVendorChatsScreen({ route, navigation }: Props) {
                   updated.conv = {
                     ...updated.conv,
                     lastMessageAt: lastMessageAt || updated.conv.lastMessageAt,
-                    adminUnreadCount: typeof adminUnreadCount === "number" ? adminUnreadCount : updated.conv.adminUnreadCount,
-                  } as any;
+                    adminUnreadCount:
+                      typeof adminUnreadCount === "number" ? adminUnreadCount : updated.conv.adminUnreadCount,
+                  };
                   list[idx] = updated;
                   // Move to top if new lastMessageAt
                   if (lastMessageAt) {
@@ -152,7 +173,7 @@ export default function AdminVendorChatsScreen({ route, navigation }: Props) {
       try { wsRef.current?.close(); } catch {}
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
-  }, [adminKey]);
+  }, [adminKey, fetchConversations]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -175,7 +196,7 @@ export default function AdminVendorChatsScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={["top", "bottom"]}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: headerHeight + Spacing.md }]}>
         <ThemedText style={styles.title}>Wedflow Support - Leverandører</ThemedText>
         <ThemedText style={styles.subtitle}>Meldinger fra leverandører</ThemedText>
         <View style={styles.toolsRow}>

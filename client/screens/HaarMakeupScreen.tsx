@@ -5,7 +5,6 @@ import {
   View,
   TextInput,
   Pressable,
-  Alert,
   Modal,
   Image,
   RefreshControl,
@@ -33,6 +32,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
+import { showToast } from "@/lib/toast";
+import { showConfirm, showOptions } from "@/lib/dialogs";
 import {
   getHairMakeupData,
   createHairMakeupAppointment,
@@ -250,17 +251,17 @@ export default function HaarMakeupScreen() {
 
   const saveAppointment = async () => {
     if (!stylistSearch.searchText.trim() || !appointmentDate.trim()) {
-      Alert.alert("Feil", "Vennligst fyll inn stylist og dato");
+      showToast("Vennligst fyll inn stylist og dato");
       return;
     }
 
     if (!isValidDate(appointmentDate)) {
-      Alert.alert("Ugyldig dato", "Bruk format DD.MM.ÅÅÅÅ (f.eks. 15.06.2026)");
+      showToast("Bruk format DD.MM.ÅÅÅÅ (f.eks. 15.06.2026)");
       return;
     }
 
     if (appointmentTime && !isValidTime(appointmentTime)) {
-      Alert.alert("Ugyldig klokkeslett", "Bruk format HH:MM (f.eks. 14:30)");
+      showToast("Bruk format HH:MM (f.eks. 14:30)");
       return;
     }
 
@@ -294,7 +295,7 @@ export default function HaarMakeupScreen() {
       setShowAppointmentModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre avtale");
+      showToast("Kunne ikke lagre avtale");
     } finally {
       setIsSavingAppointment(false);
     }
@@ -310,21 +311,17 @@ export default function HaarMakeupScreen() {
 
   const handleDeleteAppointment = async (id: string) => {
     const appointment = appointments.find((a) => a.id === id);
-    Alert.alert(
-      "Slett avtale",
-      `Er du sikker på at du vil slette avtalen med ${appointment?.stylistName || 'denne stylisten'}?`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Slett",
-          style: "destructive",
-          onPress: async () => {
-            await deleteAppointmentMutation.mutateAsync(id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          },
-        },
-      ]
-    );
+    const confirmed = await showConfirm({
+      title: "Slett avtale",
+      message: `Er du sikker på at du vil slette avtalen med ${appointment?.stylistName || 'denne stylisten'}?`,
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (confirmed) {
+      await deleteAppointmentMutation.mutateAsync(id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
   };
 
   const duplicateAppointment = async (appointment: HairMakeupAppointment) => {
@@ -341,7 +338,7 @@ export default function HaarMakeupScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke duplisere avtale");
+      showToast("Kunne ikke duplisere avtale");
     }
   };
 
@@ -367,11 +364,7 @@ export default function HaarMakeupScreen() {
     // Request permissions first
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(
-        "Tillatelse kreves",
-        "Vi trenger tilgang til bildebiblioteket for å velge bilder.",
-        [{ text: "OK" }]
-      );
+      showToast("Vi trenger tilgang til bildebiblioteket for å velge bilder.");
       return;
     }
 
@@ -394,7 +387,7 @@ export default function HaarMakeupScreen() {
 
   const saveLook = async () => {
     if (!lookName.trim()) {
-      Alert.alert("Feil", "Vennligst gi looket et navn");
+      showToast("Vennligst gi looket et navn");
       return;
     }
 
@@ -418,7 +411,7 @@ export default function HaarMakeupScreen() {
       setShowLookModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre look");
+      showToast("Kunne ikke lagre look");
     } finally {
       setIsSavingLook(false);
     }
@@ -460,27 +453,22 @@ export default function HaarMakeupScreen() {
 
   const handleDeleteLook = async (id: string) => {
     const look = looks.find((l) => l.id === id);
-    Alert.alert(
-      "Slett look",
-      `Er du sikker på at du vil slette "${look?.name || 'dette looket'}"?`,
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Slett",
-          style: "destructive",
-          onPress: async () => {
-            await deleteLookMutation.mutateAsync(id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            // Close the look modal after deletion
-            setShowLookModal(false);
-            setEditingLook(null);
-            setLookName("");
-            setLookNotes("");
-            setLookImage(undefined);
-          },
-        },
-      ]
-    );
+    const confirmed = await showConfirm({
+      title: "Slett look",
+      message: `Er du sikker på at du vil slette "${look?.name || 'dette looket'}"?`,
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (confirmed) {
+      await deleteLookMutation.mutateAsync(id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowLookModal(false);
+      setEditingLook(null);
+      setLookName("");
+      setLookNotes("");
+      setLookImage(undefined);
+    }
   };
 
   const duplicateLook = async (look: HairMakeupLook) => {
@@ -495,7 +483,7 @@ export default function HaarMakeupScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke duplisere look");
+      showToast("Kunne ikke duplisere look");
     }
   };
 
@@ -520,7 +508,7 @@ export default function HaarMakeupScreen() {
       setShowBudgetModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre budsjett");
+      showToast("Kunne ikke lagre budsjett");
     } finally {
       setIsSavingBudget(false);
     }
@@ -560,16 +548,16 @@ export default function HaarMakeupScreen() {
                 onPress={() => openAppointmentModal(appointment)}
                 onLongPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert(
-                    appointment.stylistName,
-                    "Velg en handling",
-                    [
-                      { text: "Avbryt", style: "cancel" },
-                      { text: "Rediger", onPress: () => openAppointmentModal(appointment) },
-                      { text: "Dupliser", onPress: () => duplicateAppointment(appointment) },
-                      { text: "Slett", style: "destructive", onPress: () => handleDeleteAppointment(appointment.id) },
-                    ]
-                  );
+                  showOptions({
+                    title: appointment.stylistName,
+                    message: "Velg en handling",
+                    options: [
+                      { label: "Rediger", onPress: () => openAppointmentModal(appointment) },
+                      { label: "Dupliser", onPress: () => duplicateAppointment(appointment) },
+                      { label: "Slett", destructive: true, onPress: () => handleDeleteAppointment(appointment.id) },
+                    ],
+                    cancelLabel: "Avbryt",
+                  });
                 }}
                 style={[styles.appointmentCard, { backgroundColor: theme.backgroundDefault }]}
               >
@@ -645,17 +633,17 @@ export default function HaarMakeupScreen() {
                 onPress={() => openLookModal(look)}
                 onLongPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert(
-                    look.name,
-                    "Velg en handling",
-                    [
-                      { text: "Avbryt", style: "cancel" },
-                      { text: "Rediger", onPress: () => openLookModal(look) },
-                      { text: "Dupliser", onPress: () => duplicateLook(look) },
-                      { text: look.isSelected ? "Fjern valg" : "Velg", onPress: () => toggleLookSelected(look.id) },
-                      { text: "Slett", style: "destructive", onPress: () => handleDeleteLook(look.id) },
-                    ]
-                  );
+                  showOptions({
+                    title: look.name,
+                    message: "Velg en handling",
+                    options: [
+                      { label: "Rediger", onPress: () => openLookModal(look) },
+                      { label: "Dupliser", onPress: () => duplicateLook(look) },
+                      { label: look.isSelected ? "Fjern valg" : "Velg", onPress: () => toggleLookSelected(look.id) },
+                      { label: "Slett", destructive: true, onPress: () => handleDeleteLook(look.id) },
+                    ],
+                    cancelLabel: "Avbryt",
+                  });
                 }}
                 style={[
                   styles.lookCard,

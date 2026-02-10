@@ -5,7 +5,6 @@ import {
   FlatList,
   Pressable,
   ActivityIndicator,
-  Alert,
   Linking,
   Modal,
   ScrollView,
@@ -18,6 +17,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { showToast } from "@/lib/toast";
 import type { VideoGuide } from "../../shared/schema";
 
 export default function VideoGuidesScreen() {
@@ -59,7 +59,7 @@ export default function VideoGuidesScreen() {
 
   const handleOpenURL = (url: string) => {
     Linking.openURL(url).catch(() => {
-      Alert.alert("Feil", "Kunne ikke åpne video");
+      showToast("Kunne ikke åpne video");
     });
   };
 

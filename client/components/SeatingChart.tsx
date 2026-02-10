@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import { View, StyleSheet, Pressable, TextInput, Modal, ScrollView, Alert, PanResponder, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
+import { View, StyleSheet, Pressable, TextInput, Modal, ScrollView, PanResponder, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { nanoid } from 'nanoid';
@@ -7,6 +7,8 @@ import { ThemedText } from './ThemedText';
 import { useTheme } from '@/hooks/useTheme';
 import { Spacing, BorderRadius } from '@/constants/theme';
 import { Speech } from '@/lib/types';
+import { showToast } from '@/lib/toast';
+import { showConfirm } from '@/lib/dialogs';
 
 export type TableShape = 'round' | 'rectangle' | 'square';
 export type TableCategory = 'family' | 'friends' | 'speakers' | 'kids' | 'groomsmen' | 'bridesmaids' | 'other';
@@ -295,7 +297,7 @@ export function SeatingChart({
     })
   ).current;
 
-  const deleteTable = (tableId: string) => {
+  const deleteTable = async (tableId: string) => {
     const table = tables.find(t => t.id === tableId);
     const assignedGuestsCount = guests.filter(g => g.tableId === tableId).length;
     
@@ -303,28 +305,27 @@ export function SeatingChart({
       ? `This table has ${assignedGuestsCount} assigned guest${assignedGuestsCount > 1 ? 's' : ''}. All guests will be unassigned.`
       : 'Remove this table?';
     
-    Alert.alert('Delete Table', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          pushHistory();
-          // Unassign guests from this table
-          const updatedGuests = guests.map(g => 
-            g.tableId === tableId ? { ...g, tableId: undefined } : g
-          );
-          onGuestsChange(updatedGuests);
-          onTablesChange(tables.filter(t => t.id !== tableId));
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        },
-      },
-    ]);
+    const confirmed = await showConfirm({
+      title: 'Delete Table',
+      message,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    pushHistory();
+    const updatedGuests = guests.map(g =>
+      g.tableId === tableId ? { ...g, tableId: undefined } : g
+    );
+    onGuestsChange(updatedGuests);
+    onTablesChange(tables.filter(t => t.id !== tableId));
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const addGuest = () => {
     if (!guestName.trim()) {
-      Alert.alert('Error', 'Guest name is required');
+      showToast('Guest name is required');
       return;
     }
     const newGuest: Guest = {
@@ -343,7 +344,7 @@ export function SeatingChart({
     // Use memoized guestsByTable for O(1) lookup
     const assignedCount = (guestsByTable.get(tableId) || []).length;
     if (assignedCount >= table.seats) {
-      Alert.alert('Table Full', `This table only has ${table.seats} seats`);
+      showToast(`This table only has ${table.seats} seats`);
       return;
     }
 
