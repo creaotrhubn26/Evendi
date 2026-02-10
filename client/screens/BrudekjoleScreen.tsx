@@ -29,6 +29,7 @@ import { TraditionHintBanner } from "@/components/TraditionHintBanner";
 import { getCoupleProfile } from "@/lib/api-couples";
 import { getCoupleSession } from "@/lib/storage";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
@@ -63,6 +64,7 @@ export default function BrudekjoleScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { isWedding, config } = useEventType();
   const navigation = useNavigation<NavigationProp>();
   const queryClient = useQueryClient();
 
@@ -414,7 +416,7 @@ export default function BrudekjoleScreen() {
                   <Feather name="dollar-sign" size={20} color={Colors.dark.accent} />
                 </View>
                 <View style={styles.budgetInfo}>
-                  <ThemedText style={styles.budgetLabel}>Kjolebudsjett</ThemedText>
+                  <ThemedText style={styles.budgetLabel}>{isWedding ? "Kjolebudsjett" : "Antrekksbudsjett"}</ThemedText>
                   <ThemedText style={[styles.budgetAmount, { color: Colors.dark.accent }]}>
                     {dressBudget > 0 ? `${dressBudget.toLocaleString("nb-NO")} kr` : "Sett budsjett"}
                   </ThemedText>
@@ -488,7 +490,7 @@ export default function BrudekjoleScreen() {
         {activeTab === "appointments" && (
           <Animated.View entering={FadeInRight.duration(300)}>
             <View style={styles.sectionHeader}>
-              <ThemedText style={styles.sectionTitle}>Prøveavtaler</ThemedText>
+              <ThemedText style={styles.sectionTitle}>{isWedding ? "Prøveavtaler" : "Avtaler"}</ThemedText>
               <Pressable onPress={() => openAppointmentModal()}>
                 <View style={[styles.addButton, { backgroundColor: Colors.dark.accent }]}>
                   <Feather name="plus" size={18} color="#fff" />
@@ -581,7 +583,7 @@ export default function BrudekjoleScreen() {
         {activeTab === "favorites" && (
           <Animated.View entering={FadeInRight.duration(300)}>
             <View style={styles.sectionHeader}>
-              <ThemedText style={styles.sectionTitle}>Lagrede kjoler</ThemedText>
+              <ThemedText style={styles.sectionTitle}>{isWedding ? "Lagrede kjoler" : "Lagrede antrekk"}</ThemedText>
               <Pressable onPress={() => openDressModal()}>
                 <View style={[styles.addButton, { backgroundColor: Colors.dark.accent }]}>
                   <Feather name="plus" size={18} color="#fff" />
@@ -669,7 +671,7 @@ export default function BrudekjoleScreen() {
         {/* Timeline Tab */}
         {activeTab === "timeline" && (
           <Animated.View entering={FadeInRight.duration(300)}>
-            <ThemedText style={styles.sectionTitle}>Kjolens reise</ThemedText>
+            <ThemedText style={styles.sectionTitle}>{isWedding ? "Kjolens reise" : "Antrekksplan"}</ThemedText>
             <View style={[styles.timelineCard, { backgroundColor: theme.backgroundDefault }]}>
               {TIMELINE_STEPS.map((step, idx) => {
                 const isCompleted = (timeline as any)[step.key] as boolean;
@@ -894,7 +896,7 @@ export default function BrudekjoleScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
             <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Sett kjolebudsjett</ThemedText>
+              <ThemedText style={styles.modalTitle}>{isWedding ? "Sett kjolebudsjett" : "Sett antrekksbudsjett"}</ThemedText>
               <Pressable onPress={() => setShowBudgetModal(false)}>
                 <Feather name="x" size={24} color={theme.text} />
               </Pressable>

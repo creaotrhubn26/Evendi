@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getCoupleProfile, updateCoupleProfile } from "@/lib/api-couples";
 import { getCoupleSession } from "@/lib/storage";
@@ -209,6 +210,7 @@ export default function TraditionsScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { config } = useEventType();
   const queryClient = useQueryClient();
 
   const [selectedCulture, setSelectedCulture] = useState<string>("norway");
@@ -286,9 +288,9 @@ export default function TraditionsScreen() {
       <Animated.View entering={FadeInDown.delay(100).duration(400)}>
         <View style={[styles.headerCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <Feather name="book-open" size={24} color={Colors.dark.accent} />
-          <ThemedText type="h2" style={styles.headerTitle}>Bryllupstradisjoner</ThemedText>
+          <ThemedText type="h2" style={styles.headerTitle}>{config.featureLabels?.traditions?.no || "Bryllupstradisjoner"}</ThemedText>
           <ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-            Velg kulturer som passer for deres bryllup
+            {config.featureLabels?.traditions?.descriptionNo || "Velg kulturer som passer for deres bryllup"}
           </ThemedText>
           {selectedTraditions.length > 0 && (
             <View style={[styles.selectedBadge, { backgroundColor: Colors.dark.accent + "15", borderColor: Colors.dark.accent }]}>

@@ -107,7 +107,7 @@ export interface EventTypeConfig {
   /** Typical content / key activities (for B2B info display) */
   typicalContentNo?: string[];
   typicalContentEn?: string[];
-  /** Which wedding-only features to show */
+  /** Which features to show for this event type */
   features: {
     traditions: boolean;
     dressTracking: boolean;
@@ -118,6 +118,13 @@ export interface EventTypeConfig {
     coupleProfile: boolean;
     importantPeople: boolean;
     sharePartner: boolean;
+  };
+  /** Per-feature labels — adapts feature names to event context */
+  featureLabels?: {
+    /** Label for traditions/setup feature in menus & headers */
+    traditions?: { no: string; en: string; descriptionNo?: string; descriptionEn?: string };
+    /** Label for dress tracking / dress code feature in menus & headers */
+    dressTracking?: { no: string; en: string; descriptionNo?: string; descriptionEn?: string };
   };
   /** Role labels for "important people" */
   roleLabels: {
@@ -159,6 +166,10 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       importantPeople: true,
       sharePartner: true,
     },
+    featureLabels: {
+      traditions: { no: "Tradisjoner", en: "Traditions", descriptionNo: "Kulturelle bryllupstradisjoner", descriptionEn: "Cultural wedding traditions" },
+      dressTracking: { no: "Antrekk & Styling", en: "Attire & Styling", descriptionNo: "Brudekjole, hår og makeup", descriptionEn: "Wedding dress, hair and makeup" },
+    },
     roleLabels: {
       primary: { no: "Brud", en: "Bride" },
       secondary: { no: "Brudgom", en: "Groom" },
@@ -184,8 +195,8 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     descriptionNo: "Planlegg konfirmasjonen steg for steg",
     descriptionEn: "Plan the confirmation step by step",
     features: {
-      traditions: false,
-      dressTracking: false,
+      traditions: true,
+      dressTracking: true,
       weddingPartyRoles: false,
       speeches: true,
       photoplan: true,
@@ -193,6 +204,10 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       coupleProfile: false,
       importantPeople: true,
       sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Seremoni & Oppsett", en: "Ceremony & Setup", descriptionNo: "Kirkeseremoni og festoppsett", descriptionEn: "Church ceremony and party setup" },
+      dressTracking: { no: "Antrekk & Bunad", en: "Outfit & Bunad", descriptionNo: "Bunad, kjole eller dress", descriptionEn: "Bunad, dress or suit" },
     },
     roleLabels: {
       primary: { no: "Konfirmant", en: "Confirmand" },
@@ -219,8 +234,8 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     descriptionNo: "Planlegg bursdagsfeiringen",
     descriptionEn: "Plan the birthday celebration",
     features: {
-      traditions: false,
-      dressTracking: false,
+      traditions: true,
+      dressTracking: true,
       weddingPartyRoles: false,
       speeches: true,
       photoplan: true,
@@ -228,6 +243,10 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       coupleProfile: false,
       importantPeople: true,
       sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Tema & Oppsett", en: "Theme & Setup", descriptionNo: "Temafest, dekorasjon og oppsett", descriptionEn: "Theme party, decoration and setup" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Antrekkskode og tema", descriptionEn: "Dress code and theme" },
     },
     roleLabels: {
       primary: { no: "Jubilant", en: "Birthday Person" },
@@ -254,8 +273,8 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     descriptionNo: "Feir jubileet med stil",
     descriptionEn: "Celebrate the anniversary in style",
     features: {
-      traditions: false,
-      dressTracking: false,
+      traditions: true,
+      dressTracking: true,
       weddingPartyRoles: false,
       speeches: true,
       photoplan: true,
@@ -263,6 +282,10 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       coupleProfile: true,
       importantPeople: true,
       sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Tema & Oppsett", en: "Theme & Setup", descriptionNo: "Jubiléumstema og bordoppsett", descriptionEn: "Anniversary theme and table setup" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Antrekkskode for feiringen", descriptionEn: "Dress code for the celebration" },
     },
     roleLabels: {
       primary: { no: "Vert", en: "Host" },
@@ -289,8 +312,8 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     descriptionNo: "Planlegg forlovelsesfesten",
     descriptionEn: "Plan the engagement party",
     features: {
-      traditions: false,
-      dressTracking: false,
+      traditions: true,
+      dressTracking: true,
       weddingPartyRoles: false,
       speeches: true,
       photoplan: true,
@@ -298,6 +321,10 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       coupleProfile: true,
       importantPeople: true,
       sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Tema & Oppsett", en: "Theme & Setup", descriptionNo: "Festtema og dekorasjon", descriptionEn: "Party theme and decoration" },
+      dressTracking: { no: "Antrekk", en: "Outfit", descriptionNo: "Festantrekk og styling", descriptionEn: "Party outfit and styling" },
     },
     roleLabels: {
       primary: { no: "Forlovet", en: "Fiancée" },
@@ -324,8 +351,8 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     descriptionNo: "Planlegg babyshower eller dåp",
     descriptionEn: "Plan the baby shower or baptism",
     features: {
-      traditions: false,
-      dressTracking: false,
+      traditions: true,
+      dressTracking: true,
       weddingPartyRoles: false,
       speeches: true,
       photoplan: true,
@@ -333,6 +360,10 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       coupleProfile: false,
       importantPeople: true,
       sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Tradisjon & Seremoni", en: "Tradition & Ceremony", descriptionNo: "Dåpstradisjon og seremoni", descriptionEn: "Baptism tradition and ceremony" },
+      dressTracking: { no: "Antrekk", en: "Outfit", descriptionNo: "Dåpskjole og antrekk", descriptionEn: "Baptism gown and outfit" },
     },
     roleLabels: {
       primary: { no: "Arrangør", en: "Host" },
@@ -363,9 +394,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     typicalContentNo: ["Keynote speakers", "Paneldebatter", "Breakout sessions", "Sponsorstands"],
     typicalContentEn: ["Keynote speakers", "Panel debates", "Breakout sessions", "Sponsor booths"],
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: true, photoplan: true, seating: true,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Format & Program", en: "Format & Program", descriptionNo: "Programstruktur og sesjonsformat", descriptionEn: "Program structure and session format" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Antrekkskode for deltakere", descriptionEn: "Dress code for attendees" },
     },
     roleLabels: {
       primary: { no: "Arrangør", en: "Organizer" },
@@ -394,9 +429,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     typicalContentNo: ["Presentasjoner", "Gruppearbeid", "Diskusjoner", "Nettverking"],
     typicalContentEn: ["Presentations", "Group work", "Discussions", "Networking"],
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: true, photoplan: false, seating: true,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Format & Oppsett", en: "Format & Setup", descriptionNo: "Workshop-format og gruppearbeid", descriptionEn: "Workshop format and group work" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Antrekkskode for deltakere", descriptionEn: "Dress code for participants" },
     },
     roleLabels: {
       primary: { no: "Arrangør", en: "Organizer" },
@@ -425,9 +464,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     typicalContentNo: ["Presentasjon av budsjett og mål", "Teambuilding", "Sosiale aktiviteter på kvelden"],
     typicalContentEn: ["Budget and goals presentation", "Team building", "Evening social activities"],
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: true, photoplan: true, seating: true,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Format & Agenda", en: "Format & Agenda", descriptionNo: "Dagsprogram og aktivitetsformat", descriptionEn: "Day program and activity format" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Avslappet, smart casual eller formelt", descriptionEn: "Casual, smart casual or formal" },
     },
     roleLabels: {
       primary: { no: "Arrangør", en: "Organizer" },
@@ -457,9 +500,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     typicalContentNo: ["Uformell stemning", "Utendørs aktiviteter", "Grilling", "Underholdning"],
     typicalContentEn: ["Casual atmosphere", "Outdoor activities", "BBQ", "Entertainment"],
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: true, photoplan: true, seating: true,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Tema & Oppsett", en: "Theme & Setup", descriptionNo: "Utendørstema og festoppsett", descriptionEn: "Outdoor theme and party setup" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Uformelt / sommerlig antrekk", descriptionEn: "Casual / summer attire" },
     },
     roleLabels: {
       primary: { no: "Arrangør", en: "Organizer" },
@@ -488,9 +535,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     typicalContentNo: ["Felles middag", "Underholdning", "Quiz / tema", "Dans"],
     typicalContentEn: ["Shared dinner", "Entertainment", "Quiz / theme", "Dancing"],
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: true, photoplan: true, seating: true,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Tema & Underholdning", en: "Theme & Entertainment", descriptionNo: "Juletema, quiz og underholdning", descriptionEn: "Christmas theme, quiz and entertainment" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Formelt, juletema eller avslappet", descriptionEn: "Formal, Christmas theme or casual" },
     },
     roleLabels: {
       primary: { no: "Arrangør", en: "Organizer" },
@@ -519,9 +570,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     typicalContentNo: ["Escape room", "Matlagingskurs", "Rafting / fjelltur", "Vinteraktiviteter"],
     typicalContentEn: ["Escape room", "Cooking class", "Rafting / hiking", "Winter activities"],
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: false, photoplan: false, seating: false,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Aktiviteter & Format", en: "Activities & Format", descriptionNo: "Aktivitetstype og gruppeformat", descriptionEn: "Activity type and group format" },
+      dressTracking: { no: "Antrekk", en: "Attire", descriptionNo: "Komfortable klær for aktiviteter", descriptionEn: "Comfortable clothing for activities" },
     },
     roleLabels: {
       primary: { no: "Arrangør", en: "Organizer" },
@@ -551,9 +606,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     typicalContentNo: ["Sceneproduksjon", "Demo", "Mingling og nettverk", "Pressedekning"],
     typicalContentEn: ["Stage production", "Demo", "Mingling and networking", "Press coverage"],
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: true, photoplan: true, seating: true,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Konsept & Oppsett", en: "Concept & Setup", descriptionNo: "Scenografi, demo og presentasjon", descriptionEn: "Set design, demo and presentation" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Profesjonelt / business antrekk", descriptionEn: "Professional / business attire" },
     },
     roleLabels: {
       primary: { no: "Arrangør", en: "Organizer" },
@@ -582,9 +641,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     typicalContentNo: ["Standplass", "Kundemøter", "Nettverk", "Produktvisning"],
     typicalContentEn: ["Exhibition booth", "Client meetings", "Networking", "Product display"],
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: true, photoplan: true, seating: false,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Stand & Oppsett", en: "Booth & Setup", descriptionNo: "Standoppsett og kundemøter", descriptionEn: "Booth setup and client meetings" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Profesjonelt antrekk for messe", descriptionEn: "Professional attire for trade fair" },
     },
     roleLabels: {
       primary: { no: "Utstiller", en: "Exhibitor" },
@@ -614,9 +677,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     typicalContentNo: ["Taler", "Tilbakeblikk / historikk", "Prisutdeling", "Festmiddag"],
     typicalContentEn: ["Speeches", "Retrospective / history", "Awards", "Gala dinner"],
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: true, photoplan: true, seating: true,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Historikk & Oppsett", en: "History & Setup", descriptionNo: "Jubileumshistorikk og festoppsett", descriptionEn: "Anniversary history and celebration setup" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Formelt antrekk til jubileet", descriptionEn: "Formal attire for the anniversary" },
     },
     roleLabels: {
       primary: { no: "Arrangør", en: "Organizer" },
@@ -645,9 +712,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     typicalContentNo: ["Prisutdeling", "Taler", "Festmiddag", "Underholdning"],
     typicalContentEn: ["Awards ceremony", "Speeches", "Gala dinner", "Entertainment"],
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: true, photoplan: true, seating: true,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Seremoni & Program", en: "Ceremony & Program", descriptionNo: "Prisseremoni og underholdning", descriptionEn: "Awards ceremony and entertainment" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Galla / formelt antrekk", descriptionEn: "Gala / formal attire" },
     },
     roleLabels: {
       primary: { no: "Arrangør", en: "Organizer" },
@@ -676,9 +747,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     typicalContentNo: ["Foredrag", "Workshops", "Kulturelle innslag", "Sosialt samvær"],
     typicalContentEn: ["Talks", "Workshops", "Cultural performances", "Social gathering"],
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: true, photoplan: false, seating: false,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Program & Oppsett", en: "Program & Setup", descriptionNo: "Foredrag, workshops og kultur", descriptionEn: "Talks, workshops and culture" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Avslappet eller business casual", descriptionEn: "Casual or business casual" },
     },
     roleLabels: {
       primary: { no: "HR-ansvarlig", en: "HR Lead" },
@@ -707,9 +782,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     typicalContentNo: ["Introduksjoner", "Kontoromvisning", "Teamlunsj", "Buddy-ordning"],
     typicalContentEn: ["Introductions", "Office tour", "Team lunch", "Buddy program"],
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: true, photoplan: false, seating: false,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Onboarding-program", en: "Onboarding Program", descriptionNo: "Introduksjon og fadderordning", descriptionEn: "Introduction and buddy program" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Kontorantrekk eller avslappet", descriptionEn: "Office attire or casual" },
     },
     roleLabels: {
       primary: { no: "HR-ansvarlig", en: "HR Lead" },
@@ -736,9 +815,13 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     descriptionNo: "Planlegg et annet type bedriftsarrangement",
     descriptionEn: "Plan another type of corporate event",
     features: {
-      traditions: false, dressTracking: false, weddingPartyRoles: false,
+      traditions: true, dressTracking: true, weddingPartyRoles: false,
       speeches: true, photoplan: true, seating: true,
       coupleProfile: false, importantPeople: true, sharePartner: true,
+    },
+    featureLabels: {
+      traditions: { no: "Format & Oppsett", en: "Format & Setup", descriptionNo: "Arrangementsformat og oppsett", descriptionEn: "Event format and setup" },
+      dressTracking: { no: "Dresscode", en: "Dress Code", descriptionNo: "Antrekkskode for arrangementet", descriptionEn: "Dress code for the event" },
     },
     roleLabels: {
       primary: { no: "Arrangør", en: "Organizer" },

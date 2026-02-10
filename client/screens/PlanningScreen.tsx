@@ -327,13 +327,13 @@ export default function PlanningScreen() {
       actions.push({ icon: "check-square" as const, label: t("Sjekkliste", "Checklist"), color: theme.accent, screen: "Checklist" });
       actions.push({ icon: "cloud" as const, label: t("Vær", "Weather"), color: "#64B5F6", screen: "Weather" });
       actions.push({ icon: "heart" as const, label: t("Pust", "Breathe"), color: "#81C784", screen: "StressTracker" });
-      actions.push({ icon: "book-open" as const, label: t("Tradisjoner", "Traditions"), color: "#BA68C8", screen: "Traditions" });
+      actions.push({ icon: "book-open" as const, label: t(config.featureLabels?.traditions?.no || "Tradisjoner", config.featureLabels?.traditions?.en || "Traditions"), color: "#BA68C8", screen: "Traditions" });
     } else if (daysLeft <= 60) {
       // 2 months - add stress tracker
       actions.push({ icon: "check-square" as const, label: t("Sjekkliste", "Checklist"), color: theme.accent, screen: "Checklist" });
       actions.push({ icon: "heart" as const, label: t("Pust", "Breathe"), color: "#81C784", screen: "StressTracker" });
       actions.push({ icon: "bell" as const, label: t("Påminnelser", "Reminders"), color: "#FFB74D", screen: "Reminders" });
-      actions.push({ icon: "book-open" as const, label: t("Tradisjoner", "Traditions"), color: "#BA68C8", screen: "Traditions" });
+      actions.push({ icon: "book-open" as const, label: t(config.featureLabels?.traditions?.no || "Tradisjoner", config.featureLabels?.traditions?.en || "Traditions"), color: "#BA68C8", screen: "Traditions" });
       actions.push({ icon: "cloud" as const, label: t("Vær", "Weather"), color: "#64B5F6", screen: "Weather" });
     } else {
       // Default - more planning focused
@@ -341,7 +341,7 @@ export default function PlanningScreen() {
       actions.push({ icon: "bell" as const, label: t("Påminnelser", "Reminders"), color: "#FFB74D", screen: "Reminders" });
       actions.push({ icon: "cloud" as const, label: t("Vær", "Weather"), color: "#64B5F6", screen: "Weather" });
       actions.push({ icon: "heart" as const, label: t("Pust", "Breathe"), color: "#81C784", screen: "StressTracker" });
-      actions.push({ icon: "book-open" as const, label: t("Tradisjoner", "Traditions"), color: "#BA68C8", screen: "Traditions" });
+      actions.push({ icon: "book-open" as const, label: t(config.featureLabels?.traditions?.no || "Tradisjoner", config.featureLabels?.traditions?.en || "Traditions"), color: "#BA68C8", screen: "Traditions" });
     }
     return actions;
   }, [daysLeft, theme.accent, t]);
@@ -647,11 +647,17 @@ export default function PlanningScreen() {
       <Animated.View entering={FadeInDown.delay(350).duration(400)}>
         {hasFeature("dressTracking") && (
         <>
-        <ThemedText style={styles.sectionTitle}>{t("Antrekk & Styling", "Attire & Styling")}</ThemedText>
+        <ThemedText style={styles.sectionTitle}>{t(config.featureLabels?.dressTracking?.no || "Antrekk & Styling", config.featureLabels?.dressTracking?.en || "Attire & Styling")}</ThemedText>
         <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault }]}>
-          <ActionItem icon="heart" label={t("Brudekjole", "Wedding dress")} subtitle={t("Prøvinger og favoritter", "Fittings and favorites")} theme={theme} onPress={() => navigation.navigate("Brudekjole")} color="#BA68C8" />
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          <ActionItem icon="scissors" label={t("Hår & Makeup", "Hair & Makeup")} subtitle={t("Avtaler og looks", "Appointments and looks")} theme={theme} onPress={() => navigation.navigate("HaarMakeup")} color="#E91E63" />
+          {isWedding ? (
+            <>
+            <ActionItem icon="heart" label={t("Brudekjole", "Wedding dress")} subtitle={t("Prøvinger og favoritter", "Fittings and favorites")} theme={theme} onPress={() => navigation.navigate("Brudekjole")} color="#BA68C8" />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <ActionItem icon="scissors" label={t("Hår & Makeup", "Hair & Makeup")} subtitle={t("Avtaler og looks", "Appointments and looks")} theme={theme} onPress={() => navigation.navigate("HaarMakeup")} color="#E91E63" />
+            </>
+          ) : (
+            <ActionItem icon="heart" label={t(config.featureLabels?.dressTracking?.no || "Dresscode", config.featureLabels?.dressTracking?.en || "Dress Code")} subtitle={t(config.featureLabels?.dressTracking?.descriptionNo || "Antrekkskode for arrangementet", config.featureLabels?.dressTracking?.descriptionEn || "Dress code for the event")} theme={theme} onPress={() => navigation.navigate("Brudekjole")} color="#BA68C8" />
+          )}
         </View>
         </>
         )}
