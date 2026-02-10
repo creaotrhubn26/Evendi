@@ -31,6 +31,20 @@ interface VendorActionBarProps {
   onClear?: () => void;
   /** Icon for the category */
   icon?: FeatherIconName;
+  /** Travel badge text (e.g., "15 min • 12 km") */
+  travelBadge?: string | null;
+  /** Whether travel info is loading */
+  isTravelLoading?: boolean;
+  /** Called when user taps "Kjørerute" (get directions) */
+  onGetDirections?: () => void;
+  /** Called when user taps "Vis på kart" (show on map) */
+  onShowOnMap?: () => void;
+  /** Called when user taps "Legg til tidslinje" (add to timeline) */
+  onAddToTimeline?: () => void;
+  /** Wedding venue name */
+  venueName?: string | null;
+  /** Fuel cost for the trip */
+  fuelCostNok?: number | null;
 }
 
 /**
@@ -42,6 +56,13 @@ export function VendorActionBar({
   vendorCategory,
   onClear,
   icon = "briefcase",
+  travelBadge,
+  isTravelLoading,
+  onGetDirections,
+  onShowOnMap,
+  onAddToTimeline,
+  venueName,
+  fuelCostNok,
 }: VendorActionBarProps) {
   const { theme } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<PlanningStackParamList>>();
@@ -138,6 +159,40 @@ export function VendorActionBar({
         </View>
       </View>
 
+      {/* Travel info from venue */}
+      {(travelBadge || isTravelLoading) && (
+        <View style={[styles.travelInfoRow, { backgroundColor: "#2196F308", borderColor: "#2196F320" }]}>
+          <Feather name="navigation" size={12} color="#2196F3" />
+          {isTravelLoading ? (
+            <>
+              <ActivityIndicator size={10} color="#2196F3" />
+              <ThemedText style={[styles.travelInfoText, { color: "#2196F3" }]}>
+                Beregner reisetid...
+              </ThemedText>
+            </>
+          ) : (
+            <>
+              <ThemedText style={[styles.travelInfoBold, { color: "#2196F3" }]}>
+                {travelBadge}
+              </ThemedText>
+              {venueName && (
+                <ThemedText style={[styles.travelInfoFrom, { color: theme.textMuted }]}>
+                  fra {venueName}
+                </ThemedText>
+              )}
+              {fuelCostNok != null && fuelCostNok > 0 && (
+                <View style={[styles.fuelBadge, { backgroundColor: "#FF980015" }]}>
+                  <Feather name="droplet" size={9} color="#FF9800" />
+                  <ThemedText style={[styles.fuelText, { color: "#FF9800" }]}>
+                    ~{Math.round(fuelCostNok)} kr
+                  </ThemedText>
+                </View>
+              )}
+            </>
+          )}
+        </View>
+      )}
+
       {/* Action buttons */}
       <View style={styles.buttonsRow}>
         <Pressable
@@ -176,6 +231,48 @@ export function VendorActionBar({
           </Pressable>
         )}
       </View>
+
+      {/* Location quick links */}
+      {(onGetDirections || onShowOnMap || onAddToTimeline) && vendor.location && (
+        <View style={[styles.quickLinksRow, { borderTopColor: theme.border }]}>
+          {onGetDirections && (
+            <Pressable
+              onPress={() => {
+                onGetDirections();
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              style={[styles.quickLinkButton, { backgroundColor: "#2196F310" }]}
+            >
+              <Feather name="navigation" size={12} color="#2196F3" />
+              <ThemedText style={[styles.quickLinkText, { color: "#2196F3" }]}>Kjørerute</ThemedText>
+            </Pressable>
+          )}
+          {onShowOnMap && (
+            <Pressable
+              onPress={() => {
+                onShowOnMap();
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              style={[styles.quickLinkButton, { backgroundColor: "#4CAF5010" }]}
+            >
+              <Feather name="map" size={12} color="#4CAF50" />
+              <ThemedText style={[styles.quickLinkText, { color: "#4CAF50" }]}>Vis på kart</ThemedText>
+            </Pressable>
+          )}
+          {onAddToTimeline && (
+            <Pressable
+              onPress={() => {
+                onAddToTimeline();
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              style={[styles.quickLinkButton, { backgroundColor: "#FF980010" }]}
+            >
+              <Feather name="clock" size={12} color="#FF9800" />
+              <ThemedText style={[styles.quickLinkText, { color: "#FF9800" }]}>Tidslinje</ThemedText>
+            </Pressable>
+          )}
+        </View>
+      )}
     </Animated.View>
   );
 }
@@ -266,5 +363,57 @@ const styles = StyleSheet.create({
   },
   clearButton: {
     padding: 4,
+  },
+  travelInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+  },
+  travelInfoText: {
+    fontSize: 11,
+  },
+  travelInfoBold: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  travelInfoFrom: {
+    fontSize: 10,
+    fontStyle: "italic",
+    flex: 1,
+  },
+  fuelBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  fuelText: {
+    fontSize: 9,
+    fontWeight: "600",
+  },
+  quickLinksRow: {
+    flexDirection: "row",
+    gap: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: Spacing.sm,
+  },
+  quickLinkButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.sm,
+  },
+  quickLinkText: {
+    fontSize: 10,
+    fontWeight: "600",
   },
 });

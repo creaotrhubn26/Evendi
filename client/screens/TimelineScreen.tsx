@@ -18,12 +18,16 @@ import { getCoupleProfile } from "@/lib/api-couples";
 import { ScheduleEvent, Speech } from "@/lib/types";
 import { useQuery } from "@tanstack/react-query";
 import {
+
   getEventWeather,
   getWeatherLocationData,
   weatherSymbolToEmoji,
   type EventWithWeather,
   type TravelFromCity,
 } from "@/lib/api-weather-location-bridge";
+import { useVendorLocationIntelligence } from "@/hooks/useVendorLocationIntelligence";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getApiUrl } from "@/lib/query-client";
 
 type ScheduleInterval = {
   id: string;
@@ -94,6 +98,15 @@ export default function TimelineScreen() {
   const [travelCities, setTravelCities] = useState<TravelFromCity[]>([]);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [venueName, setVenueName] = useState("");
+
+  // Vendor location intelligence
+  const locationIntel = useVendorLocationIntelligence();
+  const [bookedVendors, setBookedVendors] = useState<Array<{
+    id: string;
+    businessName: string;
+    location: string | null;
+    category: string;
+  }>>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -187,6 +200,35 @@ export default function TimelineScreen() {
         setTravelCities(bridgeData.travelFromCities?.slice(0, 5) || []);
         if (bridgeData.venue?.name) setVenueName(bridgeData.venue.name);
       } catch {}
+
+      // Load booked vendors for travel display
+      try {
+        const sessionRaw = await AsyncStorage.getItem('wedflow_couple_session');
+        if (sessionRaw) {
+          const { sessionToken } = JSON.parse(sessionRaw);
+          const vendorsRes = await fetch(
+            `${getApiUrl()}/api/couples/booked-vendors`,
+            { headers: { Authorization: `Bearer ${sessionToken}` } }
+          );
+          if (vendorsRes.ok) {
+            const vendorData = await vendorsRes.json();
+            const vendorList = (vendorData || []).map((v: any) => ({
+              id: v.id || v.vendorId,
+              businessName: v.businessName || v.vendorName || '',
+              location: v.location || null,
+              category: v.category || v.categoryId || '',
+            }));
+            setBookedVendors(vendorList);
+
+            // Calculate travel for vendors with locations
+            if (locationIntel.venueCoordinates && vendorList.length > 0) {
+              locationIntel.calculateBatchTravel(vendorList.filter((v: any) => v.location));
+            }
+          }
+        }
+      } catch {
+        // Vendor travel data is optional — don't break timeline
+      }
     } catch (err) {
       console.log('Timeline weather data not available:', err);
     } finally {
@@ -598,6 +640,38 @@ export default function TimelineScreen() {
                           {Math.round(ew.weather.temperature)}°
                         </ThemedText>
                       </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Vendor travel times from venue */}
+              {bookedVendors.length > 0 && bookedVendors.some(v => locationIntel.getTravelBadge(v.id)) && (
+                <View style={styles.weatherPerEvent}>
+                  <ThemedText style={[styles.travelCompactTitle, { color: "#2196F3" }]}>
+                    🏬 Reisetid til leverandører
+                  </ThemedText>
+                  {bookedVendors.map((vendor) => {
+                    const badge = locationIntel.getTravelBadge(vendor.id);
+                    if (!badge) return null;
+                    const travel = locationIntel.getVendorTravel(vendor.id);
+                    return (
+                      <Pressable
+                        key={vendor.id}
+                        onPress={() => locationIntel.openDirections(vendor)}
+                        style={[styles.travelCompactRow, { borderColor: theme.border }]}
+                      >
+                        <ThemedText style={[styles.travelCompactCity, { color: theme.text }]} numberOfLines={1}>
+                          {vendor.businessName}
+                        </ThemedText>
+                        <ThemedText style={[styles.travelCompactTime, { color: "#2196F3" }]}>{badge}</ThemedText>
+                        {travel?.travel?.fuelCostNok ? (
+                          <ThemedText style={[styles.travelCompactDist, { color: theme.textSecondary }]}>
+                            ~{Math.round(travel.travel.fuelCostNok)} kr
+                          </ThemedText>
+                        ) : null}
+                        <Feather name="navigation" size={12} color="#2196F3" />
+                      </Pressable>
                     );
                   })}
                 </View>

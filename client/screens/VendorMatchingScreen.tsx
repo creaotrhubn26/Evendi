@@ -23,6 +23,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import { getApiUrl } from "@/lib/query-client";
 import { getCoupleProfile } from "@/lib/api-couples";
+import { useVendorLocationIntelligence } from "@/hooks/useVendorLocationIntelligence";
 
 const COUPLE_STORAGE_KEY = "wedflow_couple_session";
 
@@ -167,6 +168,9 @@ export default function VendorMatchingScreen() {
   const [filterServiceLevels, setFilterServiceLevels] = useState<string[]>([]);
   const [filterVendorCoordination, setFilterVendorCoordination] = useState(false);
 
+  // Location intelligence
+  const locationIntel = useVendorLocationIntelligence();
+
   useEffect(() => {
     loadSessionAndPreferences();
   }, []);
@@ -247,6 +251,16 @@ export default function VendorMatchingScreen() {
     },
     enabled: !!selectedCategory,
   });
+
+  // Calculate travel for matched vendors when they load
+  useEffect(() => {
+    if (vendors.length > 0 && locationIntel.venueCoordinates) {
+      const vendorsWithLocation = vendors
+        .filter(v => v.location)
+        .map(v => ({ id: v.id, businessName: v.businessName, location: v.location }));
+      locationIntel.calculateBatchTravel(vendorsWithLocation);
+    }
+  }, [vendors, locationIntel.venueCoordinates]);
 
   // Score and sort vendors based on matching criteria
   const matchedVendors = useMemo(() => {
@@ -703,6 +717,28 @@ export default function VendorMatchingScreen() {
                   <ThemedText style={[styles.vendorLocation, { color: theme.textSecondary }]}>{item.location}</ThemedText>
                 </View>
               )}
+              {/* Travel time badge from venue */}
+              {locationIntel.getTravelBadge(item.id) && (
+                <View style={styles.vendorTravelRow}>
+                  <Feather name="navigation" size={10} color="#2196F3" />
+                  <ThemedText style={styles.vendorTravelText}>
+                    {locationIntel.getTravelBadge(item.id)}
+                  </ThemedText>
+                  {locationIntel.venueName && (
+                    <ThemedText style={[styles.vendorTravelFrom, { color: theme.textMuted }]}>
+                      fra {locationIntel.venueName}
+                    </ThemedText>
+                  )}
+                </View>
+              )}
+              {locationIntel.getVendorTravel(item.id)?.isLoading && (
+                <View style={styles.vendorTravelRow}>
+                  <ActivityIndicator size={8} color="#2196F3" />
+                  <ThemedText style={[styles.vendorTravelText, { color: theme.textMuted }]}>
+                    Beregner...
+                  </ThemedText>
+                </View>
+              )}
             </View>
             {isGoodMatch && (
               <View style={[styles.matchIndicator, { backgroundColor: "#4CAF5015" }]}>
@@ -1004,6 +1040,40 @@ export default function VendorMatchingScreen() {
               <ThemedText style={[styles.priceText, { color: theme.textMuted }]}>{item.priceRange}</ThemedText>
             </View>
           )}
+
+          {/* Location quick links */}
+          {item.location && locationIntel.venueCoordinates && (
+            <View style={[styles.vendorQuickLinks, { borderTopColor: theme.border }]}>
+              <Pressable
+                onPress={() => {
+                  locationIntel.openDirections({
+                    id: item.id,
+                    businessName: item.businessName,
+                    location: item.location,
+                  });
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                style={[styles.vendorQuickLink, { backgroundColor: "#2196F308" }]}
+              >
+                <Feather name="navigation" size={11} color="#2196F3" />
+                <ThemedText style={[styles.vendorQuickLinkText, { color: "#2196F3" }]}>Kjørerute</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  locationIntel.openVendorOnMap({
+                    id: item.id,
+                    businessName: item.businessName,
+                    location: item.location,
+                  });
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                style={[styles.vendorQuickLink, { backgroundColor: "#4CAF5008" }]}
+              >
+                <Feather name="map" size={11} color="#4CAF50" />
+                <ThemedText style={[styles.vendorQuickLinkText, { color: "#4CAF50" }]}>Kart</ThemedText>
+              </Pressable>
+            </View>
+          )}
         </Pressable>
       </Animated.View>
     );
@@ -1029,7 +1099,7 @@ export default function VendorMatchingScreen() {
       </View>
 
       {/* Preferences Summary */}
-      {(preferences.guestCount || preferences.location || preferences.weddingDate) && (
+      {(preferences.guestCount || preferences.location || preferences.weddingDate || locationIntel.venueName) && (
         <Animated.View entering={FadeInDown.duration(300)} style={[styles.preferencesSummary, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <ThemedText style={[styles.preferencesTitle, { color: theme.text }]}>Dine preferanser</ThemedText>
           <View style={styles.preferencesRow}>
@@ -1039,7 +1109,13 @@ export default function VendorMatchingScreen() {
                 <ThemedText style={[styles.preferenceChipText, { color: theme.accent }]}>{preferences.guestCount} gjester</ThemedText>
               </View>
             )}
-            {preferences.location && (
+            {locationIntel.venueName && (
+              <View style={[styles.preferenceChip, { backgroundColor: "#2196F315" }]}>
+                <Feather name="map-pin" size={12} color="#2196F3" />
+                <ThemedText style={[styles.preferenceChipText, { color: "#2196F3" }]}>{locationIntel.venueName}</ThemedText>
+              </View>
+            )}
+            {preferences.location && !locationIntel.venueName && (
               <View style={[styles.preferenceChip, { backgroundColor: theme.accent + "15" }]}>
                 <Feather name="map-pin" size={12} color={theme.accent} />
                 <ThemedText style={[styles.preferenceChipText, { color: theme.accent }]}>{preferences.location}</ThemedText>
@@ -1857,4 +1933,41 @@ const styles = StyleSheet.create({
   },
   metadataText: { fontSize: 10, fontWeight: "600" },
   moreProductsText: { fontSize: 11, fontStyle: "italic", marginTop: Spacing.xs },
+  
+  // Vendor travel styles
+  vendorTravelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 3,
+  },
+  vendorTravelText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#2196F3",
+  },
+  vendorTravelFrom: {
+    fontSize: 9,
+    fontStyle: "italic",
+    flex: 1,
+  },
+  vendorQuickLinks: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  vendorQuickLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.sm,
+  },
+  vendorQuickLinkText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
 });

@@ -13,6 +13,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type { VendorSuggestion } from "@/hooks/useVendorSearch";
+import type { VendorTravelInfo } from "@/hooks/useVendorLocationIntelligence";
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 
@@ -24,6 +25,14 @@ interface VendorSuggestionsProps {
   onViewProfile?: (vendor: VendorSuggestion) => void;
   /** Optional icon to show per result (defaults to "briefcase") */
   icon?: FeatherIconName;
+  /** Travel badge text per vendor (vendorId → "15 min • 12 km") */
+  travelBadges?: Record<string, string | null>;
+  /** Travel info per vendor for loading states */
+  travelInfoMap?: Record<string, VendorTravelInfo>;
+  /** Called when user taps navigation icon on a suggestion */
+  onNavigate?: (vendor: VendorSuggestion) => void;
+  /** Wedding venue name for "fra …" label */
+  venueName?: string | null;
 }
 
 /**
@@ -36,6 +45,10 @@ export function VendorSuggestions({
   onSelect,
   onViewProfile,
   icon = "briefcase",
+  travelBadges,
+  travelInfoMap,
+  onNavigate,
+  venueName,
 }: VendorSuggestionsProps) {
   const { theme } = useTheme();
 
@@ -112,8 +125,42 @@ export function VendorSuggestions({
                     </View>
                   )}
                 </View>
+                {/* Travel time badge from venue */}
+                {travelBadges?.[vendor.id] && (
+                  <View style={styles.travelRow}>
+                    <Feather name="navigation" size={9} color="#2196F3" />
+                    <ThemedText style={styles.travelText}>
+                      {travelBadges[vendor.id]}
+                    </ThemedText>
+                    {venueName && (
+                      <ThemedText style={[styles.travelFrom, { color: theme.textMuted }]} numberOfLines={1}>
+                        fra {venueName}
+                      </ThemedText>
+                    )}
+                  </View>
+                )}
+                {travelInfoMap?.[vendor.id]?.isLoading && (
+                  <View style={styles.travelRow}>
+                    <ActivityIndicator size={8} color="#2196F3" />
+                    <ThemedText style={[styles.travelText, { color: theme.textMuted }]}>
+                      Beregner reisetid...
+                    </ThemedText>
+                  </View>
+                )}
               </View>
               <View style={styles.actions}>
+                {onNavigate && vendor.location && (
+                  <Pressable
+                    onPress={() => {
+                      onNavigate(vendor);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    hitSlop={6}
+                    style={[styles.actionPill, { backgroundColor: "#2196F312" }]}
+                  >
+                    <Feather name="navigation" size={12} color="#2196F3" />
+                  </Pressable>
+                )}
                 {onViewProfile && (
                   <Pressable
                     onPress={() => {
@@ -237,5 +284,21 @@ const styles = StyleSheet.create({
   actionPillText: {
     fontSize: 11,
     fontWeight: "600",
+  },
+  travelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 3,
+  },
+  travelText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#2196F3",
+  },
+  travelFrom: {
+    fontSize: 9,
+    fontStyle: "italic",
+    flex: 1,
   },
 });

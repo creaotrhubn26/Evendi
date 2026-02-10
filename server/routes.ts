@@ -337,6 +337,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Vendor Location Intelligence endpoint ──────────────────────────────────
+  // GET /api/vendors/:vendorId/travel-from-venue
+  // Calculates travel time from couple's wedding venue to a vendor location
+  app.get("/api/vendors/:vendorId/travel-from-venue", async (req: Request, res: Response) => {
+    try {
+      const { vendorId } = req.params;
+      const coupleId = req.query.coupleId as string;
+
+      if (!coupleId) {
+        return res.status(400).json({ error: 'coupleId er påkrevd' });
+      }
+
+      // Get vendor location from DB
+      const vendorResult = await db.execute(
+        sql`SELECT id, business_name, location FROM vendors WHERE id = ${vendorId}`
+      );
+      const vendor = (vendorResult as any).rows?.[0];
+      if (!vendor || !vendor.location) {
+        return res.status(404).json({ error: 'Leverandør ikke funnet eller mangler lokasjon' });
+      }
+
+      // Proxy the travel calculation through the CreatorHub bridge
+      // The bridge endpoint takes a city/location name and calculates travel from venue
+      const travelUrl = `${CREATORHUB_BRIDGE_URL}/api/wedflow/weather-location/${coupleId}/travel?fromCity=${encodeURIComponent(vendor.location)}`;
+      const travelResponse = await fetch(travelUrl);
+      
+      if (!travelResponse.ok) {
+        const err = await travelResponse.json().catch(() => ({}));
+        return res.status(travelResponse.status).json(err);
+      }
+
+      const travelData = await travelResponse.json();
+      res.json({
+        vendorId,
+        vendorName: vendor.business_name,
+        vendorLocation: vendor.location,
+        ...travelData,
+      });
+    } catch (error) {
+      console.error('Vendor travel calculation error:', error);
+      res.status(500).json({ error: 'Feil ved beregning av reisetid til leverandør' });
+    }
+  });
+
   // ── Enhanced weather endpoint with travel time calculation ──────────────────
   // GET /api/weather/travel — Calculate travel time between two points  
   app.get("/api/weather/travel", async (req: Request, res: Response) => {

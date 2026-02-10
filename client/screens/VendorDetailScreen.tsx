@@ -27,6 +27,7 @@ import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import { getApiUrl } from "@/lib/query-client";
+import { useVendorLocationIntelligence } from "@/hooks/useVendorLocationIntelligence";
 
 const COUPLE_STORAGE_KEY = "wedflow_couple_session";
 
@@ -81,6 +82,23 @@ export default function VendorDetailScreen() {
   const [isStartingChat, setIsStartingChat] = useState(false);
 
   const { vendorId, vendorName, vendorDescription, vendorLocation, vendorPriceRange, vendorCategory } = route.params || {};
+
+  // Location intelligence
+  const locationIntel = useVendorLocationIntelligence();
+
+  // Calculate travel on mount if vendor has location
+  React.useEffect(() => {
+    if (vendorId && vendorLocation && locationIntel.venueCoordinates) {
+      locationIntel.calculateVendorTravel({
+        id: vendorId,
+        businessName: vendorName || '',
+        location: vendorLocation,
+      });
+    }
+  }, [vendorId, vendorLocation, locationIntel.venueCoordinates]);
+
+  const vendorTravel = vendorId ? locationIntel.getVendorTravel(vendorId) : null;
+  const travelBadge = vendorId ? locationIntel.getTravelBadge(vendorId) : null;
 
   const { data, isLoading, error } = useQuery<VendorReviewsResponse>({
     queryKey: [`/api/vendors/${vendorId}/reviews`],
@@ -209,6 +227,76 @@ export default function VendorDetailScreen() {
             </ThemedText>
           </View>
         ) : null}
+
+        {/* Travel info from venue */}
+        {(travelBadge || vendorTravel?.isLoading) && (
+          <View style={[styles.travelCard, { backgroundColor: "#2196F308", borderColor: "#2196F320" }]}>
+            <View style={styles.travelCardHeader}>
+              <Feather name="navigation" size={14} color="#2196F3" />
+              {vendorTravel?.isLoading ? (
+                <View style={styles.travelCardLoading}>
+                  <ActivityIndicator size={10} color="#2196F3" />
+                  <ThemedText style={[styles.travelCardText, { color: "#2196F3" }]}>
+                    Beregner reisetid...
+                  </ThemedText>
+                </View>
+              ) : (
+                <ThemedText style={[styles.travelCardBold, { color: "#2196F3" }]}>
+                  {travelBadge}
+                </ThemedText>
+              )}
+            </View>
+
+            {locationIntel.venueName && !vendorTravel?.isLoading && (
+              <ThemedText style={[styles.travelCardFrom, { color: theme.textMuted }]}>
+                Fra bryllupslokalet ({locationIntel.venueName})
+              </ThemedText>
+            )}
+
+            {vendorTravel?.travel && (
+              <View style={styles.travelCardDetails}>
+                {vendorTravel.travel.fuelCostNok > 0 && (
+                  <View style={[styles.travelDetailBadge, { backgroundColor: "#FF980010" }]}>
+                    <Feather name="droplet" size={10} color="#FF9800" />
+                    <ThemedText style={[styles.travelDetailText, { color: "#FF9800" }]}>
+                      Drivstoff: ~{Math.round(vendorTravel.travel.fuelCostNok)} kr
+                    </ThemedText>
+                  </View>
+                )}
+                {vendorTravel.travel.tollEstimateNok > 0 && (
+                  <View style={[styles.travelDetailBadge, { backgroundColor: "#9C27B010" }]}>
+                    <Feather name="credit-card" size={10} color="#9C27B0" />
+                    <ThemedText style={[styles.travelDetailText, { color: "#9C27B0" }]}>
+                      Bompenger: ~{Math.round(vendorTravel.travel.tollEstimateNok)} kr
+                    </ThemedText>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Quick action buttons */}
+            <View style={styles.travelCardActions}>
+              <Pressable
+                onPress={() => locationIntel.openDirections({
+                  id: vendorId, businessName: vendorName || '', location: vendorLocation,
+                })}
+                style={[styles.travelActionBtn, { backgroundColor: "#2196F312" }]}
+              >
+                <Feather name="navigation" size={12} color="#2196F3" />
+                <ThemedText style={[styles.travelActionText, { color: "#2196F3" }]}>Kjørerute</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => locationIntel.openVendorOnMap({
+                  id: vendorId, businessName: vendorName || '', location: vendorLocation,
+                })}
+                style={[styles.travelActionBtn, { backgroundColor: "#4CAF5012" }]}
+              >
+                <Feather name="map" size={12} color="#4CAF50" />
+                <ThemedText style={[styles.travelActionText, { color: "#4CAF50" }]}>Vis på kart</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        )}
         {vendorDescription ? (
           <ThemedText style={[Typography.body, { opacity: 0.8, marginTop: Spacing.md, textAlign: "center" }]}>
             {vendorDescription}
@@ -789,5 +877,69 @@ const styles = StyleSheet.create({
   actionButtonOutlineText: {
     fontSize: 14,
     fontWeight: "700",
+  },
+  // Travel card styles
+  travelCard: {
+    marginTop: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    width: "100%",
+    gap: Spacing.sm,
+  },
+  travelCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  travelCardLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  travelCardText: {
+    fontSize: 13,
+  },
+  travelCardBold: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  travelCardFrom: {
+    fontSize: 11,
+    fontStyle: "italic",
+  },
+  travelCardDetails: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  travelDetailBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.sm,
+  },
+  travelDetailText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  travelCardActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  travelActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: BorderRadius.sm,
+  },
+  travelActionText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
 });
