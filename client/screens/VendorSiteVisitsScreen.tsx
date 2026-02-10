@@ -174,7 +174,7 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
               <View style={styles.infoRow}>
                 <Feather name="heart" size={14} color={theme.textSecondary} />
                 <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>
-                  Bryllup: {formatDate(item.weddingDate)}
+                  Arrangement: {formatDate(item.weddingDate)}
                 </ThemedText>
               </View>
             )}
@@ -217,7 +217,7 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
             style={[styles.contactButton, { backgroundColor: theme.accent }]}
           >
             <Feather name="mail" size={16} color="#FFFFFF" />
-            <ThemedText style={styles.contactButtonText}>Kontakt brudepar</ThemedText>
+            <ThemedText style={styles.contactButtonText}>Kontakt kunde</ThemedText>
           </Pressable>
         </View>
       </Animated.View>
@@ -280,7 +280,7 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
             Ingen planlagte befaringer
           </ThemedText>
           <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
-            Når brudepar booker befaring hos dere, vil de vises her
+            Når kunder booker befaring hos dere, vil de vises her
           </ThemedText>
         </View>
       ) : (

@@ -751,7 +751,7 @@ export default function VendorProfileScreen({ navigation }: Props) {
               />
             </View>
             <View style={styles.switchRow}>
-              <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Brudefølge-tjenester</ThemedText>
+              <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Følge-tjenester</ThemedText>
               <Switch
                 value={categoryDetails.beautyBridalParty || false}
                 onValueChange={(v) => updateCategoryDetail("beautyBridalParty", v)}
@@ -890,7 +890,7 @@ export default function VendorProfileScreen({ navigation }: Props) {
         />
       </View>
       <View style={styles.inputGroup}>
-        <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Antall bryllup gjennomført</ThemedText>
+        <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Antall arrangementer gjennomført</ThemedText>
         <TextInput
           style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
           value={categoryDetails.weddingsCompleted?.toString() || ""}

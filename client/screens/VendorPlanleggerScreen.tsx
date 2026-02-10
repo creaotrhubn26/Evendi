@@ -487,7 +487,7 @@ export default function VendorPlanleggerScreen() {
 
       <View style={[styles.infoBox, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <Feather name="info" size={16} color={theme.textSecondary} />
-        <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>Legg til bilder av tidligere bryllup og anmeldelser for å øke konvertering.</ThemedText>
+        <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>Legg til bilder av tidligere arrangementer og anmeldelser for å øke konvertering.</ThemedText>
       </View>
 
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
@@ -532,7 +532,7 @@ export default function VendorPlanleggerScreen() {
             <Feather name="file-text" size={18} color={theme.accent} />
             <View style={{ flex: 1 }}>
               <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen tilbud ennå</ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Send tilbud til brudeparet</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Send tilbud til kunden</ThemedText>
             </View>
             <Button onPress={goToOffers}>Send tilbud</Button>
           </View>
@@ -569,7 +569,7 @@ export default function VendorPlanleggerScreen() {
             <Feather name="users" size={18} color={theme.accent} />
             <View style={{ flex: 1 }}>
               <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen møter ennå</ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Planlegg møte med brudeparet</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Planlegg møte med kunden</ThemedText>
             </View>
             <Button onPress={() => openMeetingModal()}>Legg til</Button>
           </View>

@@ -120,13 +120,13 @@ const CULTURE_ALIASES: Record<string, string> = {
 const CULTURE_MUSIC_TIPS: Record<string, string[]> = {
   norway: [
     "Hardingfele eller fele til innmarsj gir en klassisk norsk stemning.",
-    "Brudevals er et fast innslag for mange norske par - avklar tempo og lengde.",
+    "Brudevals er et fast innslag for norske bryllup - avklar tempo og lengde. For andre arrangementer, planlegg åpningsdans eller prosesjon.",
   ],
   sweden: [
-    "Svenske brudevalser og folketoner fungerer fint som rolig overgang til fest.",
+    "Svenske brudevalser og folketoner passer godt til seremonier og festlige overganger.",
   ],
   denmark: [
-    "Danske bryllup har ofte fellesdanser - planlegg tydelige overganger.",
+    "Danske arrangementer har ofte fellesdanser - planlegg tydelige overganger.",
   ],
   hindu: [
     "Avklar innslag til Sangeet eller inngangsmusikk i god tid.",
@@ -497,7 +497,7 @@ export default function VendorMusikkScreen() {
             <Feather name="file-text" size={18} color={theme.accent} />
             <View style={{ flex: 1 }}>
               <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen tilbud ennå</ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Send tilbud til brudeparet</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Send tilbud til kunden</ThemedText>
             </View>
             <Button onPress={goToOffers}>Send tilbud</Button>
           </View>
@@ -561,13 +561,13 @@ export default function VendorMusikkScreen() {
 
             {musicBrief ? (
               <View style={styles.musicBriefBody}>
-                <ThemedText style={[styles.musicBriefTitle, { color: theme.text }]}>Brudepar</ThemedText>
+                <ThemedText style={[styles.musicBriefTitle, { color: theme.text }]}>Kunde</ThemedText>
                 <ThemedText style={{ color: theme.textSecondary, fontSize: 13 }}>
                   {musicBrief.couple?.displayName || "Ukjent"}
                 </ThemedText>
                 {musicBrief.couple?.weddingDate ? (
                   <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
-                    Bryllupsdato: {musicBrief.couple.weddingDate}
+                    Arrangementsdato: {musicBrief.couple.weddingDate}
                   </ThemedText>
                 ) : null}
 

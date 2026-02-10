@@ -26,14 +26,14 @@ import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 
 const SCANDINAVIAN_VENDORS: Vendor[] = [
   { id: "1", name: "Nordic Moments", categoryId: null, categoryName: "Fotograf", location: "Oslo", country: "Norway", rating: 4.9, priceRange: "25 000 - 40 000 kr", description: "Naturlig lys og tidløse øyeblikk", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
-  { id: "2", name: "Stockholm Wedding Films", categoryId: null, categoryName: "Videograf", location: "Stockholm", country: "Sweden", rating: 4.8, priceRange: "30 000 - 50 000 kr", description: "Cinematiske bryllupsfilmer", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
+  { id: "2", name: "Stockholm Event Films", categoryId: null, categoryName: "Videograf", location: "Stockholm", country: "Sweden", rating: 4.8, priceRange: "30 000 - 50 000 kr", description: "Cinematiske event-filmer", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
   { id: "3", name: "Copenhagen Beats", categoryId: null, categoryName: "Musikk", location: "København", country: "Denmark", rating: 4.7, priceRange: "12 000 - 20 000 kr", description: "Stemningsfull musikk hele kvelden", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
-  { id: "4", name: "Bergen Bryllupsfoto", categoryId: null, categoryName: "Fotograf", location: "Bergen", country: "Norway", rating: 4.9, priceRange: "20 000 - 35 000 kr", description: "Vestlandets mest ettertraktede", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
+  { id: "4", name: "Bergen Foto", categoryId: null, categoryName: "Fotograf", location: "Bergen", country: "Norway", rating: 4.9, priceRange: "20 000 - 35 000 kr", description: "Vestlandets mest ettertraktede", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
   { id: "5", name: "Malmö Films", categoryId: null, categoryName: "Videograf", location: "Malmö", country: "Sweden", rating: 4.6, priceRange: "25 000 - 45 000 kr", description: "Moderne og kreativt uttrykk", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
-  { id: "6", name: "Oslo DJ Collective", categoryId: null, categoryName: "Musikk", location: "Oslo", country: "Norway", rating: 4.8, priceRange: "15 000 - 25 000 kr", description: "Profesjonelle bryllups-DJs", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
+  { id: "6", name: "Oslo DJ Collective", categoryId: null, categoryName: "Musikk", location: "Oslo", country: "Norway", rating: 4.8, priceRange: "15 000 - 25 000 kr", description: "Profesjonelle DJs for alle arrangementer", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
   { id: "7", name: "Trondheim Foto", categoryId: null, categoryName: "Fotograf", location: "Trondheim", country: "Norway", rating: 4.7, priceRange: "18 000 - 30 000 kr", description: "Autentiske bilder med sjel", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
-  { id: "8", name: "Danish Wedding Films", categoryId: null, categoryName: "Videograf", location: "Aarhus", country: "Denmark", rating: 4.8, priceRange: "28 000 - 48 000 kr", description: "Fortellende bryllupsfilmer", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
-  { id: "9", name: "Blomster & Bryllup", categoryId: null, categoryName: "Blomster", location: "Oslo", country: "Norway", rating: 4.9, priceRange: "8 000 - 25 000 kr", description: "Vakre buketter og dekorasjoner", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
+  { id: "8", name: "Danish Event Films", categoryId: null, categoryName: "Videograf", location: "Aarhus", country: "Denmark", rating: 4.8, priceRange: "28 000 - 48 000 kr", description: "Fortellende filmproduksjon", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
+  { id: "9", name: "Blomster & Fest", categoryId: null, categoryName: "Blomster", location: "Oslo", country: "Norway", rating: 4.9, priceRange: "8 000 - 25 000 kr", description: "Vakre buketter og dekorasjoner", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
   { id: "10", name: "Göteborg Events", categoryId: null, categoryName: "Catering", location: "Göteborg", country: "Sweden", rating: 4.7, priceRange: "500 - 1200 kr/person", description: "Nordisk gourmet-catering", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
 ];
 
@@ -335,7 +335,7 @@ export default function VendorsScreen() {
           <View style={styles.vendorCtaText}>
             <ThemedText style={styles.vendorCtaTitle}>Er du leverandør?</ThemedText>
             <ThemedText style={[styles.vendorCtaSubtitle, { color: theme.textSecondary }]}>
-              Registrer din bedrift og nå tusenvis av brudepar
+              Registrer din bedrift og nå tusenvis av kunder
             </ThemedText>
           </View>
         </View>

@@ -182,7 +182,7 @@ export default function VendorBlomsterScreen() {
       }
     >
       <ThemedText style={[styles.title, { color: theme.text }]}>Blomster dashboard</ThemedText>
-      <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Legg ut buketter, bordpynt og brudebuketter som produkter og send tilbud raskt.</ThemedText>
+      <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Legg ut buketter, bordpynt og dekorasjoner som produkter og send tilbud raskt.</ThemedText>
 
       <View style={styles.cardRow}>
         <Pressable
@@ -197,7 +197,7 @@ export default function VendorBlomsterScreen() {
             <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Produkter</ThemedText>
             <Feather name="shopping-bag" size={18} color={theme.textSecondary} />
           </View>
-          <ThemedText style={[styles.cardBody, { color: theme.textSecondary }]}>Opprett blomsterpakker (brudebukett, bordpynt, kirke, seremonier).</ThemedText>
+          <ThemedText style={[styles.cardBody, { color: theme.textSecondary }]}>Opprett blomsterpakker (bukett, bordpynt, seremonier, dekorasjoner).</ThemedText>
           <Button style={styles.cardButton} onPress={goToProducts}>Opprett produkt</Button>
         </Pressable>
 

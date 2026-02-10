@@ -293,7 +293,7 @@ export default function VendorRegistrationScreen() {
       </View>
       <ThemedText style={styles.title}>Bli en Wedflow-leverandør</ThemedText>
       <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
-        Registrer din bedrift og nå ut til tusenvis av brudepar i Skandinavia.
+        Registrer din bedrift og nå ut til tusenvis av kunder i Skandinavia.
       </ThemedText>
 
       <View style={styles.section}>

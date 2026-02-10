@@ -296,7 +296,7 @@ export default function VendorFotoVideografScreen() {
             <View style={{ flex: 1 }}>
               <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen tilbud ennå</ThemedText>
               <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-                Send tilbud til brudeparet
+                Send tilbud til kunden
               </ThemedText>
             </View>
             <Button onPress={goToOffers}>Send tilbud</Button>
@@ -357,7 +357,7 @@ export default function VendorFotoVideografScreen() {
             <View style={[styles.emptyCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
               <Feather name="link" size={32} color={theme.textSecondary} />
               <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen par tilkoblet</ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Start en samtale med et brudepar for å koble til prosjektet</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Start en samtale med en kunde for å koble til prosjektet</ThemedText>
             </View>
           )}
         </ScrollView>

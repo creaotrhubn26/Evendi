@@ -248,7 +248,7 @@ export default function VendorInventoryScreen({ navigation }: Props) {
           <View style={[styles.infoBox, { backgroundColor: theme.accent + "12", borderColor: theme.accent + "30" }]}>
             <Feather name="info" size={14} color={theme.accent} />
             <ThemedText style={[styles.infoText, { color: theme.text, flex: 1, marginLeft: Spacing.xs }]}>
-              Tilgjengelighet sjekkes automatisk per bryllupsdato ved tilbudopprettelse
+              Tilgjengelighet sjekkes automatisk per arrangementsdato ved tilbudopprettelse
             </ThemedText>
           </View>
         </Pressable>

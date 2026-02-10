@@ -349,7 +349,7 @@ export default function VendorVenueScreen() {
 
   const saveBooking = () => {
     if (!coupleName.trim() || !bookingDate.trim()) {
-      showToast("Parnavn og dato er påkrevd");
+      showToast("Kundenavn og dato er påkrevd");
       return;
     }
     const nextItem: VendorVenueBooking = {
@@ -719,7 +719,7 @@ export default function VendorVenueScreen() {
 
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
-              <ThemedText style={styles.formLabel}>Parnavn *</ThemedText>
+              <ThemedText style={styles.formLabel}>Kundenavn *</ThemedText>
               <TextInput
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="f.eks. Anna & Jonas"

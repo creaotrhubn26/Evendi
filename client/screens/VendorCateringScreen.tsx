@@ -197,7 +197,7 @@ export default function VendorCateringScreen() {
       }
     >
       <ThemedText style={[styles.title, { color: theme.text }]}>Catering dashboard</ThemedText>
-      <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Administrer menyer, tilbud og dialog med brudepar.</ThemedText>
+      <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Administrer menyer, tilbud og dialog med kunder.</ThemedText>
 
       <View style={styles.cardRow}>
         <Pressable

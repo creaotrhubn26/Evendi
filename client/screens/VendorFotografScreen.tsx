@@ -327,7 +327,7 @@ export default function VendorFotografScreen() {
             <Feather name="file-text" size={18} color={theme.accent} />
             <View style={{ flex: 1 }}>
               <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen tilbud ennå</ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Send tilbud til brudeparet</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Send tilbud til kunden</ThemedText>
             </View>
             <Button onPress={goToOffers}>Send tilbud</Button>
           </View>
@@ -409,7 +409,7 @@ export default function VendorFotografScreen() {
             <View style={[styles.emptyCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
               <Feather name="mic" size={32} color={theme.textMuted} />
               <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen taler lagt til</ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Taler vises her når brudeparet legger dem til</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Taler vises her når kunden legger dem til</ThemedText>
             </View>
           )}
         </ScrollView>
@@ -436,7 +436,7 @@ export default function VendorFotografScreen() {
             <View style={[styles.emptyCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
               <Feather name="users" size={32} color={theme.textMuted} />
               <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Bordplan ikke lagt til</ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Bordplan vises her når brudeparet legger den til</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Bordplan vises her når kunden legger den til</ThemedText>
             </View>
           )}
         </ScrollView>
@@ -477,7 +477,7 @@ export default function VendorFotografScreen() {
             <View style={[styles.emptyCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
               <Feather name="link" size={32} color={theme.textMuted} />
               <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen par tilkoblet</ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Start en samtale med et brudepar for å koble til prosjektet</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Start en samtale med en kunde for å koble til prosjektet</ThemedText>
             </View>
           )}
         </ScrollView>

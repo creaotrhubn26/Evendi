@@ -116,7 +116,7 @@ export default function VendorDetailScreen() {
     try {
       const sessionData = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
       if (!sessionData) {
-        Alert.alert("Logg inn", "Du må logge inn som par for å sende meldinger.");
+        Alert.alert("Logg inn", "Du må logge inn for å sende meldinger.");
         setIsStartingChat(false);
         return;
       }
@@ -179,9 +179,15 @@ export default function VendorDetailScreen() {
       photographer: "Fotograf",
       videographer: "Videograf",
       dj: "DJ",
-      florist: "Blomsterhandler",
+      florist: "Blomster",
       caterer: "Catering",
       venue: "Lokale",
+      planner: "Planlegger",
+      music: "Musikk/DJ",
+      cake: "Kake",
+      attire: "Antrekk",
+      beauty: "Hår & Makeup",
+      transport: "Transport",
     };
     return labels[category] || category;
   };
@@ -194,6 +200,12 @@ export default function VendorDetailScreen() {
       florist: "sun",
       caterer: "coffee",
       venue: "home",
+      planner: "clipboard",
+      music: "music",
+      cake: "gift",
+      attire: "shopping-bag",
+      beauty: "scissors",
+      transport: "truck",
     };
     return icons[category] || "briefcase";
   };
@@ -249,7 +261,7 @@ export default function VendorDetailScreen() {
 
             {locationIntel.venueName && !vendorTravel?.isLoading && (
               <ThemedText style={[styles.travelCardFrom, { color: theme.textMuted }]}>
-                Fra bryllupslokalet ({locationIntel.venueName})
+                Fra lokalet ({locationIntel.venueName})
               </ThemedText>
             )}
 

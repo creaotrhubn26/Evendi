@@ -193,7 +193,7 @@ export default function VendorReviewsScreen() {
               ]}
               value={body}
               onChangeText={setBody}
-              placeholder="Fortell andre brudepar om din erfaring..."
+              placeholder="Fortell andre kunder om din erfaring..."
               placeholderTextColor={theme.textSecondary}
               multiline
               numberOfLines={5}
@@ -249,7 +249,7 @@ export default function VendorReviewsScreen() {
         <>
           <ThemedText style={Typography.h3}>Gi anmeldelse</ThemedText>
           <ThemedText style={[Typography.small, { opacity: 0.7, marginBottom: Spacing.lg }]}>
-            Hjelp andre brudepar ved å dele din erfaring
+            Hjelp andre kunder ved å dele din erfaring
           </ThemedText>
           {unreviewedContracts.map((contract) => (
             <Card key={contract.id} style={styles.contractCard}>

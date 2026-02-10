@@ -133,7 +133,7 @@ export default function VendorHaarMakeupScreen() {
       }
     >
       <ThemedText style={[styles.title, { color: theme.text }]}>Hår & makeup dashboard</ThemedText>
-      <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Tilby brude- og forloverpakker, oppdater showcase og send tilbud.</ThemedText>
+      <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Tilby styling-pakker, oppdater showcase og send tilbud.</ThemedText>
 
       <View style={styles.cardRow}>
         <Pressable
@@ -148,7 +148,7 @@ export default function VendorHaarMakeupScreen() {
             <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Pakker</ThemedText>
             <Feather name="shopping-bag" size={18} color={theme.textSecondary} />
           </View>
-          <ThemedText style={[styles.cardBody, { color: theme.textSecondary }]}>Lag pakker for brud, forlovere og prøvetime.</ThemedText>
+          <ThemedText style={[styles.cardBody, { color: theme.textSecondary }]}>Lag pakker for styling, team og prøvetime.</ThemedText>
           <Button style={styles.cardButton} onPress={goToProducts}>Opprett pakke</Button>
         </Pressable>
 
