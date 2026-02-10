@@ -29,6 +29,8 @@ import { showOptions } from "@/lib/dialogs";
 import { 
   EVENT_TYPE_CONFIGS, 
   getGroupedEventTypes, 
+  getCorporateGrouped,
+  getCorporateCatchAll,
   type EventType, 
   type EventCategory 
 } from "@shared/event-types";
@@ -501,33 +503,77 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
               );
             })}
 
-            {/* Corporate Events */}
+            {/* Corporate Events — grouped by sub-category */}
             <ThemedText style={[styles.eventCategoryHeader, { color: theme.textSecondary, marginTop: Spacing.lg }]}>
               Bedrift & Organisasjon
             </ThemedText>
-            {getGroupedEventTypes().corporate.map((config) => {
-              const isSelected = selectedEventType === config.type;
+            {getCorporateGrouped().map((group) => (
+              <View key={group.subCategory.key}>
+                <ThemedText style={[styles.eventSubCategoryHeader, { color: theme.textMuted }]}>
+                  {group.subCategory.labelNo}
+                </ThemedText>
+                {group.events.map((config) => {
+                  const isSelected = selectedEventType === config.type;
+                  return (
+                    <Pressable
+                      key={config.type}
+                      onPress={() => handleSelectEventType(config.type)}
+                      style={[
+                        styles.traditionCard,
+                        {
+                          backgroundColor: isSelected ? Colors.dark.accent + "15" : theme.backgroundDefault,
+                          borderColor: isSelected ? Colors.dark.accent : theme.border,
+                          borderWidth: isSelected ? 2 : 1,
+                        },
+                      ]}
+                    >
+                      <View style={styles.traditionHeader}>
+                        <ThemedText style={styles.traditionIcon}>{config.icon}</ThemedText>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={[styles.traditionName, { color: theme.text }]}>
+                            {config.labelNo}
+                          </ThemedText>
+                          <ThemedText style={[styles.eventTypeDesc, { color: theme.textSecondary }]}>
+                            {config.descriptionNo}
+                          </ThemedText>
+                        </View>
+                      </View>
+                      {isSelected && (
+                        <View style={[styles.checkBadge, { backgroundColor: Colors.dark.accent }]}>
+                          <Feather name="check" size={16} color="#1A1A1A" />
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
+            {/* Catch-all "Other" corporate event */}
+            {(() => {
+              const catchAll = getCorporateCatchAll();
+              if (!catchAll) return null;
+              const isSelected = selectedEventType === catchAll.type;
               return (
                 <Pressable
-                  key={config.type}
-                  onPress={() => handleSelectEventType(config.type)}
+                  onPress={() => handleSelectEventType(catchAll.type)}
                   style={[
                     styles.traditionCard,
                     {
                       backgroundColor: isSelected ? Colors.dark.accent + "15" : theme.backgroundDefault,
                       borderColor: isSelected ? Colors.dark.accent : theme.border,
                       borderWidth: isSelected ? 2 : 1,
+                      marginTop: Spacing.sm,
                     },
                   ]}
                 >
                   <View style={styles.traditionHeader}>
-                    <ThemedText style={styles.traditionIcon}>{config.icon}</ThemedText>
+                    <ThemedText style={styles.traditionIcon}>{catchAll.icon}</ThemedText>
                     <View style={{ flex: 1 }}>
                       <ThemedText style={[styles.traditionName, { color: theme.text }]}>
-                        {config.labelNo}
+                        {catchAll.labelNo}
                       </ThemedText>
                       <ThemedText style={[styles.eventTypeDesc, { color: theme.textSecondary }]}>
-                        {config.descriptionNo}
+                        {catchAll.descriptionNo}
                       </ThemedText>
                     </View>
                   </View>
@@ -538,7 +584,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
                   )}
                 </Pressable>
               );
-            })}
+            })()}
           </ScrollView>
 
           <View style={[styles.modalFooter, { borderTopColor: theme.border, backgroundColor: theme.backgroundDefault }]}>
@@ -830,6 +876,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: Spacing.sm,
     marginTop: Spacing.sm,
+  },
+  eventSubCategoryHeader: {
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    marginBottom: 6,
+    marginTop: Spacing.md,
+    paddingLeft: 4,
   },
   checkBadge: {
     width: 32,

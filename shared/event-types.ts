@@ -3,22 +3,41 @@
  * 
  * Defines all supported event types, their categories (B2C/B2B),
  * applicable vendor categories, visible features, and role labels.
+ * 
+ * B2B taxonomy follows Norwegian corporate event standards:
+ *   1. Faglige og strategiske (Professional & Strategic)
+ *   2. Sosiale og relasjonsbyggende (Social & Relationship)
+ *   3. Eksternt rettede (External-facing)
+ *   4. HR- og interne markeringer (HR & Internal)
  */
 
 // ─── Event Type Enum ────────────────────────────────────────────
 export const EVENT_TYPES = [
+  // B2C: Personal / Life events
   "wedding",
   "confirmation",
   "birthday",
   "anniversary",
   "engagement",
   "baby_shower",
-  "corporate_event",
+  // B2B: Professional & Strategic
   "conference",
   "seminar",
+  "kickoff",
+  // B2B: Social & Relationship
+  "summer_party",
+  "christmas_party",
   "team_building",
+  // B2B: External-facing
   "product_launch",
-  "gala",
+  "trade_fair",
+  // B2B: HR & Internal
+  "corporate_anniversary",
+  "awards_night",
+  "employee_day",
+  "onboarding_day",
+  // B2B: General catch-all
+  "corporate_event",
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -27,15 +46,67 @@ export type EventType = (typeof EVENT_TYPES)[number];
 export const EVENT_CATEGORIES = ["personal", "corporate"] as const;
 export type EventCategory = (typeof EVENT_CATEGORIES)[number];
 
+// ─── Corporate Sub-Categories ───────────────────────────────────
+export const CORPORATE_SUB_CATEGORIES = [
+  "professional_strategic",
+  "social_relational",
+  "external_facing",
+  "hr_internal",
+] as const;
+export type CorporateSubCategory = (typeof CORPORATE_SUB_CATEGORIES)[number];
+
+export interface CorporateSubCategoryInfo {
+  key: CorporateSubCategory;
+  labelNo: string;
+  labelEn: string;
+  descriptionNo: string;
+  descriptionEn: string;
+}
+
+export const CORPORATE_SUB_CATEGORY_INFO: Record<CorporateSubCategory, CorporateSubCategoryInfo> = {
+  professional_strategic: {
+    key: "professional_strategic",
+    labelNo: "Faglige og strategiske",
+    labelEn: "Professional & Strategic",
+    descriptionNo: "Kompetanseheving, bransjedeling, retning og mål",
+    descriptionEn: "Competence building, industry sharing, direction and goals",
+  },
+  social_relational: {
+    key: "social_relational",
+    labelNo: "Sosiale og relasjonsbyggende",
+    labelEn: "Social & Relationship Building",
+    descriptionNo: "Kulturbygging, trivsel, samarbeid og samhold",
+    descriptionEn: "Culture building, well-being, collaboration and cohesion",
+  },
+  external_facing: {
+    key: "external_facing",
+    labelNo: "Eksternt rettede",
+    labelEn: "External-facing Events",
+    descriptionNo: "PR, merkevarebygging, leads og nettverk",
+    descriptionEn: "PR, branding, leads and networking",
+  },
+  hr_internal: {
+    key: "hr_internal",
+    labelNo: "HR og interne markeringer",
+    labelEn: "HR & Internal Celebrations",
+    descriptionNo: "Jubileer, utmerkelser, ansattdager, onboarding",
+    descriptionEn: "Anniversaries, awards, employee days, onboarding",
+  },
+};
+
 // ─── Event Type Metadata ────────────────────────────────────────
 export interface EventTypeConfig {
   type: EventType;
   category: EventCategory;
+  corporateSubCategory?: CorporateSubCategory;
   labelNo: string;       // Norwegian label
   labelEn: string;       // English label
   icon: string;          // Emoji icon for picker
   descriptionNo: string; // Norwegian description
   descriptionEn: string; // English description
+  /** Typical content / key activities (for B2B info display) */
+  typicalContentNo?: string[];
+  typicalContentEn?: string[];
   /** Which wedding-only features to show */
   features: {
     traditions: boolean;
@@ -222,42 +293,18 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     dateLabel: { no: "Dato", en: "Date" },
   },
 
-  // ─── B2B: Corporate Events ─────────────────────────────────
-  corporate_event: {
-    type: "corporate_event",
-    category: "corporate",
-    labelNo: "Firmafest",
-    labelEn: "Corporate Event",
-    icon: "🏢",
-    descriptionNo: "Planlegg firmafest eller bedriftsarrangement",
-    descriptionEn: "Plan a corporate party or company event",
-    features: {
-      traditions: false,
-      dressTracking: false,
-      weddingPartyRoles: false,
-      speeches: true,
-      photoplan: true,
-      seating: true,
-      coupleProfile: false,
-      importantPeople: true,
-      sharePartner: false,
-    },
-    roleLabels: {
-      primary: { no: "Arrangør", en: "Organizer" },
-      secondary: { no: "Medarrangør", en: "Co-organizer" },
-      guestLabel: { no: "Deltakere", en: "Attendees" },
-    },
-    dateLabel: { no: "Arrangementsdato", en: "Event Date" },
-  },
-
+  // ─── B2B: Professional & Strategic ──────────────────────────
   conference: {
     type: "conference",
     category: "corporate",
-    labelNo: "Konferanse",
-    labelEn: "Conference",
+    corporateSubCategory: "professional_strategic",
+    labelNo: "Konferanse / Fagseminar",
+    labelEn: "Conference / Industry Seminar",
     icon: "🎤",
-    descriptionNo: "Planlegg konferanse med foredrag og program",
-    descriptionEn: "Plan a conference with speakers and agenda",
+    descriptionNo: "Kompetanseheving, bransjedeling, synlighet",
+    descriptionEn: "Competence building, industry sharing, visibility",
+    typicalContentNo: ["Keynote speakers", "Paneldebatter", "Breakout sessions", "Sponsorstands"],
+    typicalContentEn: ["Keynote speakers", "Panel debates", "Breakout sessions", "Sponsor booths"],
     features: {
       traditions: false,
       dressTracking: false,
@@ -280,11 +327,14 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
   seminar: {
     type: "seminar",
     category: "corporate",
+    corporateSubCategory: "professional_strategic",
     labelNo: "Seminar / Workshop",
     labelEn: "Seminar / Workshop",
     icon: "📋",
-    descriptionNo: "Planlegg seminar eller workshop",
-    descriptionEn: "Plan a seminar or workshop",
+    descriptionNo: "Kunnskapsdeling og kompetansebygging",
+    descriptionEn: "Knowledge sharing and competence building",
+    typicalContentNo: ["Presentasjoner", "Gruppearbeid", "Diskusjoner", "Nettverking"],
+    typicalContentEn: ["Presentations", "Group work", "Discussions", "Networking"],
     features: {
       traditions: false,
       dressTracking: false,
@@ -304,14 +354,108 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     dateLabel: { no: "Seminardato", en: "Seminar Date" },
   },
 
+  kickoff: {
+    type: "kickoff",
+    category: "corporate",
+    corporateSubCategory: "professional_strategic",
+    labelNo: "Strategisamling / Kickoff",
+    labelEn: "Strategy Gathering / Kickoff",
+    icon: "🎯",
+    descriptionNo: "Sette retning, mål og motivasjon — ofte 1–2 dager",
+    descriptionEn: "Set direction, goals and motivation — often 1–2 days",
+    typicalContentNo: ["Presentasjon av budsjett og mål", "Teambuilding", "Sosiale aktiviteter på kvelden"],
+    typicalContentEn: ["Budget and goals presentation", "Team building", "Evening social activities"],
+    features: {
+      traditions: false,
+      dressTracking: false,
+      weddingPartyRoles: false,
+      speeches: true,
+      photoplan: true,
+      seating: true,
+      coupleProfile: false,
+      importantPeople: true,
+      sharePartner: false,
+    },
+    roleLabels: {
+      primary: { no: "Arrangør", en: "Organizer" },
+      secondary: { no: "Avdelingsleder", en: "Department Lead" },
+      guestLabel: { no: "Deltakere", en: "Attendees" },
+    },
+    dateLabel: { no: "Kickoff-dato", en: "Kickoff Date" },
+  },
+
+  // ─── B2B: Social & Relationship Building ──────────────────
+  summer_party: {
+    type: "summer_party",
+    category: "corporate",
+    corporateSubCategory: "social_relational",
+    labelNo: "Sommerfest",
+    labelEn: "Summer Party",
+    icon: "☀️",
+    descriptionNo: "Uformell kulturbygging, ofte utendørs",
+    descriptionEn: "Informal culture building, often outdoors",
+    typicalContentNo: ["Uformell stemning", "Utendørs aktiviteter", "Grilling", "Underholdning"],
+    typicalContentEn: ["Casual atmosphere", "Outdoor activities", "BBQ", "Entertainment"],
+    features: {
+      traditions: false,
+      dressTracking: false,
+      weddingPartyRoles: false,
+      speeches: true,
+      photoplan: true,
+      seating: true,
+      coupleProfile: false,
+      importantPeople: true,
+      sharePartner: false,
+    },
+    roleLabels: {
+      primary: { no: "Arrangør", en: "Organizer" },
+      secondary: { no: "Sosialansvarlig", en: "Social Coordinator" },
+      guestLabel: { no: "Ansatte", en: "Employees" },
+    },
+    dateLabel: { no: "Festdato", en: "Party Date" },
+  },
+
+  christmas_party: {
+    type: "christmas_party",
+    category: "corporate",
+    corporateSubCategory: "social_relational",
+    labelNo: "Julebord",
+    labelEn: "Christmas Party",
+    icon: "🎄",
+    descriptionNo: "Formell middag med underholdning og tema",
+    descriptionEn: "Formal dinner with entertainment and theme",
+    typicalContentNo: ["Felles middag", "Underholdning", "Quiz / tema", "Dans"],
+    typicalContentEn: ["Shared dinner", "Entertainment", "Quiz / theme", "Dancing"],
+    features: {
+      traditions: false,
+      dressTracking: false,
+      weddingPartyRoles: false,
+      speeches: true,
+      photoplan: true,
+      seating: true,
+      coupleProfile: false,
+      importantPeople: true,
+      sharePartner: false,
+    },
+    roleLabels: {
+      primary: { no: "Arrangør", en: "Organizer" },
+      secondary: { no: "Sosialkomité", en: "Social Committee" },
+      guestLabel: { no: "Ansatte", en: "Employees" },
+    },
+    dateLabel: { no: "Juleborddato", en: "Party Date" },
+  },
+
   team_building: {
     type: "team_building",
     category: "corporate",
+    corporateSubCategory: "social_relational",
     labelNo: "Teambuilding",
     labelEn: "Team Building",
     icon: "🤝",
-    descriptionNo: "Planlegg teambuilding-aktiviteter",
-    descriptionEn: "Plan team building activities",
+    descriptionNo: "Samarbeid og samhold — escape room, matlaging, tur",
+    descriptionEn: "Collaboration and cohesion — escape room, cooking, outdoors",
+    typicalContentNo: ["Escape room", "Matlagingskurs", "Rafting / fjelltur", "Vinteraktiviteter"],
+    typicalContentEn: ["Escape room", "Cooking class", "Rafting / hiking", "Winter activities"],
     features: {
       traditions: false,
       dressTracking: false,
@@ -331,14 +475,18 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     dateLabel: { no: "Dato", en: "Date" },
   },
 
+  // ─── B2B: External-facing ─────────────────────────────────
   product_launch: {
     type: "product_launch",
     category: "corporate",
+    corporateSubCategory: "external_facing",
     labelNo: "Produktlansering",
     labelEn: "Product Launch",
     icon: "🚀",
-    descriptionNo: "Planlegg produktlansering eller lanseringsevent",
-    descriptionEn: "Plan a product launch event",
+    descriptionNo: "PR og merkevarebygging — presse, kunder, investorer",
+    descriptionEn: "PR and branding — press, customers, investors",
+    typicalContentNo: ["Sceneproduksjon", "Demo", "Mingling og nettverk", "Pressedekning"],
+    typicalContentEn: ["Stage production", "Demo", "Mingling and networking", "Press coverage"],
     features: {
       traditions: false,
       dressTracking: false,
@@ -358,14 +506,78 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     dateLabel: { no: "Lanseringsdato", en: "Launch Date" },
   },
 
-  gala: {
-    type: "gala",
+  trade_fair: {
+    type: "trade_fair",
     category: "corporate",
-    labelNo: "Galla / Prisutdeling",
-    labelEn: "Gala / Awards Ceremony",
+    corporateSubCategory: "external_facing",
+    labelNo: "Messe / Bransjetreff",
+    labelEn: "Trade Fair / Industry Meetup",
+    icon: "🏛️",
+    descriptionNo: "Leads og nettverk — stand, kunder, samarbeidspartnere",
+    descriptionEn: "Leads and networking — booth, customers, partners",
+    typicalContentNo: ["Standplass", "Kundemøter", "Nettverk", "Produktvisning"],
+    typicalContentEn: ["Exhibition booth", "Client meetings", "Networking", "Product display"],
+    features: {
+      traditions: false,
+      dressTracking: false,
+      weddingPartyRoles: false,
+      speeches: true,
+      photoplan: true,
+      seating: false,
+      coupleProfile: false,
+      importantPeople: true,
+      sharePartner: false,
+    },
+    roleLabels: {
+      primary: { no: "Utstiller", en: "Exhibitor" },
+      secondary: { no: "Standansvarlig", en: "Booth Manager" },
+      guestLabel: { no: "Besøkende", en: "Visitors" },
+    },
+    dateLabel: { no: "Messedato", en: "Fair Date" },
+  },
+
+  // ─── B2B: HR & Internal Celebrations ──────────────────────
+  corporate_anniversary: {
+    type: "corporate_anniversary",
+    category: "corporate",
+    corporateSubCategory: "hr_internal",
+    labelNo: "Jubileumsfeiring",
+    labelEn: "Anniversary Celebration",
+    icon: "🎊",
+    descriptionNo: "Feir 10, 25 eller 50 år — bedriftsjubileum",
+    descriptionEn: "Celebrate 10, 25 or 50 years — corporate anniversary",
+    typicalContentNo: ["Taler", "Tilbakeblikk / historikk", "Prisutdeling", "Festmiddag"],
+    typicalContentEn: ["Speeches", "Retrospective / history", "Awards", "Gala dinner"],
+    features: {
+      traditions: false,
+      dressTracking: false,
+      weddingPartyRoles: false,
+      speeches: true,
+      photoplan: true,
+      seating: true,
+      coupleProfile: false,
+      importantPeople: true,
+      sharePartner: false,
+    },
+    roleLabels: {
+      primary: { no: "Arrangør", en: "Organizer" },
+      secondary: { no: "Jubileumskomité", en: "Anniversary Committee" },
+      guestLabel: { no: "Gjester", en: "Guests" },
+    },
+    dateLabel: { no: "Jubileumsdato", en: "Anniversary Date" },
+  },
+
+  awards_night: {
+    type: "awards_night",
+    category: "corporate",
+    corporateSubCategory: "hr_internal",
+    labelNo: "Prisutdeling / Galla",
+    labelEn: "Awards Night / Gala",
     icon: "🏆",
-    descriptionNo: "Planlegg galla eller prisutdeling",
-    descriptionEn: "Plan a gala or awards ceremony",
+    descriptionNo: "Pris- og utmerkelseskveld med formell ramme",
+    descriptionEn: "Awards and recognition night with formal setting",
+    typicalContentNo: ["Prisutdeling", "Taler", "Festmiddag", "Underholdning"],
+    typicalContentEn: ["Awards ceremony", "Speeches", "Gala dinner", "Entertainment"],
     features: {
       traditions: false,
       dressTracking: false,
@@ -383,6 +595,94 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       guestLabel: { no: "Gjester", en: "Guests" },
     },
     dateLabel: { no: "Galladato", en: "Gala Date" },
+  },
+
+  employee_day: {
+    type: "employee_day",
+    category: "corporate",
+    corporateSubCategory: "hr_internal",
+    labelNo: "Ansattdag / Mangfoldsarrangement",
+    labelEn: "Employee Day / Diversity Event",
+    icon: "🙌",
+    descriptionNo: "Ansattdager, mangfold- og kulturarrangementer",
+    descriptionEn: "Employee days, diversity and culture events",
+    typicalContentNo: ["Foredrag", "Workshops", "Kulturelle innslag", "Sosialt samvær"],
+    typicalContentEn: ["Talks", "Workshops", "Cultural performances", "Social gathering"],
+    features: {
+      traditions: false,
+      dressTracking: false,
+      weddingPartyRoles: false,
+      speeches: true,
+      photoplan: false,
+      seating: false,
+      coupleProfile: false,
+      importantPeople: true,
+      sharePartner: false,
+    },
+    roleLabels: {
+      primary: { no: "HR-ansvarlig", en: "HR Lead" },
+      secondary: { no: "Medarrangør", en: "Co-organizer" },
+      guestLabel: { no: "Ansatte", en: "Employees" },
+    },
+    dateLabel: { no: "Dato", en: "Date" },
+  },
+
+  onboarding_day: {
+    type: "onboarding_day",
+    category: "corporate",
+    corporateSubCategory: "hr_internal",
+    labelNo: "Onboarding-dag",
+    labelEn: "Onboarding Day",
+    icon: "🎓",
+    descriptionNo: "Velkomstdag for nye ansatte",
+    descriptionEn: "Welcome day for new employees",
+    typicalContentNo: ["Introduksjoner", "Kontoromvisning", "Teamlunsj", "Buddy-ordning"],
+    typicalContentEn: ["Introductions", "Office tour", "Team lunch", "Buddy program"],
+    features: {
+      traditions: false,
+      dressTracking: false,
+      weddingPartyRoles: false,
+      speeches: true,
+      photoplan: false,
+      seating: false,
+      coupleProfile: false,
+      importantPeople: true,
+      sharePartner: false,
+    },
+    roleLabels: {
+      primary: { no: "HR-ansvarlig", en: "HR Lead" },
+      secondary: { no: "Fadder", en: "Buddy" },
+      guestLabel: { no: "Nye ansatte", en: "New Employees" },
+    },
+    dateLabel: { no: "Onboarding-dato", en: "Onboarding Date" },
+  },
+
+  // ─── B2B: General catch-all ───────────────────────────────
+  corporate_event: {
+    type: "corporate_event",
+    category: "corporate",
+    labelNo: "Annet bedriftsarrangement",
+    labelEn: "Other Corporate Event",
+    icon: "🏢",
+    descriptionNo: "Planlegg et annet type bedriftsarrangement",
+    descriptionEn: "Plan another type of corporate event",
+    features: {
+      traditions: false,
+      dressTracking: false,
+      weddingPartyRoles: false,
+      speeches: true,
+      photoplan: true,
+      seating: true,
+      coupleProfile: false,
+      importantPeople: true,
+      sharePartner: false,
+    },
+    roleLabels: {
+      primary: { no: "Arrangør", en: "Organizer" },
+      secondary: { no: "Medarrangør", en: "Co-organizer" },
+      guestLabel: { no: "Deltakere", en: "Attendees" },
+    },
+    dateLabel: { no: "Arrangementsdato", en: "Event Date" },
   },
 };
 
@@ -434,28 +734,42 @@ export function getGroupedEventTypes(): { personal: EventTypeConfig[]; corporate
   };
 }
 
+/** Get corporate event types grouped by sub-category */
+export function getCorporateGrouped(): { subCategory: CorporateSubCategoryInfo; events: EventTypeConfig[] }[] {
+  const corporate = getCorporateEventTypes();
+  return CORPORATE_SUB_CATEGORIES.map(subCat => ({
+    subCategory: CORPORATE_SUB_CATEGORY_INFO[subCat],
+    events: corporate.filter(e => e.corporateSubCategory === subCat),
+  })).filter(g => g.events.length > 0);
+}
+
+/** Get the "Other" corporate catch-all (no sub-category) */
+export function getCorporateCatchAll(): EventTypeConfig | undefined {
+  return getCorporateEventTypes().find(e => !e.corporateSubCategory);
+}
+
 // ─── Vendor Category → Event Type Mapping ───────────────────────
 // Which vendor categories are relevant for which event types
 export const VENDOR_CATEGORY_EVENT_MAP: Record<string, EventType[]> = {
-  "Fotograf": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "baby_shower", "corporate_event", "conference", "product_launch", "gala"],
-  "Videograf": ["wedding", "confirmation", "anniversary", "corporate_event", "conference", "product_launch", "gala"],
-  "Blomster": ["wedding", "confirmation", "anniversary", "engagement", "gala"],
-  "Catering": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "baby_shower", "corporate_event", "conference", "seminar", "team_building", "product_launch", "gala"],
-  "Musikk": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "corporate_event", "gala"],
-  "Venue": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "baby_shower", "corporate_event", "conference", "seminar", "team_building", "product_launch", "gala"],
-  "Kake": ["wedding", "confirmation", "birthday", "baby_shower"],
-  "Planlegger": ["wedding", "corporate_event", "conference", "gala", "product_launch"],
-  "Hår & Makeup": ["wedding", "gala"],
-  "Transport": ["wedding", "corporate_event", "gala"],
-  "Invitasjoner": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "corporate_event", "gala"],
-  "Underholdning": ["wedding", "confirmation", "birthday", "anniversary", "corporate_event", "team_building", "gala"],
-  "Dekorasjon": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "corporate_event", "gala", "product_launch"],
-  "Konfektyrer": ["wedding", "confirmation", "birthday", "baby_shower"],
-  "Bar & Drikke": ["wedding", "birthday", "anniversary", "corporate_event", "gala", "product_launch"],
-  "Fotoboks": ["wedding", "confirmation", "birthday", "corporate_event", "gala"],
+  "Fotograf": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "baby_shower", "conference", "kickoff", "summer_party", "christmas_party", "product_launch", "trade_fair", "corporate_anniversary", "awards_night", "employee_day", "corporate_event"],
+  "Videograf": ["wedding", "confirmation", "anniversary", "conference", "kickoff", "product_launch", "corporate_anniversary", "awards_night", "corporate_event"],
+  "Blomster": ["wedding", "confirmation", "anniversary", "engagement", "awards_night", "corporate_anniversary"],
+  "Catering": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "baby_shower", "conference", "seminar", "kickoff", "summer_party", "christmas_party", "team_building", "product_launch", "corporate_anniversary", "awards_night", "employee_day", "onboarding_day", "corporate_event"],
+  "Musikk": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "summer_party", "christmas_party", "awards_night", "corporate_anniversary", "corporate_event"],
+  "Venue": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "baby_shower", "conference", "seminar", "kickoff", "summer_party", "christmas_party", "team_building", "product_launch", "trade_fair", "corporate_anniversary", "awards_night", "employee_day", "onboarding_day", "corporate_event"],
+  "Kake": ["wedding", "confirmation", "birthday", "baby_shower", "corporate_anniversary"],
+  "Planlegger": ["wedding", "conference", "kickoff", "product_launch", "awards_night", "corporate_anniversary", "corporate_event"],
+  "Hår & Makeup": ["wedding", "awards_night"],
+  "Transport": ["wedding", "conference", "kickoff", "awards_night", "corporate_event"],
+  "Invitasjoner": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "christmas_party", "awards_night", "corporate_anniversary", "corporate_event"],
+  "Underholdning": ["wedding", "confirmation", "birthday", "anniversary", "summer_party", "christmas_party", "team_building", "awards_night", "corporate_anniversary", "employee_day", "corporate_event"],
+  "Dekorasjon": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "christmas_party", "product_launch", "awards_night", "corporate_anniversary", "corporate_event"],
+  "Konfektyrer": ["wedding", "confirmation", "birthday", "baby_shower", "corporate_anniversary"],
+  "Bar & Drikke": ["wedding", "birthday", "anniversary", "summer_party", "christmas_party", "product_launch", "awards_night", "corporate_anniversary", "corporate_event"],
+  "Fotoboks": ["wedding", "confirmation", "birthday", "summer_party", "christmas_party", "awards_night", "corporate_event"],
   "Ringer": ["wedding", "engagement"],
   "Drakt & Dress": ["wedding"],
-  "Overnatting": ["wedding", "conference", "corporate_event", "gala"],
+  "Overnatting": ["wedding", "conference", "kickoff", "awards_night", "corporate_event"],
   "Husdyr": ["wedding"],
 };
 
