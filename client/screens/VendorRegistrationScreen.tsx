@@ -859,4 +859,11 @@ const styles = StyleSheet.create({
   featureText: {
     fontSize: 13,
   },
+  errorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+  },
 });

@@ -70,7 +70,7 @@ export default function BrudekjoleScreen() {
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   useEffect(() => {
-    getCoupleSession().then(s => setSessionToken(s?.sessionToken || null));
+    getCoupleSession().then(s => setSessionToken(s?.token || null));
   }, []);
 
   // Couple profile for tradition hints

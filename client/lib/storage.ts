@@ -27,14 +27,14 @@ const KEYS = {
 
 export type AppLanguage = "nb" | "en";
 
-export async function getCoupleSession(): Promise<{ token: string } | null> {
+export async function getCoupleSession(): Promise<{ token: string; sessionToken?: string; coupleId?: string } | null> {
   try {
     const data = await AsyncStorage.getItem(KEYS.COUPLE_SESSION);
     if (!data) return null;
     const parsed = JSON.parse(data);
     // Login stores sessionToken, normalize to token
     const token = parsed.token || parsed.sessionToken;
-    return token ? { token } : null;
+    return token ? { token, sessionToken: parsed.sessionToken, coupleId: parsed.coupleId } : null;
   } catch {
     return null;
   }

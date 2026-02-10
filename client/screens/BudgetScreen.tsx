@@ -112,7 +112,7 @@ export default function BudgetScreen() {
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   useEffect(() => {
-    getCoupleSession().then(s => setSessionToken(s?.sessionToken || null));
+    getCoupleSession().then(s => setSessionToken(s?.token || null));
   }, []);
 
   // Fetch couple profile for traditions + guest count

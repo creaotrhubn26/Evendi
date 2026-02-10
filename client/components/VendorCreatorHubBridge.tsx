@@ -225,7 +225,7 @@ export default function VendorCreatorHubBridge({ sessionToken, coupleId, onOpenC
 
   if (isError || !data?.projects?.length) {
     return (
-      <Animated.View entering={FadeInDown.delay(100)} style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <Animated.View entering={FadeInDown.delay(100)} style={[styles.emptyCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <Feather name="folder" size={32} color={theme.textSecondary} />
         <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>
           Ingen CreatorHub-prosjekter
@@ -234,10 +234,11 @@ export default function VendorCreatorHubBridge({ sessionToken, coupleId, onOpenC
           Det finnes ingen prosjekter knyttet til dette paret ennå.
         </ThemedText>
         <Button
-          title="Prøv igjen"
           onPress={() => refetch()}
           style={{ marginTop: Spacing.md }}
-        />
+        >
+          Prøv igjen
+        </Button>
       </Animated.View>
     );
   }
@@ -252,7 +253,7 @@ export default function VendorCreatorHubBridge({ sessionToken, coupleId, onOpenC
       <Animated.View
         key={project.id}
         entering={FadeInDown.delay(100 + index * 80)}
-        style={[styles.projectCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+        style={[styles.projectCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
       >
         {/* Project header */}
         <Pressable
@@ -386,11 +387,12 @@ export default function VendorCreatorHubBridge({ sessionToken, coupleId, onOpenC
                     />
                   </View>
                   <Button
-                    title={addEventMutation.isPending ? "Legger til..." : "Legg til i tidslinje"}
                     onPress={() => handleAddEvent(timeline.id)}
                     disabled={!newEventTitle.trim() || addEventMutation.isPending}
                     style={{ marginTop: Spacing.xs }}
-                  />
+                  >
+                    {addEventMutation.isPending ? "Legger til..." : "Legg til i tidslinje"}
+                  </Button>
                 </View>
               </View>
             )}

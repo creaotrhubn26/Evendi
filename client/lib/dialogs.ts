@@ -47,7 +47,7 @@ export function showConfirm(args: ConfirmArgs): Promise<boolean> {
     return Promise.resolve(false);
   }
 
-  return new Promise((resolve) => dialogHandler({ type: "confirm", args: normalized, resolve }));
+  return new Promise((resolve) => dialogHandler!({ type: "confirm", args: normalized, resolve }));
 }
 
 export function showOptions(args: OptionsArgs): Promise<number | null> {
@@ -63,5 +63,5 @@ export function showOptions(args: OptionsArgs): Promise<number | null> {
     return Promise.resolve(null);
   }
 
-  return new Promise((resolve) => dialogHandler({ type: "options", args: normalized, resolve }));
+  return new Promise((resolve) => dialogHandler!({ type: "options", args: normalized, resolve }));
 }

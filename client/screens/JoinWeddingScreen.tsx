@@ -45,7 +45,7 @@ interface ValidationResult {
 export default function JoinWeddingScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const { isWedding } = useEventType();
 
   const [step, setStep] = useState<Step>("code");
@@ -60,13 +60,13 @@ export default function JoinWeddingScreen() {
   const nameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
 
-  const bg = theme === "dark" ? "#1a1a2e" : "#f8f6ff";
-  const cardBg = theme === "dark" ? "#232347" : "#fff";
-  const textColor = theme === "dark" ? "#fff" : "#1a1a2e";
-  const subtextColor = theme === "dark" ? "#b0b0cc" : "#666";
-  const accent = Colors.primary;
-  const inputBg = theme === "dark" ? "#2a2a4a" : "#f0eef8";
-  const borderColor = theme === "dark" ? "#3a3a5a" : "#e0ddf0";
+  const bg = isDark ? "#1a1a2e" : "#f8f6ff";
+  const cardBg = isDark ? "#232347" : "#fff";
+  const textColor = isDark ? "#fff" : "#1a1a2e";
+  const subtextColor = isDark ? "#b0b0cc" : "#666";
+  const accent = theme.accent;
+  const inputBg = isDark ? "#2a2a4a" : "#f0eef8";
+  const borderColor = isDark ? "#3a3a5a" : "#e0ddf0";
 
   const handleValidateCode = async () => {
     if (!inviteCode.trim()) {

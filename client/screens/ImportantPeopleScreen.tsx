@@ -226,13 +226,13 @@ export default function ImportantPeopleScreen() {
       if (editingPerson) {
         await updateMutation.mutateAsync({
           id: editingPerson.id,
-          data: { name: newName.trim(), role: newRole.trim(), phone: newPhone.trim() || null },
+          data: { name: newName.trim(), role: newRole.trim() as any, phone: newPhone.trim() || undefined },
         });
       } else {
         await createMutation.mutateAsync({
           name: newName.trim(),
-          role: newRole.trim(),
-          phone: newPhone.trim() || null,
+          role: newRole.trim() as any,
+          phone: newPhone.trim() || undefined,
         });
       }
 

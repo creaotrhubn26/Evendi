@@ -41,7 +41,7 @@ interface DeliveryItemInput {
   urlError?: string; // Validation error state
 }
 
-type DeliveryCreateRouteParams = { delivery?: any } | undefined;
+type DeliveryCreateRouteParams = { delivery?: any; coupleId?: string; projectId?: string; timelineId?: string; coupleName?: string; coupleEmail?: string; weddingDate?: string } | undefined;
 
 interface Props {
   navigation: NativeStackNavigationProp<ParamListBase>;

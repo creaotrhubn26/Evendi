@@ -813,7 +813,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
                   >
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                       <ThemedText style={[styles.quickReplyLabel, { color: template.color }]}>{template.label}</ThemedText>
-                      {"isCustom" in template && template.isCustom && (
+                      {"isCustom" in template && (template as any).isCustom && (
                         <Feather name="star" size={10} color={template.color} />
                       )}
                     </View>

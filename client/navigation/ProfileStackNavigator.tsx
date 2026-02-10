@@ -237,7 +237,7 @@ export default function ProfileStackNavigator() {
       />
       <Stack.Screen
         name="CoupleChat"
-        component={ChatScreen}
+        component={ChatScreen as any}
         options={({ route }) => ({
           title: route.params.vendorName,
           headerBackVisible: false,

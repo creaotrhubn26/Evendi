@@ -80,7 +80,7 @@ export function KakeScreen() {
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   React.useEffect(() => {
-    getCoupleSession().then(s => setSessionToken(s?.sessionToken || null));
+    getCoupleSession().then(s => setSessionToken(s?.token || null));
   }, []);
 
   // Couple profile for traditions + guest count

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { ScrollView, StyleSheet, View, Pressable, TextInput, Modal } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, TextInput, Modal, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -15,7 +15,6 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getWeddingDetails, getCoupleSession, getAppLanguage, type AppLanguage } from "@/lib/storage";
 import { getCoupleProfile, updateCoupleProfile } from "@/lib/api-couples";
 import { getChecklistTasks, updateChecklistTask, createChecklistTask, deleteChecklistTask, seedDefaultChecklist } from "@/lib/api-checklist";
-import { getCoupleProfile } from "@/lib/api-couples";
 import { TRADITION_CHECKLIST_ITEMS, CULTURAL_LABELS } from "@/constants/tradition-data";
 import { migrateChecklistFromAsyncStorage, needsMigration } from "@/lib/checklist-migration";
 import { rescheduleChecklistReminders } from "@/lib/notifications";
@@ -235,16 +234,6 @@ export default function ChecklistScreen() {
       queryClient.invalidateQueries({ queryKey: ["checklist"] });
       await rescheduleChecklistReminders();
     },
-  });
-
-  // Couple profile for traditions
-  const { data: coupleProfile } = useQuery({
-    queryKey: ['coupleProfile'],
-    queryFn: async () => {
-      if (!sessionToken) throw new Error('No session');
-      return getCoupleProfile(sessionToken);
-    },
-    enabled: !!sessionToken,
   });
 
   // Seed tradition-specific checklist tasks

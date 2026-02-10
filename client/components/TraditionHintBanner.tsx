@@ -14,7 +14,7 @@ interface TraditionHintBannerProps {
 }
 
 export function TraditionHintBanner({ traditions, category }: TraditionHintBannerProps) {
-  const theme = useTheme();
+  const { theme } = useTheme();
   const hints = getTraditionHints(traditions, category);
 
   if (hints.length === 0) return null;

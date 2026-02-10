@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     zIndex: 9999,
   },
   containerWeb: {
-    position: "fixed",
+    position: "absolute" as const,
   },
   toast: {
     backgroundColor: "rgba(20, 20, 20, 0.92)",

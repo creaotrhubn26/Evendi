@@ -489,7 +489,7 @@ export default function DeliveryAccessScreen() {
                       style={styles.galleryItem}
                       onPress={() => setSelectedImageIndex(index)}
                       onLongPress={() => {
-                        Alert.alert(item.label, null, [
+                        Alert.alert(item.label, undefined, [
                           { text: "Avbryt", style: "cancel" },
                           { text: favorites.has(item.id) ? "Fjern favoritt" : "Legg til favoritt", onPress: () => toggleFavorite(item) },
                           { text: "Last ned", onPress: () => openLink(item.url, item) },
