@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -62,12 +63,13 @@ const defaultDetails: PlannerDetails = {
   specialties: [], languagesSpoken: [],
 };
 
-const PLANNING_TYPES = ["Full planlegging", "Delvis planlegging", "Koordinering på dagen", "Månedskoordinering", "Ekteskapshelg", "Destinasjonsbryllup"];
-const SPECIALTIES = ["Luksuriøst", "Budsjett-vennlig", "Intim bryllup", "Stort bryllup", "Utendørs", "Strandryllup", "Fjell/natur", "Bybryllup", "Kulturelt/tradisjonelt", "LGBTQ+", "Eco-vennlig"];
+const PLANNING_TYPES = ["Full planlegging", "Delvis planlegging", "Koordinering på dagen", "Månedskoordinering", "Ekteskapshelg", "Destinasjonsarrangement"];
+const SPECIALTIES = ["Luksuriøst", "Budsjett-vennlig", "Intimt arrangement", "Stort arrangement", "Utendørs", "Strandbryllup", "Fjell/natur", "Byarrangement", "Kulturelt/tradisjonelt", "LGBTQ+", "Eco-vennlig"];
 const LANGUAGES = ["Norsk", "Engelsk", "Svensk", "Dansk", "Tysk", "Fransk", "Spansk", "Polsk", "Arabisk", "Urdu"];
 
 export default function PlannerDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -155,7 +157,7 @@ export default function PlannerDetailsScreen({ navigation }: { navigation: Nativ
   if (isLoading) return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <View style={styles.headerContent}><View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}><Feather name="clipboard" size={20} color="#FFFFFF" /></View><ThemedText style={[styles.headerTitle, { color: theme.text }]}>Bryllupsplanlegger</ThemedText></View>
+        <View style={styles.headerContent}><View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}><Feather name="clipboard" size={20} color="#FFFFFF" /></View><ThemedText style={[styles.headerTitle, { color: theme.text }]}>{isWedding ? "Bryllupsplanlegger" : "Arrangementsplanlegger"}</ThemedText></View>
         <Pressable onPress={() => navigation.goBack()} style={styles.closeButton}><Feather name="x" size={20} color={theme.textSecondary} /></Pressable>
       </View>
       <View style={styles.loadingContainer}><ActivityIndicator size="large" color={theme.accent} /></View>
@@ -173,7 +175,7 @@ export default function PlannerDetailsScreen({ navigation }: { navigation: Nativ
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("layers", "Planleggingstyper")}
           {renderChipGrid(PLANNING_TYPES, details.planningTypes, (item) => toggleArrayItem("planningTypes", item))}
-          {renderSwitch("Full planlegging inkludert", details.fullPlanningIncluded, (v) => updateDetail("fullPlanningIncluded", v), "Fra forlovelse til bryllupsdag")}
+          {renderSwitch("Full planlegging inkludert", details.fullPlanningIncluded, (v) => updateDetail("fullPlanningIncluded", v), isWedding ? "Fra forlovelse til bryllupsdag" : "Fra start til gjennomføring")}
           {renderSwitch("Delvis planlegging tilgjengelig", details.partialPlanningAvailable, (v) => updateDetail("partialPlanningAvailable", v))}
           {renderSwitch("Koordinering på dagen", details.dayOfCoordinationAvailable, (v) => updateDetail("dayOfCoordinationAvailable", v))}
           {renderSwitch("Månedskoordinering", details.monthOfCoordinationAvailable, (v) => updateDetail("monthOfCoordinationAvailable", v))}
@@ -199,9 +201,9 @@ export default function PlannerDetailsScreen({ navigation }: { navigation: Nativ
         </View>
 
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-          {renderSectionHeader("calendar", "Bryllupsdagen")}
+          {renderSectionHeader("calendar", isWedding ? "Bryllupsdagen" : "Arrangementsdagen")}
           {renderSwitch("Prøvemiddag-koordinering", details.rehearsalCoordination, (v) => updateDetail("rehearsalCoordination", v))}
-          {renderSwitch("Tidslinje for bryllupsdagen", details.dayOfTimeline, (v) => updateDetail("dayOfTimeline", v))}
+          {renderSwitch(isWedding ? "Tidslinje for bryllupsdagen" : "Tidslinje for dagen", details.dayOfTimeline, (v) => updateDetail("dayOfTimeline", v))}
           {renderSwitch("Gjesteadministrasjon", details.guestManagement, (v) => updateDetail("guestManagement", v))}
           {renderSwitch("RSVP-sporing", details.rsvpTracking, (v) => updateDetail("rsvpTracking", v))}
           {renderSwitch("Velkomstposer", details.welcomeBags, (v) => updateDetail("welcomeBags", v))}
@@ -210,10 +212,10 @@ export default function PlannerDetailsScreen({ navigation }: { navigation: Nativ
 
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("clock", "Kapasitet & Tid")}
-          {renderInput("Maks bryllup per måned", details.maxWeddingsPerMonth?.toString() || "", (v) => updateDetail("maxWeddingsPerMonth", v ? parseInt(v) : null), { placeholder: "4", keyboardType: "number-pad" })}
+          {renderInput(isWedding ? "Maks bryllup per måned" : "Maks arrangementer per måned", details.maxWeddingsPerMonth?.toString() || "", (v) => updateDetail("maxWeddingsPerMonth", v ? parseInt(v) : null), { placeholder: "4", keyboardType: "number-pad" })}
           {renderInput("Møter inkludert", details.meetingsIncluded?.toString() || "", (v) => updateDetail("meetingsIncluded", v ? parseInt(v) : null), { placeholder: "5", keyboardType: "number-pad" })}
           {renderSwitch("Virtuelle møter tilgjengelig", details.virtualMeetings, (v) => updateDetail("virtualMeetings", v))}
-          {renderInput("Timer på stedet (bryllupsdagen)", details.onSiteHours?.toString() || "", (v) => updateDetail("onSiteHours", v ? parseInt(v) : null), { placeholder: "12", keyboardType: "number-pad", suffix: "timer" })}
+          {renderInput(isWedding ? "Timer på stedet (bryllupsdagen)" : "Timer på stedet (arrangementsdagen)", details.onSiteHours?.toString() || "", (v) => updateDetail("onSiteHours", v ? parseInt(v) : null), { placeholder: "12", keyboardType: "number-pad", suffix: "timer" })}
           {renderInput("Ekstra time-rate", details.additionalHourlyRate?.toString() || "", (v) => updateDetail("additionalHourlyRate", v ? parseInt(v) : null), { placeholder: "1500", keyboardType: "number-pad", suffix: "kr/t" })}
         </View>
 
@@ -223,7 +225,7 @@ export default function PlannerDetailsScreen({ navigation }: { navigation: Nativ
           {details.assistantsProvided && renderInput("Antall assistenter", details.numberOfAssistants?.toString() || "", (v) => updateDetail("numberOfAssistants", v ? parseInt(v) : null), { placeholder: "2", keyboardType: "number-pad" })}
           {renderSwitch("Reise inkludert", details.travelIncluded, (v) => updateDetail("travelIncluded", v))}
           {renderInput("Kjøreradius", details.travelRadius?.toString() || "", (v) => updateDetail("travelRadius", v ? parseInt(v) : null), { placeholder: "100", keyboardType: "number-pad", suffix: "km" })}
-          {renderSwitch("Destinasjonsbryllup", details.destinationWeddings, (v) => updateDetail("destinationWeddings", v))}
+          {renderSwitch(isWedding ? "Destinasjonsbryllup" : "Destinasjonsarrangement", details.destinationWeddings, (v) => updateDetail("destinationWeddings", v))}
         </View>
 
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>

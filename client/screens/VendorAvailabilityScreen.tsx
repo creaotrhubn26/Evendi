@@ -20,6 +20,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
@@ -69,6 +70,7 @@ const STATUS_OPTIONS: Array<{
 
 export default function VendorAvailabilityScreen({ navigation }: NativeStackScreenProps<RootStackParamList>) {
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const queryClient = useQueryClient();
@@ -857,7 +859,7 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                 ]}
                 value={editName}
                 onChangeText={setEditName}
-                placeholder="F.eks. 'Hansen bryllup' eller 'Opptatt'"
+                placeholder={isWedding ? "F.eks. 'Hansen bryllup' eller 'Opptatt'" : "F.eks. 'Firmakonferanse' eller 'Opptatt'"}
                 placeholderTextColor={theme.textMuted}
                 maxLength={100}
               />
@@ -926,7 +928,7 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                 onChangeText={setEditNotes}
                 multiline
                 numberOfLines={3}
-                placeholder="F.eks. 'Annet bryllup samme dag'"
+                placeholder={isWedding ? "F.eks. 'Annet bryllup samme dag'" : "F.eks. 'Annet arrangement samme dag'"}
                 placeholderTextColor={theme.textMuted}
               />
 

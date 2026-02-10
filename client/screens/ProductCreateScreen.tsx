@@ -19,6 +19,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { CateringFields, CakeFields, FlowerFields, TransportFields, HairMakeupFields } from "@/lib/product-category-fields";
@@ -161,6 +162,7 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme, isDark } = useTheme();
+  const { isWedding } = useEventType();
   const queryClient = useQueryClient();
   
   const editingProduct = route.params?.product;
@@ -748,11 +750,11 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
       "Fotograf": [
         { name: "Heldagspakke", title: "Heldagsfotografering", price: "15000", unitType: "pakke", hours: "8", photos: "500", printRights: true },
         { name: "Timepakke", title: "Timesbasert fotografering", price: "2500", unitType: "time", hours: "1", photos: "50", printRights: false },
-        { name: "Premium pakke", title: "Premium bryllupspakke", price: "25000", unitType: "pakke", hours: "12", photos: "800", printRights: true, raw: true },
+        { name: "Premium pakke", title: isWedding ? "Premium bryllupspakke" : "Premium eventpakke", price: "25000", unitType: "pakke", hours: "12", photos: "800", printRights: true, raw: true },
       ],
       "Videograf": [
-        { name: "Highlight reel", title: "Bryllups highlight", price: "12000", unitType: "pakke", duration: "10", style: "cinematic", drone: true },
-        { name: "Fullfilm", title: "Full bryllupsfilm", price: "20000", unitType: "pakke", duration: "60", style: "documentary", drone: true },
+        { name: "Highlight reel", title: isWedding ? "Bryllups highlight" : "Event highlight", price: "12000", unitType: "pakke", duration: "10", style: "cinematic", drone: true },
+        { name: "Fullfilm", title: isWedding ? "Full bryllupsfilm" : "Full eventfilm", price: "20000", unitType: "pakke", duration: "60", style: "documentary", drone: true },
         { name: "Kombinert pakke", title: "Highlight + Fullfilm", price: "28000", unitType: "pakke", duration: "70", style: "cinematic", drone: true, highlight: true },
       ],
       "Musikk": [
@@ -762,29 +764,29 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
       ],
       "Venue": [
         { name: "Liten sal", title: "Intim festsal", price: "25000", unitType: "dag", capacityMin: "20", capacityMax: "60", indoor: "innendørs", catering: true },
-        { name: "Mellomstor sal", title: "Bryllupslokale", price: "40000", unitType: "dag", capacityMin: "60", capacityMax: "120", indoor: "innendørs", catering: true },
+        { name: "Mellomstor sal", title: isWedding ? "Bryllupslokale" : "Arrangementslokale", price: "40000", unitType: "dag", capacityMin: "60", capacityMax: "120", indoor: "innendørs", catering: true },
         { name: "Stor sal", title: "Grand ballroom", price: "65000", unitType: "dag", capacityMin: "120", capacityMax: "250", indoor: "begge", catering: true, parking: "100" },
       ],
       "Planlegger": [
-        { name: "Full planlegging", title: "Full bryllupsplanlegging", price: "45000", unitType: "pakke", serviceLevel: "full", months: "12", meetings: "10", coordination: true },
-        { name: "Dagskoordinering", title: "Bryllupsdagskoordinering", price: "12000", unitType: "dag", serviceLevel: "dagskoordinering", months: "1", meetings: "3", coordination: true },
+        { name: "Full planlegging", title: isWedding ? "Full bryllupsplanlegging" : "Full arrangementsplanlegging", price: "45000", unitType: "pakke", serviceLevel: "full", months: "12", meetings: "10", coordination: true },
+        { name: "Dagskoordinering", title: isWedding ? "Bryllupsdagskoordinering" : "Arrangementsdagskoordinering", price: "12000", unitType: "dag", serviceLevel: "dagskoordinering", months: "1", meetings: "3", coordination: true },
         { name: "Konsultasjon", title: "Planleggingskonsultasjon", price: "2500", unitType: "time", serviceLevel: "konsultasjon", months: "0", meetings: "1", coordination: false },
       ],
       "Catering": [
         { name: "3-retters meny", title: "3-retters middag", price: "750", unitType: "stk", cuisine: "norsk", tasteSample: true },
-        { name: "Buffet", title: "Bryllupsbuffet", price: "550", unitType: "stk", cuisine: "blandet", tasteSample: true },
+        { name: "Buffet", title: isWedding ? "Bryllupsbuffet" : "Arrangementsbuffet", price: "550", unitType: "stk", cuisine: "blandet", tasteSample: true },
         { name: "Dessertbord", title: "Dessertbord", price: "250", unitType: "stk", tasteSample: false },
       ],
       "Kake": [
-        { name: "3-etasjes kake", title: "Bryllupskake 3 etasjer", price: "4500", unitType: "stk", style: "elegant", tiers: "3", servings: "80", tasteSample: true },
-        { name: "Naked cake", title: "Naked bryllupskake", price: "3500", unitType: "stk", style: "rustic", tiers: "2", servings: "50", tasteSample: true },
+        { name: "3-etasjes kake", title: isWedding ? "Bryllupskake 3 etasjer" : "Festkake 3 etasjer", price: "4500", unitType: "stk", style: "elegant", tiers: "3", servings: "80", tasteSample: true },
+        { name: "Naked cake", title: isWedding ? "Naked bryllupskake" : "Naked festkake", price: "3500", unitType: "stk", style: "rustic", tiers: "2", servings: "50", tasteSample: true },
       ],
       "Blomster": [
         { name: "Brudebukett", title: "Brudebukett med roser", price: "1500", unitType: "stk", itemType: "brudebukett", flowers: "Roser, Peoner" },
         { name: "Borddekorasjon", title: "Borddekorasjon per bord", price: "450", unitType: "stk", itemType: "borddekorasjon", flowers: "Sesongblomster" },
       ],
       "Transport": [
-        { name: "Vintage bil", title: "Vintage bryllupsbil", price: "5000", unitType: "dag", vehicleType: "vintage-car", capacity: "4", driver: true },
+        { name: "Vintage bil", title: isWedding ? "Vintage bryllupsbil" : "Vintage eventbil", price: "5000", unitType: "dag", vehicleType: "vintage-car", capacity: "4", driver: true },
         { name: "Limousin", title: "Limousin", price: "7000", unitType: "dag", vehicleType: "limousine", capacity: "8", driver: true },
       ],
       "Hår & Makeup": [
@@ -956,7 +958,7 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   styles.textInput,
                   { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
                 ]}
-                placeholder="F.eks. Bryllupsfotografering"
+                placeholder={isWedding ? "F.eks. Bryllupsfotografering" : "F.eks. Eventfotografering"}
                 placeholderTextColor={theme.textMuted}
                 value={title}
                 onChangeText={setTitle}

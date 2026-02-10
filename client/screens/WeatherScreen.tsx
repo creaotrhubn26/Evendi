@@ -9,6 +9,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getWeddingDetails, getCoupleSession } from "@/lib/storage";
 import { getApiUrl } from "@/lib/query-client";
@@ -110,6 +111,12 @@ export default function WeatherScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { isWedding, config } = useEventType();
+
+  const eventDayLabel = isWedding ? "Bryllupsdagen" : config.labelNo + "en";
+  const eventDayLabelShort = isWedding ? "Bryllupsdag" : config.dateLabel.no.replace("dato", "dag");
+  const eventVenueLabel = isWedding ? "Bryllupssted" : "Arrangementssted";
+  const travelLabel = isWedding ? "Reisetid til bryllupet" : "Reisetid til arrangementet";
 
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -300,7 +307,7 @@ export default function WeatherScreen() {
                 {venue}
               </ThemedText>
               <ThemedText style={[styles.dateText, { color: theme.textMuted }]}>
-                Bryllupsdag: {formatDate(weddingDate)}
+                {eventDayLabelShort}: {formatDate(weddingDate)}
               </ThemedText>
 
               <View style={styles.statsRow}>
@@ -374,7 +381,7 @@ export default function WeatherScreen() {
           <View style={[styles.weddingDayCard, { backgroundColor: theme.backgroundDefault, borderColor: Colors.dark.accent }]}>
             <View style={styles.weddingDayHeader}>
               <Feather name="heart" size={20} color={Colors.dark.accent} />
-              <ThemedText type="h4" style={styles.weddingDayTitle}>Bryllupsdagen</ThemedText>
+              <ThemedText type="h4" style={styles.weddingDayTitle}>{eventDayLabel}</ThemedText>
               <ThemedText style={[styles.weddingDayDate, { color: theme.textSecondary }]}>
                 {bridgeData.weather.weddingDayForecast.date}
               </ThemedText>
@@ -436,7 +443,7 @@ export default function WeatherScreen() {
         <View style={[styles.venueSection, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <View style={styles.venueHeader}>
             <Feather name="map-pin" size={20} color={Colors.dark.accent} />
-            <ThemedText type="h4" style={styles.sectionTitle}>Bryllupssted</ThemedText>
+            <ThemedText type="h4" style={styles.sectionTitle}>{eventVenueLabel}</ThemedText>
             <Pressable onPress={() => setShowVenueSearch(!showVenueSearch)} style={styles.editVenueBtn}>
               <Feather name={showVenueSearch ? "x" : "edit-2"} size={16} color={Colors.dark.accent} />
             </Pressable>
@@ -489,7 +496,7 @@ export default function WeatherScreen() {
           style={[styles.travelHeader, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
           <Feather name="navigation" size={20} color={Colors.dark.accent} />
-          <ThemedText type="h4" style={[styles.sectionTitle, { flex: 1 }]}>Reisetid til bryllupet</ThemedText>
+          <ThemedText type="h4" style={[styles.sectionTitle, { flex: 1 }]}>{travelLabel}</ThemedText>
           <Feather name={showTravelSection ? "chevron-up" : "chevron-down"} size={20} color={theme.textSecondary} />
         </Pressable>
 

@@ -18,12 +18,13 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || "";
 
 const ROLE_OPTIONS = [
-  { key: "partner", label: "Partner / Ektefelle", icon: "heart" as const, description: "Full tilgang til bryllupsplanlegging" },
+  { key: "partner", label: "Partner / Ektefelle", icon: "heart" as const, description: "Full tilgang til planlegging" },
   { key: "toastmaster", label: "Toastmaster", icon: "mic" as const, description: "Tidslinje, program og taler" },
   { key: "bestman", label: "Bestmann", icon: "star" as const, description: "Tidslinje og program" },
   { key: "maidofhonor", label: "Forlover", icon: "star" as const, description: "Tidslinje og program" },
@@ -45,6 +46,7 @@ export default function JoinWeddingScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
 
   const [step, setStep] = useState<Step>("code");
   const [inviteCode, setInviteCode] = useState("");
@@ -138,7 +140,7 @@ export default function JoinWeddingScreen() {
       const data = await res.json();
 
       if (!res.ok) {
-        Alert.alert("Feil", data.error || "Kunne ikke bli med i bryllupet");
+        Alert.alert("Feil", data.error || "Kunne ikke bli med i arrangementet");
         return;
       }
 
@@ -171,10 +173,10 @@ export default function JoinWeddingScreen() {
         <Feather name="mail" size={32} color={accent} />
       </View>
       <ThemedText style={[styles.cardTitle, { color: textColor }]}>
-        Bli med i et bryllup
+        {isWedding ? "Bli med i et bryllup" : "Bli med i et arrangement"}
       </ThemedText>
       <ThemedText style={[styles.cardSubtitle, { color: subtextColor }]}>
-        Skriv inn invitasjonskoden du har mottatt fra brudeparet
+        {isWedding ? "Skriv inn invitasjonskoden du har mottatt fra brudeparet" : "Skriv inn invitasjonskoden du har mottatt"}
       </ThemedText>
 
       <View style={[styles.codeInputContainer, { backgroundColor: inputBg, borderColor }]}>
@@ -335,7 +337,7 @@ export default function JoinWeddingScreen() {
         ) : (
           <>
             <Feather name="check" size={18} color="#fff" style={{ marginRight: 8 }} />
-            <ThemedText style={styles.buttonText}>Bli med i bryllupet</ThemedText>
+            <ThemedText style={styles.buttonText}>{isWedding ? "Bli med i bryllupet" : "Bli med i arrangementet"}</ThemedText>
           </>
         )}
       </Pressable>
@@ -356,7 +358,7 @@ export default function JoinWeddingScreen() {
         Du er med! 🎉
       </ThemedText>
       <ThemedText style={[styles.cardSubtitle, { color: subtextColor }]}>
-        Du er nå registrert som {ROLE_OPTIONS.find((r) => r.key === selectedRole)?.label?.toLowerCase()} i bryllupet
+        Du er nå registrert som {ROLE_OPTIONS.find((r) => r.key === selectedRole)?.label?.toLowerCase()} i {isWedding ? "bryllupet" : "arrangementet"}
         {validationResult?.couple?.displayName ? ` til ${validationResult.couple.displayName}` : ""}.
       </ThemedText>
 

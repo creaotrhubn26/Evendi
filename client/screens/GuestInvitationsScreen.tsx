@@ -6,6 +6,7 @@ import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getCoupleSession } from "@/lib/storage";
 import { getGuestInvitations } from "@/lib/api-guest-invitations";
@@ -14,6 +15,7 @@ import { showToast } from "@/lib/toast";
 
 export default function GuestInvitationsScreen() {
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
 
@@ -66,7 +68,7 @@ export default function GuestInvitationsScreen() {
   };
 
   const shareViaEmail = async (email: string | null, url: string) => {
-    const subject = "Bryllupsinvitasjon";
+    const subject = isWedding ? "Bryllupsinvitasjon" : "Invitasjon";
     const body = `Hei! Her er invitasjonen: ${url}`;
     const mailto = `mailto:${email || ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     try {

@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -74,6 +75,7 @@ const MUSIC_GENRES = ["Pop", "Rock", "Jazz", "Klassisk", "Soul/R&B", "EDM/House"
 
 export default function MusicDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -197,7 +199,7 @@ export default function MusicDetailsScreen({ navigation }: { navigation: NativeS
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("award", "Tjenester")}
           {renderSwitch("Seremonimester/MC", details.mcServicesAvailable, (v) => updateDetail("mcServicesAvailable", v))}
-          {renderSwitch("Bryllupsleker-koordinering", details.weddingGameCoordination, (v) => updateDetail("weddingGameCoordination", v))}
+          {renderSwitch(isWedding ? "Bryllupsleker-koordinering" : "Aktivitetskoordinering", details.weddingGameCoordination, (v) => updateDetail("weddingGameCoordination", v))}
           {renderSwitch("Førstdans-koordinering", details.firstDanceCoordination, (v) => updateDetail("firstDanceCoordination", v))}
           {renderSwitch("Tilpasset spilleliste", details.customPlaylistCreation, (v) => updateDetail("customPlaylistCreation", v))}
           {renderSwitch("Tar imot ønsker", details.requestsAccepted, (v) => updateDetail("requestsAccepted", v))}

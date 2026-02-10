@@ -20,6 +20,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { usePhotoLocationScouting, type LocationSearchResult } from "@/hooks/usePhotoLocationScouting";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import {
@@ -55,6 +56,7 @@ export default function PhotoPlanScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const queryClient = useQueryClient();
 
   // Query for photo shots
@@ -563,7 +565,7 @@ export default function PhotoPlanScreen() {
                 borderColor: theme.border,
               },
             ]}
-            placeholder="F.eks. Brudeparet ved sjøen"
+            placeholder={isWedding ? "F.eks. Brudeparet ved sjøen" : "F.eks. Gruppebilde ved inngangen"}
             placeholderTextColor={theme.textMuted}
             value={newTitle}
             onChangeText={setNewTitle}
@@ -649,7 +651,7 @@ export default function PhotoPlanScreen() {
                   <View style={styles.locationPreviewRow}>
                     <Feather name="navigation" size={12} color="#2196F3" />
                     <ThemedText style={[styles.locationPreviewSub, { color: '#2196F3' }]}>
-                      Fra bryllupssted: {selectedLocation.travelFromVenue}
+                      Fra {isWedding ? "bryllupssted" : "arrangementssted"}: {selectedLocation.travelFromVenue}
                     </ThemedText>
                   </View>
                 ) : null}

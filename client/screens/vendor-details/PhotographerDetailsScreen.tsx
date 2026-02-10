@@ -16,6 +16,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -129,6 +130,7 @@ const PHOTOGRAPHY_STYLES = [
 
 export default function PhotographerDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   
@@ -380,7 +382,7 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
               {renderInput("Km-pris utover", details.travelFeePerKm?.toString() || "", (v) => updateDetail("travelFeePerKm", v ? parseInt(v) : null), { placeholder: "5", keyboardType: "number-pad", suffix: "kr/km" })}
             </>
           )}
-          {renderSwitch("Internasjonalt tilgjengelig", details.internationalAvailable, (v) => updateDetail("internationalAvailable", v), "Destination weddings")}
+          {renderSwitch("Internasjonalt tilgjengelig", details.internationalAvailable, (v) => updateDetail("internationalAvailable", v), isWedding ? "Destination weddings" : "Internasjonale oppdrag")}
         </View>
 
         {/* Stil */}

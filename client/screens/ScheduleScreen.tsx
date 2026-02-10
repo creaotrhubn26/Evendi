@@ -28,6 +28,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getWeddingDetails, getSpeeches, getAppLanguage, type AppLanguage } from "@/lib/storage";
 import { useSession } from "@/hooks/useSession";
@@ -162,6 +163,7 @@ export default function ScheduleScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<any>();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const { session } = useSession();
   const queryClient = useQueryClient();
 
@@ -544,7 +546,7 @@ export default function ScheduleScreen() {
                   borderColor: theme.border,
                 },
               ]}
-              placeholder={t("F.eks. Fotografering av brudepar", "e.g. Couple photos")}
+              placeholder={t(isWedding ? "F.eks. Fotografering av brudepar" : "F.eks. Fotografering", isWedding ? "e.g. Couple photos" : "e.g. Photo session")}
               placeholderTextColor={theme.textMuted}
               value={newTitle}
               onChangeText={setNewTitle}

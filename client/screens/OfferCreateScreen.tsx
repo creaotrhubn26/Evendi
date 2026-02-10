@@ -20,6 +20,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
@@ -74,6 +75,7 @@ export default function OfferCreateScreen() {
   
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const queryClient = useQueryClient();
 
   const [title, setTitle] = useState("");
@@ -93,7 +95,7 @@ export default function OfferCreateScreen() {
       {
         title: "Heldagspakke",
         validityDays: 14,
-        message: "Heldekkende pakke for hele bryllupsdagen. Inneholder det viktigste du trenger.",
+        message: isWedding ? "Heldekkende pakke for hele bryllupsdagen. Inneholder det viktigste du trenger." : "Heldekkende pakke for hele arrangementet. Inneholder det viktigste du trenger.",
       },
       {
         title: "Timepakke",
@@ -378,7 +380,7 @@ export default function OfferCreateScreen() {
               {isEditMode ? "Rediger tilbud" : "Nytt tilbud"}
             </ThemedText>
             <ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-              {isEditMode ? "Oppdater tilbudsinfo" : "Send tilbud til brudepar"}
+              {isEditMode ? "Oppdater tilbudsinfo" : isWedding ? "Send tilbud til brudepar" : "Send tilbud til kunde"}
             </ThemedText>
           </View>
         </View>
@@ -445,7 +447,7 @@ export default function OfferCreateScreen() {
               <View style={styles.emptyState}>
                 <Feather name="users" size={24} color={theme.textMuted} />
                 <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
-                  Ingen kontakter ennå. Start en samtale med et brudepar først.
+                  {isWedding ? "Ingen kontakter ennå. Start en samtale med et brudepar først." : "Ingen kontakter ennå. Start en samtale med en kunde først."}
                 </ThemedText>
               </View>
             ) : (
@@ -505,7 +507,7 @@ export default function OfferCreateScreen() {
                   styles.textInput,
                   { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
                 ]}
-                placeholder="F.eks. Bryllupspakke 2026"
+                placeholder={isWedding ? "F.eks. Bryllupspakke 2026" : "F.eks. Eventpakke 2026"}
                 placeholderTextColor={theme.textMuted}
                 value={title}
                 onChangeText={setTitle}
@@ -589,7 +591,7 @@ export default function OfferCreateScreen() {
                 <View style={[styles.dateInfoBadge, { backgroundColor: Colors.dark.accent + "15", borderColor: Colors.dark.accent + "30" }]}>
                   <Feather name="calendar" size={14} color={Colors.dark.accent} />
                   <ThemedText style={[styles.dateInfoText, { color: Colors.dark.accent }]}>
-                    Bryllup: {new Date(selectedContact.couple.weddingDate).toLocaleDateString("nb-NO", { day: "numeric", month: "long", year: "numeric" })}
+                    {isWedding ? "Bryllup" : "Arrangement"}: {new Date(selectedContact.couple.weddingDate).toLocaleDateString("nb-NO", { day: "numeric", month: "long", year: "numeric" })}
                   </ThemedText>
                 </View>
               )}

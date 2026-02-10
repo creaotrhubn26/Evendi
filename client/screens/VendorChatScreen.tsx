@@ -25,6 +25,7 @@ import { uploadChatImage, isSupabaseConfigured } from "@/lib/supabase-storage";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -63,6 +64,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const queryClient = useQueryClient();
   const flatListRef = useRef<FlatList>(null);
 
@@ -385,7 +387,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     { id: "book-3", label: "Kontrakt signert", message: "✅ Kontrakten er mottatt og alt er i orden! Jeg kommer tilbake med en detaljert tidsplan etter hvert.", category: "booking", color: "#4CAF50" },
 
     // --- Pre-wedding planning ---
-    { id: "plan-1", label: "Tidsplan klar", message: "📋 Tidsplanen for bryllupsdagen er klar! Sjekk den og gi meg beskjed om noe bør justeres.", category: "planning", color: "#2196F3" },
+    { id: "plan-1", label: "Tidsplan klar", message: isWedding ? "📋 Tidsplanen for bryllupsdagen er klar! Sjekk den og gi meg beskjed om noe bør justeres." : "📋 Tidsplanen for arrangementet er klar! Sjekk den og gi meg beskjed om noe bør justeres.", category: "planning", color: "#2196F3" },
     { id: "plan-2", label: "Trenger info", message: "Hei! Jeg trenger noen detaljer fra dere for å planlegge best mulig. Kan dere sende meg adresse og kontaktinfo for lokalet?", category: "planning", color: "#FF9800" },
     { id: "plan-3", label: "Befaring avtalt", message: "Befaring av lokalet er avtalt — jeg tar kontakt med dem direkte. Dere trenger ikke gjøre noe mer her!", category: "planning", color: "#4CAF50" },
 
@@ -411,7 +413,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     { value: "inquiry", label: "Henvendelse", icon: "message-circle" as const },
     { value: "booking", label: "Booking", icon: "check-square" as const },
     { value: "planning", label: "Planlegging", icon: "calendar" as const },
-    { value: "weddingday", label: "Bryllupsdag", icon: "heart" as const },
+    { value: "weddingday", label: isWedding ? "Bryllupsdag" : "Arrangementsdagen", icon: "heart" as const },
     { value: "delivery", label: "Levering", icon: "package" as const },
     ...(customQuickReplies.length > 0 ? [{ value: "custom", label: "Mine", icon: "star" as const }] : []),
   ];
@@ -948,7 +950,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
             maxLength={2000}
             accessible={true}
             accessibilityLabel="Meldingstekst"
-            accessibilityHint={editingMessage ? "Rediger melding" : "Skriv en ny melding til paret"}
+            accessibilityHint={editingMessage ? "Rediger melding" : isWedding ? "Skriv en ny melding til paret" : "Skriv en ny melding til kunden"}
           />
           <Pressable
             onPress={handleSend}

@@ -16,6 +16,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -133,6 +134,7 @@ const FLORAL_STYLES = [
 
 export default function FloristDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   
@@ -308,14 +310,14 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
         style={{ flex: 1 }}
         contentContainerStyle={[styles.content, { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }]}
       >
-        {/* Bryllupsbuketter */}
+        {/* Buketter */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("heart", "Personlige blomster")}
           
-          {renderSwitch("Brudebuketter", details.offersWeddingBouquet, (v) => updateDetail("offersWeddingBouquet", v))}
-          {renderSwitch("Brudepikebuketter", details.offersBridesmaidBouquets, (v) => updateDetail("offersBridesmaidBouquets", v))}
-          {renderSwitch("Brudgom knappehullsblomst", details.offersGroomBoutonniere, (v) => updateDetail("offersGroomBoutonniere", v))}
-          {renderSwitch("Forlovere knappehullsblomster", details.offersGroomsmenBoutonnieres, (v) => updateDetail("offersGroomsmenBoutonnieres", v))}
+          {renderSwitch(isWedding ? "Brudebuketter" : "Hovedbuketter", details.offersWeddingBouquet, (v) => updateDetail("offersWeddingBouquet", v))}
+          {renderSwitch(isWedding ? "Brudepikebuketter" : "Ekstra buketter", details.offersBridesmaidBouquets, (v) => updateDetail("offersBridesmaidBouquets", v))}
+          {renderSwitch(isWedding ? "Brudgom knappehullsblomst" : "Knappehullsblomst", details.offersGroomBoutonniere, (v) => updateDetail("offersGroomBoutonniere", v))}
+          {renderSwitch(isWedding ? "Forlovere knappehullsblomster" : "Ekstra knappehullsblomster", details.offersGroomsmenBoutonnieres, (v) => updateDetail("offersGroomsmenBoutonnieres", v))}
           {renderSwitch("Corsages", details.offersCorsages, (v) => updateDetail("offersCorsages", v), "Håndleddsblomster")}
           {renderSwitch("Hårblomster", details.offersHairFlowers, (v) => updateDetail("offersHairFlowers", v))}
         </View>
@@ -393,7 +395,7 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
           {renderSwitch("Rekvisittautleie", details.offersPropRental, (v) => updateDetail("offersPropRental", v), "Lykter, stativer etc.")}
           {(details.offersVaseRental || details.offersPropRental) && renderInput("Beskrivelse utleie", details.rentalDescription || "", (v) => updateDetail("rentalDescription", v || null), { placeholder: "Hva tilbyr dere...", multiline: true })}
           
-          {renderSwitch("Bukettpreservering", details.offersPreservation, (v) => updateDetail("offersPreservation", v), "Tørking/pressing av brudebukett")}
+          {renderSwitch("Bukettpreservering", details.offersPreservation, (v) => updateDetail("offersPreservation", v), isWedding ? "Tørking/pressing av brudebukett" : "Tørking/pressing av bukett")}
           {details.offersPreservation && renderInput("Preserveringsbeskrivelse", details.preservationDescription || "", (v) => updateDetail("preservationDescription", v || null), { placeholder: "Beskriv tjenesten..." })}
         </View>
 
@@ -413,7 +415,7 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
           {renderSectionHeader("calendar", "Kapasitet & Booking")}
           
           {renderInput("Minimum ordresum", details.minOrderValue?.toString() || "", (v) => updateDetail("minOrderValue", v ? parseInt(v) : null), { placeholder: "5000", keyboardType: "number-pad", suffix: "kr" })}
-          {renderInput("Maks bryllup per helg", details.maxWeddingsPerWeekend?.toString() || "", (v) => updateDetail("maxWeddingsPerWeekend", v ? parseInt(v) : null), { placeholder: "2", keyboardType: "number-pad" })}
+          {renderInput(isWedding ? "Maks bryllup per helg" : "Maks arrangementer per helg", details.maxWeddingsPerWeekend?.toString() || "", (v) => updateDetail("maxWeddingsPerWeekend", v ? parseInt(v) : null), { placeholder: "2", keyboardType: "number-pad" })}
           {renderInput("Book i forveien", details.advanceBookingWeeks?.toString() || "", (v) => updateDetail("advanceBookingWeeks", v ? parseInt(v) : null), { placeholder: "8", keyboardType: "number-pad", suffix: "uker" })}
         </View>
 

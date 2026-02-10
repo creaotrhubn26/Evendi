@@ -16,6 +16,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { ThemedText } from "@/components/ThemedText";
 import { AdminHeader } from "@/components/AdminHeader";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import {
   getAllChecklists,
@@ -39,6 +40,7 @@ export default function AdminChecklistsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const queryClient = useQueryClient();
 
   const [selectedCouple, setSelectedCouple] = useState<string | null>(null);
@@ -126,7 +128,7 @@ export default function AdminChecklistsScreen() {
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
       <AdminHeader 
         title="Sjekklister" 
-        subtitle={`${couples.length} par med sjekklister`}
+        subtitle={`${couples.length} ${isWedding ? "par" : "kunder"} med sjekklister`}
       />
       <ScrollView
         style={[styles.container, { backgroundColor: theme.backgroundRoot }]}

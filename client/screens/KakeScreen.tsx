@@ -30,6 +30,7 @@ import { getCoupleProfile } from '@/lib/api-couples';
 import { getCakeSizingSuggestion } from '@/constants/tradition-data';
 import { getCoupleSession } from '@/lib/storage';
 import { useTheme } from '../hooks/useTheme';
+import { useEventType } from '../hooks/useEventType';
 import { useVendorSearch } from '@/hooks/useVendorSearch';
 import { Colors } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
@@ -74,6 +75,7 @@ const TIMELINE_STEPS = [
 export function KakeScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const queryClient = useQueryClient();
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -993,7 +995,7 @@ export function KakeScreen() {
         >
           <Feather name="arrow-left" size={24} color={theme.text} />
         </TouchableOpacity>
-        <ThemedText style={styles.headerTitle}>Bryllupskake</ThemedText>
+        <ThemedText style={styles.headerTitle}>{isWedding ? "Bryllupskake" : "Kake"}</ThemedText>
         <View style={styles.headerRight} />
       </View>
 
@@ -1526,7 +1528,7 @@ export function KakeScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.budgetModalContent, { backgroundColor: theme.backgroundDefault }]}>
             <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Budsjett for Bryllupskake</ThemedText>
+              <ThemedText style={styles.modalTitle}>Budsjett for {isWedding ? "Bryllupskake" : "Kake"}</ThemedText>
               <TouchableOpacity onPress={() => setShowBudgetModal(false)}>
                 <Feather name="x" size={24} color={theme.text} />
               </TouchableOpacity>

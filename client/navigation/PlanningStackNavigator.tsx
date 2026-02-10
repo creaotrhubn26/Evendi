@@ -44,6 +44,7 @@ import { FotoVideografScreen } from "@/screens/FotoVideografScreen";
 import JoinWeddingScreen from "@/screens/JoinWeddingScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
+import { useEventType } from "@/hooks/useEventType";
 
 export type PlanningStackParamList = {
   Planning: undefined;
@@ -105,6 +106,7 @@ const Stack = createNativeStackNavigator<PlanningStackParamList>();
 
 export default function PlanningStackNavigator() {
   const screenOptions = useScreenOptions();
+  const { isWedding } = useEventType();
 
   return (
     <Stack.Navigator screenOptions={screenOptions}>
@@ -251,7 +253,7 @@ export default function PlanningStackNavigator() {
       <Stack.Screen
         name="Brudekjole"
         component={BrudekjoleScreen}
-        options={{ title: "Brudekjole" }}
+        options={{ title: isWedding ? "Brudekjole" : "Antrekk" }}
       />
       <Stack.Screen
         name="HaarMakeup"
@@ -276,7 +278,7 @@ export default function PlanningStackNavigator() {
       <Stack.Screen
         name="Kake"
         component={KakeScreen}
-        options={{ title: "Bryllupskake" }}
+        options={{ title: isWedding ? "Bryllupskake" : "Kake" }}
       />
       <Stack.Screen
         name="Fotograf"
@@ -301,7 +303,7 @@ export default function PlanningStackNavigator() {
       <Stack.Screen
         name="Planlegger"
         component={PlanleggerScreen}
-        options={{ title: "Bryllupsplanlegger" }}
+        options={{ title: isWedding ? "Bryllupsplanlegger" : "Arrangementsplanlegger" }}
       />
       <Stack.Screen
         name="FotoVideograf"
@@ -316,7 +318,7 @@ export default function PlanningStackNavigator() {
       <Stack.Screen
         name="JoinWedding"
         component={JoinWeddingScreen}
-        options={{ title: "Bli med i bryllup" }}
+        options={{ title: isWedding ? "Bli med i bryllup" : "Bli med i arrangement" }}
       />
     </Stack.Navigator>
   );

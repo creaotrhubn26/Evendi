@@ -12,6 +12,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { WhatsNewItem } from "../../shared/schema";
@@ -53,9 +54,11 @@ export default function WhatsNewScreen() {
     });
   }, [category]);
 
+  const { isWedding, config } = useEventType();
+  const coupleLabel = isWedding ? "Brudepar" : config.roleLabels.guestLabel.no;
   const categoryLabel = useMemo(
-    () => (category === "vendor" ? "Leverandører" : "Brudepar"),
-    [category]
+    () => (category === "vendor" ? "Leverandører" : coupleLabel),
+    [category, coupleLabel]
   );
 
   const {
@@ -128,7 +131,7 @@ export default function WhatsNewScreen() {
           <View style={styles.categoryToggle}>
             {([
               { key: "vendor", label: "Leverandør" },
-              { key: "couple", label: "Brudepar" },
+              { key: "couple", label: coupleLabel },
             ] as const).map((option) => {
               const isActive = option.key === category;
               return (

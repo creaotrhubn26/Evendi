@@ -9,6 +9,7 @@ import * as Notifications from "expo-notifications";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import {
   NotificationSettings,
@@ -35,6 +36,7 @@ export default function NotificationSettingsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
 
   const [settings, setSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const [hasWeddingDate, setHasWeddingDate] = useState(false);
@@ -216,9 +218,9 @@ export default function NotificationSettingsScreen() {
                       <Feather name="calendar" size={20} color="#BA68C8" />
                     </View>
                     <View style={styles.settingText}>
-                      <ThemedText style={styles.settingTitle}>Bryllupsnedtelling</ThemedText>
+                      <ThemedText style={styles.settingTitle}>{isWedding ? "Bryllupsnedtelling" : "Arrangementsnedtelling"}</ThemedText>
                       <ThemedText style={[styles.settingDescription, { color: theme.textMuted }]}>
-                        Varsler om dager igjen til bryllupet
+                        {isWedding ? "Varsler om dager igjen til bryllupet" : "Varsler om dager igjen til arrangementet"}
                       </ThemedText>
                     </View>
                   </View>

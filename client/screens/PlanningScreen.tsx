@@ -367,7 +367,7 @@ export default function PlanningScreen() {
       steps.push({ icon: "cloud" as const, label: t("Sjekk værmelding", "Check the forecast"), screen: "Weather", priority: "urgent" });
     }
     if (wedding && isDefaultCoupleName) {
-      steps.push({ icon: "heart" as const, label: t("Fyll inn bryllupsdetaljer", "Fill in wedding details"), screen: "WeddingDetails", priority: "normal" });
+      steps.push({ icon: "heart" as const, label: t(isWedding ? "Fyll inn bryllupsdetaljer" : "Fyll inn arrangementsdetaljer", isWedding ? "Fill in wedding details" : "Fill in event details"), screen: "WeddingDetails", priority: "normal" });
     }
     return steps.slice(0, 3); // Max 3 suggestions
   }, [schedule.length, budgetUsed, isOverBudget, daysLeft, wedding, isDefaultCoupleName, t]);
@@ -485,7 +485,7 @@ export default function PlanningScreen() {
             <View style={styles.ctaContent}>
               <ThemedText style={[styles.ctaTitle, { color: theme.text }]}>{t("Lag kjøreplan", "Create schedule")}</ThemedText>
               <ThemedText style={[styles.ctaSubtitle, { color: theme.textMuted }]}>
-                {t("Planlegg timeplan for bryllupsdagen", "Plan the wedding day timeline")}
+                {t(isWedding ? "Planlegg timeplan for bryllupsdagen" : "Planlegg timeplan for arrangementet", isWedding ? "Plan the wedding day timeline" : "Plan the event timeline")}
               </ThemedText>
             </View>
             <Feather name="arrow-right" size={20} color={theme.accent} />
@@ -636,7 +636,7 @@ export default function PlanningScreen() {
       <Animated.View entering={FadeInDown.delay(250).duration(400)}>
         <ThemedText style={styles.sectionTitle}>{t("Planlegging", "Planning")}</ThemedText>
         <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault }]}>
-          <ActionItem icon="calendar" label={t("Kjøreplan", "Schedule")} subtitle={t("Planlegg bryllupsdagen", "Plan the wedding day")} theme={theme} onPress={() => navigation.navigate("Schedule")} />
+          <ActionItem icon="calendar" label={t("Kjøreplan", "Schedule")} subtitle={t(isWedding ? "Planlegg bryllupsdagen" : "Planlegg arrangementet", isWedding ? "Plan the wedding day" : "Plan the event")} theme={theme} onPress={() => navigation.navigate("Schedule")} />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <ActionItem icon="clock" label={t("Tidslinje", "Timeline")} subtitle={t("Visuell oversikt", "Visual overview")} theme={theme} onPress={() => navigation.navigate("Timeline")} />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />

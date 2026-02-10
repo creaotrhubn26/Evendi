@@ -16,6 +16,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -149,6 +150,7 @@ const CUISINE_TYPES = [
 
 export default function CateringDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   
@@ -425,7 +427,7 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
             </>
           )}
           {renderSwitch("Tilpassede menyer", details.customMenusAvailable, (v) => updateDetail("customMenusAvailable", v))}
-          {renderSwitch("Bryllupskake", details.cakeAvailable, (v) => updateDetail("cakeAvailable", v))}
+          {renderSwitch(isWedding ? "Bryllupskake" : "Festkake", details.cakeAvailable, (v) => updateDetail("cakeAvailable", v))}
           {renderSwitch("Late night snacks", details.lateNightSnacks, (v) => updateDetail("lateNightSnacks", v))}
         </View>
 

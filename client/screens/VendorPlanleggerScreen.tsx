@@ -13,6 +13,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
@@ -86,6 +87,7 @@ const PRIORITY_LABELS = {
 export default function VendorPlanleggerScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const navigation = useNavigation<Navigation>();
   const queryClient = useQueryClient();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -264,7 +266,7 @@ export default function VendorPlanleggerScreen() {
 
   const saveMeeting = () => {
     if (!coupleName.trim() || !meetingDate.trim()) {
-      showToast('Vennligst fyll inn parnavn og dato');
+      showToast(isWedding ? 'Vennligst fyll inn parnavn og dato' : 'Vennligst fyll inn kundenavn og dato');
       return;
     }
 
@@ -559,7 +561,7 @@ export default function VendorPlanleggerScreen() {
       {/* Admin: Meetings with couples */}
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
-          <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Møter med par</ThemedText>
+          <ThemedText style={[styles.cardTitle, { color: theme.text }]}>{isWedding ? "Møter med par" : "Møter med kunder"}</ThemedText>
           <Pressable onPress={() => openMeetingModal()} style={styles.addIconBtn}>
             <Feather name="plus" size={18} color={theme.text} />
           </Pressable>
@@ -751,10 +753,10 @@ export default function VendorPlanleggerScreen() {
 
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
-              <ThemedText style={styles.formLabel}>Parnavn *</ThemedText>
+              <ThemedText style={styles.formLabel}>{isWedding ? "Parnavn *" : "Kundenavn *"}</ThemedText>
               <TextInput
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-                placeholder="f.eks. Anna & Jonas"
+                placeholder={isWedding ? "f.eks. Anna & Jonas" : "f.eks. Bedrift AS"}
                 placeholderTextColor={theme.textSecondary}
                 value={coupleName}
                 onChangeText={setCoupleName}

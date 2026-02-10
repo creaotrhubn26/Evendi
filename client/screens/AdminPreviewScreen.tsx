@@ -19,6 +19,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { AdminHeader } from "@/components/AdminHeader";
@@ -46,6 +47,7 @@ export default function AdminPreviewScreen({ route }: { route: RouteProp<RootSta
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { adminKey } = route.params || {};
 
@@ -58,8 +60,10 @@ export default function AdminPreviewScreen({ route }: { route: RouteProp<RootSta
   const previewModes: PreviewMode[] = [
     {
       type: "couple",
-      label: "Brudepar-visning",
-      description: "Se appen slik brudepar ser den. Velg et brudepar og se nøyaktig det de ser.",
+      label: isWedding ? "Brudepar-visning" : "Kunde-visning",
+      description: isWedding
+        ? "Se appen slik brudepar ser den. Velg et brudepar og se nøyaktig det de ser."
+        : "Se appen slik kunder ser den. Velg en kunde og se nøyaktig det de ser.",
       icon: "heart",
       color: "#FF6B9D",
     },
@@ -276,7 +280,7 @@ export default function AdminPreviewScreen({ route }: { route: RouteProp<RootSta
 
           <View style={{ marginBottom: Spacing.lg }}>
             <ThemedText style={styles.subtitle}>
-              Velg {selectedMode === "couple" ? "brudepar" : "leverandør"}:
+              Velg {selectedMode === "couple" ? (isWedding ? "brudepar" : "kunde") : "leverandør"}:
             </ThemedText>
           </View>
 
@@ -289,7 +293,7 @@ export default function AdminPreviewScreen({ route }: { route: RouteProp<RootSta
                 borderColor: theme.border,
               },
             ]}
-            placeholder={`Søk etter ${selectedMode === "couple" ? "brudepar" : "leverandør"}...`}
+            placeholder={`Søk etter ${selectedMode === "couple" ? (isWedding ? "brudepar" : "kunde") : "leverandør"}...`}
             placeholderTextColor={theme.textMuted}
             value={searchText}
             onChangeText={setSearchText}
@@ -304,7 +308,7 @@ export default function AdminPreviewScreen({ route }: { route: RouteProp<RootSta
               <Feather name="inbox" size={48} color={theme.textMuted} />
               <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
                 {users.length === 0
-                  ? `Ingen ${selectedMode === "couple" ? "brudepar" : "leverandører"} funnet`
+                  ? `Ingen ${selectedMode === "couple" ? (isWedding ? "brudepar" : "kunder") : "leverandører"} funnet`
                   : "Ingen resultater på søket"}
               </ThemedText>
             </View>

@@ -29,6 +29,7 @@ import { SwipeableRow } from "@/components/SwipeableRow";
 import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
@@ -54,11 +55,11 @@ const TIMELINE_STEPS = [
   { key: "consultationBooked", label: "Konsultasjon booket", icon: "calendar" as const },
   { key: "trialBooked", label: "Prøvetime booket", icon: "user" as const },
   { key: "lookSelected", label: "Look valgt", icon: "heart" as const },
-  { key: "weddingDayBooked", label: "Bryllupsdag booket", icon: "check-circle" as const },
+  { key: "weddingDayBooked", label: "Dagen booket", icon: "check-circle" as const },
 ];
 
 const SERVICE_TYPES = ["Hår", "Makeup", "Hår & Makeup", "Negler", "Annet"];
-const APPOINTMENT_TYPES = ["Konsultasjon", "Prøvetime", "Bryllupsdag", "Annet"];
+const APPOINTMENT_TYPES = ["Konsultasjon", "Prøvetime", "Dagen", "Annet"];
 const LOOK_TYPES = ["Hår", "Makeup", "Komplett look"];
 
 export default function HaarMakeupScreen() {

@@ -27,12 +27,24 @@ import { Speech } from "@/lib/types";
 import { Table } from "@/components/SeatingChart";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
+import { useEventType } from "@/hooks/useEventType";
 
-const DEFAULT_SPEECHES: Speech[] = [
+const WEDDING_DEFAULT_SPEECHES: Speech[] = [
   { id: "1", speakerName: "Mor til bruden", role: "Familie", time: "18:00", order: 1, status: "ready", tableId: null },
   { id: "2", speakerName: "Far til brudgommen", role: "Familie", time: "18:15", order: 2, status: "ready", tableId: null },
   { id: "3", speakerName: "Forlover", role: "Forlover", time: "18:30", order: 3, status: "ready", tableId: null },
   { id: "4", speakerName: "Toastmaster", role: "Toastmaster", time: "18:45", order: 4, status: "ready", tableId: null },
+];
+
+const CORPORATE_DEFAULT_SPEECHES: Speech[] = [
+  { id: "1", speakerName: "Daglig leder", role: "CEO", time: "18:00", order: 1, status: "ready", tableId: null },
+  { id: "2", speakerName: "Avdelingsleder", role: "Leder", time: "18:15", order: 2, status: "ready", tableId: null },
+  { id: "3", speakerName: "Konferansier", role: "Konferansier", time: "18:30", order: 3, status: "ready", tableId: null },
+];
+
+const EVENT_DEFAULT_SPEECHES: Speech[] = [
+  { id: "1", speakerName: "Hovedtaler", role: "Taler", time: "18:00", order: 1, status: "ready", tableId: null },
+  { id: "2", speakerName: "Konferansier", role: "Konferansier", time: "18:30", order: 2, status: "ready", tableId: null },
 ];
 
 export default function SpeechListScreen() {
@@ -41,6 +53,9 @@ export default function SpeechListScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
+  const { isWedding, isCorporate } = useEventType();
+  
+  const DEFAULT_SPEECHES = isWedding ? WEDDING_DEFAULT_SPEECHES : isCorporate ? CORPORATE_DEFAULT_SPEECHES : EVENT_DEFAULT_SPEECHES;
 
   const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [loading, setLoading] = useState(true);

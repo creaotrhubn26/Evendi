@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -85,6 +86,7 @@ const PRODUCT_BRANDS = ["MAC", "Charlotte Tilbury", "Bobbi Brown", "NARS", "Laur
 
 export default function BeautyDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -177,13 +179,13 @@ export default function BeautyDetailsScreen({ navigation }: { navigation: Native
       <KeyboardAwareScrollViewCompat style={{ flex: 1 }} contentContainerStyle={[styles.content, { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }]}>
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("heart", "Tjenester")}
-          {renderSwitch("Brudemakeup", details.offersBridalMakeup, (v) => updateDetail("offersBridalMakeup", v))}
-          {renderSwitch("Brudehår", details.offersBridalHair, (v) => updateDetail("offersBridalHair", v))}
-          {renderSwitch("Brudepikemakeup", details.offersBridesmaidMakeup, (v) => updateDetail("offersBridesmaidMakeup", v))}
-          {renderSwitch("Brudepikehår", details.offersBridesmaidHair, (v) => updateDetail("offersBridesmaidHair", v))}
-          {renderSwitch("Brudens mor", details.offersMotherOfBride, (v) => updateDetail("offersMotherOfBride", v))}
-          {renderSwitch("Brudgom-styling", details.offersGroomGrooming, (v) => updateDetail("offersGroomGrooming", v))}
-          {renderSwitch("Brudepikehår", details.offersFlowerGirlHair, (v) => updateDetail("offersFlowerGirlHair", v), "For små blomsterpiker")}
+          {renderSwitch(isWedding ? "Brudemakeup" : "Event-makeup", details.offersBridalMakeup, (v) => updateDetail("offersBridalMakeup", v))}
+          {renderSwitch(isWedding ? "Brudehår" : "Event-hår", details.offersBridalHair, (v) => updateDetail("offersBridalHair", v))}
+          {renderSwitch(isWedding ? "Brudepikemakeup" : "Gruppemedlem-makeup", details.offersBridesmaidMakeup, (v) => updateDetail("offersBridesmaidMakeup", v))}
+          {renderSwitch(isWedding ? "Brudepikehår" : "Gruppemedlem-hår", details.offersBridesmaidHair, (v) => updateDetail("offersBridesmaidHair", v))}
+          {renderSwitch(isWedding ? "Brudens mor" : "VIP-styling", details.offersMotherOfBride, (v) => updateDetail("offersMotherOfBride", v))}
+          {renderSwitch(isWedding ? "Brudgom-styling" : "Herrestyling", details.offersGroomGrooming, (v) => updateDetail("offersGroomGrooming", v))}
+          {renderSwitch(isWedding ? "Brudepikehår" : "Barnehår", details.offersFlowerGirlHair, (v) => updateDetail("offersFlowerGirlHair", v), isWedding ? "For små blomsterpiker" : "For yngre deltakere")}
         </View>
 
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
@@ -252,7 +254,7 @@ export default function BeautyDetailsScreen({ navigation }: { navigation: Native
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("clock", "Tidsbruk")}
           {renderInput("Rigge-tid", details.setupTimeMinutes?.toString() || "", (v) => updateDetail("setupTimeMinutes", v ? parseInt(v) : null), { placeholder: "30", keyboardType: "number-pad", suffix: "min" })}
-          {renderInput("Tid per brud", details.bridalTimeMinutes?.toString() || "", (v) => updateDetail("bridalTimeMinutes", v ? parseInt(v) : null), { placeholder: "90", keyboardType: "number-pad", suffix: "min" })}
+          {renderInput(isWedding ? "Tid per brud" : "Tid per kunde", details.bridalTimeMinutes?.toString() || "", (v) => updateDetail("bridalTimeMinutes", v ? parseInt(v) : null), { placeholder: "90", keyboardType: "number-pad", suffix: "min" })}
           {renderInput("Tid per ekstra person", details.additionalPersonTime?.toString() || "", (v) => updateDetail("additionalPersonTime", v ? parseInt(v) : null), { placeholder: "45", keyboardType: "number-pad", suffix: "min" })}
         </View>
 

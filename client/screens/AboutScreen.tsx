@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import type { AppSetting } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
@@ -24,6 +25,7 @@ export default function AboutScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme, designSettings } = useTheme();
+  const { isWedding } = useEventType();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   // Fetch app settings to check for active status messages
@@ -52,14 +54,18 @@ export default function AboutScreen() {
   const statusMessage = getSetting("status_message").trim();
   const statusType = getSetting("status_type", "info");
   const appName = getSetting("app_name", designSettings.appName ?? "Wedflow");
-  const appTagline = getSetting("app_tagline", designSettings.appTagline ?? "Din bryllupsplanlegger");
+  const appTagline = getSetting("app_tagline", designSettings.appTagline ?? (isWedding ? "Din bryllupsplanlegger" : "Din arrangementsplanlegger"));
   const appDescription = getSetting(
     "app_description",
-    "Wedflow er en komplett bryllupsplattform for par og leverandorer i Skandinavia. Planlegg gjestelister, bordplassering, budsjett, timeline og samarbeid med leverandorer i en felles oversikt."
+    isWedding
+      ? "Wedflow er en komplett bryllupsplattform for par og leverandorer i Skandinavia. Planlegg gjestelister, bordplassering, budsjett, timeline og samarbeid med leverandorer i en felles oversikt."
+      : "Wedflow er en komplett arrangementsplattform for planleggere og leverandorer i Skandinavia. Planlegg gjestelister, bordplassering, budsjett, timeline og samarbeid med leverandorer i en felles oversikt."
   );
   const companyDescription = getSetting(
     "app_company_description",
-    "Appen er laget av Norwedfilm, et team med erfaring fra bryllupsbransjen som forstar hva par trenger for en stressfri planleggingsprosess."
+    isWedding
+      ? "Appen er laget av Norwedfilm, et team med erfaring fra bryllupsbransjen som forstar hva par trenger for en stressfri planleggingsprosess."
+      : "Appen er laget av Norwedfilm, et team med erfaring fra eventbransjen som forstar hva arrangorer trenger for en stressfri planleggingsprosess."
   );
   const supportEmail = getSetting("support_email", "contact@norwedfilm.no");
   const supportPhone = getSetting("support_phone");
@@ -199,7 +205,7 @@ export default function AboutScreen() {
             <FeatureItem icon="message-circle" text="Meldinger med leverandører" theme={theme} />
             <FeatureItem icon="file-text" text="Pristilbud og tilbudsbehandling" theme={theme} />
             <FeatureItem icon="shopping-bag" text="Leverandørmarkedsplass" theme={theme} />
-            <FeatureItem icon="cloud" text="Værvarsel for bryllupsdagen" theme={theme} />
+            <FeatureItem icon="cloud" text={isWedding ? "Værvarsel for bryllupsdagen" : "Værvarsel for arrangementsdagen"} theme={theme} />
             <FeatureItem icon="bell" text="Påminnelser og varsler" theme={theme} />
             <FeatureItem icon="shield" text="GDPR-kompatibel datahåndtering" theme={theme} />
           </View>

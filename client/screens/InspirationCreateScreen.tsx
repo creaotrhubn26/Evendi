@@ -23,6 +23,7 @@ import * as ImagePicker from "expo-image-picker";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
@@ -57,6 +58,7 @@ export default function InspirationCreateScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const navigation = useNavigation();
   const route = useRoute<RouteProp<RouteParams, "params">>();
   const queryClient = useQueryClient();
@@ -425,7 +427,7 @@ export default function InspirationCreateScreen() {
             style={[styles.input, { backgroundColor: theme.backgroundRoot, borderColor: theme.border, color: theme.text }]}
             value={title}
             onChangeText={setTitle}
-            placeholder="F.eks. Romantisk hagebryllup"
+            placeholder={isWedding ? "F.eks. Romantisk hagebryllup" : "F.eks. Sommerkonferanse 2026"}
             placeholderTextColor={theme.textMuted}
           />
 
@@ -668,7 +670,7 @@ export default function InspirationCreateScreen() {
               <View style={{ flex: 1 }}>
                 <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Tillat kontaktskjema</ThemedText>
                 <ThemedText style={[styles.switchDesc, { color: theme.textMuted }]}>
-                  Brudepar kan sende deg forespørsler
+                  {isWedding ? "Brudepar kan sende deg forespørsler" : "Kunder kan sende deg forespørsler"}
                 </ThemedText>
               </View>
             </View>

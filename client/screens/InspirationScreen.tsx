@@ -22,6 +22,7 @@ import { Image } from "expo-image";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
@@ -78,6 +79,7 @@ export default function InspirationScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [savedItems, setSavedItems] = useState<Set<string>>(new Set());
@@ -88,7 +90,7 @@ export default function InspirationScreen() {
   const [inquiryEmail, setInquiryEmail] = useState("");
   const [inquiryPhone, setInquiryPhone] = useState("");
   const [inquiryMessage, setInquiryMessage] = useState("");
-  const [inquiryWeddingDate, setInquiryWeddingDate] = useState("");
+  const [inquiryEventDate, setInquiryEventDate] = useState("");
 
   const { data: categories = [] } = useQuery<InspirationCategory[]>({
     queryKey: ["/api/inspiration-categories"],
@@ -128,7 +130,7 @@ export default function InspirationScreen() {
     setInquiryEmail("");
     setInquiryPhone("");
     setInquiryMessage("");
-    setInquiryWeddingDate("");
+    setInquiryEventDate("");
   };
 
   const handleRefresh = async () => {
@@ -165,7 +167,7 @@ export default function InspirationScreen() {
       email: inquiryEmail.trim(),
       phone: inquiryPhone.trim() || undefined,
       message: inquiryMessage.trim(),
-      weddingDate: inquiryWeddingDate.trim() || undefined,
+      weddingDate: inquiryEventDate.trim() || undefined,
     });
   };
 
@@ -567,9 +569,9 @@ export default function InspirationScreen() {
 
               <TextInput
                 style={[styles.inquiryInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
-                value={inquiryWeddingDate}
-                onChangeText={setInquiryWeddingDate}
-                placeholder="Bryllupsdato (valgfritt)"
+                value={inquiryEventDate}
+                onChangeText={setInquiryEventDate}
+                placeholder={isWedding ? "Bryllupsdato (valgfritt)" : "Arrangementsdato (valgfritt)"}
                 placeholderTextColor={theme.textMuted}
               />
 

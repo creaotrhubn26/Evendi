@@ -17,6 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -130,6 +131,7 @@ const TABLE_TYPES = [
 
 export default function VenueDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   
@@ -458,7 +460,7 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
             </Pressable>
           )}
 
-          {renderSwitch("Tillat egendefinert oppsett", details.customTableSetupAllowed, (v) => updateDetail("customTableSetupAllowed", v), "Brudeparet kan ønske annet oppsett")}
+          {renderSwitch("Tillat egendefinert oppsett", details.customTableSetupAllowed, (v) => updateDetail("customTableSetupAllowed", v), isWedding ? "Brudeparet kan ønske annet oppsett" : "Kunden kan ønske annet oppsett")}
         </View>
 
         {/* Overnatting */}
@@ -561,7 +563,7 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
           {renderSwitch("Lydanlegg inkludert", details.hasAudioSystem, (v) => updateDetail("hasAudioSystem", v))}
           {renderSwitch("Dansegulv", details.hasDanceFloor, (v) => updateDetail("hasDanceFloor", v))}
           {renderSwitch("Kjøkken tilgjengelig", details.hasKitchen, (v) => updateDetail("hasKitchen", v), "For catering-bruk")}
-          {renderSwitch("Brudesuite", details.hasBridalSuite, (v) => updateDetail("hasBridalSuite", v), "Rom for klargjøring")}
+          {renderSwitch(isWedding ? "Brudesuite" : "Forberedelsesrom", details.hasBridalSuite, (v) => updateDetail("hasBridalSuite", v), "Rom for klargjøring")}
         </View>
 
         {/* Regler */}

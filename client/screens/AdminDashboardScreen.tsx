@@ -19,6 +19,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
@@ -37,6 +38,7 @@ export default function AdminDashboardScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [adminKey, setAdminKey] = useState("");
@@ -152,7 +154,7 @@ export default function AdminDashboardScreen() {
     {
       title: "Preview-modus",
       icon: "eye" as const,
-      description: "Se appen fra brudepar og leverandør-perspektivet",
+      description: isWedding ? "Se appen fra brudepar og leverandør-perspektivet" : "Se appen fra kunde- og leverandør-perspektivet",
       screen: "AdminPreview" as const,
     },
     {

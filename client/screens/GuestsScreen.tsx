@@ -28,6 +28,7 @@ import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
 import { useToast } from "@/components/ToastProvider";
 import { useTheme } from "@/hooks/useTheme";
+import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { GuestsStackParamList } from "@/navigation/GuestsStackNavigator";
 import { getCoupleSession, getAppLanguage, type AppLanguage } from "@/lib/storage";
@@ -79,6 +80,7 @@ export default function GuestsScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { isWedding } = useEventType();
   const navigation = useNavigation<NavigationProp>();
   const { showToast } = useToast();
 
@@ -1344,7 +1346,7 @@ export default function GuestsScreen() {
                   <Button
                     onPress={() => {
                       if (selectedInvite?.email && selectedInvite?.inviteUrl) {
-                        const subject = t("Bryllupsinvitasjon", "Wedding invitation");
+                        const subject = t(isWedding ? "Bryllupsinvitasjon" : "Invitasjon", isWedding ? "Wedding invitation" : "Invitation");
                         const body = t(
                           `Hei ${selectedInvite.name},\n\nHer er din invitasjon: ${selectedInvite.inviteUrl}\n`,
                           `Hi ${selectedInvite.name},\n\nHere is your invitation: ${selectedInvite.inviteUrl}\n`

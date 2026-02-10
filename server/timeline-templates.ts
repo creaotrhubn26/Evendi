@@ -235,7 +235,7 @@ export const TIMELINE_TEMPLATES: Record<string, TimelineTemplate[]> = {
 
 // Default generic timeline (if no tradition selected)
 export const DEFAULT_TIMELINE: TimelineTemplate[] = [
-  { time: "10:00", title: "Forberedelser", icon: "heart", description: "Brudens og brudgommens forberedelser" },
+  { time: "10:00", title: "Forberedelser", icon: "heart", description: "Forberedelser for dagen" },
   { time: "14:00", title: "Vielse", icon: "users", description: "Vielsesseremoni" },
   { time: "14:30", title: "Gratulering", icon: "heart", description: "Gratulasjon" },
   { time: "15:00", title: "Fotosession", icon: "camera", description: "Bilder av brudeparet" },
@@ -246,6 +246,50 @@ export const DEFAULT_TIMELINE: TimelineTemplate[] = [
   { time: "20:30", title: "Første dans", icon: "music", description: "Brudeparets første dans" },
   { time: "21:00", title: "Dans og fest", icon: "music", description: "Fest" },
 ];
+
+// Generic event timeline (for non-wedding events)
+export const GENERIC_EVENT_TIMELINE: TimelineTemplate[] = [
+  { time: "09:00", title: "Forberedelser", icon: "heart", description: "Forberedelser og oppsett" },
+  { time: "10:00", title: "Registrering", icon: "users", description: "Gjester ankommer og registrerer seg" },
+  { time: "10:30", title: "Velkomst", icon: "heart", description: "Velkomsttale" },
+  { time: "11:00", title: "Program", icon: "star", description: "Hovedprogram" },
+  { time: "12:00", title: "Fotosession", icon: "camera", description: "Bilder av deltakere" },
+  { time: "13:00", title: "Lunsj", icon: "coffee", description: "Lunsj og mingling" },
+  { time: "14:00", title: "Aktiviteter", icon: "music", description: "Underholdning og aktiviteter" },
+  { time: "16:00", title: "Taler", icon: "users", description: "Taler og markeringer" },
+  { time: "17:00", title: "Middag", icon: "coffee", description: "Festmiddag" },
+  { time: "20:00", title: "Avslutning", icon: "moon", description: "Avslutning og takk" },
+];
+
+// Corporate event timeline
+export const CORPORATE_EVENT_TIMELINE: TimelineTemplate[] = [
+  { time: "08:00", title: "Registrering", icon: "users", description: "Ankomst og registrering" },
+  { time: "08:30", title: "Kaffe og nettverk", icon: "coffee", description: "Nettverksbygging" },
+  { time: "09:00", title: "Åpningstale", icon: "heart", description: "Velkomst og introduksjon" },
+  { time: "09:30", title: "Presentasjon", icon: "star", description: "Hovedpresentasjon" },
+  { time: "10:30", title: "Pause", icon: "coffee", description: "Kaffepause" },
+  { time: "11:00", title: "Workshop", icon: "users", description: "Interaktiv workshop" },
+  { time: "12:00", title: "Lunsj", icon: "coffee", description: "Lunsj og nettverk" },
+  { time: "13:00", title: "Paneldebatt", icon: "users", description: "Paneldiskusjon" },
+  { time: "14:00", title: "Fotosession", icon: "camera", description: "Gruppebilde" },
+  { time: "15:00", title: "Oppsummering", icon: "star", description: "Oppsummering og veien videre" },
+  { time: "16:00", title: "Minglemiddag", icon: "coffee", description: "Middag og nettverk" },
+];
+
+// Get default timeline based on event type
+export function getDefaultTimeline(eventType?: string): TimelineTemplate[] {
+  if (!eventType || eventType === 'wedding') return DEFAULT_TIMELINE;
+  
+  const corporateTypes = [
+    'conference', 'seminar', 'workshop', 'corporate_party',
+    'team_building', 'product_launch', 'networking', 'gala',
+    'award_ceremony', 'exhibition', 'fundraiser', 'retreat', 'meetup'
+  ];
+  
+  if (corporateTypes.includes(eventType)) return CORPORATE_EVENT_TIMELINE;
+  
+  return GENERIC_EVENT_TIMELINE;
+}
 
 // Backward-compatible key migration map (old wedflow keys → new synced keys)
 export const LEGACY_KEY_MAP: Record<string, string> = {
