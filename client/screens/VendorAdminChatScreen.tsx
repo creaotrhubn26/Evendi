@@ -16,7 +16,7 @@ import type { AppSetting } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { showToast } from "@/lib/toast";
 
-const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
+const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 const WELCOME_MESSAGE = "Velkommen til Evendi Support!\n\nHer kan du kontakte oss direkte med spørsmål, problemer eller tilbakemeldinger. Vi svarer vanligvis innen 24 timer.\n\nFør du sender melding, sjekk våre ressurser:";
 const HELP_LINKS = [
   { label: "Fullstendig Dokumentasjon", icon: "book-open" as const, screen: "Documentation" as const, url: null },

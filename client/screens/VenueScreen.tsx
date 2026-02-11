@@ -132,7 +132,7 @@ export function VenueScreen() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
 
   const apiBase = getApiUrl();
-  const COUPLE_STORAGE_KEY = 'wedflow_couple_session';
+  const COUPLE_STORAGE_KEY = 'evendi_couple_session';
 
   // Fetch couple profile to get selected traditions
   const { data: coupleProfile } = useQuery({

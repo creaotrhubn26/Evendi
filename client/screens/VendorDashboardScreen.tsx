@@ -30,7 +30,7 @@ import { getVendorConfig, getEnabledTabs, type VendorTab } from "@/lib/vendor-ad
 import { showToast } from "@/lib/toast";
 import { showConfirm, showOptions } from "@/lib/dialogs";
 
-const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
+const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
 interface VendorSession {
   sessionToken: string;

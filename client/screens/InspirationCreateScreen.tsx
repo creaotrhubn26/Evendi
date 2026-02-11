@@ -30,7 +30,7 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { showToast } from "@/lib/toast";
 import { showConfirm, showOptions } from "@/lib/dialogs";
 
-const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
+const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
 async function getVendorSession(): Promise<{ sessionToken: string } | null> {
   const data = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);

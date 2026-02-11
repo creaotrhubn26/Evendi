@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApiUrl } from "@/lib/query-client";
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 export interface VendorSuggestion {
   id: string;

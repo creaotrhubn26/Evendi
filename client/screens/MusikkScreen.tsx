@@ -70,7 +70,7 @@ export function MusikkScreen() {
   // Vendor search for music autocomplete
   const musicSearch = useVendorSearch({ category: 'music' });
 
-  const COUPLE_STORAGE_KEY = 'wedflow_couple_session';
+  const COUPLE_STORAGE_KEY = 'evendi_couple_session';
 
   useFocusEffect(
     useCallback(() => {

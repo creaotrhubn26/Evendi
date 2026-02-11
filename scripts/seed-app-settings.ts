@@ -16,7 +16,7 @@ const SETTINGS: SettingSeed[] = [
   {
     key: "app_description",
     value:
-      "Wedflow er en komplett bryllupsplattform for par og leverandorer i Skandinavia. Planlegg gjestelister, bordplassering, budsjett, timeline og samarbeid med leverandorer i en felles oversikt.",
+      "Evendi er en komplett bryllupsplattform for par og leverandorer i Skandinavia. Planlegg gjestelister, bordplassering, budsjett, timeline og samarbeid med leverandorer i en felles oversikt.",
     category: "branding",
   },
   {

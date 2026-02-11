@@ -83,7 +83,7 @@ export default function BlomsterScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
 
-  const COUPLE_STORAGE_KEY = 'wedflow_couple_session';
+  const COUPLE_STORAGE_KEY = 'evendi_couple_session';
 
   // Load session token on mount
   React.useEffect(() => {

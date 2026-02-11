@@ -296,7 +296,7 @@ default:
 ```tsx
 const shareLink = async (token: string, name: string) => {
   try {
-    const domain = process.env.EXPO_PUBLIC_DOMAIN || "wedflow.app";
+    const domain = process.env.EXPO_PUBLIC_DOMAIN || "evendi.app";
     const link = `https://${domain}/coordinator/${token}`;
     await Share.share({
       message: `Hei! Du er invitert som ${name || "koordinator"} for vårt bryllup. Åpne lenken for å se program og talerliste:\n\n${link}`,

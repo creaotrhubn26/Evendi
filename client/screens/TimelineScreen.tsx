@@ -203,7 +203,7 @@ export default function TimelineScreen() {
 
       // Load booked vendors for travel display
       try {
-        const sessionRaw = await AsyncStorage.getItem('wedflow_couple_session');
+        const sessionRaw = await AsyncStorage.getItem('evendi_couple_session');
         if (sessionRaw) {
           const { sessionToken } = JSON.parse(sessionRaw);
           const vendorsRes = await fetch(

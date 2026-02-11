@@ -18,7 +18,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 
-const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
+const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
 type Navigation = NativeStackNavigationProp<any>;
 

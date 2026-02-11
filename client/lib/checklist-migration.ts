@@ -5,7 +5,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { seedDefaultChecklist, createChecklistTask } from "./api-checklist";
 
-const STORAGE_KEY = "@wedflow/checklist";
+const STORAGE_KEY = "@evendi/checklist";
 
 interface LegacyChecklistItem {
   id: string;

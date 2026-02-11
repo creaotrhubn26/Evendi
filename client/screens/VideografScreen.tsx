@@ -49,7 +49,7 @@ export function VideografScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
 
-  const COUPLE_STORAGE_KEY = 'wedflow_couple_session';
+  const COUPLE_STORAGE_KEY = 'evendi_couple_session';
 
   React.useEffect(() => {
     const loadSession = async () => {

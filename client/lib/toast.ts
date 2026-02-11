@@ -8,9 +8,9 @@ function showWebToastFallback(message: string, durationMs: number) {
   const doc = globalThis.document;
   if (!doc) return;
 
-  const existing = doc.getElementById("wedflow-toast-fallback");
+  const existing = doc.getElementById("evendi-toast-fallback");
   const el = existing ?? doc.createElement("div");
-  el.id = "wedflow-toast-fallback";
+  el.id = "evendi-toast-fallback";
   el.textContent = message;
   el.style.position = "fixed";
   el.style.left = "50%";

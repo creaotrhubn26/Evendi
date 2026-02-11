@@ -2,7 +2,7 @@
 
 ## 🎯 Overview
 
-Couples now select their cultural traditions during signup, and Wedflow automatically adapts the entire planning experience - starting with a culturally-appropriate timeline that reflects their specific ceremonies and rituals.
+Couples now select their cultural traditions during signup, and Evendi automatically adapts the entire planning experience - starting with a culturally-appropriate timeline that reflects their specific ceremonies and rituals.
 
 ## ✨ What's New
 
@@ -294,7 +294,7 @@ Server creates timeline with:
 ✅ **Preparation** - Know what ceremonies to expect
 ✅ **Specialization** - Showcase tradition-specific services
 
-### For Wedflow
+### For Evendi
 ✅ **Differentiation** - Unique feature competitors don't have
 ✅ **Personalization** - App adapts to each couple
 ✅ **Engagement** - Couples see value immediately
@@ -459,4 +459,4 @@ Couples now experience a **personalized, culturally-aware planning journey from 
 4. **Better vendor matching** (from previous implementation)
 5. **Flexible planning** that respects their cultural identity
 
-This feature positions Wedflow as the **only wedding planning app that truly understands multicultural weddings** from the moment couples join.
+This feature positions Evendi as the **only wedding planning app that truly understands multicultural weddings** from the moment couples join.

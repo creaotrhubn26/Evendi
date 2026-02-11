@@ -285,7 +285,7 @@ When access is denied, endpoints return `403 Forbidden` with details:
 ```json
 {
   "error": "Abonnement satt på pause",
-  "message": "Ditt abonnement er satt på pause. Betal for å fortsette å bruke Wedflow.",
+  "message": "Ditt abonnement er satt på pause. Betal for å fortsette å bruke Evendi.",
   "requiresPayment": true,
   "isPaused": true
 }
@@ -387,7 +387,7 @@ const transporter = nodemailer.createTransport({ ... });
 
 async function sendTrialExpiryEmail(vendor, subscription, tier) {
   await transporter.sendMail({
-    from: 'no-reply@wedflow.no',
+    from: 'no-reply@evendi.no',
     to: vendor.email,
     subject: '⚠️ Prøveperioden utløper snart',
     html: `... HTML template ...`
@@ -487,7 +487,7 @@ grep "Trial reminder sent" server.log
 
 ## 📄 License & Credits
 
-**System**: Wedflow Subscription Management
+**System**: Evendi Subscription Management
 **Author**: Implementation completed as per requirements
 **Date**: 2024
 **Version**: 1.0.0

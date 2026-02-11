@@ -2,7 +2,7 @@
 
 ## Overview
 
-The scheduled jobs for Wedflow are configured using GitHub Actions. This guide walks through the setup process.
+The scheduled jobs for Evendi are configured using GitHub Actions. This guide walks through the setup process.
 
 ## Scheduled Jobs
 
@@ -15,20 +15,20 @@ The scheduled jobs for Wedflow are configured using GitHub Actions. This guide w
 
 ### Step 1: Add GitHub Repository Secrets
 
-GitHub Actions needs two secrets to authenticate with your Wedflow API:
+GitHub Actions needs two secrets to authenticate with your Evendi API:
 
-1. **APP_URL**: Your Wedflow application URL
+1. **APP_URL**: Your Evendi application URL
 2. **ADMIN_KEY**: Your admin API key for authentication
 
 #### How to Add Secrets:
 
-1. Go to your GitHub repository: `https://github.com/creaotrhubn26/wedflow`
+1. Go to your GitHub repository: `https://github.com/creaotrhubn26/evendi`
 2. Click **Settings** → **Secrets and variables** → **Actions**
 3. Click **New repository secret**
 
 #### Secret 1: APP_URL
 - **Name**: `APP_URL`
-- **Value**: Your Wedflow application URL (e.g., `https://wedflow.example.com`)
+- **Value**: Your Evendi application URL (e.g., `https://evendi.example.com`)
 - Click **Add secret**
 
 #### Secret 2: ADMIN_KEY
@@ -56,7 +56,7 @@ Expected output:
 You can manually trigger the jobs to verify they work:
 
 1. Go to **Actions** tab in your GitHub repository
-2. Click **Wedflow Scheduled Jobs** workflow
+2. Click **Evendi Scheduled Jobs** workflow
 3. Click **Run workflow**
 4. Select job type: `all`, `expire-offers`, or `process-reminders`
 5. Click **Run workflow**
@@ -68,10 +68,10 @@ View the logs to see if jobs executed successfully.
 Jobs will now run automatically on schedule:
 
 - **Offer Expiration**: Every day at midnight UTC
-  - Check logs: **Actions** → **Wedflow Scheduled Jobs** → Daily run
+  - Check logs: **Actions** → **Evendi Scheduled Jobs** → Daily run
   
 - **Message Reminders**: Every hour (on the hour)
-  - Check logs: **Actions** → **Wedflow Scheduled Jobs** → Hourly run
+  - Check logs: **Actions** → **Evendi Scheduled Jobs** → Hourly run
 
 ---
 
@@ -120,9 +120,9 @@ on:
 
 ### View Job Logs
 
-1. Go to your repository: `https://github.com/creaotrhubn26/wedflow`
+1. Go to your repository: `https://github.com/creaotrhubn26/evendi`
 2. Click **Actions** tab
-3. Click **Wedflow Scheduled Jobs**
+3. Click **Evendi Scheduled Jobs**
 4. Click the specific run to view logs
 5. Expand each job to see detailed output
 
@@ -142,7 +142,7 @@ Status: 200
 **Failure**:
 ```
 Starting offer expiration job...
-curl: (7) Failed to connect to wedflow.example.com port 443: Connection timed out
+curl: (7) Failed to connect to evendi.example.com port 443: Connection timed out
 ❌ Offer expiration job failed at 2025-01-17 00:00:00 UTC
 ```
 

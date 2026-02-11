@@ -1,4 +1,4 @@
-# Wedflow - Deployment Guide
+# Evendi - Deployment Guide
 
 ## Pre-Deployment Checklist
 
@@ -97,7 +97,7 @@ crontab -e
 #### Option B: GitHub Actions (Recommended)
 Create `.github/workflows/scheduled-jobs.yml`:
 ```yaml
-name: Wedflow Scheduled Jobs
+name: Evendi Scheduled Jobs
 
 on:
   schedule:
@@ -295,10 +295,10 @@ curl -X POST http://localhost:5000/api/couple/reviews \
 ### Monitor Scheduled Jobs
 ```bash
 # Check job execution logs
-tail -f /var/log/wedflow/jobs.log
+tail -f /var/log/evendi/jobs.log
 
 # Or from GitHub Actions dashboard
-# Settings → Actions → All workflows → Wedflow Scheduled Jobs
+# Settings → Actions → All workflows → Evendi Scheduled Jobs
 ```
 
 ### Monitor Database
@@ -316,11 +316,11 @@ psql -c "SELECT COUNT(*) FROM message_reminders WHERE status='pending' AND sched
 ### Monitor Application
 ```bash
 # Check for errors in logs
-grep -i "error" /var/log/wedflow/app.log | tail -20
+grep -i "error" /var/log/evendi/app.log | tail -20
 
 # Monitor password hashing performance (should be ~100ms)
 # Look for slow auth endpoints in access logs
-tail -f /var/log/wedflow/access.log | grep login
+tail -f /var/log/evendi/access.log | grep login
 ```
 
 ---
@@ -336,7 +336,7 @@ git revert HEAD
 
 # Rebuild and restart
 npm run server:build
-systemctl restart wedflow  # or your restart command
+systemctl restart evendi  # or your restart command
 ```
 
 ### Rollback Database
@@ -375,11 +375,11 @@ After deployment, verify:
 
 If deployment fails:
 
-1. Check logs: `grep -i error /var/log/wedflow/*.log`
+1. Check logs: `grep -i error /var/log/evendi/*.log`
 2. Verify database connection: `psql -c "SELECT 1;"`
 3. Verify bcryptjs installed: `npm list bcryptjs`
 4. Verify migrations applied: `psql -c "SELECT * FROM vendor_sessions LIMIT 0;"`
-5. Restart application: `systemctl restart wedflow`
+5. Restart application: `systemctl restart evendi`
 
 For issues, contact the development team with:
 - Error message from logs

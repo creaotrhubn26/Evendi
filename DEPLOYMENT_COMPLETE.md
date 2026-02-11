@@ -2,7 +2,7 @@
 
 ## Summary
 
-All deployment steps have been successfully completed. The Wedflow application is now ready with all critical fixes applied.
+All deployment steps have been successfully completed. The Evendi application is now ready with all critical fixes applied.
 
 ---
 

@@ -8,8 +8,8 @@ const VIPPS_CONFIG = {
   // Test environment
   apiUrl: "https://apitest.vipps.no",
   tokenUrl: "https://apitest.vipps.no/accesstoken/get",
-  callbackUrl: process.env.VIPPS_CALLBACK_URL || "https://wedflow.no/api/vipps/callback",
-  redirectUrl: process.env.VIPPS_REDIRECT_URL || "https://wedflow.no/payment-success",
+  callbackUrl: process.env.VIPPS_CALLBACK_URL || "https://evendi.no/api/vipps/callback",
+  redirectUrl: process.env.VIPPS_REDIRECT_URL || "https://evendi.no/payment-success",
 };
 
 interface VIPPSPaymentInit {
@@ -86,8 +86,8 @@ export async function initiateVIPPSPayment(
       callbackPrefix: VIPPS_CONFIG.callbackUrl,
       callbackAuthToken: generateAuthToken(),
       isApp: false,
-      merchantWebsiteUrl: "https://wedflow.no",
-      termsUrl: "https://wedflow.no/terms",
+      merchantWebsiteUrl: "https://evendi.no",
+      termsUrl: "https://evendi.no/terms",
       staticShippingDetails: {
         isShippingRequired: false,
       },
@@ -96,7 +96,7 @@ export async function initiateVIPPSPayment(
       amount: payment.amount, // in øre
       orderId: payment.orderId,
       transactionText: payment.description,
-      paymentText: `Wedflow subscription - ${payment.description}`,
+      paymentText: `Evendi subscription - ${payment.description}`,
       refOrderId: payment.subscriptionTierId,
     },
   };

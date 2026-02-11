@@ -27,7 +27,7 @@ import { getApiUrl } from "@/lib/query-client";
 import { getCoupleProfile } from "@/lib/api-couples";
 import { useVendorLocationIntelligence } from "@/hooks/useVendorLocationIntelligence";
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 // Category configuration with icons and labels — event-type-aware
 // Maps internal category IDs to their vendor category names in VENDOR_CATEGORY_EVENT_MAP
@@ -206,7 +206,7 @@ export default function VendorMatchingScreen() {
       }
       
       // Load wedding details for preferences
-      const weddingData = await AsyncStorage.getItem("@wedflow/wedding_details");
+      const weddingData = await AsyncStorage.getItem("@evendi/wedding_details");
       if (weddingData) {
         const details = JSON.parse(weddingData);
         setPreferences(prev => ({

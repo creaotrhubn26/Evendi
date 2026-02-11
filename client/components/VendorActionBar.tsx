@@ -20,7 +20,7 @@ import { getApiUrl } from "@/lib/query-client";
 import type { VendorSuggestion } from "@/hooks/useVendorSearch";
 import { showToast } from "@/lib/toast";
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 interface VendorActionBarProps {
   vendor: VendorSuggestion;

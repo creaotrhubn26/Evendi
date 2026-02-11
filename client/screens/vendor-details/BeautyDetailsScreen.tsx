@@ -14,7 +14,7 @@ import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { showToast } from "@/lib/toast";
 
-const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
+const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
 interface BeautyDetails {
   // Tjenester

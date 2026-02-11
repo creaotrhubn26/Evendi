@@ -4,7 +4,7 @@ import { vendorSessions, vendors } from "./shared/schema";
 import bcrypt from "bcryptjs";
 
 async function testDeployment() {
-  console.log("🧪 Testing Wedflow Deployment...\n");
+  console.log("🧪 Testing Evendi Deployment...\n");
 
   try {
     // Test 1: Check vendor_sessions table exists

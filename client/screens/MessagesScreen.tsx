@@ -21,7 +21,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 interface Conversation {
   id: string;

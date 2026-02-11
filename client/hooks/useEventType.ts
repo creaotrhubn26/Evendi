@@ -9,7 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getCoupleProfile } from "@/lib/api-couples";
 import { getEventConfig, isFeatureEnabled, type EventType, type EventTypeConfig } from "@shared/event-types";
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 interface UseEventTypeResult {
   /** The current event type (defaults to "wedding") */

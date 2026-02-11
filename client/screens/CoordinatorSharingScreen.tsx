@@ -30,7 +30,7 @@ import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 // Helper: Safe session retrieval with JSON.parse error handling
 async function getCoupleSession(): Promise<{ sessionToken: string; weddingId?: string } | null> {

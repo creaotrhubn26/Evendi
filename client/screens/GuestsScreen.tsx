@@ -40,9 +40,9 @@ import type { GuestInvitation, WeddingGuest } from "@shared/schema";
 
 type NavigationProp = NativeStackNavigationProp<GuestsStackParamList>;
 
-const GUESTS_RSVP_FILTER_KEY = "wedflow_guests_rsvp_filter";
-const GUESTS_QUICK_FILTER_KEY = "wedflow_guests_quick_filter";
-const GUESTS_SEARCH_QUERY_KEY = "wedflow_guests_search_query";
+const GUESTS_RSVP_FILTER_KEY = "evendi_guests_rsvp_filter";
+const GUESTS_QUICK_FILTER_KEY = "evendi_guests_quick_filter";
+const GUESTS_SEARCH_QUERY_KEY = "evendi_guests_search_query";
 
 // Use theme tokens for status colors instead of hardcoded values
 const getStatusColor = (status: string, isDark: boolean): string => {

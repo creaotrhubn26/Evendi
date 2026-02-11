@@ -1,13 +1,13 @@
 # Supabase Storage Setup Guide
 
-This guide shows how to set up Supabase Storage for image uploads in Wedflow.
+This guide shows how to set up Supabase Storage for image uploads in Evendi.
 
 ## Step 1: Create a Supabase Project
 
 1. Go to [supabase.com](https://supabase.com)
 2. Click **New Project**
 3. Enter your project details:
-   - **Name**: wedflow-storage (or your choice)
+   - **Name**: evendi-storage (or your choice)
    - **Database Password**: Save this securely
    - **Region**: Choose one closest to you
 4. Wait for the project to be created (~2 minutes)

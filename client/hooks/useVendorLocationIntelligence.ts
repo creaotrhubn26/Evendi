@@ -72,9 +72,9 @@ export interface VendorLocationIntelligence {
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const COUPLE_STORAGE_KEY = 'wedflow_couple_session';
-const VENDOR_COORDS_CACHE_KEY = 'wedflow_vendor_coords_cache';
-const TRAVEL_CACHE_KEY = 'wedflow_vendor_travel_cache';
+const COUPLE_STORAGE_KEY = 'evendi_couple_session';
+const VENDOR_COORDS_CACHE_KEY = 'evendi_vendor_coords_cache';
+const TRAVEL_CACHE_KEY = 'evendi_vendor_travel_cache';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours for vendor travel data
 
 // ─── Geocode Cache ──────────────────────────────────────────────────────────

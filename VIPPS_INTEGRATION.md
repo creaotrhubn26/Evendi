@@ -1,4 +1,4 @@
-# Vipps Recurring - Implementasjonsguide for Wedflow
+# Vipps Recurring - Implementasjonsguide for Evendi
 
 ## Official Vipps Resources
 
@@ -16,7 +16,7 @@ https://brand.vippsmobilepay.com/document/61#/branding/online
 ## Valg av Vipps-løsning
 
 ### ✅ Vipps Recurring (Faste avtaler)
-**Dette er riktig løsning for Wedflow's abonnementssystem.**
+**Dette er riktig løsning for Evendi's abonnementssystem.**
 
 **Fordeler:**
 - 🔄 Automatisk månedlig trekk
@@ -130,8 +130,8 @@ app.post("/api/subscription/vipps/create-agreement", async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        merchantAgreementUrl: `https://wedflow.no/vendor/subscription/agreement/${subscriptionId}`,
-        merchantRedirectUrl: `https://wedflow.no/vendor/subscription/callback`,
+        merchantAgreementUrl: `https://evendi.no/vendor/subscription/agreement/${subscriptionId}`,
+        merchantRedirectUrl: `https://evendi.no/vendor/subscription/callback`,
         phoneNumber: subscription.vendor.phone, // Optional
         interval: 'MONTH',
         intervalCount: 1,
@@ -141,7 +141,7 @@ app.post("/api/subscription/vipps/create-agreement", async (req, res) => {
           amount: subscription.tier.priceNok * 100, // Øre (cents)
           currency: 'NOK',
         },
-        productDescription: `${subscription.tier.displayName} - Wedflow Vendor`,
+        productDescription: `${subscription.tier.displayName} - Evendi Vendor`,
         productName: subscription.tier.displayName,
       }),
     }
@@ -515,4 +515,4 @@ https://developer.vippsmobilepay.com/docs/test-environment/
 
 ---
 
-*Denne guiden gir deg alt du trenger for å implementere Vipps Recurring i Wedflow. Følg retningslinjene nøye for best brukeropplevelse og compliance med Vipps' krav.*
+*Denne guiden gir deg alt du trenger for å implementere Vipps Recurring i Evendi. Følg retningslinjene nøye for best brukeropplevelse og compliance med Vipps' krav.*

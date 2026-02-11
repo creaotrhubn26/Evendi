@@ -28,7 +28,7 @@ import { getAppLanguage, type AppLanguage } from "@/lib/storage";
 import { showToast } from "@/lib/toast";
 import type { ProfileStackParamList } from "@/navigation/ProfileStackNavigator";
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 interface Conversation {
   id: string;

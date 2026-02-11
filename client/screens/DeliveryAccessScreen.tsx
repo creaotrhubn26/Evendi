@@ -79,13 +79,13 @@ const trackDeliveryAction = async (
   action: string,
   deliveryItemId?: string,
   accessCode?: string,
-  source: string = 'wedflow-app'
+  source: string = 'evendi-app'
 ) => {
   try {
-    // Try monorepo bridge first, then wedflow
+    // Try monorepo bridge first, then evendi
     const urls = [
-      new URL('/api/wedflow/delivery-track', 'https://creatorhub-monorepo.onrender.com').toString(),
-      new URL('/api/wedflow/delivery-track', getApiUrl()).toString(),
+      new URL('/api/evendi/delivery-track', 'https://creatorhub-monorepo.onrender.com').toString(),
+      new URL('/api/evendi/delivery-track', getApiUrl()).toString(),
     ];
     for (const url of urls) {
       try {

@@ -28,11 +28,11 @@ function setupCors(app: express.Application) {
 
     // Allowlist production origins (including current domains and render host)
     const allowedProdOrigins = [
-      "https://wedflow.no",
-      "https://www.wedflow.no",
-      "https://api.wedflow.no",
-      "https://wedflow-api.onrender.com",
-      "https://wedflow-wedflow.vercel.app",
+      "https://evendi.no",
+      "https://www.evendi.no",
+      "https://api.evendi.no",
+      "https://evendi-api.onrender.com",
+      "https://evendi.vercel.app",
     ];
 
     // Allow custom list via env (comma-separated)

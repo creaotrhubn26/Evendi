@@ -80,7 +80,7 @@ const [sessionToken, setSessionToken] = useState<string | null>(null);
 // 3. Load session token
 React.useEffect(() => {
   const loadSession = async () => {
-    const data = await AsyncStorage.getItem('wedflow_couple_session');
+    const data = await AsyncStorage.getItem('evendi_couple_session');
     if (!data) return;
     const parsed = JSON.parse(data);
     setSessionToken(parsed?.sessionToken || null);
@@ -401,7 +401,7 @@ Currently supported cultural traditions (matching `CULTURAL_TRADITIONS` in Coupl
 ✅ **Better Leads** - Matched with couples needing their specific skills
 ✅ **Portfolio Showcase** - Tradition-specific work displayed prominently
 
-### For Wedflow
+### For Evendi
 ✅ **Differentiation** - Unique feature competitors lack
 ✅ **Retention** - Couples find value immediately
 ✅ **Word-of-Mouth** - Multicultural couples recommend app
@@ -570,7 +570,7 @@ curl http://localhost:5000/api/vendors/matching?category=catering
 
 ## 🎉 Summary
 
-This implementation brings **culturally-aware vendor matching** to Wedflow, making it the only wedding planning app that truly understands multicultural weddings. By automatically prioritizing vendors with relevant cultural expertise, we:
+This implementation brings **culturally-aware vendor matching** to Evendi, making it the only wedding planning app that truly understands multicultural weddings. By automatically prioritizing vendors with relevant cultural expertise, we:
 
 1. **Save couples time** - No manual filtering needed
 2. **Improve match quality** - Better vendor-couple fit

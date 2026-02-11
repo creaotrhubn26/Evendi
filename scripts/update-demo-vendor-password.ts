@@ -16,7 +16,7 @@ async function updateDemoVendorPassword() {
   const result = await db
     .update(vendors)
     .set({ password: hashedPassword })
-    .where(eq(vendors.email, 'demo.vendor@wedflow.no'))
+    .where(eq(vendors.email, 'demo.vendor@evendi.no'))
     .returning();
 
   console.log('Demo vendor password updated:', result.length > 0 ? 'Success' : 'Not found');

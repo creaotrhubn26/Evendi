@@ -20,8 +20,8 @@ async function seed() {
     const guides = [
       // ── Vendor guides ──
       {
-        title: "Kom i gang med Wedflow",
-        description: "En grundig gjennomgang av hvordan du setter opp din leverandørprofil og kommer i gang med Wedflow-plattformen.",
+        title: "Kom i gang med Evendi",
+        description: "En grundig gjennomgang av hvordan du setter opp din leverandørprofil og kommer i gang med Evendi-plattformen.",
         videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         thumbnail: "https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
         duration: "05:30",
@@ -100,7 +100,7 @@ async function seed() {
       // ── Couple guides ──
       {
         title: "Kom i gang med bryllupsplanlegging",
-        description: "En introduksjon til alle planleggingsverktøyene i Wedflow — sjekkliste, budsjett, gjesteliste og mer.",
+        description: "En introduksjon til alle planleggingsverktøyene i Evendi — sjekkliste, budsjett, gjesteliste og mer.",
         videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         thumbnail: "https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
         duration: "06:00",

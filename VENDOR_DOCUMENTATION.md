@@ -1,6 +1,6 @@
-# Wedflow Leverandørdokumentasjon
+# Evendi Leverandørdokumentasjon
 
-Velkommen til Wedflow! Denne guiden hjelper deg å komme i gang som leverandør på plattformen.
+Velkommen til Evendi! Denne guiden hjelper deg å komme i gang som leverandør på plattformen.
 
 ## Innholdsfortegnelse
 
@@ -21,7 +21,7 @@ Velkommen til Wedflow! Denne guiden hjelper deg å komme i gang som leverandør 
 
 ### Registrering
 
-1. Åpne Wedflow-appen
+1. Åpne Evendi-appen
 2. Gå til **Profil** → **Leverandørportal**
 3. Velg **Bli leverandør**
 4. Fyll ut skjemaet:
@@ -36,7 +36,7 @@ Velkommen til Wedflow! Denne guiden hjelper deg å komme i gang som leverandør 
 
 ### Godkjenning
 
-- Din søknad vil bli gjennomgått av Wedflow-admin
+- Din søknad vil bli gjennomgått av Evendi-admin
 - Du får e-postvarsel når søknaden er godkjent
 - Innloggingsinformasjon sendes til din e-post
 - Statusverdier:
@@ -94,7 +94,7 @@ Dashboard er ditt kontrollsenter med 6 hovedfaner:
 **Fra venstre til høyre:**
 - 🚪 **Logg ut**: Logg ut av leverandørportalen
 - ❓ **Hjelp & FAQ**: Åpne hjelpesenter med ofte stilte spørsmål
-- 💬 **Wedflow Support**: Chat direkte med Wedflow-teamet
+- 💬 **Evendi Support**: Chat direkte med Evendi-teamet
 
 ---
 
@@ -472,11 +472,11 @@ Konfigurer hvilke varsler du vil motta:
 
 ## Support
 
-### Wedflow Support Chat
+### Evendi Support Chat
 
 **Raskeste vei til hjelp:**
 
-1. Dashboard → Trykk **💬** (Wedflow Support)
+1. Dashboard → Trykk **💬** (Evendi Support)
 2. Skriv melding direkte til teamet
 3. Vi svarer vanligvis innen 24 timer
 
@@ -502,7 +502,7 @@ Konfigurer hvilke varsler du vil motta:
 
 ### Kontakt via e-post
 
-**Support:** support@wedflow.no  
+**Support:** support@evendi.no  
 **Generelle henvendelser:** contact@norwedfilm.no
 
 ### Nyttige lenker
@@ -545,7 +545,7 @@ Konfigurer hvilke varsler du vil motta:
 
 ### Generelt
 
-**Q: Hvor mye koster det å være leverandør på Wedflow?**  
+**Q: Hvor mye koster det å være leverandør på Evendi?**  
 A: Gratis å registrere seg. Kontakt oss for kommersielle avtaler.
 
 **Q: Hvilke kategorier finnes?**  
@@ -629,7 +629,7 @@ A: Kontakt support hvis du opplever problemer med kommunikasjon.
 Vi setter stor pris på tilbakemeldinger!
 
 **Forslag til forbedringer:**  
-Bruk **Wedflow Support Chat** eller send e-post til support@wedflow.no
+Bruk **Evendi Support Chat** eller send e-post til support@evendi.no
 
 **Rapporter feil:**  
 Beskriv problemet detaljert:
@@ -644,7 +644,7 @@ Beskriv problemet detaljert:
 
 ---
 
-**Takk for at du bruker Wedflow! 🎉**
+**Takk for at du bruker Evendi! 🎉**
 
 Vi ønsker deg lykke til som leverandør på plattformen.
 

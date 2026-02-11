@@ -41,7 +41,7 @@ import { useEventType } from "@/hooks/useEventType";
 import { getDateLabel } from "@shared/event-types";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || "";
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 type NavigationProp = NativeStackNavigationProp<PlanningStackParamList>;
 

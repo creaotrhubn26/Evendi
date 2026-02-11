@@ -7,10 +7,10 @@ import { showToast as showToastNative } from "@/lib/toast";
 
 const isWeb = Platform.OS === "web";
 
-const NOTIFICATION_SETTINGS_KEY = "@wedflow/notification_settings";
-const COUNTDOWN_NOTIFICATIONS_KEY = "@wedflow/countdown_notifications";
-const CHECKLIST_NOTIFICATIONS_KEY = "@wedflow/checklist_notifications";
-const CUSTOM_REMINDERS_KEY = "@wedflow/custom_reminders";
+const NOTIFICATION_SETTINGS_KEY = "@evendi/notification_settings";
+const COUNTDOWN_NOTIFICATIONS_KEY = "@evendi/countdown_notifications";
+const CHECKLIST_NOTIFICATIONS_KEY = "@evendi/checklist_notifications";
+const CUSTOM_REMINDERS_KEY = "@evendi/custom_reminders";
 
 type NotificationCopy = {
   toastChecklistFailed: string;

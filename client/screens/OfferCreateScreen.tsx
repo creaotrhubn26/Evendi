@@ -26,7 +26,7 @@ import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 
-const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
+const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
 interface VendorProduct {
   id: string;

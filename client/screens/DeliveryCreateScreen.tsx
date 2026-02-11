@@ -30,7 +30,7 @@ import { showConfirm } from "@/lib/dialogs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp, ParamListBase } from "@react-navigation/native";
 
-const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
+const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
 interface DeliveryItemInput {
   id: string; // Stable ID for lists

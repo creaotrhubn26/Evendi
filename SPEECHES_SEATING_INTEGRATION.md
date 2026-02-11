@@ -272,7 +272,7 @@ In SpeechListScreen form:
 
 ### Speeches (Local Storage)
 ```typescript
-// Key: 'wedflow_speeches'
+// Key: 'evendi_speeches'
 // Type: Speech[]
 interface Speech {
   id: string;

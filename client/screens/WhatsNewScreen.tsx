@@ -19,7 +19,7 @@ import type { WhatsNewItem } from "../../shared/schema";
 
 type WhatsNewScreenRouteProp = RouteProp<{ WhatsNew: { category?: "vendor" | "couple" } }, "WhatsNew">;
 
-const WHATS_NEW_CATEGORY_KEY = "wedflow_whats_new_category";
+const WHATS_NEW_CATEGORY_KEY = "evendi_whats_new_category";
 
 export default function WhatsNewScreen() {
   const insets = useSafeAreaInsets();

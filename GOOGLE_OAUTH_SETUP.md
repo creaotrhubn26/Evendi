@@ -1,6 +1,6 @@
 # Google OAuth Setup Guide
 
-This guide explains how to configure Google OAuth with Supabase for Wedflow.
+This guide explains how to configure Google OAuth with Supabase for Evendi.
 
 ## Step 1: Supabase Configuration (Already Done ✅)
 
@@ -21,7 +21,7 @@ You've already enabled Google OAuth in Supabase and added your Google credential
 
 The OAuth flow is now implemented:
 
-**New file created:** `/workspaces/wedflow/client/lib/supabase-auth.ts`
+**New file created:** `/workspaces/evendi/client/lib/supabase-auth.ts`
 - `signInWithGoogle()` - Opens Google login in browser
 - `getSession()` - Gets current session
 - `signOut()` - Logs out user

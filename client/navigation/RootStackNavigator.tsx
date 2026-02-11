@@ -52,6 +52,7 @@ import DocumentationScreen from "@/screens/DocumentationScreen";
 import VideoGuidesScreen from "@/screens/VideoGuidesScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { AuthProvider } from "@/lib/AuthContext";
+import { migrateFromWedflow } from "@/lib/storage";
 import {
   VenueDetailsScreen,
   PhotographerDetailsScreen,
@@ -139,8 +140,8 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
-const ADMIN_STORAGE_KEY = "wedflow_admin_key";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
+const ADMIN_STORAGE_KEY = "evendi_admin_key";
 
 export default function RootStackNavigator() {
   const screenOptions = useScreenOptions();
@@ -157,6 +158,9 @@ export default function RootStackNavigator() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        // Migrate legacy @wedflow/* keys → @evendi/* (one-time, safe)
+        await migrateFromWedflow();
+
         const [session, adminKey] = await Promise.all([
           AsyncStorage.getItem(COUPLE_STORAGE_KEY),
           AsyncStorage.getItem(ADMIN_STORAGE_KEY),

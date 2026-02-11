@@ -11,18 +11,18 @@ import {
 } from "./types";
 
 const KEYS = {
-  WEDDING_DETAILS: "@wedflow/wedding_details",
-  SCHEDULE: "@wedflow/schedule",
-  TIMELINE_CULTURE: "@wedflow/timeline_culture",
-  GUESTS: "@wedflow/guests",
-  TABLES: "@wedflow/tables",
-  SPEECHES: "@wedflow/speeches",
-  IMPORTANT_PEOPLE: "@wedflow/important_people",
-  PHOTO_SHOTS: "@wedflow/photo_shots",
-  BUDGET_ITEMS: "@wedflow/budget_items",
-  TOTAL_BUDGET: "@wedflow/total_budget",
-  COUPLE_SESSION: "wedflow_couple_session",
-  APP_LANGUAGE: "@wedflow/app_language",
+  WEDDING_DETAILS: "@evendi/wedding_details",
+  SCHEDULE: "@evendi/schedule",
+  TIMELINE_CULTURE: "@evendi/timeline_culture",
+  GUESTS: "@evendi/guests",
+  TABLES: "@evendi/tables",
+  SPEECHES: "@evendi/speeches",
+  IMPORTANT_PEOPLE: "@evendi/important_people",
+  PHOTO_SHOTS: "@evendi/photo_shots",
+  BUDGET_ITEMS: "@evendi/budget_items",
+  TOTAL_BUDGET: "@evendi/total_budget",
+  COUPLE_SESSION: "evendi_couple_session",
+  APP_LANGUAGE: "@evendi/app_language",
 };
 
 export type AppLanguage = "nb" | "en";
@@ -197,4 +197,77 @@ export async function clearAllData(): Promise<void> {
 
 export function generateId(): string {
   return Math.random().toString(36).substring(2, 11);
+}
+
+// ── Legacy key migration (Wedflow → Evendi) ──────────────────────────
+// Maps old @wedflow/* AsyncStorage keys to new @evendi/* keys.
+// Run once on app startup to preserve existing user data.
+const LEGACY_KEYS: Record<string, string> = {
+  "@wedflow/wedding_details": "@evendi/wedding_details",
+  "@wedflow/schedule": "@evendi/schedule",
+  "@wedflow/timeline_culture": "@evendi/timeline_culture",
+  "@wedflow/guests": "@evendi/guests",
+  "@wedflow/tables": "@evendi/tables",
+  "@wedflow/speeches": "@evendi/speeches",
+  "@wedflow/important_people": "@evendi/important_people",
+  "@wedflow/photo_shots": "@evendi/photo_shots",
+  "@wedflow/budget_items": "@evendi/budget_items",
+  "@wedflow/total_budget": "@evendi/total_budget",
+  "@wedflow/app_language": "@evendi/app_language",
+  "@wedflow/checklist": "@evendi/checklist",
+  "@wedflow/checklist_notifications": "@evendi/checklist_notifications",
+  "@wedflow/countdown_notifications": "@evendi/countdown_notifications",
+  "@wedflow/custom_reminders": "@evendi/custom_reminders",
+  "@wedflow/notification_settings": "@evendi/notification_settings",
+  "wedflow_couple_session": "evendi_couple_session",
+  "wedflow_vendor_session": "evendi_vendor_session",
+  "wedflow_admin_key": "evendi_admin_key",
+  "wedflow_seating": "evendi_seating",
+  "wedflow_scouting_travel_cache": "evendi_scouting_travel_cache",
+  "wedflow_vendor_coords_cache": "evendi_vendor_coords_cache",
+  "wedflow_vendor_travel_cache": "evendi_vendor_travel_cache",
+  "wedflow_guests_quick_filter": "evendi_guests_quick_filter",
+  "wedflow_guests_rsvp_filter": "evendi_guests_rsvp_filter",
+  "wedflow_guests_search_query": "evendi_guests_search_query",
+  "wedflow_stress_tracker_affirmation": "evendi_stress_tracker_affirmation",
+  "wedflow_stress_tracker_countdown": "evendi_stress_tracker_countdown",
+  "wedflow_stress_tracker_haptics": "evendi_stress_tracker_haptics",
+  "wedflow_stress_tracker_session_minutes": "evendi_stress_tracker_session_minutes",
+  "wedflow_stress_tracker_total_breaths": "evendi_stress_tracker_total_breaths",
+  "wedflow_vendor_custom_quick_templates": "evendi_vendor_custom_quick_templates",
+  "wedflow_whats_new_category": "evendi_whats_new_category",
+};
+
+const MIGRATION_FLAG = "@evendi/migrated_from_wedflow";
+
+/**
+ * One-time migration: copies data from old @wedflow/* keys to @evendi/* keys.
+ * Only runs once — subsequent calls are a no-op.
+ * Does NOT delete old keys (safe rollback).
+ */
+export async function migrateFromWedflow(): Promise<void> {
+  try {
+    const alreadyMigrated = await AsyncStorage.getItem(MIGRATION_FLAG);
+    if (alreadyMigrated) return;
+
+    let migrated = 0;
+    for (const [oldKey, newKey] of Object.entries(LEGACY_KEYS)) {
+      const value = await AsyncStorage.getItem(oldKey);
+      if (value !== null) {
+        // Only copy if new key doesn't already have data
+        const existing = await AsyncStorage.getItem(newKey);
+        if (existing === null) {
+          await AsyncStorage.setItem(newKey, value);
+          migrated++;
+        }
+      }
+    }
+
+    await AsyncStorage.setItem(MIGRATION_FLAG, new Date().toISOString());
+    if (migrated > 0) {
+      console.log(`[Evendi] Migrated ${migrated} keys from legacy storage`);
+    }
+  } catch (err) {
+    console.warn("[Evendi] Legacy key migration failed:", err);
+  }
 }

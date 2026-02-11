@@ -9,7 +9,7 @@ async function createDemoCoupleForDaniel() {
   const db = drizzle(client);
 
   // Generate temporary password
-  const tempPassword = 'WedflowDemo2026!';
+  const tempPassword = 'EvendiDemo2026!';
   const hashedPassword = bcryptjs.hashSync(tempPassword, 10);
 
   try {

@@ -7,7 +7,7 @@ Transformed PlanningScreen from a static dashboard into an intelligent, context-
 December 2024
 
 ## Problem Statement
-The main hub screen of wedflow was passive - showing static information without guiding users on what to do next. Users asked: "how can we make this more fast track feeling?" The screen lacked:
+The main hub screen of evendi was passive - showing static information without guiding users on what to do next. Users asked: "how can we make this more fast track feeling?" The screen lacked:
 - State-based guidance (no indication of what needs attention)
 - Context-aware actions (same buttons regardless of timeline)
 - Progress visibility (no way to see completion status)
@@ -477,7 +477,7 @@ Add more timeline-specific actions:
 - Multiple urgent next steps competing
 
 ## Files Modified
-- `/workspaces/wedflow/client/screens/PlanningScreen.tsx`
+- `/workspaces/evendi/client/screens/PlanningScreen.tsx`
   - Added 3 helper functions (calculateCompletion, getSmartQuickActions, getNextSteps)
   - Updated ActionItemProps interface (badge prop)
   - Modified hero card (interactive stats)

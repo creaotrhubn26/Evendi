@@ -103,7 +103,7 @@ async function fetchYrWeather(lat: number, lon: number): Promise<any> {
   
   const response = await fetch(url, {
     headers: {
-      "User-Agent": "Wedflow/1.0 https://replit.com",
+      "User-Agent": "Evendi/1.0 https://replit.com",
     },
   });
 
@@ -311,10 +311,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ── Weather/Location Bridge Proxy → CreatorHub backend ──────────────────────
-  // Proxies /api/wedflow/weather-location/* to CreatorHub API for couples
+  // Proxies /api/evendi/weather-location/* to CreatorHub API for couples
   const CREATORHUB_BRIDGE_URL = process.env.CREATORHUB_API_URL || 'http://localhost:3001';
 
-  app.all("/api/wedflow/weather-location/*", async (req: Request, res: Response) => {
+  app.all("/api/evendi/weather-location/*", async (req: Request, res: Response) => {
     try {
       const targetUrl = `${CREATORHUB_BRIDGE_URL}${req.originalUrl}`;
       const fetchOptions: RequestInit = {
@@ -360,7 +360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Proxy the travel calculation through the CreatorHub bridge
       // The bridge endpoint takes a city/location name and calculates travel from venue
-      const travelUrl = `${CREATORHUB_BRIDGE_URL}/api/wedflow/weather-location/${coupleId}/travel?fromCity=${encodeURIComponent(vendor.location)}`;
+      const travelUrl = `${CREATORHUB_BRIDGE_URL}/api/evendi/weather-location/${coupleId}/travel?fromCity=${encodeURIComponent(vendor.location)}`;
       const travelResponse = await fetch(travelUrl);
       
       if (!travelResponse.ok) {
@@ -583,7 +583,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             recipientId: sub.vendorId,
             type: "payment_required",
             title: "Betaling påkrevd",
-            body: "Din 30-dagers prøveperiode har utløpt. Betal for å fortsette å bruke Wedflow og motta henvendelser fra brudepar.",
+            body: "Din 30-dagers prøveperiode har utløpt. Betal for å fortsette å bruke Evendi og motta henvendelser fra brudepar.",
             sentVia: "in_app",
           });
 
@@ -1364,7 +1364,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (subscription.status === "paused") {
         res.status(403).json({ 
           error: "Abonnement satt på pause",
-          message: "Ditt abonnement er satt på pause. Betal for å fortsette å bruke Wedflow og motta henvendelser.",
+          message: "Ditt abonnement er satt på pause. Betal for å fortsette å bruke Evendi og motta henvendelser.",
           requiresPayment: true,
           isPaused: true
         });
@@ -1837,7 +1837,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         coupleId: delivery.coupleId,
         vendorId: delivery.vendorId,
         action: 'opened',
-        actionDetail: JSON.stringify({ source: 'wedflow-app', accessCode }),
+        actionDetail: JSON.stringify({ source: 'evendi-app', accessCode }),
       });
       // Update open counter
       await db.execute(sql`UPDATE deliveries SET open_count = COALESCE(open_count, 0) + 1, opened_at = COALESCE(opened_at, NOW()) WHERE id = ${delivery.id}`);
@@ -1872,7 +1872,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         coupleId: delivery.coupleId,
         vendorId: delivery.vendorId,
         action,
-        actionDetail: JSON.stringify({ accessCode: ac || null, source: source || 'wedflow-app' }),
+        actionDetail: JSON.stringify({ accessCode: ac || null, source: source || 'evendi-app' }),
       });
 
       // Update counters
@@ -1995,7 +1995,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const chatBody = customMessage ||
-          `📦 Leveransen din er klar!\n\n"${delivery.title}"\n${items.length} ${items.length === 1 ? 'element' : 'elementer'} venter på deg.\n\n🔑 Tilgangskode: ${delivery.accessCode}\n\nÅpne Wedflow → "Hent leveranse" → Skriv inn koden. 💕`;
+          `📦 Leveransen din er klar!\n\n"${delivery.title}"\n${items.length} ${items.length === 1 ? 'element' : 'elementer'} venter på deg.\n\n🔑 Tilgangskode: ${delivery.accessCode}\n\nÅpne Evendi → "Hent leveranse" → Skriv inn koden. 💕`;
 
         await db.insert(messages).values({
           conversationId: conversationId!,
@@ -9291,7 +9291,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== APP FEEDBACK ====================
 
-  // Submit feedback to Wedflow (couple)
+  // Submit feedback to Evendi (couple)
   app.post("/api/couple/feedback", async (req: Request, res: Response) => {
     const coupleId = await checkCoupleAuth(req, res);
     if (!coupleId) return;
@@ -9318,7 +9318,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Submit feedback to Wedflow (vendor)
+  // Submit feedback to Evendi (vendor)
   app.post("/api/vendor/feedback", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;

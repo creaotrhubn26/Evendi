@@ -2,7 +2,7 @@
 
 ## Oversikt
 
-Admin Preview-modus er en funksjonalitet som lar administratorer se og teste Wedflow-appen fra brudepar eller leverandør-perspektivet. Dette gjør det enklere å:
+Admin Preview-modus er en funksjonalitet som lar administratorer se og teste Evendi-appen fra brudepar eller leverandør-perspektivet. Dette gjør det enklere å:
 
 - Forstå brukeropplevelsen
 - Finne og reprodusere bugs

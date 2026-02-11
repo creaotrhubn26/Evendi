@@ -1,16 +1,16 @@
 {
   "expo": {
     "name": "Evendi",
-    "slug": "wedflow",
+    "slug": "evendi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/Evendi_app_icon.png",
-    "scheme": "wedflow",
+    "scheme": "evendi",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.norwedfilm.wedflow"
+      "bundleIdentifier": "com.norwedfilm.evendi"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +19,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.norwedfilm.wedflow"
+      "package": "com.norwedfilm.evendi"
     },
     "web": {
       "output": "single",

@@ -35,7 +35,7 @@ import {
   type EventCategory 
 } from "@shared/event-types";
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 interface CoupleSession {
   sessionToken: string;

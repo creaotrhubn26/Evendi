@@ -49,11 +49,11 @@ const AFFIRMATIONS = [
   "Dette er DERES dag",
 ];
 
-const AFFIRMATION_STORAGE_KEY = "wedflow_stress_tracker_affirmation";
-const HAPTICS_STORAGE_KEY = "wedflow_stress_tracker_haptics";
-const COUNTDOWN_STORAGE_KEY = "wedflow_stress_tracker_countdown";
-const SESSION_MINUTES_STORAGE_KEY = "wedflow_stress_tracker_session_minutes";
-const TOTAL_BREATHS_STORAGE_KEY = "wedflow_stress_tracker_total_breaths";
+const AFFIRMATION_STORAGE_KEY = "evendi_stress_tracker_affirmation";
+const HAPTICS_STORAGE_KEY = "evendi_stress_tracker_haptics";
+const COUNTDOWN_STORAGE_KEY = "evendi_stress_tracker_countdown";
+const SESSION_MINUTES_STORAGE_KEY = "evendi_stress_tracker_session_minutes";
+const TOTAL_BREATHS_STORAGE_KEY = "evendi_stress_tracker_total_breaths";
 const SESSION_MINUTES_OPTIONS = [1, 3, 5];
 
 

@@ -126,7 +126,7 @@ SpeechListScreen
         ▼
 Form saves speech with tableId="table-2"
         │
-        ├─ localStorage.setItem('wedflow_speeches', [...])
+        ├─ localStorage.setItem('evendi_speeches', [...])
         │
         ▼
 User navigates to VenueScreen seating tab

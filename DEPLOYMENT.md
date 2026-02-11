@@ -1,10 +1,10 @@
-# Wedflow Deployment & Launch Guide
+# Evendi Deployment & Launch Guide
 
-This guide covers how to launch Wedflow beyond local Expo testing, including mobile store builds, web deployment, and backend server setup.
+This guide covers how to launch Evendi beyond local Expo testing, including mobile store builds, web deployment, and backend server setup.
 
 ## Overview
 
-Wedflow consists of two parts:
+Evendi consists of two parts:
 - Frontend (React Native via Expo) — mobile (Android/iOS) and web.
 - Backend (Node/Express) — API and database access.
 
@@ -53,11 +53,11 @@ Expo is great for testing; production builds for app stores are created with EAS
 - Verify bundle identifiers in `app.json`:
   - iOS: `ios.bundleIdentifier`
   - Android: `android.package`
-- Confirm app scheme is set: `scheme: "wedflow"` (used for OAuth deep links).
+- Confirm app scheme is set: `scheme: "evendi"` (used for OAuth deep links).
 - In Supabase → Auth → Providers → Google, add authorized redirect URIs for store builds using your app scheme.
 
 Examples (adjust to your app scheme and domain):
-- `wedflow://oauth-callback`
+- `evendi://oauth-callback`
 - `https://YOUR_DOMAIN/oauth-callback`
 - For Expo dev/client: `exp://localhost:19000/--/oauth-callback`
 
@@ -82,7 +82,7 @@ eas submit --platform ios
 ```
 
 ### Note on Redirect URIs
-The OAuth flow uses `AuthSession.makeRedirectUri`. For production store builds, make sure the redirect URI matches your app scheme (e.g., `wedflow://oauth-callback`) and that the same value is added to Supabase Google provider settings.
+The OAuth flow uses `AuthSession.makeRedirectUri`. For production store builds, make sure the redirect URI matches your app scheme (e.g., `evendi://oauth-callback`) and that the same value is added to Supabase Google provider settings.
 
 ## Web App
 
@@ -108,7 +108,7 @@ Starts the optimized, minified bundle locally for a quick production-like check.
 - Supabase → Auth → Providers → Google: Enabled and credentials added.
 - Authorized redirect URIs include your dev and prod values (Expo dev and app scheme):
   - `exp://localhost:19000/--/oauth-callback` (Expo dev)
-  - `wedflow://oauth-callback` (app scheme for store builds)
+  - `evendi://oauth-callback` (app scheme for store builds)
   - Your deployed domain URL variant if using web.
 - The mobile app scheme in `app.json` matches the redirect URI you add in Supabase.
 

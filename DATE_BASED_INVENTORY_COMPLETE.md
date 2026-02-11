@@ -25,7 +25,7 @@ Previously, if a vendor had 200 chairs and created offers for two different wedd
 
 ## Technical Changes
 
-### Backend Changes (`/workspaces/wedflow/server/routes.ts`)
+### Backend Changes (`/workspaces/evendi/server/routes.ts`)
 
 #### 1. **Date-Aware Availability Checking**
 

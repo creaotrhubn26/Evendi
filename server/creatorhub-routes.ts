@@ -375,7 +375,7 @@ export function registerCreatorhubRoutes(app: Express) {
 
       return res.status(201).json({
         ...invitation,
-        inviteUrl: `${process.env.APP_URL || "https://wedflow.no"}/creatorhub/invite/${token}`,
+        inviteUrl: `${process.env.APP_URL || "https://evendi.no"}/creatorhub/invite/${token}`,
       });
     } catch (err: any) {
       console.error("[CreatorHub] Create invitation error:", err);
@@ -521,15 +521,15 @@ export function registerCreatorhubRoutes(app: Express) {
 
       if (!booking) return res.status(404).json({ error: "Booking not found" });
 
-      // Include linked Wedflow data if available
-      let wedflowData: any = {};
+      // Include linked Evendi data if available
+      let evendiData: any = {};
       if (booking.vendorId) {
         const [vendor] = await db.select({
           id: vendors.id,
           businessName: vendors.businessName,
           email: vendors.email,
         }).from(vendors).where(eq(vendors.id, booking.vendorId));
-        wedflowData.vendor = vendor || null;
+        evendiData.vendor = vendor || null;
       }
       if (booking.coupleId) {
         const [couple] = await db.select({
@@ -537,10 +537,10 @@ export function registerCreatorhubRoutes(app: Express) {
           displayName: coupleProfiles.displayName,
           email: coupleProfiles.email,
         }).from(coupleProfiles).where(eq(coupleProfiles.id, booking.coupleId));
-        wedflowData.couple = couple || null;
+        evendiData.couple = couple || null;
       }
 
-      return res.json({ ...booking, wedflow: wedflowData });
+      return res.json({ ...booking, evendi: evendiData });
     } catch (err: any) {
       return res.status(500).json({ error: "Failed to get booking" });
     }
@@ -766,13 +766,13 @@ export function registerCreatorhubRoutes(app: Express) {
     }
   });
 
-  // ----- WEDFLOW BRIDGE: Conversations & Messages -----
+  // ----- EVENDI BRIDGE: Conversations & Messages -----
 
   /**
-   * GET /api/creatorhub/wedflow/conversations
-   * List Wedflow conversations for a specific vendor (linked creator)
+   * GET /api/creatorhub/evendi/conversations
+   * List Evendi conversations for a specific vendor (linked creator)
    */
-  app.get("/api/creatorhub/wedflow/conversations", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.get("/api/creatorhub/evendi/conversations", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const { vendorId } = req.query;
       if (!vendorId) {
@@ -800,10 +800,10 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   /**
-   * GET /api/creatorhub/wedflow/conversations/:id/messages
-   * Get messages for a Wedflow conversation
+   * GET /api/creatorhub/evendi/conversations/:id/messages
+   * Get messages for a Evendi conversation
    */
-  app.get("/api/creatorhub/wedflow/conversations/:id/messages", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.get("/api/creatorhub/evendi/conversations/:id/messages", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       // Verify conversation belongs to a vendor in this project
       const [convo] = await db.select().from(conversations)
@@ -828,13 +828,13 @@ export function registerCreatorhubRoutes(app: Express) {
     }
   });
 
-  // ----- WEDFLOW BRIDGE: Offers -----
+  // ----- EVENDI BRIDGE: Offers -----
 
   /**
-   * GET /api/creatorhub/wedflow/offers
-   * List Wedflow offers for a vendor linked to this project
+   * GET /api/creatorhub/evendi/offers
+   * List Evendi offers for a vendor linked to this project
    */
-  app.get("/api/creatorhub/wedflow/offers", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.get("/api/creatorhub/evendi/offers", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const { vendorId, status } = req.query;
       if (!vendorId) return res.status(400).json({ error: "vendorId query param required" });
@@ -992,17 +992,17 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   // ===============================================
-  // FULL WEDFLOW CONTROL (Admin-level access)
+  // FULL EVENDI CONTROL (Admin-level access)
   // ===============================================
 
   // ----- IMPERSONATION: Get session tokens for any couple or vendor -----
 
   /**
-   * POST /api/creatorhub/wedflow/impersonate/couple
+   * POST /api/creatorhub/evendi/impersonate/couple
    * Get a session token to act as a specific couple. Use this token as
    * "Authorization: Bearer <token>" on any /api/couples/* endpoint.
    */
-  app.post("/api/creatorhub/wedflow/impersonate/couple", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.post("/api/creatorhub/evendi/impersonate/couple", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const { coupleId, email } = req.body;
       if (!coupleId && !email) {
@@ -1048,10 +1048,10 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   /**
-   * POST /api/creatorhub/wedflow/impersonate/vendor
+   * POST /api/creatorhub/evendi/impersonate/vendor
    * Get a session token to act as a specific vendor.
    */
-  app.post("/api/creatorhub/wedflow/impersonate/vendor", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.post("/api/creatorhub/evendi/impersonate/vendor", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const { vendorId, email } = req.body;
       if (!vendorId && !email) {
@@ -1096,13 +1096,13 @@ export function registerCreatorhubRoutes(app: Express) {
     }
   });
 
-  // ----- FULL DATA ACCESS: Read/write all Wedflow data -----
+  // ----- FULL DATA ACCESS: Read/write all Evendi data -----
 
   /**
-   * GET /api/creatorhub/wedflow/couples
+   * GET /api/creatorhub/evendi/couples
    * List all couples with their profiles
    */
-  app.get("/api/creatorhub/wedflow/couples", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.get("/api/creatorhub/evendi/couples", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const allCouples = await db.select({
         id: coupleProfiles.id,
@@ -1121,10 +1121,10 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   /**
-   * GET /api/creatorhub/wedflow/couples/:id
+   * GET /api/creatorhub/evendi/couples/:id
    * Get full couple details
    */
-  app.get("/api/creatorhub/wedflow/couples/:id", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.get("/api/creatorhub/evendi/couples/:id", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const [couple] = await db.select().from(coupleProfiles)
         .where(eq(coupleProfiles.id, req.params.id));
@@ -1142,10 +1142,10 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   /**
-   * PATCH /api/creatorhub/wedflow/couples/:id
+   * PATCH /api/creatorhub/evendi/couples/:id
    * Update couple profile
    */
-  app.patch("/api/creatorhub/wedflow/couples/:id", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.patch("/api/creatorhub/evendi/couples/:id", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const { displayName, weddingDate, partnerEmail } = req.body;
       const updates: any = { updatedAt: new Date() };
@@ -1166,10 +1166,10 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   /**
-   * GET /api/creatorhub/wedflow/vendors
+   * GET /api/creatorhub/evendi/vendors
    * List all vendors
    */
-  app.get("/api/creatorhub/wedflow/vendors", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.get("/api/creatorhub/evendi/vendors", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const status = req.query.status as string | undefined;
       const conditions: any[] = [];
@@ -1198,10 +1198,10 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   /**
-   * GET /api/creatorhub/wedflow/vendors/:id
+   * GET /api/creatorhub/evendi/vendors/:id
    * Get full vendor details
    */
-  app.get("/api/creatorhub/wedflow/vendors/:id", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.get("/api/creatorhub/evendi/vendors/:id", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const [vendor] = await db.select().from(vendors)
         .where(eq(vendors.id, req.params.id));
@@ -1230,10 +1230,10 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   /**
-   * PATCH /api/creatorhub/wedflow/vendors/:id
+   * PATCH /api/creatorhub/evendi/vendors/:id
    * Update vendor profile
    */
-  app.patch("/api/creatorhub/wedflow/vendors/:id", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.patch("/api/creatorhub/evendi/vendors/:id", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const { businessName, description, city, phone, website, status } = req.body;
       const updates: any = { updatedAt: new Date() };
@@ -1257,10 +1257,10 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   /**
-   * POST /api/creatorhub/wedflow/vendors/:id/approve
+   * POST /api/creatorhub/evendi/vendors/:id/approve
    * Approve a vendor
    */
-  app.post("/api/creatorhub/wedflow/vendors/:id/approve", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.post("/api/creatorhub/evendi/vendors/:id/approve", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const [updated] = await db.update(vendors)
         .set({ status: "active", updatedAt: new Date() })
@@ -1274,10 +1274,10 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   /**
-   * POST /api/creatorhub/wedflow/vendors/:id/reject
+   * POST /api/creatorhub/evendi/vendors/:id/reject
    * Reject a vendor
    */
-  app.post("/api/creatorhub/wedflow/vendors/:id/reject", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.post("/api/creatorhub/evendi/vendors/:id/reject", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const [updated] = await db.update(vendors)
         .set({ status: "rejected", updatedAt: new Date() })
@@ -1291,10 +1291,10 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   /**
-   * GET /api/creatorhub/wedflow/conversations/:id/messages
+   * GET /api/creatorhub/evendi/conversations/:id/messages
    * Get all messages in a conversation (with send capability)
    */
-  app.get("/api/creatorhub/wedflow/all-conversations", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.get("/api/creatorhub/evendi/all-conversations", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const allConvos = await db.select().from(conversations)
         .orderBy(desc(conversations.lastMessageAt))
@@ -1306,10 +1306,10 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   /**
-   * POST /api/creatorhub/wedflow/messages
+   * POST /api/creatorhub/evendi/messages
    * Send a message in any conversation (as couple or vendor)
    */
-  app.post("/api/creatorhub/wedflow/messages", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.post("/api/creatorhub/evendi/messages", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const { conversationId, content, senderType, senderId, attachmentUrl, attachmentType } = req.body;
       if (!conversationId || !content || !senderType || !senderId) {
@@ -1346,10 +1346,10 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   /**
-   * GET /api/creatorhub/wedflow/statistics
+   * GET /api/creatorhub/evendi/statistics
    * Get full platform statistics
    */
-  app.get("/api/creatorhub/wedflow/statistics", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+  app.get("/api/creatorhub/evendi/statistics", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
       const [coupleCount] = await db.select({ count: sql<number>`count(*)` }).from(coupleProfiles);
       const [vendorCount] = await db.select({ count: sql<number>`count(*)` }).from(vendors);

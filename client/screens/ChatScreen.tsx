@@ -26,7 +26,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { showToast } from "@/lib/toast";
 import { showConfirm, showOptions } from "@/lib/dialogs";
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 interface Message {
   id: string;

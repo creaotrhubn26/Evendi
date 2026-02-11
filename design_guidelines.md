@@ -1,8 +1,8 @@
-# Wedflow - Wedding Planning App Design Guidelines
+# Evendi - Wedding Planning App Design Guidelines
 
 ## 1. Brand Identity
 
-**App Name**: Wedflow by Norwedfilm
+**App Name**: Evendi by Norwedfilm
 **Purpose**: A comprehensive wedding planning app for Scandinavian couples to organize their special day - managing schedules, guests, table seating, speeches, and coordination with vendors.
 
 **Aesthetic Direction**: **Dark Elegance** — A sophisticated dark theme with warm gold accents. The design evokes luxury and romance, with a premium feel that matches the importance of the wedding day.
@@ -64,7 +64,7 @@
 ## 5. Screen Specifications
 
 ### Planning Dashboard (Tab 1)
-- **Header**: App logo "Wedflow" with gold W icon
+- **Header**: App logo "Evendi" with gold W icon
 - **Layout**: Scrollable with cards
 - **Components**: 
   - Countdown to wedding date

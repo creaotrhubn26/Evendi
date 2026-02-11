@@ -291,7 +291,7 @@ export function getDefaultTimeline(eventType?: string): TimelineTemplate[] {
   return GENERIC_EVENT_TIMELINE;
 }
 
-// Backward-compatible key migration map (old wedflow keys → new synced keys)
+// Backward-compatible key migration map (old evendi keys → new synced keys)
 export const LEGACY_KEY_MAP: Record<string, string> = {
   norway: 'norsk',
   hindu: 'indisk',

@@ -80,8 +80,8 @@ export interface PhotoLocationScouting {
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const COUPLE_STORAGE_KEY = 'wedflow_couple_session';
-const SCOUTING_CACHE_KEY = 'wedflow_scouting_travel_cache';
+const COUPLE_STORAGE_KEY = 'evendi_couple_session';
+const SCOUTING_CACHE_KEY = 'evendi_scouting_travel_cache';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24h
 
 // ─── Hook ───────────────────────────────────────────────────────────────────

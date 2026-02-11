@@ -1,7 +1,7 @@
 /**
- * Data Migration Script: Wedflow DB → CreatorHub DB
+ * Data Migration Script: Evendi DB → CreatorHub DB
  * 
- * Copies all data from the old Wedflow Neon database to the new CreatorHub Neon database.
+ * Copies all data from the old Evendi Neon database to the new CreatorHub Neon database.
  * The schema must already exist on the target (use `drizzle-kit push` first).
  * 
  * Strategy:
@@ -160,14 +160,14 @@ async function resetSequences(target: Client): Promise<void> {
 }
 
 async function main() {
-  console.log('🔄 Starting data migration: Wedflow → CreatorHub DB\n');
+  console.log('🔄 Starting data migration: Evendi → CreatorHub DB\n');
 
   const source = new Client({ connectionString: SOURCE_URL });
   const target = new Client({ connectionString: TARGET_URL });
 
   try {
     await source.connect();
-    console.log('✓ Connected to source (Wedflow DB)');
+    console.log('✓ Connected to source (Evendi DB)');
     await target.connect();
     console.log('✓ Connected to target (CreatorHub DB)');
 

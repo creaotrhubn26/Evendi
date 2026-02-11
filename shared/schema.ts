@@ -1629,7 +1629,7 @@ export const insertTableSeatingInvitationSchema = createInsertSchema(tableSeatin
 export type TableSeatingInvitation = typeof tableSeatingInvitations.$inferSelect;
 export type InsertTableSeatingInvitation = z.infer<typeof insertTableSeatingInvitationSchema>;
 
-// App Feedback - Feedback to Wedflow from couples and vendors
+// App Feedback - Feedback to Evendi from couples and vendors
 export const appFeedback = pgTable("app_feedback", {
   id: varchar("id")
     .primaryKey()
@@ -2417,7 +2417,7 @@ export type CouplePlannerTimeline = typeof couplePlannerTimeline.$inferSelect;
 // ===== CREATORHUB INTEGRATION TABLES =====
 // ==========================================
 
-// CreatorHub Projects - A project groups creators and links to Wedflow vendor accounts
+// CreatorHub Projects - A project groups creators and links to Evendi vendor accounts
 export const creatorhubProjects = pgTable("creatorhub_projects", {
   id: varchar("id")
     .primaryKey()
@@ -2440,13 +2440,13 @@ export const creatorhubProjects = pgTable("creatorhub_projects", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// CreatorHub Users - Users on the CreatorHub platform (linked to Wedflow vendors)
+// CreatorHub Users - Users on the CreatorHub platform (linked to Evendi vendors)
 export const creatorhubUsers = pgTable("creatorhub_users", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
   projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
-  vendorId: varchar("vendor_id").references(() => vendors.id, { onDelete: "set null" }), // Link to Wedflow vendor
+  vendorId: varchar("vendor_id").references(() => vendors.id, { onDelete: "set null" }), // Link to Evendi vendor
   email: text("email").notNull(),
   displayName: text("display_name").notNull(),
   avatarUrl: text("avatar_url"),
@@ -2477,14 +2477,14 @@ export const creatorhubInvitations = pgTable("creatorhub_invitations", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// CreatorHub Bookings - Shared calendar/bookings synced with Wedflow vendors
+// CreatorHub Bookings - Shared calendar/bookings synced with Evendi vendors
 export const creatorhubBookings = pgTable("creatorhub_bookings", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
   projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
   creatorUserId: varchar("creator_user_id").notNull().references(() => creatorhubUsers.id, { onDelete: "cascade" }),
-  // Link to Wedflow entities
+  // Link to Evendi entities
   vendorId: varchar("vendor_id").references(() => vendors.id, { onDelete: "set null" }),
   coupleId: varchar("couple_id").references(() => coupleProfiles.id, { onDelete: "set null" }),
   conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
@@ -2519,7 +2519,7 @@ export const creatorhubBookings = pgTable("creatorhub_bookings", {
   creatorIdx: index("idx_creatorhub_bookings_creator").on(table.creatorUserId),
 }));
 
-// CreatorHub Messages / CRM Notes - Shared messaging/CRM linked to Wedflow conversations
+// CreatorHub Messages / CRM Notes - Shared messaging/CRM linked to Evendi conversations
 export const creatorhubCrmNotes = pgTable("creatorhub_crm_notes", {
   id: varchar("id")
     .primaryKey()
@@ -2527,7 +2527,7 @@ export const creatorhubCrmNotes = pgTable("creatorhub_crm_notes", {
   projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
   bookingId: varchar("booking_id").references(() => creatorhubBookings.id, { onDelete: "cascade" }),
   creatorUserId: varchar("creator_user_id").notNull().references(() => creatorhubUsers.id, { onDelete: "cascade" }),
-  // Link to Wedflow conversation for shared messaging
+  // Link to Evendi conversation for shared messaging
   conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
   // CRM note
   noteType: text("note_type").notNull().default("note"), // note, call_log, email_log, task, follow_up
@@ -2552,7 +2552,7 @@ export const creatorhubAnalyticsEvents = pgTable("creatorhub_analytics_events", 
   eventType: text("event_type").notNull(), // booking_created, booking_completed, payment_received, message_sent, etc.
   eventData: text("event_data"), // JSON payload with event-specific data
   // Attribution
-  source: text("source").default("creatorhub"), // creatorhub, wedflow, api, webhook
+  source: text("source").default("creatorhub"), // creatorhub, evendi, api, webhook
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -2612,7 +2612,7 @@ export const createCreatorhubBookingSchema = z.object({
   internalNotes: z.string().optional(),
   tags: z.array(z.string()).optional(),
   externalRef: z.string().optional(),
-  // Optional Wedflow links
+  // Optional Evendi links
   vendorId: z.string().optional(),
   coupleId: z.string().optional(),
   conversationId: z.string().optional(),

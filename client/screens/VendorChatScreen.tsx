@@ -31,7 +31,7 @@ import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
-const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
+const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
 interface Message {
   id: string;
@@ -372,7 +372,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
 
   // ---- Quick Message Templates (built-in + custom) ----
   // Context: Vendor replying TO a couple — organized by wedding workflow stage
-  const CUSTOM_TEMPLATES_KEY = "wedflow_vendor_custom_quick_templates";
+  const CUSTOM_TEMPLATES_KEY = "evendi_vendor_custom_quick_templates";
 
   const builtInTemplates = [
     // --- Booking & inquiry replies (most common vendor-to-couple context) ---

@@ -29,7 +29,7 @@ import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import { getApiUrl } from "@/lib/query-client";
 import { useVendorLocationIntelligence } from "@/hooks/useVendorLocationIntelligence";
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 interface VendorReview {
   id: string;

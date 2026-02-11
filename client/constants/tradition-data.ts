@@ -1,5 +1,5 @@
 /**
- * Tradition data constants for wedflow mobile app
+ * Tradition data constants for evendi mobile app
  * Mirrors the 17-culture system synced with CreatorHub monorepo
  */
 

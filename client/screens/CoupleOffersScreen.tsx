@@ -25,7 +25,7 @@ import { getApiUrl } from "@/lib/query-client";
 import { showConfirm } from "@/lib/dialogs";
 import { showToast } from "@/lib/toast";
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 const getCountdown = (validUntil: string): { text: string; color: string; urgency: "urgent" | "warning" | "normal" | "expired" } => {
   const now = new Date();

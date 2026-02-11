@@ -209,7 +209,7 @@ export async function getWeatherLocationData(coupleId: string): Promise<WeatherL
   if (cached) return cached;
 
   const baseUrl = getCreatorHubApiUrl();
-  const res = await fetch(`${baseUrl}/api/wedflow/weather-location/${coupleId}`);
+  const res = await fetch(`${baseUrl}/api/evendi/weather-location/${coupleId}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Kunne ikke hente vær- og stedsdata');
@@ -226,7 +226,7 @@ export async function searchAddress(query: string): Promise<KartverketSearchResu
   if (!query || query.length < 2) return [];
 
   const baseUrl = getCreatorHubApiUrl();
-  const res = await fetch(`${baseUrl}/api/wedflow/weather-location/search?q=${encodeURIComponent(query)}`);
+  const res = await fetch(`${baseUrl}/api/evendi/weather-location/search?q=${encodeURIComponent(query)}`);
   if (!res.ok) return [];
   const data = await res.json();
   return data.addresses || [];
@@ -240,7 +240,7 @@ export async function updateVenueLocation(
   venue: { venueName?: string; lat?: number; lng?: number; address?: string }
 ): Promise<VenueUpdateResult | { results: KartverketSearchResult[]; message: string }> {
   const baseUrl = getCreatorHubApiUrl();
-  const res = await fetch(`${baseUrl}/api/wedflow/weather-location/${coupleId}/venue`, {
+  const res = await fetch(`${baseUrl}/api/evendi/weather-location/${coupleId}/venue`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(venue),
@@ -269,7 +269,7 @@ export async function calculateTravel(
   }
   if (from.city) params.set('fromCity', from.city);
 
-  const res = await fetch(`${baseUrl}/api/wedflow/weather-location/${coupleId}/travel?${params.toString()}`);
+  const res = await fetch(`${baseUrl}/api/evendi/weather-location/${coupleId}/travel?${params.toString()}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Kunne ikke beregne reiseinformasjon');
@@ -283,7 +283,7 @@ export async function calculateTravel(
 export async function getEventWeather(coupleId: string, date?: string): Promise<EventWeatherResult> {
   const baseUrl = getCreatorHubApiUrl();
   const params = date ? `?date=${date}` : '';
-  const res = await fetch(`${baseUrl}/api/wedflow/weather-location/${coupleId}/event-weather${params}`);
+  const res = await fetch(`${baseUrl}/api/evendi/weather-location/${coupleId}/event-weather${params}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Kunne ikke hente vær per hendelse');
@@ -304,7 +304,7 @@ export async function syncLocationFromProject(
   }
 ): Promise<{ synced: boolean; coupleId: string; projectId: string }> {
   const baseUrl = getCreatorHubApiUrl();
-  const res = await fetch(`${baseUrl}/api/wedflow/weather-location/sync-from-project/${projectId}`, {
+  const res = await fetch(`${baseUrl}/api/evendi/weather-location/sync-from-project/${projectId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(locationData),

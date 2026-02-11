@@ -171,7 +171,7 @@ const validateSeats = (value: string) => {
 
 ## Files Modified
 
-- `/workspaces/wedflow/client/components/SeatingChart.tsx`
+- `/workspaces/evendi/client/components/SeatingChart.tsx`
 
 ## Related Systems
 
