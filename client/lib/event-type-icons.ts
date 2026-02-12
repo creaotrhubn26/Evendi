@@ -1,12 +1,10 @@
 /**
- * Event Type Icons — Maps event types to EvendiIcon names.
+ * Event Type Icons — Maps event types to bundled PNG images and EvendiIcon fallbacks.
  *
- * Since we don't have custom PNGs for all 19 event types yet,
- * this module maps each type to a Feather/EvendiIcon name as the default.
+ * 6 personal event types have bundled PNGs in assets/images/event_types/.
+ * The remaining 13 corporate types fall back to EvendiIcon (Feather icons).
  * Admin can override any event type icon with a custom image URI
  * stored in AsyncStorage via useCustomEventIcons().
- *
- * When custom PNGs are added to assets/event-types/, update BUNDLED_IMAGES.
  */
 import type { EventType } from "@shared/event-types";
 import type { ImageSourcePropType } from "react-native";
@@ -81,10 +79,14 @@ export function getEventTypeColor(
   return customColors?.[type] ?? EVENT_TYPE_COLORS[type] ?? "#64748b";
 }
 
-// ─── Bundled PNG images (add as you create them) ────────────────
+// ─── Bundled PNG images ─────────────────────────────────────────
 const BUNDLED_IMAGES: Partial<Record<EventType, ImageSourcePropType>> = {
-  // When you add a PNG for an event type, map it here:
-  // conference: require("@/../../assets/event-types/conference.png"),
+  wedding: require("@/../../assets/images/event_types/Evendi_event_type_wedding.png"),
+  confirmation: require("@/../../assets/images/event_types/Evendi_event_type_conformation.png"),
+  birthday: require("@/../../assets/images/event_types/Evendi_event_type_birthday.png"),
+  anniversary: require("@/../../assets/images/event_types/Evendi_event_type_anniversary.png"),
+  engagement: require("@/../../assets/images/event_types/Evendi_event_type_engagement.png"),
+  baby_shower: require("@/../../assets/images/event_types/Evendi_event_type_babyshower.png"),
 };
 
 /**
