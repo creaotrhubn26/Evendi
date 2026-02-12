@@ -32,6 +32,11 @@ import {
   conversations,
   messages,
   vendorOffers,
+  speeches,
+  weddingTables,
+  weddingGuests,
+  tableGuestAssignments,
+  coupleVendorContracts,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, lte, inArray, or } from "drizzle-orm";
 
@@ -1370,6 +1375,138 @@ export function registerCreatorhubRoutes(app: Express) {
       });
     } catch (err: any) {
       return res.status(500).json({ error: "Failed to get statistics" });
+    }
+  });
+
+  // ===============================================
+  // SPEECHES BRIDGE — Expose speech/program data to CreatorHub
+  // ===============================================
+
+  /**
+   * GET /api/creatorhub/speeches/:coupleId
+   * Returns speeches for a specific couple.
+   * Used by CreatorHub to show speech/program list to vendors.
+   */
+  app.get("/api/creatorhub/speeches/:coupleId", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const { coupleId } = req.params;
+      if (!coupleId) {
+        return res.status(400).json({ error: "coupleId is required" });
+      }
+
+      // Verify couple exists
+      const [couple] = await db.select({
+        id: coupleProfiles.id,
+        displayName: coupleProfiles.displayName,
+        eventType: coupleProfiles.eventType,
+      }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+
+      if (!couple) {
+        return res.status(404).json({ error: "Couple not found" });
+      }
+
+      const allSpeeches = await db.select()
+        .from(speeches)
+        .where(eq(speeches.coupleId, coupleId))
+        .orderBy(speeches.sortOrder);
+
+      return res.json({
+        speeches: allSpeeches,
+        coupleId,
+        eventType: couple.eventType || "wedding",
+        coupleName: couple.displayName,
+      });
+    } catch (err: any) {
+      console.error("CreatorHub speeches bridge error:", err);
+      return res.status(500).json({ error: "Failed to fetch speeches" });
+    }
+  });
+
+  // ===============================================
+  // SEATING / TABLES BRIDGE — Expose table seating to CreatorHub
+  // ===============================================
+
+  /**
+   * GET /api/creatorhub/tables/:coupleId
+   * Returns tables with guest assignments for a specific couple.
+   * Used by CreatorHub to show table seating layout to vendors.
+   */
+  app.get("/api/creatorhub/tables/:coupleId", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+    try {
+      const { coupleId } = req.params;
+      if (!coupleId) {
+        return res.status(400).json({ error: "coupleId is required" });
+      }
+
+      // Verify couple exists
+      const [couple] = await db.select({
+        id: coupleProfiles.id,
+        displayName: coupleProfiles.displayName,
+        eventType: coupleProfiles.eventType,
+      }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+
+      if (!couple) {
+        return res.status(404).json({ error: "Couple not found" });
+      }
+
+      // Get all tables
+      const tables = await db.select()
+        .from(weddingTables)
+        .where(eq(weddingTables.coupleId, coupleId))
+        .orderBy(weddingTables.sortOrder);
+
+      // Get guest assignments
+      const assignments = await db.select()
+        .from(tableGuestAssignments)
+        .where(eq(tableGuestAssignments.coupleId, coupleId));
+
+      // Get guest names for display
+      const guestIds = assignments.map(a => a.guestId);
+      let guestsById: Record<string, { name: string; category: string | null }> = {};
+      if (guestIds.length > 0) {
+        const guests = await db.select({
+          id: weddingGuests.id,
+          name: weddingGuests.name,
+          category: weddingGuests.category,
+        }).from(weddingGuests).where(inArray(weddingGuests.id, guestIds));
+        for (const g of guests) {
+          guestsById[g.id] = { name: g.name, category: g.category };
+        }
+      }
+
+      // Build tables with guest info (hide private notes)
+      const tablesWithGuests = tables.map(t => ({
+        id: t.id,
+        tableNumber: t.tableNumber,
+        name: t.name,
+        category: t.category,
+        label: t.label,
+        seats: t.seats,
+        isReserved: t.isReserved,
+        vendorNotes: t.vendorNotes,
+        sortOrder: t.sortOrder,
+        guests: assignments
+          .filter(a => a.tableId === t.id)
+          .map(a => ({
+            id: a.guestId,
+            name: guestsById[a.guestId]?.name || "Ukjent",
+            category: guestsById[a.guestId]?.category,
+            seatNumber: a.seatNumber,
+          })),
+      }));
+
+      return res.json({
+        tables: tablesWithGuests,
+        coupleId,
+        eventType: couple.eventType || "wedding",
+        coupleName: couple.displayName,
+        totalTables: tables.length,
+        totalSeats: tables.reduce((sum, t) => sum + t.seats, 0),
+        assignedGuests: assignments.length,
+      });
+    } catch (err: any) {
+      console.error("CreatorHub tables bridge error:", err);
+      return res.status(500).json({ error: "Failed to fetch tables" });
     }
   });
 

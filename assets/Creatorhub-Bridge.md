@@ -1,0 +1,541 @@
+# Evendi ↔ CreatorHub Bridge – Fullstendig dokumentasjon
+
+> Sist oppdatert: 12. februar 2026
+
+---
+
+## 1. HVORFOR – Formål
+
+### Kjernevirksomheten til Evendi
+Evendi er en **multi-event planleggingsplattform** — ikke en bryllupsapp. Hele plattformen drives av én sentral konfigurasjonsfil: [`shared/event-types.ts`](../shared/event-types.ts).
+
+**B2C – Personlige livshendelser (6 typer)**
+| Type | Norsk | Ikon |
+|---|---|---|
+| `wedding` | Bryllup | 💒 |
+| `confirmation` | Konfirmasjon | ⛪ |
+| `birthday` | Bursdag | 🎂 |
+| `anniversary` | Jubileum | 💍 |
+| `engagement` | Forlovelse | 💎 |
+| `baby_shower` | Babyshower / Dåp | 👶 |
+
+**B2B – Bedriftsarrangementer (11 typer, 4 underkategorier)**
+| Underkategori | Typer |
+|---|---|
+| Faglige og strategiske | Konferanse 🎤, Seminar 📋, Kickoff 🎯 |
+| Sosiale og relasjonsbyggende | Sommerfest ☀️, Julebord 🎄, Teambuilding 🤝 |
+| Eksternt rettede | Produktlansering 🚀, Messe 🏛️ |
+| HR og interne markeringer | Jubileumsfeiering 🎊, Galla 🏆, Ansattdag 🙌, Onboarding 🎓 |
+| Generelt | Annet bedriftsarrangement 🏢 |
+
+### Hva `event-types.ts` styrer
+Hver `EventTypeConfig` definerer hvilke funksjoner som er aktive per arrangementstype:
+
+```typescript
+features: {
+  traditions: boolean;        // Tradisjoner / Format & Oppsett
+  dressTracking: boolean;     // Antrekk / Dresscode
+  weddingPartyRoles: boolean; // Bryllupsfølge (kun wedding)
+  speeches: boolean;          // Taler / Presentasjoner / Program
+  photoplan: boolean;         // Fotoplan
+  seating: boolean;           // Bordplassering / Sitteplasser
+  coupleProfile: boolean;     // Par-/Arrangørprofil
+  importantPeople: boolean;   // Viktige personer
+  sharePartner: boolean;      // Del med medarrangør
+}
+```
+
+I tillegg styrer `event-types.ts`:
+- **Rollemerker** (`roleLabels`): Brud/Brudgom → Arrangør/Programansvarlig → HR-ansvarlig/Fadder
+- **Datofelter** (`dateLabel`): Bryllupsdato → Konferansedato → Onboarding-dato
+- **Gjestemerker** (`guestLabel`): Gjester → Deltakere → Ansatte → Nye ansatte
+- **Delingsetiketter** (`shareLabel`): Tilpassede invitasjonstekster per type
+- **Q&A-spill** (`qaGames`): Skoleken (bryllup), Icebreaker (bedrift), Quiz, To sannheter/én løgn
+- **Antrekkstips** (`attireVendorHints`): Brudekjole → Business casual → Galla
+- **Funksjonsmerker** (`featureLabels`): "Tradisjoner" → "Format & Program" → "Onboarding-program"
+
+### 27 leverandørkategorier
+`VENDOR_CATEGORIES` i samme fil definerer alle leverandørtyper med:
+- Norsk/engelsk label, ikon, gradient, DB-navn, detail-route, aliaser
+- `VENDOR_CATEGORY_EVENT_MAP` kobler hvilke kategorier som er relevante for hvilke event-typer
+
+Eksempler:
+| Kategori | Gjelder for |
+|---|---|
+| Fotograf | 16 av 17 typer |
+| Catering | Alle 17 typer |
+| Blomster | 6 typer (wedding, confirmation, anniversary, engagement, awards, corp. anniversary) |
+| Ringer | 2 typer (wedding, engagement) |
+| Husdyr | 1 type (wedding) |
+
+### Hva broen løser
+CreatorHub er arbeidsflaten for **leverandører** (fotografer, cateringfirmaer, planleggere osv.) som betjener arrangementer booket gjennom Evendi. Uten en bro:
+
+| Problem | Konsekvens |
+|---|---|
+| Leverandør vet ikke arrangementets program | Går glipp av viktige øyeblikk |
+| Arrangør ser ikke leveransestatus | Må mase manuelt |
+| Dobbeltregistrering av gjester/tidslinje | Merarbeid og feil |
+| Feature-flagg synkroniseres ikke | Leverandør ser funksjoner som ikke er aktive for denne arrangementstypen |
+
+### Overordnet mål
+Broen skal gi **sømløs, sanntids dataflyt** mellom arrangør og leverandør — og alltid respektere `event-types.ts` sin konfigurasjon for hvilke funksjoner, roller og etiketter som gjelder for det aktive arrangementet.
+
+### Strategiske prinsipper
+1. **Event-type-drevet** – all data filtreres gjennom `EventTypeConfig.features`
+2. **Delt database, delte API-er** – begge apper leser/skriver til samme PostgreSQL
+3. **API-key-autentisering** – kryssappkall bruker `authenticateApiKey`-middleware
+4. **Toveis synkronisering** – data flyter begge veier der det gir mening
+5. **Fallback og robusthet** – miljøvariabler med fallback-URLer
+6. **Bakoverkompatibilitet** – `/api/wedflow/*` omdirigeres automatisk til `/api/evendi/*`
+
+---
+
+## 2. HVORDAN – Prosess
+
+### Arkitekturoversikt
+
+```
+┌─────────────────────┐                              ┌──────────────────────┐
+│       EVENDI         │                              │     CREATORHUB       │
+│  (Expo/React Native  │                              │  (React + Express)   │
+│   + Express server)  │                              │                      │
+│                      │                              │                      │
+│  Arrangør-appen      │         Delt PostgreSQL      │  Leverandør-         │
+│  17 arrangementstyper│◄────────── DATABASE ────────►│  arbeidsflate        │
+│  27 vendor-kategorier│                              │  Prosjekter          │
+│  Gjester / Tidslinje │                              │  Leveranser          │
+│  Budsjett / Sjekkliste                              │  Showcase            │
+│                      │                              │  Kontrakter          │
+│  ┌────────────────┐  │                              │                      │
+│  │shared/          │  │   Delt kilde for            │                      │
+│  │event-types.ts   │──────event-typer,──────────────│  (leser fra DB       │
+│  │                 │  │   features, kategorier       │   eller API)         │
+│  └────────────────┘  │                              │                      │
+│                      │                              │                      │
+│  ┌────────────────┐  │    HTTP med API-nøkkel       │  ┌────────────────┐  │
+│  │/api/creatorhub  │◄──────────────────────────────│  │  Frontend       │  │
+│  │ 39 endepunkter  │  │                              │  │  kaller         │  │
+│  └────────────────┘  │                              │  │  /api/evendi    │  │
+│                      │                              │  └────────────────┘  │
+│  ┌────────────────┐  │    HTTP med API-nøkkel       │  ┌────────────────┐  │
+│  │  Frontend       │──────────────────────────────►│  │/api/evendi      │  │
+│  │  kaller         │  │                              │  │ 62 endepunkter  │  │
+│  │  getApiUrl()    │  │                              │  │ + catch-all     │  │
+│  └────────────────┘  │                              │  └────────────────┘  │
+└─────────────────────┘                              └──────────────────────┘
+```
+
+### Dataflyt styrt av event-type
+
+```
+Arrangør oppretter arrangement i Evendi
+  → Velger type fra EVENT_TYPES (f.eks. "conference")
+  → EVENT_TYPE_CONFIGS["conference"].features bestemmer:
+      ✅ speeches: true   → Programpunkter synlig for leverandør
+      ✅ seating: true    → Sitteplasser synlig
+      ❌ weddingPartyRoles: false → Skjult
+      ✅ photoplan: true  → Fotoplan synlig
+  → VENDOR_CATEGORY_EVENT_MAP filtrerer leverandører:
+      ✅ "Fotograf" gjelder for "conference"
+      ✅ "Catering" gjelder for "conference"
+      ❌ "Ringer" gjelder IKKE for "conference"
+  → Leverandør i CreatorHub ser KUN data som er aktivt for denne typen
+```
+
+### Teknisk flyt – steg for steg
+
+**1. Evendi → CreatorHub (arrangørdata til leverandør)**
+```
+Leverandør åpner prosjekt i CreatorHub
+  → CreatorHub frontend kaller "/api/evendi/planning/:coupleId"
+  → CreatorHub server henter fra delt DB DIREKTE eller
+  → CreatorHub server kaller EVENDI_API_URL + "/api/creatorhub/..."
+    → Evendi server returnerer data (filtrert etter event-type features)
+      → CreatorHub viser til leverandør
+```
+
+**2. CreatorHub → Evendi (leverandørdata til arrangør)**
+```
+Arrangør åpner "Leverandørstatus" i Evendi
+  → Evendi frontend kaller getApiUrl() + "/api/vendor/creatorhub-bridge"
+  → Evendi server henter data fra delt DB ELLER
+  → Evendi server proxyer til CREATORHUB_API_URL
+    → CreatorHub returnerer data
+      → Evendi viser til arrangør
+```
+
+**3. Toveis synk (f.eks. tidslinje)**
+```
+Arrangør endrer tidslinje i Evendi
+  → Lagres i DB (wedding_timeline_events)
+  → Leverandør åpner prosjekt i CreatorHub
+    → /api/evendi/planning/:coupleId/sync-from-timeline/:projectId
+      → Henter siste versjon fra DB → viser i CreatorHub
+
+Leverandør endrer hendelse i CreatorHub
+  → /api/evendi/planning/:coupleId/sync-to-timeline/:projectId
+    → Skriver tilbake til DB → synlig i Evendi
+```
+
+### Leverandørkategori → Arrangementstype-kobling
+
+`VENDOR_CATEGORY_EVENT_MAP` i `event-types.ts` definerer dette. Funksjonen `isVendorCategoryApplicable(category, eventType)` brukes for filtrering i broen.
+
+### Miljøkonfigurasjon
+
+| Variabel | Brukes i | Standardverdi |
+|---|---|---|
+| `CREATORHUB_API_URL` | Evendi server | `http://localhost:3001` |
+| `EVENDI_API_URL` | CreatorHub server | `https://evendi.onrender.com` |
+| `EXPO_PUBLIC_CREATORHUB_API_URL` | Evendi klient | Codespaces-deteksjon / `localhost:3001` |
+| `API_KEY` | Begge servere | Delt hemmelighet for kryssapp-auth |
+
+### Autentisering mellom appene
+- Alle `/api/creatorhub/*`-ruter i Evendi bruker `authenticateApiKey`-middleware
+- CreatorHub sender `x-api-key`-header med alle kall til Evendi
+- CreatorHub sin catch-all proxy (`app.all('/api/evendi/*')`) videresender automatisk til `EVENDI_API_URL`
+
+---
+
+## 3. HVA – Produkt (nåværende status)
+
+### Broet i dag (18 domener)
+
+| Domene | Retning | Evendi-endepunkt | CreatorHub-endepunkt |
+|---|---|---|---|
+| **Budsjett** | CH → Evendi | `/api/couple/budget/*` | `/api/evendi/budget/:coupleId` |
+| **Sjekkliste + tradisjonsseeding** | CH → Evendi | `/api/checklist/*` | `/api/evendi/checklist/:coupleId` |
+| **Chat / Samtaler** | Begge veier | `/api/couples/conversations/*` | `/api/evendi/conversations/*` |
+| **Kontakter** | CH → Evendi | Delt DB | `/api/evendi/contacts` |
+| **Kontrakter / Tilbud** | Begge veier | `/api/couple/offers/*` | `/api/evendi/contracts/*`, `/api/evendi/offers/*` |
+| **Arrangørprofil** | CH → Evendi | `/api/couples/me` | `/api/evendi/couple-profile` |
+| **Leveransesporing** | Begge veier | `/api/delivery-track` | `/api/evendi/delivery-track` |
+| **Gjester / Deltakere** | CH → Evendi | `/api/couple/guests/*` | `/api/evendi/couple/guests` |
+| **Viktige personer** | Begge veier | `/api/couple/important-people/*` | `/api/evendi/important-people/*` |
+| **Fotoønsker** | Begge veier | `/api/couple/photo-shots/*` | `/api/evendi/photo-shots-bridge/*` |
+| **Planlegging / Tidshendelser** | Begge veier (synk) | `/api/couple/schedule-events/*` | `/api/evendi/planning/:coupleId/*` |
+| **Produkter** | CH → Evendi | Delt DB | `/api/evendi/products` |
+| **Showcase ↔ Leveranse** | Begge veier | Delt DB | `/api/evendi/showcase-*` |
+| **Tidslinjekommentarer** | Begge veier | `/api/vendor/timeline-*` | `/api/evendi/timeline-bridge/:id/*` |
+| **Tradisjoner / Format** | CH → Evendi | Delt DB | `/api/evendi/traditions-bridge` |
+| **Leverandør-prosjekt-bro** | CH → Evendi | Delt DB | `/api/evendi/vendor-project-bridge` |
+| **Vær / Lokasjon / Reise** | Begge veier | `/api/weather/*` | `/api/evendi/weather-location/*` |
+| **Invitasjoner** | CH → Evendi | `/api/couple/wedding-invites/*` | `/api/evendi/couple/:coupleId/wedding-invites` |
+
+### Tellersammendrag
+- **Evendi → CreatorHub-ruter:** 39 endepunkter under `/api/creatorhub/*`
+- **CreatorHub → Evendi-ruter:** 62 dedikerte endepunkter + 1 catch-all proxy under `/api/evendi/*`
+- **Arrangementstyper:** 17 (6 B2C + 11 B2B) definert i `EVENT_TYPE_CONFIGS`
+- **Leverandørkategorier:** 27 slugs i `VENDOR_CATEGORIES`
+- **Kultursynk:** 17 kulturelle nøkler (norsk, sikh, indisk, pakistansk, … annet)
+- **Q&A-spill:** 5 moduser (shoe_game, quiz, two_truths, qa_open, icebreaker)
+
+---
+
+## 4. CREATORHUB-KOMPONENTER – Hvor bridge-data konsumeres
+
+### Komponentkart
+
+CreatorHub har **10 frontend-komponenter** som aktivt konsumerer Evendi bridge-data:
+
+```
+CreatorHub Frontend (frontend/client/src/)
+│
+├── lib/
+│   └── evendi-api.ts                    ← API-klientbibliotek (alle /api/evendi/* kall)
+│                                           Speiler EventType, EventTypeFeatures, 
+│                                           isEventFeatureEnabled(), getEventTypeLabel()
+│
+├── components/
+│   ├── evendi/
+│   │   ├── EvendiImportantPeople.tsx     ← Viktige personer CRUD (599 linjer)
+│   │   │     Kall: /api/evendi/contacts
+│   │   │           /api/evendi/important-people?coupleId=X
+│   │   │           /api/evendi/important-people/:id (PUT/POST/DELETE)
+│   │   │
+│   │   └── EvendiOfferManager.tsx        ← Tilbud/kontrakter (544 linjer)
+│   │         Kall: /api/evendi/offers (GET/POST/DELETE)
+│   │               /api/evendi/contracts
+│   │               /api/evendi/contacts
+│   │
+│   ├── chat/
+│   │   ├── UniversalChatWidget.tsx       ← Arrangør↔Leverandør chat
+│   │   │     Kall: /api/evendi/conversations (GET)
+│   │   │           /api/evendi/conversations/:id/messages (GET/POST)
+│   │   │           /api/evendi/delivery-notify-chat
+│   │   │           /api/evendi/delivery-project-bridge
+│   │   │
+│   │   └── FullscreenChatWidget.tsx      ← Fullskjerm chatvisning
+│   │         Kall: /api/evendi/conversations
+│   │               /api/evendi/conversations/:id/messages
+│   │
+│   ├── project/
+│   │   └── ProjectCreationWithMemoryCards.tsx  ← Prosjektoppretting med bridge-data
+│   │         Kall: /api/evendi/traditions-bridge?coupleId=X
+│   │               /api/evendi/photo-shots-bridge?coupleId=X (pull)
+│   │               /api/evendi/photo-shots-bridge/push (push)
+│   │               /api/evendi/weather-location/sync-from-project/:id
+│   │
+│   ├── wedding/
+│   │   ├── WeddingTimelineAdmin.tsx      ← Tidslinje-administrasjon (hovedkomponent)
+│   │   │     Kall: /api/evendi/traditions-bridge?coupleId=X
+│   │   │     Import: EvendiImportantPeople
+│   │   │     Bruker: isEventFeatureEnabled() for feature-gating
+│   │   │
+│   │   ├── WeddingTimelineOverview.tsx   ← Tidslinjeoversikt
+│   │   ├── WeddingTimelineClientView.tsx ← Klientvisning av tidslinje
+│   │   ├── WeddingTimelineChangesOverview.tsx ← Endringslogg
+│   │   ├── WeddingTimelineClientAccess.tsx    ← Tilgangsstyring
+│   │   └── WeddingTimelineEditor.tsx     ← Editor med speech-type events
+│   │
+│   └── universal/
+│       ├── UniversalDashboard.tsx         ← Hoveddashboard (7300+ linjer)
+│       │     Kall: /api/evendi/resolve-couple?email=X
+│       │     Rendrer: WeddingTimeline*, UniversalChatWidget,
+│       │              EvendiTimelineAdmin (via import)
+│       │     Tab-struktur per yrke (se under)
+│       │
+│       └── UniversalShowcase.tsx          ← Showcase-administrasjon
+│             Kall: /api/evendi/showcase-create-delivery
+│
+└── integration/
+    └── EnhancedMasterIntegrationProvider.tsx ← Master-integrasjonslag
+          Registrerer: evendi:bookings:*, evendi:users:*, evendi:analytics:*
+```
+
+### Dashboard tab-struktur (UniversalDashboard)
+
+Leverandøren ser tabs basert på sitt yrke. Bridge-data vises i følgende tabs:
+
+| Tab ID | Label | Bridge-data som vises |
+|---|---|---|
+| `overview` | Oversikt | Evendi bookings + analytics via `evendi-api.ts` |
+| `projects` | Prosjekter | Traditions + photo-shots bridge per `evendiCoupleId` |
+| `wedding-timeline` | Tidslinje | Full tidslinjesynk med events, viktige personer, kulturtype |
+| `showcase-admin` | Showcase Admin | Showcase ↔ Delivery bridge |
+| `showcase-viewer` | Showcase Viewer | Klientvisning med leveransesporing |
+| `communication` | Kommunikasjon | Chat-bridge med arrangør via `/api/evendi/conversations` |
+| `client-management` | Klientadministrasjon | Resolve couple + kontakter |
+
+### Eksisterende feature-gating i CreatorHub
+
+`evendi-api.ts` har sin egen `isEventFeatureEnabled()` som speiler Evendi sin `event-types.ts`:
+
+```typescript
+// Eksempel: WeddingTimelineAdmin sjekker features før visning
+if (isEventFeatureEnabled(eventType, 'speeches')) → vis tale-hendelser i tidslinje
+if (isEventFeatureEnabled(eventType, 'seating'))  → vis bordplassering
+if (isEventFeatureEnabled(eventType, 'photoplan')) → vis fotoplan
+```
+
+### DB-felt som allerede ligger klart
+
+Tabellen `couple_vendor_contracts` har allerede kolonner for tilgangsstyring:
+```sql
+can_view_schedule        -- Leverandør kan se tidslinje
+can_view_speeches        -- Leverandør kan se taler/program ← IKKE KOBLET TIL FRONTEND
+can_view_table_seating   -- Leverandør kan se bordplassering ← IKKE KOBLET TIL FRONTEND
+notify_on_schedule_changes -- Push-varsel ved tidslinjeendring
+notify_on_speech_changes   -- Push-varsel ved taleendring ← IKKE KOBLET
+notify_on_table_changes    -- Push-varsel ved bordendring ← IKKE KOBLET
+```
+
+---
+
+## 5. WORKFLOW – Leverandørens vei gjennom bridge-data
+
+### Navigasjonsflyt i CreatorHub
+
+```
+Login → /login
+  │
+  ▼
+UniversalDashboard → /:profession-dashboard-material
+  │
+  ├── [Oversikt-tab] ──────→ Evendi bookings + analytics
+  │
+  ├── [Prosjekter-tab] ────→ Velg prosjekt
+  │     │                     └── ProjectCreationWithMemoryCards
+  │     │                           ├── Traditions bridge → kulturtype
+  │     │                           ├── Photo-shots bridge → fotoønsker (pull/push)
+  │     │                           └── Weather-location sync
+  │     │
+  │     └── Åpne tidslinje ──→ [Tidslinje-tab]
+  │
+  ├── [Tidslinje-tab] ─────→ WeddingTimelineAdmin
+  │     ├── Tidslinjeoversikt (events fra Evendi)
+  │     ├── Viktige personer (EvendiImportantPeople)
+  │     ├── Kulturtype fra traditions bridge
+  │     └── ⚠️ MANGLER: Taler, Bordplassering
+  │
+  ├── [Kommunikasjon-tab] ──→ UniversalChatWidget
+  │     ├── Samtaler med arrangør
+  │     ├── Meldinger (push/pull)
+  │     └── Leveransevarsler
+  │
+  └── [Showcase-tab] ──────→ UniversalShowcase
+        ├── Showcase → Delivery bridge
+        └── Leveransesporing
+```
+
+### Dataflyt per bridge-domene
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Arrangør    │     │  Evendi API  │     │ CreatorHub   │     │  Leverandør  │
+│  (Evendi app) │     │   (server)   │     │   (server)   │     │ (CreatorHub) │
+└──────┬───────┘     └──────┬───────┘     └──────┬───────┘     └──────┬───────┘
+       │                     │                     │                     │
+  [1] Lager tale ──────────► │                     │                     │
+       │                     │ Lagrer i DB         │                     │
+       │                     │ (speeches-tabell)   │                     │
+       │                     │                     │                     │
+       │                     │     ◄──── [2] Leverandør åpner prosjekt ─┤
+       │                     │                     │                     │
+       │                     │ ─── [3] GET /api/evendi/speeches ───────► │
+       │                     │                     │                     │
+       │                     │     │ Sjekk contract:                     │
+       │                     │     │ can_view_speeches = true?           │
+       │                     │     │ Sjekk features:                     │
+       │                     │     │ speeches = true for event-type?     │
+       │                     │     │                                     │
+       │                     │     └──── [4] Returnér JSON ────────────► │
+       │                     │                     │                     │
+       │                     │                     │      [5] Vises i    │
+       │                     │                     │      tidslinje-tab  │
+       │                     │                     │                     │
+  [6] Ser leverandørens  ◄── │ ◄──── Push-varsel ved endring ──────────┤
+      kommentar              │     (notify_on_speech_changes)           │
+```
+
+### Workflow for ny bridge (Taler som eksempel)
+
+**Steg 1 – Evendi backend** (`server/routes.ts` eller `server/creatorhub-routes.ts`):
+```
+Nytt endepunkt: GET /api/creatorhub/speeches/:coupleId
+  → Sjekk authenticateApiKey
+  → Hent fra speeches-tabell WHERE couple_id = :coupleId
+  → Returner { speeches: [...], eventType }
+```
+
+**Steg 2 – CreatorHub backend** (`backend/server/index.ts`):
+```
+Nytt endepunkt: GET /api/evendi/speeches/:coupleId
+  → Sjekk kontrakt: can_view_speeches = true
+  → Sjekk event-type features via isEventFeatureEnabled()
+  → Proxy til EVENDI_API_URL/api/creatorhub/speeches/:coupleId
+  → Returner til frontend
+```
+
+**Steg 3 – CreatorHub frontend** (ny komponent):
+```
+Ny fil: components/evendi/EvendiSpeeches.tsx
+  → Kall /api/evendi/speeches/:coupleId
+  → Vis liste: Taler/programpunkter med navn, rekkefølge, varighet
+  → Integreres i WeddingTimelineAdmin som ny seksjon
+```
+
+**Steg 4 – Koble til dashboard**:
+```
+WeddingTimelineAdmin.tsx:
+  → Import EvendiSpeeches
+  → if (isEventFeatureEnabled(eventType, 'speeches')) → vis panel
+```
+
+---
+
+## 6. GAP-ANALYSE – Ikke broet ennå
+
+### Høy prioritet – klar for implementering
+
+| Domene | Evendi-endepunkt | DB-felt klart? | CreatorHub-komponent | Status |
+|---|---|---|---|---|
+| **Taler / Program** | `/api/speeches` | ✅ `can_view_speeches`, `notify_on_speech_changes` | ❌ Mangler `EvendiSpeeches.tsx` | Klar for impl. |
+| **Bordplassering** | `/api/couple/tables` | ✅ `can_view_table_seating`, `notify_on_table_changes` | ❌ Mangler `EvendiSeating.tsx` | Klar for impl. |
+
+**Begge** har:
+- Evendi API-endepunkter som fungerer ✅
+- DB-kolonner for tilgangsstyring i `couple_vendor_contracts` ✅
+- Feature-flagg i `event-types.ts` (`speeches: true` for 15/17, `seating: true` for 13/17) ✅
+- **Mangler kun**: CreatorHub backend-endepunkt + frontend-komponent
+
+### Medium prioritet
+
+| Domene | Evendi-endepunkt | DB-felt? | CreatorHub-komponent | Status |
+|---|---|---|---|---|
+| **Musikk / Spillelister** | `/api/couple/music/*` | ❌ Ingen DB-felt | ❌ Mangler | Trenger DB-migrasjon |
+| **Koordinatorinfo** | `/api/couple/coordinators` | ❌ Ingen DB-felt | ❌ Mangler | Trenger DB-migrasjon |
+| **Anmeldelser** | `/api/couple/reviews` | ❌ Ingen DB-felt | ❌ Mangler | Trenger DB-migrasjon |
+
+### Lav prioritet
+
+| Domene | Kommentar |
+|---|---|
+| Kategori-detaljskjermer | Overlapper med fotoønsker/tidslinjebroer |
+
+### Trenger ikke bro
+
+| Domene | Begrunnelse |
+|---|---|
+| Påminnelser | Arrangør-privat |
+| Aktivitetslogg | Arrangør-privat |
+| FAQ / Videoguider / Hva er nytt | App-internt innhold |
+| Abonnementsnivåer | Kun fakturering |
+| Partnerdeling | Arrangør-private tilgangstokens |
+| Inspirasjoner | Innholdsbibliotek, ikke prosjektspesifikt |
+| Gjesteinvitasjoner/RSVP | Gjestelisten er allerede broet |
+
+---
+
+## 7. FILREFERANSER
+
+### Evendi (wedflow repo)
+| Fil | Rolle |
+|---|---|
+| [`shared/event-types.ts`](../shared/event-types.ts) | **Kjerneregisteret** — 17 event-typer, features, roller, 27 vendor-kategorier, Q&A-spill, event↔kategori-mapping |
+| `server/creatorhub-routes.ts` | 39 endepunkter CreatorHub kaller |
+| `server/routes.ts` | Vær-proxy, leveransesporing, leverandør-bro-ruter, speeches, tables |
+| `client/components/VendorCreatorHubBridge.tsx` | Leverandør ser CreatorHub-prosjekter |
+| `client/lib/api-weather-location-bridge.ts` | Vær/lokasjon/reise-hjelpefunksjoner |
+| `client/screens/DeliveryAccessScreen.tsx` | Arrangør-leveransetilgang |
+
+### CreatorHub (Creatorhubn-monorepo)
+| Fil | Rolle |
+|---|---|
+| `frontend/client/src/lib/evendi-api.ts` | **API-klient** — typer, helpers, feature-gating, auth, React Query keys |
+| `frontend/client/src/components/evendi/EvendiImportantPeople.tsx` | Viktige personer CRUD (599 linjer) |
+| `frontend/client/src/components/evendi/EvendiOfferManager.tsx` | Tilbud/kontrakter (544 linjer) |
+| `frontend/client/src/components/chat/UniversalChatWidget.tsx` | Arrangør↔Leverandør chat |
+| `frontend/client/src/components/chat/FullscreenChatWidget.tsx` | Fullskjerm chatvisning |
+| `frontend/client/src/components/project/ProjectCreationWithMemoryCards.tsx` | Prosjektoppretting med traditions/photo-shots/weather bridge |
+| `frontend/client/src/components/wedding/WeddingTimelineAdmin.tsx` | Tidslinje-administrasjon (hovednav for bridge-data) |
+| `frontend/client/src/components/wedding/WeddingTimelineEditor.tsx` | Editor med speech-type events |
+| `frontend/client/src/components/universal/UniversalDashboard.tsx` | Hoveddashboard med tab-struktur |
+| `frontend/client/src/components/universal/UniversalShowcase.tsx` | Showcase → Delivery bridge |
+| `backend/server/index.ts` | 62 `/api/evendi/*`-endepunkter + catch-all proxy |
+| `backend/server/tradition-checklists.ts` | Tradisjonsspesifikke sjekklisteelementer (17 kulturer) |
+
+---
+
+## 8. ANBEFALING – Implementeringsplan
+
+### Fase 1: Taler / Programpunkter (høyest impact, lavest innsats)
+
+Alt grunnlag er på plass (DB-felt, Evendi API, feature-flagg). Trenger:
+
+1. **`server/creatorhub-routes.ts`** → Nytt endepunkt `GET /api/creatorhub/speeches/:coupleId`
+2. **`backend/server/index.ts`** → Nytt endepunkt `GET /api/evendi/speeches/:coupleId` med contract-sjekk
+3. **`components/evendi/EvendiSpeeches.tsx`** → Ny komponent for visning
+4. **`WeddingTimelineAdmin.tsx`** → Importer og vis `EvendiSpeeches` gated bak `isEventFeatureEnabled('speeches')`
+
+### Fase 2: Bordplassering (samme mønster)
+
+1. **`server/creatorhub-routes.ts`** → `GET /api/creatorhub/tables/:coupleId`
+2. **`backend/server/index.ts`** → `GET /api/evendi/tables/:coupleId` med contract-sjekk
+3. **`components/evendi/EvendiSeating.tsx`** → Ny komponent for bordvisning
+4. **`WeddingTimelineAdmin.tsx`** → Importer og vis `EvendiSeating` gated bak `isEventFeatureEnabled('seating')`
+
+### Fase 3: Musikk / Koordinator / Anmeldelser
+
+Krever DB-migrasjon for tilgangsfelter i `couple_vendor_contracts` + nye endepunkter og komponenter.
