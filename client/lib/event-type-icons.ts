@@ -1,8 +1,9 @@
 /**
  * Event Type Icons — Maps event types to bundled PNG images and EvendiIcon fallbacks.
  *
- * 6 personal event types have bundled PNGs in assets/images/event_types/.
- * The remaining 13 corporate types fall back to EvendiIcon (Feather icons).
+ * 15 event types have bundled PNGs in assets/images/event_types/.
+ * The remaining 4 (conference, team_building, product_launch, awards_night)
+ * fall back to EvendiIcon (Feather icons).
  * Admin can override any event type icon with a custom image URI
  * stored in AsyncStorage via useCustomEventIcons().
  */
@@ -87,6 +88,15 @@ const BUNDLED_IMAGES: Partial<Record<EventType, ImageSourcePropType>> = {
   anniversary: require("@/../../assets/images/event_types/Evendi_event_type_anniversary.png"),
   engagement: require("@/../../assets/images/event_types/Evendi_event_type_engagement.png"),
   baby_shower: require("@/../../assets/images/event_types/Evendi_event_type_babyshower.png"),
+  christmas_party: require("@/../../assets/images/event_types/Evendi_event_type_julebord.png"),
+  summer_party: require("@/../../assets/images/event_types/Evendi_event_type_sommer.png"),
+  kickoff: require("@/../../assets/images/event_types/Evendi_event_type_kickoff.png"),
+  seminar: require("@/../../assets/images/event_types/Evendi_event_type_seminar.png"),
+  corporate_event: require("@/../../assets/images/event_types/Evendi_event_type_corporate_event.png"),
+  corporate_anniversary: require("@/../../assets/images/event_types/Evendi_event_type_corporate_anniversary.png"),
+  employee_day: require("@/../../assets/images/event_types/Evendi_event_type_employee_day.png"),
+  onboarding_day: require("@/../../assets/images/event_types/Evendi_event_type_onbording_day.png"),
+  trade_fair: require("@/../../assets/images/event_types/Evendi_event_type_trade_fair.png"),
 };
 
 /**
