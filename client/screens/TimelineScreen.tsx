@@ -5,6 +5,7 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useFocusEffect } from "@react-navigation/native";
 import { EvendiIcon, EvendiIconGlyphMap } from "@/components/EvendiIcon";
+import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInLeft } from "react-native-reanimated";
 
@@ -823,7 +824,7 @@ export default function TimelineScreen() {
 
       {schedule.length === 0 ? (
         <View style={styles.emptyState}>
-          <EvendiIcon name="calendar" size={48} color={theme.textMuted} />
+          <EmptyStateIllustration stateKey="timeline" />
           <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
             Ingen hendelser i kjøreplanen
           </ThemedText>

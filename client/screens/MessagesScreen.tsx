@@ -10,6 +10,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { EvendiIcon } from "@/components/EvendiIcon";
+import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -266,9 +267,7 @@ export default function MessagesScreen({ navigation }: Props) {
         </View>
       ) : conversations.length === 0 ? (
         <View style={[styles.emptyState, { paddingTop: headerHeight + Spacing.xl }]}>
-          <View style={[styles.iconCircle, { backgroundColor: theme.accent + "20" }]}>
-            <EvendiIcon name="inbox" size={32} color={theme.accent} />
-          </View>
+          <EmptyStateIllustration stateKey="messages" />
           <ThemedText style={styles.emptyTitle}>Ingen samtaler ennå</ThemedText>
           <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
             Når du sender en henvendelse til en leverandør, vil samtalen vises her

@@ -33,8 +33,7 @@ import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { GuestsStackParamList } from "@/navigation/GuestsStackNavigator";
 import { getCoupleSession, getAppLanguage, type AppLanguage } from "@/lib/storage";
-import { useCustomEmptyImages } from "@/hooks/useCustomEmptyImages";
-import { getEmptyStateImage } from "@/lib/empty-state-images";
+import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import { getGuests, createGuest, updateGuest, deleteGuest } from "@/lib/api-guests";
 import { GUEST_CATEGORIES } from "@/lib/types";
 import { searchContacts, requestContactsPermission, ContactResult } from "@/lib/contacts";
@@ -84,7 +83,6 @@ export default function GuestsScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
-  const { customImages } = useCustomEmptyImages();
   const { isWedding } = useEventType();
   const navigation = useNavigation<NavigationProp>();
   const { showToast } = useToast();
@@ -1146,11 +1144,7 @@ export default function GuestsScreen() {
 
   const ListEmpty = () => (
     <View style={styles.emptyState}>
-      <Image
-        source={getEmptyStateImage("guests", customImages)}
-        style={styles.emptyImage}
-        resizeMode="contain"
-      />
+      <EmptyStateIllustration stateKey="guests" size={150} />
       <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
         Ingen gjester lagt til
       </ThemedText>

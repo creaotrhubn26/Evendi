@@ -33,7 +33,7 @@ import { useCustomEventIcons } from "@/hooks/useCustomEventIcons";
 import { getEventTypeColor } from "@/lib/event-type-icons";
 import { EVENT_TYPE_CONFIGS } from "@shared/event-types";
 import { useCustomEmptyImages } from "@/hooks/useCustomEmptyImages";
-import { getEmptyStateImage, EMPTY_STATE_CONFIGS } from "@/lib/empty-state-images";
+import { getEmptyStateImage, getEmptyStateIcon, EMPTY_STATE_CONFIGS } from "@/lib/empty-state-images";
 
 interface AppSetting {
   id: string;
@@ -815,11 +815,24 @@ export default function AdminDesignScreen() {
             return (
               <View key={config.key} style={[styles.eventIconRow, { borderBottomColor: theme.border }]}>
                 <Pressable onPress={() => pickEmptyImage(config.key)}>
-                  <Image
-                    source={getEmptyStateImage(config.key, customEmptyImages)}
-                    style={{ width: 48, height: 48, borderRadius: 8 }}
-                    resizeMode="cover"
-                  />
+                  {(() => {
+                    const imgSrc = getEmptyStateImage(config.key, customEmptyImages);
+                    if (imgSrc) {
+                      return (
+                        <Image
+                          source={imgSrc}
+                          style={{ width: 48, height: 48, borderRadius: 8 }}
+                          resizeMode="cover"
+                        />
+                      );
+                    }
+                    const iconName = getEmptyStateIcon(config.key);
+                    return (
+                      <View style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: theme.backgroundSecondary, alignItems: "center", justifyContent: "center" }}>
+                        <EvendiIcon name={iconName ?? "image"} size={22} color={theme.textMuted} />
+                      </View>
+                    );
+                  })()}
                   <View style={styles.eventIconPickBadge}>
                     <EvendiIcon name="camera" size={10} color="#fff" />
                   </View>

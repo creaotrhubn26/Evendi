@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { EvendiIcon, EvendiIconGlyphMap } from "@/components/EvendiIcon";
+import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -804,9 +805,7 @@ export default function RemindersScreen() {
 
         {reminders.length === 0 ? (
           <Animated.View entering={FadeInDown.duration(300).delay(300)} style={styles.emptyState}>
-            <View style={[styles.emptyIcon, { backgroundColor: theme.accent + "20" }]}>
-              <EvendiIcon name="bell-off" size={32} color={theme.accent} />
-            </View>
+            <EmptyStateIllustration stateKey="reminders" />
             <ThemedText style={styles.emptyTitle}>{copy.emptyTitle}</ThemedText>
             <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
               {copy.emptyText}

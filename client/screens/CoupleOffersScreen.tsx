@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { EvendiIcon } from "@/components/EvendiIcon";
+import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -616,7 +617,7 @@ export default function CoupleOffersScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <EvendiIcon name="file-text" size={48} color={theme.textMuted} />
+            <EmptyStateIllustration stateKey="offers" />
             <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>
               Ingen tilbud ennå
             </ThemedText>

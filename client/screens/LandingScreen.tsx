@@ -114,7 +114,10 @@ const TESTIMONIALS = [
    COMPONENT
    ================================================================ */
 export default function LandingScreen() {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, designSettings } = useTheme();
+  const logoSource = designSettings.logoUrl
+    ? { uri: designSettings.logoUrl }
+    : LOGO;
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const tier = useTier();
   const scrollY = useSharedValue(0);
@@ -183,7 +186,7 @@ export default function LandingScreen() {
 
             <Animated.View entering={FadeInDown.duration(700).delay(100)}>
               <Image
-                source={LOGO}
+                source={logoSource}
                 style={{ width: heroLogoWidth, height: heroLogoWidth * 0.4, alignSelf: "center", marginBottom: 20 }}
                 resizeMode="contain"
               />
@@ -192,9 +195,9 @@ export default function LandingScreen() {
             <Animated.View entering={FadeInDown.duration(700).delay(200)} style={styles.badgeContainer}>
               <View style={[styles.badge, { backgroundColor: "rgba(30,107,255,0.12)", borderColor: "rgba(30,107,255,0.25)" }]}>
                 <ThemedText style={[styles.badgeText, { color: "#00D2C6" }]}>
-                  Norges arrangementsplattform
+                  {designSettings.appTagline || "Ditt arrangement. Perfekt Match."}
                   {"\n"}
-                  Norway's event platform
+                  {designSettings.appTaglineEn || "Your Event. Perfectly Matched."}
                 </ThemedText>
               </View>
             </Animated.View>
@@ -470,7 +473,7 @@ export default function LandingScreen() {
         {/* ====== FOOTER ====== */}
         <View style={[styles.footer, { borderTopColor: theme.border, paddingHorizontal: pad }]}>
           <Image
-            source={LOGO}
+            source={logoSource}
             style={{ width: 140, height: 50, alignSelf: "center", marginBottom: 16 }}
             resizeMode="contain"
           />
@@ -480,7 +483,7 @@ export default function LandingScreen() {
             </Pressable>
           </View>
           <ThemedText style={[styles.footerCopy, { color: theme.textMuted }]}>
-            © 2026 Evendi. Alle rettigheter reservert.
+            © {new Date().getFullYear()} {designSettings.appName || "Evendi"}. Alle rettigheter reservert.
           </ThemedText>
         </View>
       </Animated.ScrollView>

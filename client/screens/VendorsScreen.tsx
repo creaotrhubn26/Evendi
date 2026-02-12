@@ -17,6 +17,7 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import { EvendiIcon, EvendiIconGlyphMap } from "@/components/EvendiIcon";
+import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
@@ -29,7 +30,7 @@ import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import PersistentTextInput from "@/components/PersistentTextInput";
 import { type EventType, VENDOR_CATEGORIES, getVendorCategoryGradientByDbName } from "@shared/event-types";
 
-const LOGO = require("../../assets/images/Evendi_logo_norsk_tagline.png");
+const FALLBACK_LOGO = require("../../assets/images/Evendi_logo_norsk_tagline.png");
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 // ─── Vendor Categories for dropdown (from shared registry) ─────
@@ -183,7 +184,7 @@ export default function VendorsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
-  const { theme } = useTheme();
+  const { theme, designSettings } = useTheme();
   const { eventType, config } = useEventType();
   const navigation = useNavigation<NativeStackNavigationProp<PlanningStackParamList>>();
 
@@ -442,7 +443,7 @@ export default function VendorsScreen() {
           end={{ x: 0, y: 1 }}
           style={styles.heroHeader}
         >
-          <Image source={LOGO} style={styles.logo} resizeMode="contain" />
+          <Image source={designSettings.logoUrl ? { uri: designSettings.logoUrl } : FALLBACK_LOGO} style={styles.logo} resizeMode="contain" />
         </LinearGradient>
 
         {/* Search bar */}
@@ -569,7 +570,7 @@ export default function VendorsScreen() {
   // ── Empty state ──
   const EmptyState = () => (
     <View style={styles.emptyState}>
-      <EvendiIcon name="search" size={48} color={theme.textMuted} />
+      <EmptyStateIllustration stateKey="vendors" />
       <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>
         Ingen leverandører funnet
       </ThemedText>

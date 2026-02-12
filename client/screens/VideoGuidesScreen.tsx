@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EvendiIcon } from "@/components/EvendiIcon";
+import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import * as Haptics from "expo-haptics";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "@/hooks/useTheme";
@@ -87,7 +88,7 @@ export default function VideoGuidesScreen() {
 
       {!isLoading && guides.length === 0 && (
         <View style={styles.emptyState}>
-          <EvendiIcon name="video" size={48} color={theme.textMuted} />
+          <EmptyStateIllustration stateKey="video_guides" />
           <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>Ingen videoguider tilgjengelig</ThemedText>
         </View>
       )}

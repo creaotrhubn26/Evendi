@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { EvendiIcon } from "@/components/EvendiIcon";
+import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import Animated, { FadeInRight } from "react-native-reanimated";
@@ -301,14 +302,7 @@ export default function ImportantPeopleScreen() {
     >
       {people.length === 0 && !showForm ? (
         <View style={styles.emptyState}>
-          <View
-            style={[
-              styles.emptyIcon,
-              { backgroundColor: theme.backgroundDefault },
-            ]}
-          >
-            <EvendiIcon name="users" size={32} color={theme.textMuted} />
-          </View>
+          <EmptyStateIllustration stateKey="important_people" />
           <ThemedText
             style={[styles.emptyText, { color: theme.textSecondary }]}
           >

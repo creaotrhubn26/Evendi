@@ -28,8 +28,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { renderIcon } from "@/lib/custom-icons";
-import { useCustomEmptyImages } from "@/hooks/useCustomEmptyImages";
-import { getEmptyStateImage } from "@/lib/empty-state-images";
+import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import { showToast } from "@/lib/toast";
 import PersistentTextInput from "@/components/PersistentTextInput";
 
@@ -83,7 +82,6 @@ export default function InspirationScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
-  const { customImages: customEmptyImages } = useCustomEmptyImages();
   const { isWedding } = useEventType();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -287,11 +285,7 @@ export default function InspirationScreen() {
         </View>
       ) : filteredInspirations.length === 0 ? (
         <View style={styles.emptyState}>
-          <Image
-            source={getEmptyStateImage("inspiration", customEmptyImages)}
-            style={{ width: 150, height: 150, opacity: 0.8 }}
-            resizeMode="contain"
-          />
+          <EmptyStateIllustration stateKey="inspiration" size={150} />
           <ThemedText
             style={[styles.emptyText, { color: theme.textSecondary }]}
           >

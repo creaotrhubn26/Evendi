@@ -3,8 +3,7 @@ import { View, StyleSheet, ScrollView, Pressable, RefreshControl, TouchableOpaci
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { EvendiIcon } from '@/components/EvendiIcon';
-import * as Haptics from 'expo-haptics';
+import { EvendiIcon } from '@/components/EvendiIcon';import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -215,7 +214,7 @@ export function FotografScreen() {
         {/* Tab content */}
         {activeTab === 'sessions' ? (
           <Animated.View entering={FadeInDown.duration(300)} style={styles.emptyState}>
-            <EvendiIcon name="camera" size={48} color={theme.textMuted} style={{ opacity: 0.5 }} />
+            <EmptyStateIllustration stateKey="photographer" />
             <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>
               Ingen fotoøkter ennå
             </ThemedText>

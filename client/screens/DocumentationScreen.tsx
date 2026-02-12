@@ -312,7 +312,6 @@ const parseFeaturesSetting = (value: string | undefined, fallbackColor: string) 
 
 // Logo assets
 const LOGO_NO = require("../../assets/images/Evendi_logo_norsk_tagline.png");
-const LOGO_ICON = require("../../assets/images/Evendi_app_icon.png");
 
 export default function DocumentationScreen() {
   const headerHeight = useHeaderHeight();
