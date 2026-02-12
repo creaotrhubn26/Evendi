@@ -83,21 +83,14 @@ const trackDeliveryAction = async (
   source: string = 'evendi-app'
 ) => {
   try {
-    // Try monorepo bridge first, then evendi
-    const urls = [
-      new URL('/api/evendi/delivery-track', 'https://creatorhub-monorepo.onrender.com').toString(),
-      new URL('/api/evendi/delivery-track', getApiUrl()).toString(),
-    ];
-    for (const url of urls) {
-      try {
-        await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deliveryId, deliveryItemId, action, accessCode, source }),
-        });
-        return;
-      } catch { continue; }
-    }
+    await fetch(
+      new URL('/api/delivery-track', getApiUrl()).toString(),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deliveryId, deliveryItemId, action, accessCode, source }),
+      }
+    );
   } catch { /* silent fail */ }
 };
 
