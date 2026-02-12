@@ -27,6 +27,8 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { showToast } from "@/lib/toast";
 import { showOptions } from "@/lib/dialogs";
 import PersistentTextInput from "@/components/PersistentTextInput";
+import { EventTypeIcon } from "@/components/EventTypeIcon";
+import { useCustomEventIcons } from "@/hooks/useCustomEventIcons";
 import {
   EVENT_TYPE_CONFIGS,
   getGroupedEventTypes,
@@ -66,6 +68,7 @@ interface Props {
 export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props) {
   const headerHeight = useHeaderHeight();
   const { theme, designSettings } = useTheme();
+  const { customIcons: customEventIcons, customColors: customEventColors } = useCustomEventIcons();
   const logoSource = designSettings.logoUrl
     ? { uri: designSettings.logoUrl }
     : require("../../assets/images/Evendi_logo_norsk_tagline.png");
@@ -494,7 +497,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
                   ]}
                 >
                   <View style={styles.traditionHeader}>
-                    <ThemedText style={styles.traditionIcon}>{config.icon}</ThemedText>
+                    <EventTypeIcon type={config.type} size={32} customIcons={customEventIcons} customColors={customEventColors} />
                     <View style={{ flex: 1 }}>
                       <ThemedText style={[styles.traditionName, { color: theme.text }]}>
                         {config.labelNo}
@@ -513,7 +516,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
               );
             })}
 
-            {/* Corporate Events — grouped by sub-category */}
+            {/* Corporate Events -- grouped by sub-category */}
             <ThemedText style={[styles.eventCategoryHeader, { color: theme.textSecondary, marginTop: Spacing.lg }]}>
               Bedrift & Organisasjon
             </ThemedText>
@@ -538,7 +541,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
                       ]}
                     >
                       <View style={styles.traditionHeader}>
-                        <ThemedText style={styles.traditionIcon}>{config.icon}</ThemedText>
+                        <EventTypeIcon type={config.type} size={32} customIcons={customEventIcons} customColors={customEventColors} />
                         <View style={{ flex: 1 }}>
                           <ThemedText style={[styles.traditionName, { color: theme.text }]}>
                             {config.labelNo}
@@ -577,7 +580,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
                   ]}
                 >
                   <View style={styles.traditionHeader}>
-                    <ThemedText style={styles.traditionIcon}>{catchAll.icon}</ThemedText>
+                    <EventTypeIcon type={catchAll.type} size={32} customIcons={customEventIcons} customColors={customEventColors} />
                     <View style={{ flex: 1 }}>
                       <ThemedText style={[styles.traditionName, { color: theme.text }]}>
                         {catchAll.labelNo}

@@ -27,6 +27,10 @@ import { getApiUrl } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { showToast } from "@/lib/toast";
 import PersistentTextInput from "@/components/PersistentTextInput";
+import { EventTypeIcon } from "@/components/EventTypeIcon";
+import { useCustomEventIcons } from "@/hooks/useCustomEventIcons";
+import { getEventTypeColor } from "@/lib/event-type-icons";
+import { EVENT_TYPE_CONFIGS } from "@shared/event-types";
 
 interface AppSetting {
   id: string;
@@ -95,6 +99,31 @@ export default function AdminDesignScreen() {
   const [buttonRadius, setButtonRadius] = useState("8");
   const [cardRadius, setCardRadius] = useState("12");
   const [borderWidth, setBorderWidth] = useState("1");
+
+  // Custom event type icons
+  const {
+    customIcons: customEventIcons,
+    customColors: customEventColors,
+    setIcon: setEventIcon,
+    setColor: setEventColor,
+  } = useCustomEventIcons();
+
+  const pickEventIcon = async (eventType: string) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      showToast("Vi trenger tilgang til bildebiblioteket.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    await setEventIcon(eventType, result.assets[0].uri);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
 
   const numericFontSize = Number.parseInt(fontSize, 10);
   const safeFontSize = Number.isFinite(numericFontSize) ? numericFontSize : 16;
@@ -695,6 +724,57 @@ export default function AdminDesignScreen() {
         </View>
       </Animated.View>
 
+      {/* ── Event Type Icons ── */}
+      <Animated.View entering={FadeInDown.delay(270).duration(400)}>
+        <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <ThemedText style={styles.sectionTitle}>Arrangementsikoner</ThemedText>
+          <ThemedText style={{ color: theme.textSecondary, fontSize: 12, marginBottom: Spacing.md }}>
+            Trykk for a velge egne ikoner for arrangementstyper.
+          </ThemedText>
+          {EVENT_TYPE_CONFIGS.map((config) => {
+            const hasCustom = !!customEventIcons[config.type];
+            return (
+              <View key={config.type} style={[styles.eventIconRow, { borderBottomColor: theme.border }]}>
+                <Pressable onPress={() => pickEventIcon(config.type)}>
+                  <EventTypeIcon type={config.type} size={36} customIcons={customEventIcons} customColors={customEventColors} />
+                  <View style={styles.eventIconPickBadge}>
+                    <EvendiIcon name="camera" size={10} color="#fff" />
+                  </View>
+                </Pressable>
+                <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                  <ThemedText style={{ color: theme.text, fontWeight: "600", fontSize: 13 }}>
+                    {config.labelNo}
+                  </ThemedText>
+                  <ThemedText style={{ color: theme.textMuted, fontSize: 11 }}>
+                    {hasCustom ? "Egendefinert" : "Standardikon"}
+                  </ThemedText>
+                </View>
+                {/* Color cycle */}
+                <Pressable
+                  onPress={() => {
+                    const palette = ["#ec4899","#3b82f6","#f59e0b","#10b981","#8b5cf6","#ef4444","#06b6d4","#f97316","#64748b"];
+                    const cur = customEventColors[config.type] ?? getEventTypeColor(config.type);
+                    const idx = palette.indexOf(cur);
+                    const next = palette[(idx + 1) % palette.length];
+                    setEventColor(config.type, next);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={{
+                    width: 22, height: 22, borderRadius: 11, marginRight: Spacing.sm,
+                    backgroundColor: customEventColors[config.type] ?? getEventTypeColor(config.type),
+                  }}
+                />
+                {hasCustom && (
+                  <Pressable onPress={() => { setEventIcon(config.type, undefined); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} style={{ padding: Spacing.xs }}>
+                    <EvendiIcon name="x" size={16} color={theme.textMuted} />
+                  </Pressable>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      </Animated.View>
+
       <Animated.View entering={FadeInDown.delay(275).duration(400)}>
         <View style={[styles.previewSection, { backgroundColor: backgroundColor, borderColor: theme.border }]}>
           <ThemedText style={[styles.previewTitle, { color: primaryColor, fontFamily: previewFontFamily }]}>
@@ -934,5 +1014,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: Spacing.md,
+  },
+  eventIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  eventIconPickBadge: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
