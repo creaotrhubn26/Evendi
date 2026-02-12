@@ -1380,11 +1380,12 @@ export function registerCreatorhubRoutes(app: Express) {
 
   // ===============================================
   // SPEECHES BRIDGE — Expose speech/program data to CreatorHub
+  // Supports all event types (wedding, conference, corporate, etc.)
   // ===============================================
 
   /**
    * GET /api/creatorhub/speeches/:coupleId
-   * Returns speeches for a specific couple.
+   * Returns speeches/program items for a specific organizer.
    * Used by CreatorHub to show speech/program list to vendors.
    */
   app.get("/api/creatorhub/speeches/:coupleId", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
@@ -1394,15 +1395,15 @@ export function registerCreatorhubRoutes(app: Express) {
         return res.status(400).json({ error: "coupleId is required" });
       }
 
-      // Verify couple exists
-      const [couple] = await db.select({
+      // Verify organizer exists
+      const [organizer] = await db.select({
         id: coupleProfiles.id,
         displayName: coupleProfiles.displayName,
         eventType: coupleProfiles.eventType,
       }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
 
-      if (!couple) {
-        return res.status(404).json({ error: "Couple not found" });
+      if (!organizer) {
+        return res.status(404).json({ error: "Organizer not found" });
       }
 
       const allSpeeches = await db.select()
@@ -1413,8 +1414,8 @@ export function registerCreatorhubRoutes(app: Express) {
       return res.json({
         speeches: allSpeeches,
         coupleId,
-        eventType: couple.eventType || "wedding",
-        coupleName: couple.displayName,
+        eventType: organizer.eventType || "wedding",
+        organizerName: organizer.displayName,
       });
     } catch (err: any) {
       console.error("CreatorHub speeches bridge error:", err);
@@ -1423,12 +1424,13 @@ export function registerCreatorhubRoutes(app: Express) {
   });
 
   // ===============================================
-  // SEATING / TABLES BRIDGE — Expose table seating to CreatorHub
+  // SEATING / TABLES BRIDGE — Expose table layout to CreatorHub
+  // Supports all event types (wedding, conference, corporate, etc.)
   // ===============================================
 
   /**
    * GET /api/creatorhub/tables/:coupleId
-   * Returns tables with guest assignments for a specific couple.
+   * Returns tables with guest assignments for a specific organizer.
    * Used by CreatorHub to show table seating layout to vendors.
    */
   app.get("/api/creatorhub/tables/:coupleId", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
@@ -1438,15 +1440,15 @@ export function registerCreatorhubRoutes(app: Express) {
         return res.status(400).json({ error: "coupleId is required" });
       }
 
-      // Verify couple exists
-      const [couple] = await db.select({
+      // Verify organizer exists
+      const [organizer] = await db.select({
         id: coupleProfiles.id,
         displayName: coupleProfiles.displayName,
         eventType: coupleProfiles.eventType,
       }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
 
-      if (!couple) {
-        return res.status(404).json({ error: "Couple not found" });
+      if (!organizer) {
+        return res.status(404).json({ error: "Organizer not found" });
       }
 
       // Get all tables
@@ -1498,8 +1500,8 @@ export function registerCreatorhubRoutes(app: Express) {
       return res.json({
         tables: tablesWithGuests,
         coupleId,
-        eventType: couple.eventType || "wedding",
-        coupleName: couple.displayName,
+        eventType: organizer.eventType || "wedding",
+        organizerName: organizer.displayName,
         totalTables: tables.length,
         totalSeats: tables.reduce((sum, t) => sum + t.seats, 0),
         assignedGuests: assignments.length,
