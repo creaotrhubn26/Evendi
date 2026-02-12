@@ -32,6 +32,8 @@ import { EventTypeIcon } from "@/components/EventTypeIcon";
 import { useCustomEventIcons } from "@/hooks/useCustomEventIcons";
 import { getEventTypeColor } from "@/lib/event-type-icons";
 import { EVENT_TYPE_CONFIGS } from "@shared/event-types";
+import { useCustomEmptyImages } from "@/hooks/useCustomEmptyImages";
+import { getEmptyStateImage, EMPTY_STATE_CONFIGS } from "@/lib/empty-state-images";
 
 interface AppSetting {
   id: string;
@@ -108,6 +110,29 @@ export default function AdminDesignScreen() {
     setIcon: setEventIcon,
     setColor: setEventColor,
   } = useCustomEventIcons();
+
+  const {
+    customImages: customEmptyImages,
+    setImage: setEmptyImage,
+  } = useCustomEmptyImages();
+
+  const pickEmptyImage = async (key: string) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      showToast("Vi trenger tilgang til bildebiblioteket.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const optimizedUri = await optimizeImage(result.assets[0].uri, ICON_PRESET);
+    await setEmptyImage(key, optimizedUri);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
 
   const pickEventIcon = async (eventType: string) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -769,6 +794,46 @@ export default function AdminDesignScreen() {
                 />
                 {hasCustom && (
                   <Pressable onPress={() => { setEventIcon(config.type, undefined); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} style={{ padding: Spacing.xs }}>
+                    <EvendiIcon name="x" size={16} color={theme.textMuted} />
+                  </Pressable>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      </Animated.View>
+
+      {/* ── Empty State Illustrations ── */}
+      <Animated.View entering={FadeInDown.delay(273).duration(400)}>
+        <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <ThemedText style={styles.sectionTitle}>Tomme tilstander</ThemedText>
+          <ThemedText style={{ color: theme.textSecondary, fontSize: 12, marginBottom: Spacing.md }}>
+            Tilpass illustrasjoner som vises nar det ikke er noe innhold.
+          </ThemedText>
+          {EMPTY_STATE_CONFIGS.map((config) => {
+            const hasCustom = !!customEmptyImages[config.key];
+            return (
+              <View key={config.key} style={[styles.eventIconRow, { borderBottomColor: theme.border }]}>
+                <Pressable onPress={() => pickEmptyImage(config.key)}>
+                  <Image
+                    source={getEmptyStateImage(config.key, customEmptyImages)}
+                    style={{ width: 48, height: 48, borderRadius: 8 }}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.eventIconPickBadge}>
+                    <EvendiIcon name="camera" size={10} color="#fff" />
+                  </View>
+                </Pressable>
+                <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                  <ThemedText style={{ color: theme.text, fontWeight: "600", fontSize: 13 }}>
+                    {config.labelNo}
+                  </ThemedText>
+                  <ThemedText style={{ color: theme.textMuted, fontSize: 11 }}>
+                    {hasCustom ? "Egendefinert" : "Standardillustrasjon"}
+                  </ThemedText>
+                </View>
+                {hasCustom && (
+                  <Pressable onPress={() => { setEmptyImage(config.key, undefined); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} style={{ padding: Spacing.xs }}>
                     <EvendiIcon name="x" size={16} color={theme.textMuted} />
                   </Pressable>
                 )}

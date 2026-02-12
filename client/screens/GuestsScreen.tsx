@@ -10,6 +10,7 @@ import {
   Linking,
   Platform,
   ScrollView,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -32,6 +33,8 @@ import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { GuestsStackParamList } from "@/navigation/GuestsStackNavigator";
 import { getCoupleSession, getAppLanguage, type AppLanguage } from "@/lib/storage";
+import { useCustomEmptyImages } from "@/hooks/useCustomEmptyImages";
+import { getEmptyStateImage } from "@/lib/empty-state-images";
 import { getGuests, createGuest, updateGuest, deleteGuest } from "@/lib/api-guests";
 import { GUEST_CATEGORIES } from "@/lib/types";
 import { searchContacts, requestContactsPermission, ContactResult } from "@/lib/contacts";
@@ -81,6 +84,7 @@ export default function GuestsScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { customImages } = useCustomEmptyImages();
   const { isWedding } = useEventType();
   const navigation = useNavigation<NavigationProp>();
   const { showToast } = useToast();
@@ -1142,9 +1146,11 @@ export default function GuestsScreen() {
 
   const ListEmpty = () => (
     <View style={styles.emptyState}>
-      <View style={[styles.emptyIcon, { backgroundColor: theme.backgroundSecondary }]}>
-        <EvendiIcon name="users" size={48} color={theme.textMuted} />
-      </View>
+      <Image
+        source={getEmptyStateImage("guests", customImages)}
+        style={styles.emptyImage}
+        resizeMode="contain"
+      />
       <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
         Ingen gjester lagt til
       </ThemedText>
@@ -1740,13 +1746,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing["5xl"],
   },
-  emptyIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    justifyContent: "center",
-    alignItems: "center",
+  emptyImage: {
+    width: 150,
+    height: 150,
     marginBottom: Spacing.xl,
+    opacity: 0.8,
   },
   emptyText: {
     fontSize: 16,

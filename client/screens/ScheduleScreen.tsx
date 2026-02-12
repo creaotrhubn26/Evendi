@@ -43,8 +43,8 @@ import { showConfirm } from "@/lib/dialogs";
 import type { ScheduleEvent } from "@shared/schema";
 import { Speech } from "@/lib/types";
 import PersistentTextInput from "@/components/PersistentTextInput";
-
-const emptyScheduleImage = require("../../assets/images/empty-schedule.png");
+import { useCustomEmptyImages } from "@/hooks/useCustomEmptyImages";
+import { getEmptyStateImage } from "@/lib/empty-state-images";
 
 const ICON_OPTIONS = [
   "heart",
@@ -166,6 +166,7 @@ export default function ScheduleScreen() {
   const { theme } = useTheme();
   const { isWedding } = useEventType();
   const { session } = useSession();
+  const { customImages } = useCustomEmptyImages();
   const queryClient = useQueryClient();
 
   const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
@@ -476,7 +477,7 @@ export default function ScheduleScreen() {
       {events.length === 0 ? (
         <View style={styles.emptyState}>
           <Image
-            source={emptyScheduleImage}
+            source={getEmptyStateImage("schedule", customImages)}
             style={styles.emptyImage}
             resizeMode="contain"
           />
