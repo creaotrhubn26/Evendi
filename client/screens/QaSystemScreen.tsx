@@ -15,6 +15,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
+import { optimizeImage, ICON_PRESET } from "@/lib/optimize-image";
 import Animated, { FadeInDown, FadeInRight, SlideInRight } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -411,7 +412,7 @@ export default function QaSystemScreen() {
       quality: 0.8,
     });
     if (result.canceled || !result.assets[0]) return;
-    const uri = result.assets[0].uri;
+    const uri = await optimizeImage(result.assets[0].uri, ICON_PRESET);
     if (gameMode) {
       await handleUpdateGameIconSetting("customGameIcons", gameMode, uri);
     } else {

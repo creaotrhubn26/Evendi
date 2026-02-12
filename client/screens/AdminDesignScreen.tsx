@@ -15,6 +15,7 @@ import { EvendiIcon } from "@/components/EvendiIcon";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from 'expo-image-picker';
+import { optimizeImage, ICON_PRESET, LOGO_PRESET } from "@/lib/optimize-image";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
@@ -121,7 +122,8 @@ export default function AdminDesignScreen() {
       quality: 0.8,
     });
     if (result.canceled || !result.assets[0]) return;
-    await setEventIcon(eventType, result.assets[0].uri);
+    const optimizedUri = await optimizeImage(result.assets[0].uri, ICON_PRESET);
+    await setEventIcon(eventType, optimizedUri);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -252,7 +254,8 @@ export default function AdminDesignScreen() {
 
     if (!result.canceled) {
       // In production, upload to cloud storage and get URL
-      setLogoUrl(result.assets[0].uri);
+      const optimizedUri = await optimizeImage(result.assets[0].uri, LOGO_PRESET);
+      setLogoUrl(optimizedUri);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
