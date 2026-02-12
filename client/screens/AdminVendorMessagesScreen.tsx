@@ -25,6 +25,7 @@ import { showToast } from "@/lib/toast";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import type { VideoGuide } from "@shared/schema";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 interface AdminMessage {
   id: string;
@@ -346,7 +347,8 @@ export default function AdminVendorMessagesScreen({ route, navigation }: Props) 
         >
           <EvendiIcon name="video" size={18} color={selectedGuideId ? "#FFFFFF" : theme.textSecondary} />
         </Pressable>
-        <TextInput
+        <PersistentTextInput
+          draftKey="AdminVendorMessagesScreen-input-1"
           style={[styles.input, { color: theme.text }]}
           placeholder="Svar på melding…"
           placeholderTextColor={theme.textMuted}

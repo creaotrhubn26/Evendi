@@ -24,6 +24,7 @@ import { showConfirm } from "@/lib/dialogs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { SubscriptionTier } from "@shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AdminSubscriptions">;
 
@@ -378,7 +379,8 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
               ListHeaderComponent={
                 <View style={[styles.searchBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}> 
                   <EvendiIcon name="search" size={16} color={theme.textMuted} />
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="AdminSubscriptionsScreen-input-1"
                     style={[styles.searchInput, { color: theme.text, flex: 1 }]}
                     placeholder="Søk leverandør..."
                     placeholderTextColor={theme.textMuted}
@@ -429,7 +431,8 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
           <ScrollView style={styles.modalContent} contentContainerStyle={{ padding: Spacing.md, gap: Spacing.md }}>
             <View>
               <ThemedText style={styles.label}>System-navn *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="AdminSubscriptionsScreen-input-2"
                 style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                 placeholder="starter, professional, enterprise"
                 placeholderTextColor={theme.textMuted}
@@ -441,7 +444,8 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
 
             <View>
               <ThemedText style={styles.label}>Visningsnavn *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="AdminSubscriptionsScreen-input-3"
                 style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                 placeholder="Starter Plan"
                 placeholderTextColor={theme.textMuted}
@@ -453,7 +457,8 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
 
             <View>
               <ThemedText style={styles.label}>Beskrivelse</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="AdminSubscriptionsScreen-input-4"
                 style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                 placeholder="For små leverandører..."
                 placeholderTextColor={theme.textMuted}
@@ -467,7 +472,8 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
             <View style={{ flexDirection: "row", gap: Spacing.md }}>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Pris (NOK/mnd)</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminSubscriptionsScreen-input-5"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   placeholder="0"
                   placeholderTextColor={theme.textMuted}
@@ -479,7 +485,8 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
               </View>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Sortering</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminSubscriptionsScreen-input-6"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   placeholder="0"
                   placeholderTextColor={theme.textMuted}
@@ -496,7 +503,8 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
             <View style={{ flexDirection: "row", gap: Spacing.md }}>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Maks inspirasjonsfoto</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminSubscriptionsScreen-input-7"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   placeholder="10"
                   placeholderTextColor={theme.textMuted}
@@ -508,7 +516,8 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
               </View>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Maks produkter</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminSubscriptionsScreen-input-8"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   placeholder="5"
                   placeholderTextColor={theme.textMuted}
@@ -523,7 +532,8 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
             <View style={{ flexDirection: "row", gap: Spacing.md }}>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Maks tilbud per mnd</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminSubscriptionsScreen-input-9"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   placeholder="10"
                   placeholderTextColor={theme.textMuted}
@@ -535,7 +545,8 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
               </View>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Maks leveringer per mnd</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminSubscriptionsScreen-input-10"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   placeholder="5"
                   placeholderTextColor={theme.textMuted}
@@ -550,7 +561,8 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
             <View style={{ flexDirection: "row", gap: Spacing.md }}>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Maks lagring (GB)</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminSubscriptionsScreen-input-11"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   placeholder="5"
                   placeholderTextColor={theme.textMuted}
@@ -625,7 +637,8 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
             <View style={{ flexDirection: "row", gap: Spacing.md }}>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Provisjon (%)</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminSubscriptionsScreen-input-12"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   placeholder="3"
                   placeholderTextColor={theme.textMuted}

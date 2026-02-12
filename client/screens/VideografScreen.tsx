@@ -25,7 +25,7 @@ import {
 } from '@/lib/api-couple-data';
 import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
-import { VendorSearchField } from '@/components/VendorSearchField';
+import { VendorCategoryMarketplace } from '@/components/VendorCategoryMarketplace';
 import { useTheme } from '../hooks/useTheme';
 import { Colors, Spacing } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
@@ -169,74 +169,58 @@ export function VideografScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={['bottom']}>
-      <View style={[styles.header, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <View style={styles.headerContent}>
-          <View style={[styles.iconCircle, { backgroundColor: Colors.dark.accent + '15' }]}>
-            <EvendiIcon name="video" size={24} color={Colors.dark.accent} />
-          </View>
-          <View style={styles.headerText}>
-            <ThemedText style={styles.headerTitle}>Videograf</ThemedText>
-            <ThemedText style={[styles.headerSubtitle, { color: theme.textMuted }]}>
-              Film din spesielle dag
-            </ThemedText>
-          </View>
-        </View>
-      </View>
-
-      <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <Pressable
-          style={[styles.tab, activeTab === 'sessions' && styles.activeTab]}
-          onPress={() => {
-            setActiveTab('sessions');
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }}
-        >
-          <ThemedText style={[styles.tabText, activeTab === 'sessions' && { color: Colors.dark.accent }]}>
-            Økter
-          </ThemedText>
-          {activeTab === 'sessions' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
-        </Pressable>
-        <Pressable
-          style={[styles.tab, activeTab === 'timeline' && styles.activeTab]}
-          onPress={() => {
-            setActiveTab('timeline');
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }}
-        >
-          <ThemedText style={[styles.tabText, activeTab === 'timeline' && { color: Colors.dark.accent }]}>
-            Tidslinje
-          </ThemedText>
-          {activeTab === 'timeline' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
-        </Pressable>
-      </View>
-
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {/* Marketplace hero + search + vendor cards + CTA */}
+        <VendorCategoryMarketplace
+          category="videographer"
+          categoryName="Videograf"
+          icon="video"
+          subtitle="Finn videografen som fanger følelsene"
+          selectedTraditions={coupleProfile?.selectedTraditions}
+        />
+
+        {/* Tab bar */}
+        <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+          <Pressable
+            style={[styles.tab, activeTab === 'sessions' && styles.activeTab]}
+            onPress={() => {
+              setActiveTab('sessions');
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <ThemedText style={[styles.tabText, activeTab === 'sessions' && { color: Colors.dark.accent }]}>
+              Økter
+            </ThemedText>
+            {activeTab === 'sessions' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
+          </Pressable>
+          <Pressable
+            style={[styles.tab, activeTab === 'timeline' && styles.activeTab]}
+            onPress={() => {
+              setActiveTab('timeline');
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <ThemedText style={[styles.tabText, activeTab === 'timeline' && { color: Colors.dark.accent }]}>
+              Tidslinje
+            </ThemedText>
+            {activeTab === 'timeline' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
+          </Pressable>
+        </View>
+
+        {/* Tab content */}
         {activeTab === 'sessions' ? (
           <Animated.View entering={FadeInDown.duration(300)} style={styles.emptyState}>
-            <EvendiIcon name="heart" size={48} color={theme.primary} style={{ opacity: 0.6 }} />
-            <ThemedText style={[styles.emptyTitle, { color: theme.text, fontWeight: '600' }]}>
-              Filmen som lar dere gjenoppleve dagen
+            <EvendiIcon name="video" size={48} color={theme.textMuted} style={{ opacity: 0.5 }} />
+            <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>
+              Ingen videoøkter ennå
             </ThemedText>
             <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
-              La oss finne videografen som fanger følelsene.
+              Bruk søket ovenfor for å finne og booke en videograf.
             </ThemedText>
-
-            <View style={{ width: '100%', marginTop: Spacing.md }}>
-              <VendorSearchField
-                category="videographer"
-                icon="video"
-                label="Søk etter videograf"
-                placeholder="Søk etter registrert videograf..."
-              />
-            </View>
-
-            <Button onPress={handleFindVideographer} style={styles.findButton}>
-              Finn videograf
-            </Button>
           </Animated.View>
         ) : (
           <Animated.View entering={FadeInDown.duration(300)} style={styles.timelineContainer}>
@@ -259,26 +243,6 @@ export function VideografScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerText: { flex: 1 },
-  headerTitle: { fontSize: 24, fontWeight: '700' },
-  headerSubtitle: { fontSize: 14, marginTop: 2 },
   tabBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -299,17 +263,15 @@ const styles = StyleSheet.create({
     height: 2,
   },
   content: { flex: 1 },
-  scrollContent: { flexGrow: 1, padding: Spacing.lg },
+  scrollContent: { flexGrow: 1 },
   emptyState: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
     gap: Spacing.md,
-    paddingVertical: Spacing['3xl'],
+    paddingVertical: Spacing['2xl'],
+    paddingHorizontal: Spacing.lg,
   },
-  emptyTitle: { fontSize: 20, fontWeight: '600', textAlign: 'center' },
+  emptyTitle: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
   emptyText: { fontSize: 14, textAlign: 'center', maxWidth: 280 },
-  findButton: { marginTop: Spacing.md },
   timelineContainer: { gap: Spacing.lg },
   timelineItem: {
     flexDirection: 'row',

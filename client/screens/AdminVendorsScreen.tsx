@@ -31,6 +31,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { showToast } from "@/lib/toast";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 interface PendingVendor {
   id: string;
@@ -61,7 +62,7 @@ interface SubscriptionTier {
 export default function AdminVendorsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const { theme } = useTheme();
+  const { theme, designSettings } = useTheme();
   const queryClient = useQueryClient();
   const route = useRoute<RouteProp<RootStackParamList, "AdminVendors">>();
   const passedAdminKey = route.params?.adminKey || "";
@@ -78,6 +79,10 @@ export default function AdminVendorsScreen() {
   const [vendorCategories, setVendorCategories] = useState<string[]>([]);
   const [approvingVendor, setApprovingVendor] = useState<PendingVendor | null>(null);
   const [selectedTierId, setSelectedTierId] = useState<string>("");
+  const logoSource = designSettings.logoUrl
+    ? { uri: designSettings.logoUrl }
+    : require("../../assets/images/Evendi_logo_norsk_tagline.png");
+  const showLogo = designSettings.logoUseAuth ?? true;
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectTarget, setRejectTarget] = useState<PendingVendor | null>(null);
@@ -462,11 +467,13 @@ export default function AdminVendorsScreen() {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
         <View style={[styles.loginContainer, { paddingTop: headerHeight + Spacing.xl }]}>
-          <Image
-            source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+          {showLogo ? (
+            <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+          ) : (
+            <ThemedText style={styles.logoText}>
+              {designSettings.appName || "Evendi"}
+            </ThemedText>
+          )}
           <ThemedText style={styles.loginTitle}>Admin-tilgang</ThemedText>
           <ThemedText style={[styles.loginSubtitle, { color: theme.textSecondary }]}>
             Skriv inn admin-nøkkelen for å administrere leverandører
@@ -474,7 +481,8 @@ export default function AdminVendorsScreen() {
 
           <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <EvendiIcon name="key" size={18} color={theme.textMuted} />
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminVendorsScreen-input-1"
               style={[styles.input, { color: theme.text }]}
               placeholder="Admin-nøkkel"
               placeholderTextColor={theme.textMuted}
@@ -764,7 +772,8 @@ export default function AdminVendorsScreen() {
               <ThemedText style={[styles.sectionSubtitle, { color: theme.textSecondary }]}> 
                 Oppgi årsak for avvisning av "{rejectTarget?.businessName}":
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="AdminVendorsScreen-input-2"
                 style={[styles.input, { color: theme.text, borderColor: theme.border }]}
                 placeholder="Valgfritt"
                 placeholderTextColor={theme.textMuted}
@@ -805,6 +814,12 @@ const styles = StyleSheet.create({
     width: 300,
     height: 80,
     marginBottom: Spacing.xl,
+  },
+  logoText: {
+    fontSize: 28,
+    fontWeight: "600",
+    marginBottom: Spacing.xl,
+    textAlign: "center",
   },
   loginTitle: {
     fontSize: 24,

@@ -17,26 +17,23 @@ import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import type { AppSetting } from "../../shared/schema";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
-
+import PersistentTextInput from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 interface VendorSession {
   sessionToken: string;
   vendorId: string;
   email: string;
   businessName: string;
 }
-
 interface VendorAvailability {
   id: string;
   vendorId: string;
@@ -48,33 +45,26 @@ interface VendorAvailability {
   createdAt: string;
   updatedAt: string;
 }
-
 interface BookingInfo {
   date: string;
   acceptedBookings: number;
 }
-
 type AvailabilityStatus = VendorAvailability["status"];
-
-const STATUS_OPTIONS: Array<{
-  value: AvailabilityStatus;
-  label: string;
-  icon: EvendiIconName;
-  color: string;
-}> = [
-  { value: "available", label: "Tilgjengelig", icon: "check-circle", color: "#4CAF50" },
-  { value: "blocked", label: "Blokkert", icon: "x-circle", color: "#EF5350" },
-  { value: "limited", label: "Begrenset", icon: "alert-circle", color: "#FF9800" },
-];
-
 export default function VendorAvailabilityScreen({ navigation }: NativeStackScreenProps<RootStackParamList>) {
   const { theme } = useTheme();
+  const statusOptions = useMemo<Array<{ value: AvailabilityStatus; label: string; icon: EvendiIconName; color: string }>>(
+    () => [
+      { value: "available", label: "Tilgjengelig", icon: "check-circle", color: theme.success },
+      { value: "blocked", label: "Blokkert", icon: "x-circle", color: theme.error },
+      { value: "limited", label: "Begrenset", icon: "alert-circle", color: theme.warning },
+    ],
+    [theme.success, theme.error, theme.warning]
+  );
   const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const queryClient = useQueryClient();
   const scrollViewRef = useRef<ScrollView>(null);
-
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -93,7 +83,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
   const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
   const [highlightedRow, setHighlightedRow] = useState<number | null>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const getVendorSession = useCallback(async (): Promise<VendorSession> => {
     const session = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
     if (!session) throw new Error("Not authenticated");
@@ -101,7 +90,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
     if (!parsed?.sessionToken) throw new Error("Invalid session");
     return parsed;
   }, []);
-
   const { data: appSettings } = useQuery<AppSetting[]>({
     queryKey: ["app-settings"],
     queryFn: async () => {
@@ -110,7 +98,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       return res.json();
     },
   });
-
   const settingsByKey = useMemo(() => {
     return (
       appSettings?.reduce<Record<string, string>>((acc, setting) => {
@@ -119,29 +106,24 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       }, {}) ?? {}
     );
   }, [appSettings]);
-
   const getSetting = useCallback(
     (key: string, fallback = "") => settingsByKey[key] ?? fallback,
     [settingsByKey]
   );
-
   const highlightDurationMs = useMemo(() => {
     const raw = Number.parseInt(getSetting("vendor_availability_highlight_ms", "1200"), 10);
     if (Number.isNaN(raw)) return 1200;
     return Math.min(Math.max(raw, 300), 3000);
   }, [getSetting]);
-
   const highlightIntensity = useMemo(() => {
     const raw = Number.parseFloat(getSetting("vendor_availability_highlight_intensity", "0.12"));
     if (Number.isNaN(raw)) return 0.12;
     return Math.min(Math.max(raw, 0.05), 0.3);
   }, [getSetting]);
-
   const highlightAlphaHex = useMemo(() => {
     const alpha = Math.round(highlightIntensity * 255);
     return alpha.toString(16).padStart(2, "0");
   }, [highlightIntensity]);
-
   const { data: availability = [], isLoading } = useQuery<VendorAvailability[]>({
     queryKey: ["vendor-availability"],
     queryFn: async () => {
@@ -153,7 +135,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       return res.json();
     },
   });
-
   const { data: bookings = {} } = useQuery<Record<string, BookingInfo>>({
     queryKey: ["vendor-bookings-by-date"],
     queryFn: async () => {
@@ -182,7 +163,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
     },
     enabled: !!currentMonth,
   });
-
   const saveAvailabilityMutation = useMutation({
     mutationFn: async (data: { date: string; status: AvailabilityStatus; maxBookings: number | null; notes: string | null; name: string | null }) => {
       const { sessionToken } = await getVendorSession();
@@ -216,7 +196,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       showToast(error.message);
     },
   });
-
   const deleteAvailabilityMutation = useMutation({
     mutationFn: async (date: string) => {
       const { sessionToken } = await getVendorSession();
@@ -236,7 +215,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       setSelectedDate(null);
     },
   });
-
   // Bulk save mutation for multiple dates
   const bulkSaveAvailabilityMutation = useMutation({
     mutationFn: async (data: { dates: string[]; status: AvailabilityStatus; maxBookings: number | null; notes: string | null; name: string | null }) => {
@@ -272,7 +250,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       showToast(error.message);
     },
   });
-
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await queryClient.invalidateQueries({ queryKey: ["app-settings"] });
@@ -280,7 +257,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
     await queryClient.invalidateQueries({ queryKey: ["vendor-bookings-by-date"] });
     setIsRefreshing(false);
   }, [queryClient]);
-
   const getDatesInMonth = (date: Date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -293,7 +269,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
     }
     return dates;
   };
-
   const getCalendarDays = () => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -315,19 +290,16 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
     
     return days;
   };
-
   const getAvailabilityForDate = (date: Date | null): VendorAvailability | undefined => {
     if (!date) return undefined;
     const dateStr = date.toISOString().split("T")[0];
     return availability.find(a => a.date === dateStr);
   };
-
   const getBookingsForDate = (date: Date | null): number => {
     if (!date) return 0;
     const dateStr = date.toISOString().split("T")[0];
     return bookings[dateStr]?.acceptedBookings || 0;
   };
-
   const openEditModal = (date: Date) => {
     const dateStr = date.toISOString().split("T")[0];
     const existing = availability.find(a => a.date === dateStr);
@@ -340,7 +312,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
     setShowEditModal(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
-
   const toggleDateSelection = (date: Date) => {
     const dateStr = date.toISOString().split("T")[0];
     const newSelected = new Set(selectedDates);
@@ -352,7 +323,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
     setSelectedDates(newSelected);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const openBulkEditModal = () => {
     if (selectedDates.size === 0) {
       showToast("Velg minst én dato for å fortsette");
@@ -364,7 +334,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
     setEditNotes("");
     setShowBulkModal(true);
   };
-
   const handleBulkSave = () => {
     if (selectedDates.size === 0) return;
     
@@ -381,12 +350,10 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       notes: editNotes.trim() || null,
     });
   };
-
   const exitMultiSelectMode = () => {
     setIsMultiSelectMode(false);
     setSelectedDates(new Set());
   };
-
   const selectAllDatesInMonth = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -396,7 +363,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
     setSelectedDates(new Set(dates));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
-
   const handleSave = () => {
     if (!selectedDate) return;
     
@@ -413,7 +379,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       notes: editNotes.trim() || null,
     });
   };
-
   const handleDelete = async () => {
     if (!selectedDate) return;
     const confirmed = await showConfirm({
@@ -426,13 +391,11 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
     if (!confirmed) return;
     deleteAvailabilityMutation.mutate(selectedDate);
   };
-
   const changeMonth = (offset: number) => {
     const newMonth = new Date(currentMonth);
     newMonth.setMonth(newMonth.getMonth() + offset);
     setCurrentMonth(newMonth);
   };
-
   const jumpToToday = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -447,22 +410,18 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       setSelectedDate(today.toISOString().split("T")[0]);
     }
   };
-
   const isSameMonth = (a: Date, b: Date) =>
     a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
-
   const getStartPaddingForMonth = (date: Date) => {
     const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
     return (firstDay.getDay() + 6) % 7;
   };
-
   const getRowIndexForDate = (date: Date) => {
     const startPadding = getStartPaddingForMonth(date);
     const dayIndex = date.getDate() - 1;
     const cellIndex = startPadding + dayIndex;
     return Math.floor(cellIndex / 7);
   };
-
   const highlightRow = useCallback((rowIndex: number) => {
     setHighlightedRow(rowIndex);
     if (highlightTimeoutRef.current) {
@@ -472,42 +431,34 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       setHighlightedRow(null);
     }, highlightDurationMs);
   }, [highlightDurationMs]);
-
   const scrollToToday = useCallback(() => {
     if (!calendarLayout) return;
     const today = new Date();
     if (!isSameMonth(currentMonth, today)) return;
-
     const rowIndex = getRowIndexForDate(today);
     const cellSize = calendarLayout.width / 7;
     const rowHeight = cellSize + Spacing.xs;
     const targetY = Math.max(calendarLayout.y + rowIndex * rowHeight - Spacing.md, 0);
-
     scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
     highlightRow(rowIndex);
   }, [calendarLayout, currentMonth]);
-
   const scrollToDate = useCallback((dateString: string) => {
     if (!calendarLayout) return;
     const target = new Date(dateString);
     if (Number.isNaN(target.getTime())) return;
     if (!isSameMonth(currentMonth, target)) return;
-
     const rowIndex = getRowIndexForDate(target);
     const cellSize = calendarLayout.width / 7;
     const rowHeight = cellSize + Spacing.xs;
     const targetY = Math.max(calendarLayout.y + rowIndex * rowHeight - Spacing.md, 0);
-
     scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
     highlightRow(rowIndex);
   }, [calendarLayout, currentMonth, highlightRow]);
-
   useEffect(() => {
     if (!pendingScrollToToday) return;
     scrollToToday();
     setPendingScrollToToday(false);
   }, [pendingScrollToToday, scrollToToday]);
-
   useEffect(() => {
     if (!pendingScrollTarget) return;
     const targetDate = new Date(pendingScrollTarget);
@@ -515,22 +466,18 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       setPendingScrollTarget(null);
       return;
     }
-
     if (!isSameMonth(currentMonth, targetDate)) {
       setCurrentMonth(new Date(targetDate.getFullYear(), targetDate.getMonth(), 1));
       return;
     }
-
     scrollToDate(pendingScrollTarget);
     setPendingScrollTarget(null);
   }, [pendingScrollTarget, currentMonth, scrollToDate]);
-
   useEffect(() => {
     if (!isMultiSelectMode || selectedDates.size === 0) return;
     const firstSelected = Array.from(selectedDates).sort()[0];
     if (firstSelected) setPendingScrollTarget(firstSelected);
   }, [isMultiSelectMode, selectedDates]);
-
   useEffect(() => {
     return () => {
       if (highlightTimeoutRef.current) {
@@ -538,19 +485,17 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       }
     };
   }, []);
-
   const isPastDate = (date: Date | null) => {
     if (!date) return false;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return date < today;
   };
-
   const renderDay = (date: Date | null, index: number) => {
     const rowIndex = Math.floor(index / 7);
     const isHighlightedRow = highlightedRow === rowIndex;
     const highlightStyle = isHighlightedRow
-      ? { backgroundColor: `${Colors.dark.accent}${highlightAlphaHex}` }
+      ? { backgroundColor: `${theme.accent}${highlightAlphaHex}` }
       : null;
     if (!date) {
       return (
@@ -572,28 +517,26 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
     
     if (availability) {
       if (availability.status === "blocked") {
-        bgColor = "#EF535015";
-        borderColor = "#EF5350";
-        statusColor = "#EF5350";
+        bgColor = theme.error + "15";
+        borderColor = theme.error;
+        statusColor = theme.error;
         statusIcon = "x-circle";
       } else if (availability.status === "limited") {
-        bgColor = "#FF980015";
-        borderColor = "#FF9800";
-        statusColor = "#FF9800";
+        bgColor = theme.warning + "15";
+        borderColor = theme.warning;
+        statusColor = theme.warning;
         statusIcon = "alert-circle";
       }
     }
     
     if (bookingCount > 0) {
-      bgColor = "#4CAF5015";
-      borderColor = "#4CAF50";
+      bgColor = theme.success + "15";
+      borderColor = theme.success;
     }
-
     const dateStr = date.toISOString().split("T")[0];
     const isSelected = selectedDates.has(dateStr);
     const todayStr = new Date().toISOString().split("T")[0];
     const isToday = dateStr === todayStr;
-
     return (
       <Pressable
         key={date.toISOString()}
@@ -618,11 +561,11 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
           { backgroundColor: bgColor, borderColor },
           pressed && !past && { opacity: 0.7 },
           past && { opacity: 0.4 },
-          isSelected && styles.selectedDay,
-          isToday && styles.todayDay,
-          isHighlightedRow && styles.highlightRowCell,
+          isSelected && { backgroundColor: theme.accent + "20" },
+          isToday && { borderColor: theme.accent, borderWidth: 1 },
+          isHighlightedRow && { borderColor: theme.accent, borderWidth: 1 },
           highlightStyle,
-          isSelected && { borderColor: Colors.dark.accent, borderWidth: 2 },
+          isSelected && { borderColor: theme.accent, borderWidth: 2 },
         ]}
       >
         <ThemedText style={[styles.dayNumber, past && { color: theme.textMuted }]}>
@@ -630,8 +573,8 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
         </ThemedText>
         
         {isSelected && (
-          <View style={styles.selectedCheckmark}>
-            <EvendiIcon name="check" size={10} color="#FFFFFF" />
+          <View style={[styles.selectedCheckmark, { backgroundColor: theme.accent }]}>
+            <EvendiIcon name="check" size={10} color={theme.buttonText} />
           </View>
         )}
         
@@ -640,8 +583,10 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
         )}
         
         {bookingCount > 0 && !isSelected && (
-          <View style={[styles.bookingBadge, { backgroundColor: "#4CAF50" }]}>
-            <ThemedText style={styles.bookingCount}>{bookingCount}</ThemedText>
+          <View style={[styles.bookingBadge, { backgroundColor: theme.success }]}> 
+            <ThemedText style={[styles.bookingCount, { color: theme.buttonText }]}>
+              {bookingCount}
+            </ThemedText>
           </View>
         )}
         
@@ -653,7 +598,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       </Pressable>
     );
   };
-
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.backgroundRoot }]}>
@@ -661,7 +605,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
       </View>
     );
   }
-
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <ScrollView
@@ -678,7 +621,7 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
         {/* Header Info */}
         <Animated.View entering={FadeInDown.duration(300)}>
           <View style={[styles.infoCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <EvendiIcon name="calendar" size={24} color={Colors.dark.accent} />
+            <EvendiIcon name="calendar" size={24} color={theme.accent} />
             <ThemedText type="h3" style={styles.infoTitle}>Kalender & Tilgjengelighet</ThemedText>
             <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>
               Administrer tilgjengelighet for datoer. Blokkerte datoer vil ikke kunne motta tilbud.
@@ -692,31 +635,29 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
             </Pressable>
           </View>
         </Animated.View>
-
         {/* Legend */}
         <Animated.View entering={FadeInDown.delay(100).duration(300)}>
           <View style={[styles.legendCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <ThemedText style={[styles.legendTitle, { color: theme.textSecondary }]}>Forklaring:</ThemedText>
             <View style={styles.legendRow}>
-              <View style={[styles.legendDot, { backgroundColor: "#4CAF50" }]} />
+              <View style={[styles.legendDot, { backgroundColor: theme.success }]} />
               <ThemedText style={styles.legendText}>Har bookinger</ThemedText>
             </View>
             <View style={styles.legendRow}>
-              <EvendiIcon name="x-circle" size={14} color="#EF5350" />
+              <EvendiIcon name="x-circle" size={14} color={theme.error} />
               <ThemedText style={styles.legendText}>Blokkert</ThemedText>
             </View>
             <View style={styles.legendRow}>
-              <EvendiIcon name="alert-circle" size={14} color="#FF9800" />
+              <EvendiIcon name="alert-circle" size={14} color={theme.warning} />
               <ThemedText style={styles.legendText}>Begrenset kapasitet</ThemedText>
             </View>
           </View>
         </Animated.View>
-
         {/* Multi-select controls */}
         {isMultiSelectMode ? (
           <View style={[styles.multiSelectBar, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <View style={styles.multiSelectInfo}>
-              <EvendiIcon name="check-square" size={20} color={Colors.dark.accent} />
+              <EvendiIcon name="check-square" size={20} color={theme.accent} />
               <ThemedText style={styles.multiSelectText}>
                 {selectedDates.size} dato{selectedDates.size !== 1 ? "er" : ""} valgt
               </ThemedText>
@@ -731,9 +672,9 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
               <Pressable
                 onPress={openBulkEditModal}
                 disabled={selectedDates.size === 0}
-                style={[styles.multiSelectBtn, { backgroundColor: Colors.dark.accent, opacity: selectedDates.size === 0 ? 0.5 : 1 }]}
+                style={[styles.multiSelectBtn, { backgroundColor: theme.accent, opacity: selectedDates.size === 0 ? 0.5 : 1 }]}
               >
-                <ThemedText style={[styles.multiSelectBtnText, { color: "#1A1A1A" }]}>Rediger</ThemedText>
+                <ThemedText style={[styles.multiSelectBtnText, { color: theme.buttonText }]}>Rediger</ThemedText>
               </Pressable>
               <Pressable onPress={exitMultiSelectMode} style={styles.cancelMultiBtn}>
                 <EvendiIcon name="x" size={20} color={theme.textMuted} />
@@ -745,13 +686,12 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
             onPress={() => setIsMultiSelectMode(true)}
             style={[styles.enableMultiSelectBtn, { borderColor: theme.border }]}
           >
-            <EvendiIcon name="check-square" size={18} color={Colors.dark.accent} />
+            <EvendiIcon name="check-square" size={18} color={theme.accent} />
             <ThemedText style={[styles.enableMultiSelectText, { color: theme.text }]}>
               Velg flere datoer
             </ThemedText>
           </Pressable>
         )}
-
         {/* Month Navigation */}
         <View style={styles.monthNav}>
           <Pressable onPress={() => changeMonth(-1)} style={styles.monthButton}>
@@ -764,7 +704,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
             <EvendiIcon name="chevron-right" size={24} color={theme.text} />
           </Pressable>
         </View>
-
         <Pressable
           onPress={jumpToToday}
           disabled={isSameMonth(currentMonth, new Date())}
@@ -778,7 +717,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
           <EvendiIcon name="calendar" size={16} color={theme.text} />
           <ThemedText style={[styles.todayBtnText, { color: theme.text }]}>Hopp til i dag</ThemedText>
         </Pressable>
-
         {/* Calendar */}
         <Animated.View entering={FadeInDown.delay(200).duration(300)}>
           <View
@@ -803,26 +741,25 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
           </View>
           </View>
         </Animated.View>
-
         {/* Stats */}
         <Animated.View entering={FadeInDown.delay(300).duration(300)}>
           <View style={[styles.statsCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}> 
             <ThemedText type="h4" style={styles.statsTitle}>Statistikk</ThemedText>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
-                <ThemedText style={[styles.statValue, { color: "#EF5350" }]}> 
+                <ThemedText style={[styles.statValue, { color: theme.error }]}>
                   {availability.filter(a => a.status === "blocked").length}
                 </ThemedText>
                 <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Blokkerte</ThemedText>
               </View>
               <View style={styles.statItem}>
-                <ThemedText style={[styles.statValue, { color: "#FF9800" }]}> 
+                <ThemedText style={[styles.statValue, { color: theme.warning }]}>
                   {availability.filter(a => a.status === "limited").length}
                 </ThemedText>
                 <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Begrensede</ThemedText>
               </View>
               <View style={styles.statItem}>
-                <ThemedText style={[styles.statValue, { color: "#4CAF50" }]}> 
+                <ThemedText style={[styles.statValue, { color: theme.success }]}>
                   {Object.values(bookings).reduce((sum, b) => sum + b.acceptedBookings, 0)}
                 </ThemedText>
                 <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Bookinger</ThemedText>
@@ -831,7 +768,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
           </View>
         </Animated.View>
       </ScrollView>
-
       {/* Edit Modal */}
       <Modal visible={showEditModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -848,10 +784,10 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                 <EvendiIcon name="x" size={24} color={theme.text} />
               </Pressable>
             </View>
-
             <View style={styles.modalBody}>
               <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Navn (valgfritt)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorAvailabilityScreen-input-1"
                 style={[
                   styles.input,
                   { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
@@ -862,10 +798,9 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                 placeholderTextColor={theme.textMuted}
                 maxLength={100}
               />
-
               <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Status</ThemedText>
               <View style={styles.statusButtons}>
-                {STATUS_OPTIONS.map(option => (
+                {statusOptions.map(option => (
                   <Pressable
                     key={option.value}
                     onPress={() => {
@@ -894,13 +829,13 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                   </Pressable>
                 ))}
               </View>
-
               {editStatus === "limited" && (
                 <>
                   <ThemedText style={[styles.label, { color: theme.textSecondary }]}>
                     Maks antall bookinger
                   </ThemedText>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="VendorAvailabilityScreen-input-2"
                     style={[
                       styles.input,
                       { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
@@ -913,11 +848,11 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                   />
                 </>
               )}
-
               <ThemedText style={[styles.label, { color: theme.textSecondary }]}>
                 Notater (valgfritt)
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorAvailabilityScreen-input-3"
                 style={[
                   styles.input,
                   styles.notesInput,
@@ -930,17 +865,15 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                 placeholder={isWedding ? "F.eks. 'Annet bryllup samme dag'" : "F.eks. 'Annet arrangement samme dag'"}
                 placeholderTextColor={theme.textMuted}
               />
-
               {selectedDate && getBookingsForDate(new Date(selectedDate)) > 0 && (
-                <View style={[styles.warningBox, { backgroundColor: "#FF980015", borderColor: "#FF9800" }]}>
-                  <EvendiIcon name="alert-triangle" size={16} color="#FF9800" />
-                  <ThemedText style={[styles.warningText, { color: "#FF9800" }]}>
+                <View style={[styles.warningBox, { backgroundColor: theme.warning + "15", borderColor: theme.warning }]}>
+                  <EvendiIcon name="alert-triangle" size={16} color={theme.warning} />
+                  <ThemedText style={[styles.warningText, { color: theme.warning }]}>
                     Denne datoen har {getBookingsForDate(new Date(selectedDate))} aktiv(e) booking(er)
                   </ThemedText>
                 </View>
               )}
             </View>
-
             <View style={styles.modalActions}>
               {availability.find(a => a.date === selectedDate) && (
                 <Pressable
@@ -949,11 +882,11 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                   style={({ pressed }) => [
                     styles.actionBtn,
                     styles.deleteBtn,
-                    { borderColor: "#EF5350" },
+                    { borderColor: theme.error },
                     pressed && { opacity: 0.7 },
                   ]}
                 >
-                  <ThemedText style={[styles.actionBtnText, { color: "#EF5350" }]}>Slett</ThemedText>
+                  <ThemedText style={[styles.actionBtnText, { color: theme.error }]}>Slett</ThemedText>
                 </Pressable>
               )}
               <Pressable
@@ -966,7 +899,7 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                   pressed && { opacity: 0.7 },
                 ]}
               >
-                <ThemedText style={[styles.actionBtnText, { color: "#FFFFFF" }]}>
+                  <ThemedText style={[styles.actionBtnText, { color: theme.buttonText }]}>
                   {saveAvailabilityMutation.isPending ? "Lagrer..." : "Lagre"}
                 </ThemedText>
               </Pressable>
@@ -986,7 +919,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                 <EvendiIcon name="x" size={24} color={theme.text} />
               </Pressable>
             </View>
-
             <View style={styles.modalBody}>
               {/* Show selected dates preview */}
               <View style={[styles.selectedDatesPreview, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}>
@@ -995,17 +927,17 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                 </ThemedText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {Array.from(selectedDates).sort().map(dateStr => (
-                    <View key={dateStr} style={[styles.selectedDateChip, { backgroundColor: Colors.dark.accent + "20" }]}>
-                      <ThemedText style={[styles.selectedDateChipText, { color: Colors.dark.accent }]}>
+                    <View key={dateStr} style={[styles.selectedDateChip, { backgroundColor: theme.accent + "20" }]}>
+                      <ThemedText style={[styles.selectedDateChipText, { color: theme.accent }]}>
                         {new Date(dateStr).toLocaleDateString("nb-NO", { day: "numeric", month: "short" })}
                       </ThemedText>
                     </View>
                   ))}
                 </ScrollView>
               </View>
-
               <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Navn (valgfritt)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorAvailabilityScreen-input-4"
                 style={[
                   styles.input,
                   { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
@@ -1016,10 +948,9 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                 placeholderTextColor={theme.textMuted}
                 maxLength={100}
               />
-
               <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Status</ThemedText>
               <View style={styles.statusButtons}>
-                {STATUS_OPTIONS.map(option => (
+                {statusOptions.map(option => (
                   <Pressable
                     key={option.value}
                     onPress={() => {
@@ -1048,13 +979,13 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                   </Pressable>
                 ))}
               </View>
-
               {editStatus === "limited" && (
                 <>
                   <ThemedText style={[styles.label, { color: theme.textSecondary }]}>
                     Maks antall bookinger
                   </ThemedText>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="VendorAvailabilityScreen-input-5"
                     style={[
                       styles.input,
                       { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
@@ -1067,11 +998,11 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                   />
                 </>
               )}
-
               <ThemedText style={[styles.label, { color: theme.textSecondary }]}>
                 Notater (valgfritt)
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorAvailabilityScreen-input-6"
                 style={[
                   styles.input,
                   styles.notesInput,
@@ -1085,7 +1016,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                 placeholderTextColor={theme.textMuted}
               />
             </View>
-
             <View style={styles.modalActions}>
               <Pressable
                 onPress={() => setShowBulkModal(false)}
@@ -1108,7 +1038,7 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
                   pressed && { opacity: 0.7 },
                 ]}
               >
-                <ThemedText style={[styles.actionBtnText, { color: "#FFFFFF" }]}>
+                <ThemedText style={[styles.actionBtnText, { color: theme.buttonText }]}>
                   {bulkSaveAvailabilityMutation.isPending ? "Lagrer..." : `Lagre ${selectedDates.size} datoer`}
                 </ThemedText>
               </Pressable>
@@ -1119,7 +1049,6 @@ export default function VendorAvailabilityScreen({ navigation }: NativeStackScre
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
@@ -1194,6 +1123,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "relative",
   },
+  highlightRowCell: {},
   dayNumber: {
     fontSize: 14,
     fontWeight: "500",
@@ -1217,7 +1147,6 @@ const styles = StyleSheet.create({
   bookingCount: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#FFFFFF",
   },
   limitText: {
     fontSize: 8,
@@ -1330,17 +1259,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   // Multi-select styles
-  selectedDay: {
-    backgroundColor: Colors.dark.accent + "20",
-  },
-  todayDay: {
-    borderColor: Colors.dark.accent,
-    borderWidth: 1,
-  },
-  highlightRowCell: {
-    borderColor: Colors.dark.accent,
-    borderWidth: 1,
-  },
   selectedCheckmark: {
     position: "absolute",
     top: 2,
@@ -1348,7 +1266,6 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: Colors.dark.accent,
     alignItems: "center",
     justifyContent: "center",
   },

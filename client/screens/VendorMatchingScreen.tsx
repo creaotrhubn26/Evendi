@@ -10,27 +10,22 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { EvendiIcon } from "@/components/EvendiIcon";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInRight, FadeInDown } from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
+import { EvendiIcon } from "@/components/EvendiIcon";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
-import { isVendorCategoryApplicable, type EventType, type EventTypeConfig } from "@shared/event-types";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { isVendorCategoryApplicable, type EventType, type EventTypeConfig, VENDOR_CATEGORIES as SHARED_VENDOR_CATEGORIES } from "@shared/event-types";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import { getApiUrl } from "@/lib/query-client";
 import { getCoupleProfile } from "@/lib/api-couples";
 import { useVendorLocationIntelligence } from "@/hooks/useVendorLocationIntelligence";
-
 const COUPLE_STORAGE_KEY = "evendi_couple_session";
-
-// Category configuration with icons and labels — event-type-aware
-// Maps internal category IDs to their vendor category names in VENDOR_CATEGORY_EVENT_MAP
 function getVendorCategories(eventType: EventType, isWedding: boolean, config: EventTypeConfig) {
   // Build a dynamic attire description from hints
   const attireHints = config.attireVendorHints?.storesNo;
@@ -39,33 +34,34 @@ function getVendorCategories(eventType: EventType, isWedding: boolean, config: E
     : attireHints && attireHints.length > 0
       ? `F.eks. ${attireHints.slice(0, 3).join(", ")}`
       : "Dresscode & antrekk";
-
   const attireLabel = config.featureLabels?.dressTracking?.no || (isWedding ? "Drakt & Dress" : "Antrekk");
-
+  const hasQaGames = config.qaGames && config.qaGames.length > 0;
   const allCategories = [
-    { id: "venue", name: "Lokale", icon: "home" as const, description: "Finn det perfekte stedet", mapName: "Venue" },
-    { id: "photographer", name: "Fotograf", icon: "camera" as const, description: "Fang de beste øyeblikkene", mapName: "Fotograf" },
-    { id: "videographer", name: "Videograf", icon: "video" as const, description: isWedding ? "Film fra deres dag" : "Profesjonell film", mapName: "Videograf" },
-    { id: "catering", name: "Catering", icon: "coffee" as const, description: "Mat til gjestene", mapName: "Catering" },
-    { id: "florist", name: "Blomster", icon: "sun" as const, description: "Dekorasjon og buketter", mapName: "Blomster" },
-    { id: "music", name: "Musikk/DJ", icon: "music" as const, description: "Stemning hele kvelden", mapName: "Musikk" },
-    { id: "cake", name: "Kake", icon: "gift" as const, description: isWedding ? "Bryllupskaken" : "Festkaken", mapName: "Kake" },
-    { id: "attire", name: attireLabel, icon: "shopping-bag" as const, description: attireDescription, mapName: "Drakt & Dress" },
-    { id: "beauty", name: "Hår & Makeup", icon: "scissors" as const, description: "Se fantastisk ut", mapName: "Hår & Makeup" },
-    { id: "transport", name: "Transport", icon: "truck" as const, description: "Reise med stil", mapName: "Transport" },
-    { id: "planner", name: "Planlegger", icon: "clipboard" as const, description: "Profesjonell hjelp", mapName: "Planlegger" },
+    { id: "venue", name: SHARED_VENDOR_CATEGORIES.venue.labelNo, icon: "home" as const, description: "Finn det perfekte stedet", mapName: SHARED_VENDOR_CATEGORIES.venue.dbName },
+    { id: "photographer", name: SHARED_VENDOR_CATEGORIES.photographer.labelNo, icon: "camera" as const, description: "Fang de beste øyeblikkene", mapName: SHARED_VENDOR_CATEGORIES.photographer.dbName },
+    { id: "videographer", name: SHARED_VENDOR_CATEGORIES.videographer.labelNo, icon: "video" as const, description: isWedding ? "Film fra deres dag" : "Profesjonell film", mapName: SHARED_VENDOR_CATEGORIES.videographer.dbName },
+    { id: "catering", name: SHARED_VENDOR_CATEGORIES.catering.labelNo, icon: "coffee" as const, description: "Mat til gjestene", mapName: SHARED_VENDOR_CATEGORIES.catering.dbName },
+    { id: "florist", name: SHARED_VENDOR_CATEGORIES.florist.labelNo, icon: "sun" as const, description: "Dekorasjon og buketter", mapName: SHARED_VENDOR_CATEGORIES.florist.dbName },
+    { id: "music", name: SHARED_VENDOR_CATEGORIES.music.labelNo, icon: "music" as const, description: "Stemning hele kvelden", mapName: SHARED_VENDOR_CATEGORIES.music.dbName },
+    { id: "cake", name: SHARED_VENDOR_CATEGORIES.cake.labelNo, icon: "gift" as const, description: isWedding ? "Bryllupskaken" : "Festkaken", mapName: SHARED_VENDOR_CATEGORIES.cake.dbName },
+    { id: "attire", name: attireLabel, icon: "shopping-bag" as const, description: attireDescription, mapName: SHARED_VENDOR_CATEGORIES.attire.dbName },
+    { id: "beauty", name: SHARED_VENDOR_CATEGORIES.beauty.labelNo, icon: "scissors" as const, description: "Se fantastisk ut", mapName: SHARED_VENDOR_CATEGORIES.beauty.dbName },
+    { id: "transport", name: SHARED_VENDOR_CATEGORIES.transport.labelNo, icon: "truck" as const, description: "Reise med stil", mapName: SHARED_VENDOR_CATEGORIES.transport.dbName },
+    { id: "entertainment", name: SHARED_VENDOR_CATEGORIES.entertainment.labelNo, icon: "smile" as const,
+      description: hasQaGames
+        ? `Spill & Q&A – ${config.qaGames!.map(g => g.labelNo).join(", ")}`
+        : "Aktiviteter og underholdning",
+      mapName: SHARED_VENDOR_CATEGORIES.entertainment.dbName },
+    { id: "planner", name: SHARED_VENDOR_CATEGORIES.planner.labelNo, icon: "clipboard" as const, description: "Profesjonell hjelp", mapName: SHARED_VENDOR_CATEGORIES.planner.dbName },
   ];
-
   return allCategories.filter(cat => isVendorCategoryApplicable(cat.mapName, eventType));
 }
-
 interface WeddingPreferences {
   guestCount: number | null;
   weddingDate: string | null;
   location: string | null;
   budget: number | null;
 }
-
 interface VendorProduct {
   id: string;
   vendorId: string;
@@ -82,7 +78,6 @@ interface VendorProduct {
   venueAccommodationAvailable?: boolean;
   venueCheckoutTime?: string | null;
 }
-
 interface VendorMatch {
   id: string;
   businessName: string;
@@ -104,7 +99,6 @@ interface VendorMatch {
   // Products
   products?: VendorProduct[];
 }
-
 type RouteParams = {
   VendorMatching: {
     category?: string;
@@ -113,7 +107,6 @@ type RouteParams = {
     selectedTraditions?: string[];
   };
 };
-
 // Cuisine types for matching (shared with CateringScreen)
 const CUISINE_TYPES_MAP: Record<string, string[]> = {
   norwegian: ["norsk", "skandinavisk", "norwegian"],
@@ -130,7 +123,6 @@ const CUISINE_TYPES_MAP: Record<string, string[]> = {
   fusion: ["fusion", "moderne"],
   mixed: ["blandet", "mixed", "variert"],
 };
-
 export default function VendorMatchingScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -186,17 +178,13 @@ export default function VendorMatchingScreen() {
   // Planlegger filters
   const [filterServiceLevels, setFilterServiceLevels] = useState<string[]>([]);
   const [filterVendorCoordination, setFilterVendorCoordination] = useState(false);
-
   // Location intelligence
   const locationIntel = useVendorLocationIntelligence();
-
   // Event-type-aware vendor categories
   const vendorCategories = useMemo(() => getVendorCategories(eventType, isWedding, config), [eventType, isWedding, config]);
-
   useEffect(() => {
     loadSessionAndPreferences();
   }, []);
-
   const loadSessionAndPreferences = async () => {
     try {
       const sessionData = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
@@ -219,7 +207,6 @@ export default function VendorMatchingScreen() {
       console.error("Error loading session:", error);
     }
   };
-
   // Fetch couple's guest count from API
   const { data: guestData } = useQuery({
     queryKey: ["/api/couple/guests"],
@@ -232,7 +219,6 @@ export default function VendorMatchingScreen() {
     },
     enabled: !!sessionToken,
   });
-
   // Calculate guest count from API data
   useEffect(() => {
     if (guestData && Array.isArray(guestData)) {
@@ -245,7 +231,6 @@ export default function VendorMatchingScreen() {
       }
     }
   }, [guestData, initialGuestCount]);
-
   // Fetch couple profile to get selected traditions
   const { data: coupleProfile } = useQuery({
     queryKey: ["coupleProfile"],
@@ -255,7 +240,6 @@ export default function VendorMatchingScreen() {
     },
     enabled: !!sessionToken,
   });
-
   // Fetch vendors that match the category
   const { data: vendors = [], isLoading } = useQuery<VendorMatch[]>({
     queryKey: ["/api/vendors/matching", selectedCategory, preferences.guestCount, selectedCuisines],
@@ -273,7 +257,6 @@ export default function VendorMatchingScreen() {
     },
     enabled: !!selectedCategory,
   });
-
   // Calculate travel for matched vendors when they load
   useEffect(() => {
     if (vendors.length > 0 && locationIntel.venueCoordinates) {
@@ -283,7 +266,6 @@ export default function VendorMatchingScreen() {
       locationIntel.calculateBatchTravel(vendorsWithLocation);
     }
   }, [vendors, locationIntel.venueCoordinates]);
-
   // Score and sort vendors based on matching criteria
   const matchedVendors = useMemo(() => {
     if (!vendors.length) return [];
@@ -469,7 +451,6 @@ export default function VendorMatchingScreen() {
           reasons.push(`Tilbyr ${matchedCuisineLabels.join(", ")} mat`);
         }
       }
-
       // Check cultural expertise match - use passed traditions OR couple profile traditions
       const coupleTraditions = selectedTraditions.length > 0 
         ? selectedTraditions 
@@ -611,11 +592,9 @@ export default function VendorMatchingScreen() {
     filterServiceLevels,
     filterVendorCoordination
   ]);
-
   const getCategoryConfig = (categoryId: string) => {
     return vendorCategories.find(c => c.id === categoryId) || vendorCategories[0];
   };
-
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
     // Reset filters when changing category
@@ -642,7 +621,6 @@ export default function VendorMatchingScreen() {
     setFilterVendorCoordination(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const handleVendorPress = (vendor: VendorMatch) => {
     navigation.navigate("VendorDetail", {
       vendorId: vendor.id,
@@ -654,7 +632,6 @@ export default function VendorMatchingScreen() {
     });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const renderCategoryCard = (category: ReturnType<typeof getVendorCategories>[number], index: number) => {
     const isSelected = selectedCategory === category.id;
     const hasGuestCount = preferences.guestCount && preferences.guestCount > 0;
@@ -677,6 +654,11 @@ export default function VendorMatchingScreen() {
         case "beauty": return Math.ceil(gc / 20) > 3 ? `${Math.ceil(gc / 20)} personer` : null;
         case "planner": return gc > 100 ? "Komplekst" : null;
         case "attire": return config.attireVendorHints?.storesNo?.[0] || null;
+        case "entertainment": {
+          const games = config.qaGames;
+          if (games && games.length > 0) return `${games.length} spill klare`;
+          return null;
+        }
         default: return null;
       }
     };
@@ -696,7 +678,7 @@ export default function VendorMatchingScreen() {
           ]}
         >
           <View style={[styles.categoryIconCircle, { backgroundColor: isSelected ? theme.accent : theme.backgroundSecondary }]}>
-            <EvendiIcon name={category.icon as any} size={20} color={isSelected ? "#FFFFFF" : theme.textSecondary} />
+            <EvendiIcon name={category.icon as any} size={20} color={isSelected ? theme.buttonText : theme.textSecondary} />
           </View>
           <View style={styles.categoryInfo}>
             <ThemedText style={[styles.categoryName, { color: isSelected ? theme.accent : theme.text }]}>
@@ -707,9 +689,9 @@ export default function VendorMatchingScreen() {
             </ThemedText>
           </View>
           {smartHint && (
-            <View style={[styles.matchBadge, { backgroundColor: "#4CAF5020" }]}>
-              <EvendiIcon name="zap" size={12} color="#4CAF50" />
-              <ThemedText style={[styles.matchBadgeText, { color: "#4CAF50" }]}>{smartHint}</ThemedText>
+            <View style={[styles.matchBadge, { backgroundColor: theme.success + "20" }]}>
+              <EvendiIcon name="zap" size={12} color={theme.success} />
+              <ThemedText style={[styles.matchBadgeText, { color: theme.success }]}>{smartHint}</ThemedText>
             </View>
           )}
           <EvendiIcon name="chevron-right" size={18} color={theme.textMuted} />
@@ -717,7 +699,6 @@ export default function VendorMatchingScreen() {
       </Animated.View>
     );
   };
-
   const renderVendorCard = ({ item, index }: { item: VendorMatch; index: number }) => {
     const score = item.matchScore || 50;
     const isGoodMatch = score >= 70;
@@ -743,8 +724,8 @@ export default function VendorMatchingScreen() {
               {/* Travel time badge from venue */}
               {locationIntel.getTravelBadge(item.id) && (
                 <View style={styles.vendorTravelRow}>
-                  <EvendiIcon name="navigation" size={10} color="#2196F3" />
-                  <ThemedText style={styles.vendorTravelText}>
+                  <EvendiIcon name="navigation" size={10} color={theme.accent} />
+                  <ThemedText style={[styles.vendorTravelText, { color: theme.accent }]}>
                     {locationIntel.getTravelBadge(item.id)}
                   </ThemedText>
                   {locationIntel.venueName && (
@@ -756,7 +737,7 @@ export default function VendorMatchingScreen() {
               )}
               {locationIntel.getVendorTravel(item.id)?.isLoading && (
                 <View style={styles.vendorTravelRow}>
-                  <ActivityIndicator size={8} color="#2196F3" />
+                  <ActivityIndicator size={8} color={theme.accent} />
                   <ThemedText style={[styles.vendorTravelText, { color: theme.textMuted }]}>
                     Beregner...
                   </ThemedText>
@@ -764,9 +745,9 @@ export default function VendorMatchingScreen() {
               )}
             </View>
             {isGoodMatch && (
-              <View style={[styles.matchIndicator, { backgroundColor: "#4CAF5015" }]}>
-                <EvendiIcon name="star" size={14} color="#4CAF50" />
-                <ThemedText style={[styles.matchText, { color: "#4CAF50" }]}>Anbefalt</ThemedText>
+              <View style={[styles.matchIndicator, { backgroundColor: theme.success + "15" }]}>
+                <EvendiIcon name="star" size={14} color={theme.success} />
+                <ThemedText style={[styles.matchText, { color: theme.success }]}>Anbefalt</ThemedText>
               </View>
             )}
           </View>
@@ -815,9 +796,9 @@ export default function VendorMatchingScreen() {
                     <View style={styles.metadataRow}>
                       {/* Catering metadata */}
                       {metadata.offersTasteSample && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#4CAF5015" }]}>
-                          <EvendiIcon name="coffee" size={10} color="#4CAF50" />
-                          <ThemedText style={[styles.metadataText, { color: "#4CAF50" }]}>Smaksprøve</ThemedText>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.success + "15" }]}>
+                          <EvendiIcon name="coffee" size={10} color={theme.success} />
+                          <ThemedText style={[styles.metadataText, { color: theme.success }]}>Smaksprøve</ThemedText>
                         </View>
                       )}
                       {metadata.cuisineType && (
@@ -828,13 +809,13 @@ export default function VendorMatchingScreen() {
                         </View>
                       )}
                       {metadata.isVegetarian && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
-                          <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Vegetar</ThemedText>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.success + "15" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.success }]}>Vegetar</ThemedText>
                         </View>
                       )}
                       {metadata.isVegan && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
-                          <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Vegan</ThemedText>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.success + "15" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.success }]}>Vegan</ThemedText>
                         </View>
                       )}
                       
@@ -863,9 +844,9 @@ export default function VendorMatchingScreen() {
                         </View>
                       )}
                       {metadata.isSeasonal && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#FF980015" }]}>
-                          <EvendiIcon name="sun" size={10} color="#FF9800" />
-                          <ThemedText style={[styles.metadataText, { color: "#FF9800" }]}>Sesongbasert</ThemedText>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.warning + "15" }]}>
+                          <EvendiIcon name="sun" size={10} color={theme.warning} />
+                          <ThemedText style={[styles.metadataText, { color: theme.warning }]}>Sesongbasert</ThemedText>
                         </View>
                       )}
                       
@@ -896,16 +877,16 @@ export default function VendorMatchingScreen() {
                         </View>
                       )}
                       {metadata.includesTrialSession && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#9C27B015" }]}>
-                          <EvendiIcon name="check" size={10} color="#9C27B0" />
-                          <ThemedText style={[styles.metadataText, { color: "#9C27B0" }]}>Prøveskyss</ThemedText>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                          <EvendiIcon name="check" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>Prøveskyss</ThemedText>
                         </View>
                       )}
                       
                       {/* Fotograf metadata */}
                       {metadata.packageType && selectedCategory === "photographer" && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#2196F315" }]}>
-                          <ThemedText style={[styles.metadataText, { color: "#2196F3" }]}>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
                             {metadata.packageType.charAt(0).toUpperCase() + metadata.packageType.slice(1)}
                           </ThemedText>
                         </View>
@@ -919,29 +900,29 @@ export default function VendorMatchingScreen() {
                         </View>
                       )}
                       {metadata.photosDelivered && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#2196F315" }]}>
-                          <EvendiIcon name="image" size={10} color="#2196F3" />
-                          <ThemedText style={[styles.metadataText, { color: "#2196F3" }]}>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                          <EvendiIcon name="image" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
                             {metadata.photosDelivered} bilder
                           </ThemedText>
                         </View>
                       )}
                       {metadata.printRightsIncluded && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#00BCD415" }]}>
-                          <EvendiIcon name="printer" size={10} color="#00BCD4" />
-                          <ThemedText style={[styles.metadataText, { color: "#00BCD4" }]}>Trykkerett</ThemedText>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                          <EvendiIcon name="printer" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>Trykkerett</ThemedText>
                         </View>
                       )}
                       {metadata.rawPhotosIncluded && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#00BCD415" }]}>
-                          <ThemedText style={[styles.metadataText, { color: "#00BCD4" }]}>RAW</ThemedText>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>RAW</ThemedText>
                         </View>
                       )}
                       
                       {/* Videograf metadata */}
                       {metadata.packageType && selectedCategory === "videographer" && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#9C27B015" }]}>
-                          <ThemedText style={[styles.metadataText, { color: "#9C27B0" }]}>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}> 
                             {metadata.packageType.charAt(0).toUpperCase() + metadata.packageType.slice(1)}
                           </ThemedText>
                         </View>
@@ -955,31 +936,31 @@ export default function VendorMatchingScreen() {
                         </View>
                       )}
                       {metadata.editingStyle && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#673AB715" }]}>
-                          <ThemedText style={[styles.metadataText, { color: "#673AB7" }]}>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
                             {metadata.editingStyle.charAt(0).toUpperCase() + metadata.editingStyle.slice(1)}
                           </ThemedText>
                         </View>
                       )}
                       {metadata.droneFootageIncluded && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#FF980015" }]}>
-                          <EvendiIcon name="navigation" size={10} color="#FF9800" />
-                          <ThemedText style={[styles.metadataText, { color: "#FF9800" }]}>Drone</ThemedText>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.warning + "15" }]}>
+                          <EvendiIcon name="navigation" size={10} color={theme.warning} />
+                          <ThemedText style={[styles.metadataText, { color: theme.warning }]}>Drone</ThemedText>
                         </View>
                       )}
                       
                       {/* Musikk metadata */}
                       {metadata.performanceType && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#E91E6315" }]}>
-                          <EvendiIcon name="music" size={10} color="#E91E63" />
-                          <ThemedText style={[styles.metadataText, { color: "#E91E63" }]}>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                          <EvendiIcon name="music" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
                             {metadata.performanceType.toUpperCase()}
                           </ThemedText>
                         </View>
                       )}
                       {metadata.genre && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#F4433615" }]}>
-                          <ThemedText style={[styles.metadataText, { color: "#F44336" }]}>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.error + "15" }]}>
+                          <ThemedText style={[styles.metadataText, { color: theme.error }]}>
                             {metadata.genre.charAt(0).toUpperCase() + metadata.genre.slice(1)}
                           </ThemedText>
                         </View>
@@ -993,17 +974,17 @@ export default function VendorMatchingScreen() {
                         </View>
                       )}
                       {metadata.equipmentIncluded && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#FF572215" }]}>
-                          <EvendiIcon name="headphones" size={10} color="#FF5722" />
-                          <ThemedText style={[styles.metadataText, { color: "#FF5722" }]}>Utstyr</ThemedText>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                          <EvendiIcon name="headphones" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>Utstyr</ThemedText>
                         </View>
                       )}
                       
                       {/* Venue metadata */}
                       {metadata.capacityMax && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#79554815" }]}>
-                          <EvendiIcon name="users" size={10} color="#795548" />
-                          <ThemedText style={[styles.metadataText, { color: "#795548" }]}>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                          <EvendiIcon name="users" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}> 
                             {metadata.capacityMin && `${metadata.capacityMin}-`}{metadata.capacityMax} gjester
                           </ThemedText>
                         </View>
@@ -1016,17 +997,17 @@ export default function VendorMatchingScreen() {
                         </View>
                       )}
                       {metadata.cateringIncluded && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
-                          <EvendiIcon name="coffee" size={10} color="#8BC34A" />
-                          <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Catering</ThemedText>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.success + "15" }]}>
+                          <EvendiIcon name="coffee" size={10} color={theme.success} />
+                          <ThemedText style={[styles.metadataText, { color: theme.success }]}>Catering</ThemedText>
                         </View>
                       )}
                       
                       {/* Planlegger metadata */}
                       {metadata.serviceLevel && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#00BCD415" }]}>
-                          <EvendiIcon name="clipboard" size={10} color="#00BCD4" />
-                          <ThemedText style={[styles.metadataText, { color: "#00BCD4" }]}>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                          <EvendiIcon name="clipboard" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}> 
                             {metadata.serviceLevel.charAt(0).toUpperCase() + metadata.serviceLevel.slice(1)}
                           </ThemedText>
                         </View>
@@ -1040,9 +1021,9 @@ export default function VendorMatchingScreen() {
                         </View>
                       )}
                       {metadata.vendorCoordinationIncluded && (
-                        <View style={[styles.metadataBadge, { backgroundColor: "#00968815" }]}>
-                          <EvendiIcon name="users" size={10} color="#009688" />
-                          <ThemedText style={[styles.metadataText, { color: "#009688" }]}>Koordinering</ThemedText>
+                        <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
+                          <EvendiIcon name="users" size={10} color={theme.accent} />
+                          <ThemedText style={[styles.metadataText, { color: theme.accent }]}>Koordinering</ThemedText>
                         </View>
                       )}
                     </View>
@@ -1063,7 +1044,6 @@ export default function VendorMatchingScreen() {
               <ThemedText style={[styles.priceText, { color: theme.textMuted }]}>{item.priceRange}</ThemedText>
             </View>
           )}
-
           {/* Location quick links */}
           {item.location && locationIntel.venueCoordinates && (
             <View style={[styles.vendorQuickLinks, { borderTopColor: theme.border }]}>
@@ -1076,10 +1056,10 @@ export default function VendorMatchingScreen() {
                   });
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
-                style={[styles.vendorQuickLink, { backgroundColor: "#2196F308" }]}
+                style={[styles.vendorQuickLink, { backgroundColor: theme.accent + "08" }]}
               >
-                <EvendiIcon name="navigation" size={11} color="#2196F3" />
-                <ThemedText style={[styles.vendorQuickLinkText, { color: "#2196F3" }]}>Kjørerute</ThemedText>
+                <EvendiIcon name="navigation" size={11} color={theme.accent} />
+                <ThemedText style={[styles.vendorQuickLinkText, { color: theme.accent }]}>Kjørerute</ThemedText>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -1090,10 +1070,10 @@ export default function VendorMatchingScreen() {
                   });
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
-                style={[styles.vendorQuickLink, { backgroundColor: "#4CAF5008" }]}
+                style={[styles.vendorQuickLink, { backgroundColor: theme.success + "08" }]}
               >
-                <EvendiIcon name="map" size={11} color="#4CAF50" />
-                <ThemedText style={[styles.vendorQuickLinkText, { color: "#4CAF50" }]}>Kart</ThemedText>
+                <EvendiIcon name="map" size={11} color={theme.success} />
+                <ThemedText style={[styles.vendorQuickLinkText, { color: theme.success }]}>Kart</ThemedText>
               </Pressable>
             </View>
           )}
@@ -1101,7 +1081,6 @@ export default function VendorMatchingScreen() {
       </Animated.View>
     );
   };
-
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       {/* Header */}
@@ -1120,7 +1099,6 @@ export default function VendorMatchingScreen() {
           </View>
         </View>
       </View>
-
       {/* Preferences Summary */}
       {(preferences.guestCount || preferences.location || preferences.weddingDate || locationIntel.venueName) && (
         <Animated.View entering={FadeInDown.duration(300)} style={[styles.preferencesSummary, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
@@ -1133,9 +1111,9 @@ export default function VendorMatchingScreen() {
               </View>
             )}
             {locationIntel.venueName && (
-              <View style={[styles.preferenceChip, { backgroundColor: "#2196F315" }]}>
-                <EvendiIcon name="map-pin" size={12} color="#2196F3" />
-                <ThemedText style={[styles.preferenceChipText, { color: "#2196F3" }]}>{locationIntel.venueName}</ThemedText>
+              <View style={[styles.preferenceChip, { backgroundColor: theme.accent + "15" }]}>
+                <EvendiIcon name="map-pin" size={12} color={theme.accent} />
+                <ThemedText style={[styles.preferenceChipText, { color: theme.accent }]}>{locationIntel.venueName}</ThemedText>
               </View>
             )}
             {preferences.location && !locationIntel.venueName && (
@@ -1155,7 +1133,6 @@ export default function VendorMatchingScreen() {
           </View>
         </Animated.View>
       )}
-
       {/* Category Selection */}
       {!selectedCategory ? (
         <FlatList
@@ -1180,14 +1157,13 @@ export default function VendorMatchingScreen() {
             </Pressable>
             <View style={styles.selectedCategoryInfo}>
               <View style={[styles.categoryIconCircle, { backgroundColor: theme.accent }]}>
-                <EvendiIcon name={getCategoryConfig(selectedCategory).icon as any} size={16} color="#FFFFFF" />
+                <EvendiIcon name={getCategoryConfig(selectedCategory).icon as any} size={16} color={theme.buttonText} />
               </View>
               <ThemedText style={[styles.selectedCategoryName, { color: theme.text }]}>
                 {getCategoryConfig(selectedCategory).name}
               </ThemedText>
             </View>
           </View>
-
           {/* Metadata Filters */}
           {selectedCategory && (
             <Animated.View entering={FadeInDown.duration(300).delay(100)} style={[styles.filtersSection, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
@@ -1312,12 +1288,12 @@ export default function VendorMatchingScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     style={[styles.filterChip, { 
-                      backgroundColor: filterTasteSample ? "#4CAF50" : theme.backgroundRoot,
-                      borderColor: filterTasteSample ? "#4CAF50" : theme.border 
+                      backgroundColor: filterTasteSample ? theme.success : theme.backgroundRoot,
+                      borderColor: filterTasteSample ? theme.success : theme.border 
                     }]}
                   >
-                    <EvendiIcon name="coffee" size={12} color={filterTasteSample ? "#FFFFFF" : theme.textSecondary} />
-                    <ThemedText style={[styles.filterChipText, { color: filterTasteSample ? "#FFFFFF" : theme.text }]}>
+                    <EvendiIcon name="coffee" size={12} color={filterTasteSample ? theme.buttonText : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterTasteSample ? theme.buttonText : theme.text }]}>
                       Smaksprøve
                     </ThemedText>
                   </Pressable>
@@ -1327,11 +1303,11 @@ export default function VendorMatchingScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     style={[styles.filterChip, { 
-                      backgroundColor: filterVegetarian ? "#8BC34A" : theme.backgroundRoot,
-                      borderColor: filterVegetarian ? "#8BC34A" : theme.border 
+                      backgroundColor: filterVegetarian ? theme.success : theme.backgroundRoot,
+                      borderColor: filterVegetarian ? theme.success : theme.border 
                     }]}
                   >
-                    <ThemedText style={[styles.filterChipText, { color: filterVegetarian ? "#FFFFFF" : theme.text }]}>
+                    <ThemedText style={[styles.filterChipText, { color: filterVegetarian ? theme.buttonText : theme.text }]}>
                       Vegetar
                     </ThemedText>
                   </Pressable>
@@ -1341,11 +1317,11 @@ export default function VendorMatchingScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     style={[styles.filterChip, { 
-                      backgroundColor: filterVegan ? "#8BC34A" : theme.backgroundRoot,
-                      borderColor: filterVegan ? "#8BC34A" : theme.border 
+                      backgroundColor: filterVegan ? theme.success : theme.backgroundRoot,
+                      borderColor: filterVegan ? theme.success : theme.border 
                     }]}
                   >
-                    <ThemedText style={[styles.filterChipText, { color: filterVegan ? "#FFFFFF" : theme.text }]}>
+                    <ThemedText style={[styles.filterChipText, { color: filterVegan ? theme.buttonText : theme.text }]}>
                       Vegan
                     </ThemedText>
                   </Pressable>
@@ -1370,7 +1346,7 @@ export default function VendorMatchingScreen() {
                       }]}
                     >
                       <ThemedText style={[styles.filterChipText, { 
-                        color: filterCakeStyles.includes(style) ? "#FFFFFF" : theme.text 
+                        color: filterCakeStyles.includes(style) ? theme.buttonText : theme.text 
                       }]}>
                         {style.charAt(0).toUpperCase() + style.slice(1)}
                       </ThemedText>
@@ -1396,9 +1372,9 @@ export default function VendorMatchingScreen() {
                         borderColor: filterVehicleTypes.includes(type) ? theme.accent : theme.border 
                       }]}
                     >
-                      <EvendiIcon name="truck" size={12} color={filterVehicleTypes.includes(type) ? "#FFFFFF" : theme.textSecondary} />
+                      <EvendiIcon name="truck" size={12} color={filterVehicleTypes.includes(type) ? theme.buttonText : theme.textSecondary} />
                       <ThemedText style={[styles.filterChipText, { 
-                        color: filterVehicleTypes.includes(type) ? "#FFFFFF" : theme.text 
+                        color: filterVehicleTypes.includes(type) ? theme.buttonText : theme.text 
                       }]}>
                         {type.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
                       </ThemedText>
@@ -1425,7 +1401,7 @@ export default function VendorMatchingScreen() {
                       }]}
                     >
                       <ThemedText style={[styles.filterChipText, { 
-                        color: filterServiceTypes.includes(type) ? "#FFFFFF" : theme.text 
+                        color: filterServiceTypes.includes(type) ? theme.buttonText : theme.text 
                       }]}>
                         {type === "both" ? "Begge" : type === "hair" ? "Hår" : "Makeup"}
                       </ThemedText>
@@ -1437,12 +1413,12 @@ export default function VendorMatchingScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     style={[styles.filterChip, { 
-                      backgroundColor: filterTrialSession ? "#9C27B0" : theme.backgroundRoot,
-                      borderColor: filterTrialSession ? "#9C27B0" : theme.border 
+                      backgroundColor: filterTrialSession ? theme.accent : theme.backgroundRoot,
+                      borderColor: filterTrialSession ? theme.accent : theme.border 
                     }]}
                   >
-                    <EvendiIcon name="check" size={12} color={filterTrialSession ? "#FFFFFF" : theme.textSecondary} />
-                    <ThemedText style={[styles.filterChipText, { color: filterTrialSession ? "#FFFFFF" : theme.text }]}>
+                    <EvendiIcon name="check" size={12} color={filterTrialSession ? theme.buttonText : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterTrialSession ? theme.buttonText : theme.text }]}>
                       Prøveskyss
                     </ThemedText>
                   </Pressable>
@@ -1462,12 +1438,12 @@ export default function VendorMatchingScreen() {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       }}
                       style={[styles.filterChip, { 
-                        backgroundColor: filterPhotoPackageTypes.includes(type) ? "#2196F3" : theme.backgroundRoot,
-                        borderColor: filterPhotoPackageTypes.includes(type) ? "#2196F3" : theme.border 
+                        backgroundColor: filterPhotoPackageTypes.includes(type) ? theme.accent : theme.backgroundRoot,
+                        borderColor: filterPhotoPackageTypes.includes(type) ? theme.accent : theme.border 
                       }]}
                     >
                       <ThemedText style={[styles.filterChipText, { 
-                        color: filterPhotoPackageTypes.includes(type) ? "#FFFFFF" : theme.text 
+                        color: filterPhotoPackageTypes.includes(type) ? theme.buttonText : theme.text 
                       }]}>
                         {type.charAt(0).toUpperCase() + type.slice(1)}
                       </ThemedText>
@@ -1479,12 +1455,12 @@ export default function VendorMatchingScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     style={[styles.filterChip, { 
-                      backgroundColor: filterPrintRights ? "#00BCD4" : theme.backgroundRoot,
-                      borderColor: filterPrintRights ? "#00BCD4" : theme.border 
+                      backgroundColor: filterPrintRights ? theme.accent : theme.backgroundRoot,
+                      borderColor: filterPrintRights ? theme.accent : theme.border 
                     }]}
                   >
-                    <EvendiIcon name="printer" size={12} color={filterPrintRights ? "#FFFFFF" : theme.textSecondary} />
-                    <ThemedText style={[styles.filterChipText, { color: filterPrintRights ? "#FFFFFF" : theme.text }]}>
+                    <EvendiIcon name="printer" size={12} color={filterPrintRights ? theme.buttonText : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterPrintRights ? theme.buttonText : theme.text }]}>
                       Trykkerett
                     </ThemedText>
                   </Pressable>
@@ -1494,12 +1470,12 @@ export default function VendorMatchingScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     style={[styles.filterChip, { 
-                      backgroundColor: filterRawPhotos ? "#00BCD4" : theme.backgroundRoot,
-                      borderColor: filterRawPhotos ? "#00BCD4" : theme.border 
+                      backgroundColor: filterRawPhotos ? theme.accent : theme.backgroundRoot,
+                      borderColor: filterRawPhotos ? theme.accent : theme.border 
                     }]}
                   >
-                    <EvendiIcon name="file" size={12} color={filterRawPhotos ? "#FFFFFF" : theme.textSecondary} />
-                    <ThemedText style={[styles.filterChipText, { color: filterRawPhotos ? "#FFFFFF" : theme.text }]}>
+                    <EvendiIcon name="file" size={12} color={filterRawPhotos ? theme.buttonText : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterRawPhotos ? theme.buttonText : theme.text }]}>
                       RAW-filer
                     </ThemedText>
                   </Pressable>
@@ -1519,12 +1495,12 @@ export default function VendorMatchingScreen() {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       }}
                       style={[styles.filterChip, { 
-                        backgroundColor: filterVideoPackageTypes.includes(type) ? "#9C27B0" : theme.backgroundRoot,
-                        borderColor: filterVideoPackageTypes.includes(type) ? "#9C27B0" : theme.border 
+                        backgroundColor: filterVideoPackageTypes.includes(type) ? theme.accent : theme.backgroundRoot,
+                        borderColor: filterVideoPackageTypes.includes(type) ? theme.accent : theme.border 
                       }]}
                     >
                       <ThemedText style={[styles.filterChipText, { 
-                        color: filterVideoPackageTypes.includes(type) ? "#FFFFFF" : theme.text 
+                        color: filterVideoPackageTypes.includes(type) ? theme.buttonText : theme.text 
                       }]}>
                         {type.charAt(0).toUpperCase() + type.slice(1)}
                       </ThemedText>
@@ -1540,12 +1516,12 @@ export default function VendorMatchingScreen() {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       }}
                       style={[styles.filterChip, { 
-                        backgroundColor: filterEditingStyles.includes(style) ? "#673AB7" : theme.backgroundRoot,
-                        borderColor: filterEditingStyles.includes(style) ? "#673AB7" : theme.border 
+                        backgroundColor: filterEditingStyles.includes(style) ? theme.accent : theme.backgroundRoot,
+                        borderColor: filterEditingStyles.includes(style) ? theme.accent : theme.border 
                       }]}
                     >
                       <ThemedText style={[styles.filterChipText, { 
-                        color: filterEditingStyles.includes(style) ? "#FFFFFF" : theme.text 
+                        color: filterEditingStyles.includes(style) ? theme.buttonText : theme.text 
                       }]}>
                         {style.charAt(0).toUpperCase() + style.slice(1)}
                       </ThemedText>
@@ -1557,12 +1533,12 @@ export default function VendorMatchingScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     style={[styles.filterChip, { 
-                      backgroundColor: filterDroneFootage ? "#FF9800" : theme.backgroundRoot,
-                      borderColor: filterDroneFootage ? "#FF9800" : theme.border 
+                      backgroundColor: filterDroneFootage ? theme.warning : theme.backgroundRoot,
+                      borderColor: filterDroneFootage ? theme.warning : theme.border 
                     }]}
                   >
-                    <EvendiIcon name="navigation" size={12} color={filterDroneFootage ? "#FFFFFF" : theme.textSecondary} />
-                    <ThemedText style={[styles.filterChipText, { color: filterDroneFootage ? "#FFFFFF" : theme.text }]}>
+                    <EvendiIcon name="navigation" size={12} color={filterDroneFootage ? theme.buttonText : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterDroneFootage ? theme.buttonText : theme.text }]}>
                       Drone
                     </ThemedText>
                   </Pressable>
@@ -1582,12 +1558,12 @@ export default function VendorMatchingScreen() {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       }}
                       style={[styles.filterChip, { 
-                        backgroundColor: filterPerformanceTypes.includes(type) ? "#E91E63" : theme.backgroundRoot,
-                        borderColor: filterPerformanceTypes.includes(type) ? "#E91E63" : theme.border 
+                        backgroundColor: filterPerformanceTypes.includes(type) ? theme.accent : theme.backgroundRoot,
+                        borderColor: filterPerformanceTypes.includes(type) ? theme.accent : theme.border 
                       }]}
                     >
                       <ThemedText style={[styles.filterChipText, { 
-                        color: filterPerformanceTypes.includes(type) ? "#FFFFFF" : theme.text 
+                        color: filterPerformanceTypes.includes(type) ? theme.buttonText : theme.text 
                       }]}>
                         {type.toUpperCase()}
                       </ThemedText>
@@ -1603,12 +1579,12 @@ export default function VendorMatchingScreen() {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       }}
                       style={[styles.filterChip, { 
-                        backgroundColor: filterMusicGenres.includes(genre) ? "#F44336" : theme.backgroundRoot,
-                        borderColor: filterMusicGenres.includes(genre) ? "#F44336" : theme.border 
+                        backgroundColor: filterMusicGenres.includes(genre) ? theme.error : theme.backgroundRoot,
+                        borderColor: filterMusicGenres.includes(genre) ? theme.error : theme.border 
                       }]}
                     >
                       <ThemedText style={[styles.filterChipText, { 
-                        color: filterMusicGenres.includes(genre) ? "#FFFFFF" : theme.text 
+                        color: filterMusicGenres.includes(genre) ? theme.buttonText : theme.text 
                       }]}>
                         {genre.charAt(0).toUpperCase() + genre.slice(1)}
                       </ThemedText>
@@ -1620,12 +1596,12 @@ export default function VendorMatchingScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     style={[styles.filterChip, { 
-                      backgroundColor: filterEquipmentIncluded ? "#FF5722" : theme.backgroundRoot,
-                      borderColor: filterEquipmentIncluded ? "#FF5722" : theme.border 
+                      backgroundColor: filterEquipmentIncluded ? theme.accent : theme.backgroundRoot,
+                      borderColor: filterEquipmentIncluded ? theme.accent : theme.border 
                     }]}
                   >
-                    <EvendiIcon name="headphones" size={12} color={filterEquipmentIncluded ? "#FFFFFF" : theme.textSecondary} />
-                    <ThemedText style={[styles.filterChipText, { color: filterEquipmentIncluded ? "#FFFFFF" : theme.text }]}>
+                    <EvendiIcon name="headphones" size={12} color={filterEquipmentIncluded ? theme.buttonText : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterEquipmentIncluded ? theme.buttonText : theme.text }]}>
                       Utstyr inkl.
                     </ThemedText>
                   </Pressable>
@@ -1645,12 +1621,12 @@ export default function VendorMatchingScreen() {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       }}
                       style={[styles.filterChip, { 
-                        backgroundColor: filterIndoorOutdoor.includes(type) ? "#795548" : theme.backgroundRoot,
-                        borderColor: filterIndoorOutdoor.includes(type) ? "#795548" : theme.border 
+                        backgroundColor: filterIndoorOutdoor.includes(type) ? theme.accent : theme.backgroundRoot,
+                        borderColor: filterIndoorOutdoor.includes(type) ? theme.accent : theme.border 
                       }]}
                     >
                       <ThemedText style={[styles.filterChipText, { 
-                        color: filterIndoorOutdoor.includes(type) ? "#FFFFFF" : theme.text 
+                        color: filterIndoorOutdoor.includes(type) ? theme.buttonText : theme.text 
                       }]}>
                         {type.charAt(0).toUpperCase() + type.slice(1)}
                       </ThemedText>
@@ -1662,12 +1638,12 @@ export default function VendorMatchingScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     style={[styles.filterChip, { 
-                      backgroundColor: filterCateringIncluded ? "#8BC34A" : theme.backgroundRoot,
-                      borderColor: filterCateringIncluded ? "#8BC34A" : theme.border 
+                      backgroundColor: filterCateringIncluded ? theme.success : theme.backgroundRoot,
+                      borderColor: filterCateringIncluded ? theme.success : theme.border 
                     }]}
                   >
-                    <EvendiIcon name="coffee" size={12} color={filterCateringIncluded ? "#FFFFFF" : theme.textSecondary} />
-                    <ThemedText style={[styles.filterChipText, { color: filterCateringIncluded ? "#FFFFFF" : theme.text }]}>
+                    <EvendiIcon name="coffee" size={12} color={filterCateringIncluded ? theme.buttonText : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterCateringIncluded ? theme.buttonText : theme.text }]}>
                       Catering inkl.
                     </ThemedText>
                   </Pressable>
@@ -1687,12 +1663,12 @@ export default function VendorMatchingScreen() {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       }}
                       style={[styles.filterChip, { 
-                        backgroundColor: filterServiceLevels.includes(level) ? "#00BCD4" : theme.backgroundRoot,
-                        borderColor: filterServiceLevels.includes(level) ? "#00BCD4" : theme.border 
+                        backgroundColor: filterServiceLevels.includes(level) ? theme.accent : theme.backgroundRoot,
+                        borderColor: filterServiceLevels.includes(level) ? theme.accent : theme.border 
                       }]}
                     >
                       <ThemedText style={[styles.filterChipText, { 
-                        color: filterServiceLevels.includes(level) ? "#FFFFFF" : theme.text 
+                        color: filterServiceLevels.includes(level) ? theme.buttonText : theme.text 
                       }]}>
                         {level.charAt(0).toUpperCase() + level.slice(1)}
                       </ThemedText>
@@ -1704,12 +1680,12 @@ export default function VendorMatchingScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     style={[styles.filterChip, { 
-                      backgroundColor: filterVendorCoordination ? "#009688" : theme.backgroundRoot,
-                      borderColor: filterVendorCoordination ? "#009688" : theme.border 
+                      backgroundColor: filterVendorCoordination ? theme.accent : theme.backgroundRoot,
+                      borderColor: filterVendorCoordination ? theme.accent : theme.border 
                     }]}
                   >
-                    <EvendiIcon name="users" size={12} color={filterVendorCoordination ? "#FFFFFF" : theme.textSecondary} />
-                    <ThemedText style={[styles.filterChipText, { color: filterVendorCoordination ? "#FFFFFF" : theme.text }]}>
+                    <EvendiIcon name="users" size={12} color={filterVendorCoordination ? theme.buttonText : theme.textSecondary} />
+                    <ThemedText style={[styles.filterChipText, { color: filterVendorCoordination ? theme.buttonText : theme.text }]}>
                       Leverandørkoordinering
                     </ThemedText>
                   </Pressable>
@@ -1717,7 +1693,6 @@ export default function VendorMatchingScreen() {
               )}
             </Animated.View>
           )}
-
           {/* Vendor Results */}
           {isLoading ? (
             <View style={styles.loadingContainer}>
@@ -1753,7 +1728,6 @@ export default function VendorMatchingScreen() {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
@@ -1967,7 +1941,6 @@ const styles = StyleSheet.create({
   vendorTravelText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#2196F3",
   },
   vendorTravelFrom: {
     fontSize: 9,

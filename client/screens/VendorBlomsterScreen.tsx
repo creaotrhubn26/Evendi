@@ -7,7 +7,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
@@ -18,11 +17,8 @@ import { getVendorConfig } from "@/lib/vendor-adapter";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 import Animated, { FadeInDown } from "react-native-reanimated";
-
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 type Navigation = NativeStackNavigationProp<any>;
-
 type VendorProduct = {
   id: string;
   title: string;
@@ -31,7 +27,6 @@ type VendorProduct = {
   unitType: string;
   imageUrl: string | null;
 };
-
 type VendorOffer = {
   id: string;
   title: string;
@@ -40,7 +35,6 @@ type VendorOffer = {
   currency: string | null;
   createdAt: string;
 };
-
 export default function VendorBlomsterScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -48,9 +42,7 @@ export default function VendorBlomsterScreen() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
-
   const vendorConfig = getVendorConfig(null, "Blomster");
-
   useEffect(() => {
     const loadSession = async () => {
       const data = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
@@ -63,7 +55,6 @@ export default function VendorBlomsterScreen() {
     };
     loadSession();
   }, [navigation]);
-
   const { data: products = [], isLoading: productsLoading, refetch: refetchProducts } = useQuery<VendorProduct[]>({
     queryKey: ["/api/vendor/products"],
     queryFn: async () => {
@@ -76,7 +67,6 @@ export default function VendorBlomsterScreen() {
     },
     enabled: !!sessionToken,
   });
-
   const { data: offers = [], isLoading: offersLoading, refetch: refetchOffers } = useQuery<VendorOffer[]>({
     queryKey: ["/api/vendor/offers"],
     queryFn: async () => {
@@ -89,7 +79,6 @@ export default function VendorBlomsterScreen() {
     },
     enabled: !!sessionToken,
   });
-
   const deleteProductMutation = useMutation({
     mutationFn: async (id: string) => {
       if (!sessionToken) throw new Error("Ingen sesjon");
@@ -101,7 +90,6 @@ export default function VendorBlomsterScreen() {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/vendor/products"] }),
   });
-
   const deleteOfferMutation = useMutation({
     mutationFn: async (id: string) => {
       if (!sessionToken) throw new Error("Ingen sesjon");
@@ -113,24 +101,20 @@ export default function VendorBlomsterScreen() {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/vendor/offers"] }),
   });
-
   const onRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([refetchProducts(), refetchOffers()]);
     setIsRefreshing(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const goToProducts = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("ProductCreate");
   };
-
   const goToOffers = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("OfferCreate");
   };
-
   const handleDeleteProduct = (id: string) => {
     showConfirm({
       title: "Slett produkt",
@@ -148,7 +132,6 @@ export default function VendorBlomsterScreen() {
       }
     });
   };
-
   const handleDeleteOffer = (id: string) => {
     showConfirm({
       title: "Slett tilbud",
@@ -166,9 +149,7 @@ export default function VendorBlomsterScreen() {
       }
     });
   };
-
   if (!sessionToken) return null;
-
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
@@ -183,7 +164,6 @@ export default function VendorBlomsterScreen() {
     >
       <ThemedText style={[styles.title, { color: theme.text }]}>Blomster dashboard</ThemedText>
       <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Legg ut buketter, bordpynt og dekorasjoner som produkter og send tilbud raskt.</ThemedText>
-
       <View style={styles.cardRow}>
         <Pressable
           onPress={goToProducts}
@@ -200,7 +180,6 @@ export default function VendorBlomsterScreen() {
           <ThemedText style={[styles.cardBody, { color: theme.textSecondary }]}>Opprett blomsterpakker (bukett, bordpynt, seremonier, dekorasjoner).</ThemedText>
           <Button style={styles.cardButton} onPress={goToProducts}>Opprett produkt</Button>
         </Pressable>
-
         <Pressable
           onPress={goToOffers}
           style={({ pressed }) => [
@@ -217,12 +196,10 @@ export default function VendorBlomsterScreen() {
           <Button style={styles.cardButton} onPress={goToOffers}>Send tilbud</Button>
         </Pressable>
       </View>
-
       <View style={[styles.infoBox, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <EvendiIcon name="info" size={16} color={theme.textSecondary} />
         <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>Oppdater sesongens blomster og bilder i dine produkter for bedre treff.</ThemedText>
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Produkter</ThemedText>
@@ -254,7 +231,6 @@ export default function VendorBlomsterScreen() {
           ))
         )}
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Tilbud</ThemedText>
@@ -288,7 +264,6 @@ export default function VendorBlomsterScreen() {
     </ScrollView>
   );
 }
-
 const styles = StyleSheet.create({
   title: {
     fontSize: 24,
@@ -371,7 +346,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: "#00000010",
     gap: Spacing.sm,
   },
   chevronBtn: {

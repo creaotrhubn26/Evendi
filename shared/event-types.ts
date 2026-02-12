@@ -150,7 +150,82 @@ export interface EventTypeConfig {
     shareMessageNo: string;  // SMS/share text template
     shareMessageEn: string;
   };
+  /** Q&A game configurations — interactive audience games suitable for this event type */
+  qaGames?: QaGameConfig[];
 }
+
+// ─── Q&A Game System ────────────────────────────────────────────
+export type QaGameMode = "shoe_game" | "quiz" | "two_truths" | "qa_open" | "icebreaker";
+
+export interface QaGameConfig {
+  mode: QaGameMode;
+  labelNo: string;
+  labelEn: string;
+  descriptionNo: string;
+  descriptionEn: string;
+  icon: string;
+  /** Instructions shown before start */
+  instructionsNo: string[];
+  instructionsEn: string[];
+  /** Pre-loaded questions for this game */
+  presetQuestions: QaGameQuestion[];
+}
+
+export interface QaGameQuestion {
+  id: string;
+  textNo: string;
+  textEn: string;
+  category?: string;
+}
+
+// ─── Wedding Shoe Game Presets ──────────────────────────────────
+export const SHOE_GAME_QUESTIONS: QaGameQuestion[] = [
+  // Hvem av dere... (Who of you...)
+  { id: "shoe_1", textNo: "Hvem sa «Jeg elsker deg» først?", textEn: "Who said 'I love you' first?", category: "kjærlighet" },
+  { id: "shoe_2", textNo: "Hvem tok initiativet til den første daten?", textEn: "Who initiated the first date?", category: "kjærlighet" },
+  { id: "shoe_3", textNo: "Hvem er den mest romantiske?", textEn: "Who is more romantic?", category: "kjærlighet" },
+  { id: "shoe_4", textNo: "Hvem fridde?", textEn: "Who proposed?", category: "kjærlighet" },
+  { id: "shoe_5", textNo: "Hvem bruker lengst tid på badet?", textEn: "Who spends more time in the bathroom?", category: "hverdag" },
+  { id: "shoe_6", textNo: "Hvem er flinkest til å lage mat?", textEn: "Who is the better cook?", category: "hverdag" },
+  { id: "shoe_7", textNo: "Hvem holder orden i hjemmet?", textEn: "Who keeps the house tidy?", category: "hverdag" },
+  { id: "shoe_8", textNo: "Hvem er morgenfuglen?", textEn: "Who is the early bird?", category: "hverdag" },
+  { id: "shoe_9", textNo: "Hvem styrer fjernkontrollen?", textEn: "Who controls the remote?", category: "hverdag" },
+  { id: "shoe_10", textNo: "Hvem snorker?", textEn: "Who snores?", category: "hverdag" },
+  { id: "shoe_11", textNo: "Hvem vinner i en diskusjon?", textEn: "Who wins an argument?", category: "personlighet" },
+  { id: "shoe_12", textNo: "Hvem er den mest sta?", textEn: "Who is more stubborn?", category: "personlighet" },
+  { id: "shoe_13", textNo: "Hvem glemmer oftest ting?", textEn: "Who forgets things most often?", category: "personlighet" },
+  { id: "shoe_14", textNo: "Hvem er den morsomste?", textEn: "Who is funnier?", category: "personlighet" },
+  { id: "shoe_15", textNo: "Hvem sier unnskyld først etter en krangel?", textEn: "Who apologizes first after a fight?", category: "personlighet" },
+  { id: "shoe_16", textNo: "Hvem bruker mest penger?", textEn: "Who spends more money?", category: "økonomi" },
+  { id: "shoe_17", textNo: "Hvem planla bryllupet mest?", textEn: "Who planned the wedding the most?", category: "bryllup" },
+  { id: "shoe_18", textNo: "Hvem var mest nervøs i dag?", textEn: "Who was more nervous today?", category: "bryllup" },
+  { id: "shoe_19", textNo: "Hvem gråt først i dag?", textEn: "Who cried first today?", category: "bryllup" },
+  { id: "shoe_20", textNo: "Hvem kommer til å bestemme hvor dere skal på bryllupsreise?", textEn: "Who will decide the honeymoon destination?", category: "bryllup" },
+  { id: "shoe_21", textNo: "Hvem kjører best?", textEn: "Who is the better driver?", category: "hverdag" },
+  { id: "shoe_22", textNo: "Hvem velger film på filmnatt?", textEn: "Who picks the movie on movie night?", category: "hverdag" },
+  { id: "shoe_23", textNo: "Hvem synger høyest i dusjen?", textEn: "Who sings the loudest in the shower?", category: "morsomt" },
+  { id: "shoe_24", textNo: "Hvem hadde den verste frisyren som ung?", textEn: "Who had the worst hairstyle as a kid?", category: "morsomt" },
+  { id: "shoe_25", textNo: "Hvem er den beste danseren?", textEn: "Who is the better dancer?", category: "morsomt" },
+];
+
+// ─── Corporate Icebreaker Presets ───────────────────────────────
+export const ICEBREAKER_QUESTIONS: QaGameQuestion[] = [
+  { id: "ice_1", textNo: "Hva er din skjulte superkraft?", textEn: "What is your hidden superpower?", category: "personlig" },
+  { id: "ice_2", textNo: "Hva ville du gjort hvis du ikke jobbet her?", textEn: "What would you do if you didn't work here?", category: "personlig" },
+  { id: "ice_3", textNo: "Hva er det beste ferietipset ditt?", textEn: "What is your best vacation tip?", category: "personlig" },
+  { id: "ice_4", textNo: "Hva handler den siste boken du leste om?", textEn: "What was the last book you read about?", category: "kultur" },
+  { id: "ice_5", textNo: "Hvis laget vårt var en film, hvilken genre ville det vært?", textEn: "If our team was a movie, what genre would it be?", category: "team" },
+  { id: "ice_6", textNo: "Hva er den største utfordringen i vår bransje akkurat nå?", textEn: "What is the biggest challenge in our industry right now?", category: "bransje" },
+  { id: "ice_7", textNo: "Hva motiverer deg mest i jobben?", textEn: "What motivates you most at work?", category: "team" },
+  { id: "ice_8", textNo: "Hvis du kunne ha lunsj med hvem som helst, hvem ville det vært?", textEn: "If you could have lunch with anyone, who would it be?", category: "personlig" },
+];
+
+// ─── Party/Celebration Two Truths Presets ───────────────────────
+export const TWO_TRUTHS_QUESTIONS: QaGameQuestion[] = [
+  { id: "tt_1", textNo: "Fortell to sannheter og en løgn – gjestene gjetter!", textEn: "Tell two truths and a lie – guests guess!", category: "lek" },
+  { id: "tt_2", textNo: "Hva er noe overraskende folk ikke vet om deg?", textEn: "What is something surprising people don't know about you?", category: "lek" },
+  { id: "tt_3", textNo: "Hva er ditt mest pinlige øyeblikk?", textEn: "What is your most embarrassing moment?", category: "lek" },
+];
 
 export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
   // ─── B2C: Life Events ───────────────────────────────────────
@@ -197,6 +272,52 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til bryllupet vårt på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to our wedding on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "shoe_game",
+        labelNo: "Skoleken",
+        labelEn: "The Shoe Game",
+        descriptionNo: "Den klassiske bryllupsleken med sko!",
+        descriptionEn: "The classic wedding shoe game!",
+        icon: "👟",
+        instructionsNo: [
+          "Brud og brudgom sitter på stoler med ryggen mot hverandre",
+          "Begge tar av seg skoene og bytter én sko med hverandre",
+          "Verten leser opp spørsmål – svaret er enten «Brud» eller «Brudgom»",
+          "Paret svarer ved å løfte opp den riktige skoen",
+          "Gjestene koser seg med å se om parene er enige!",
+        ],
+        instructionsEn: [
+          "Bride and groom sit on chairs back to back",
+          "Both take off their shoes and swap one shoe with each other",
+          "The host reads questions – the answer is either 'Bride' or 'Groom'",
+          "The couple answers by raising the correct shoe",
+          "Guests enjoy seeing if the couple agrees!",
+        ],
+        presetQuestions: [], // Will reference SHOE_GAME_QUESTIONS
+      },
+      {
+        mode: "qa_open",
+        labelNo: "Åpne spørsmål",
+        labelEn: "Open Q&A",
+        descriptionNo: "Gjestene stiller spørsmål til brudeparet",
+        descriptionEn: "Guests ask questions to the couple",
+        icon: "💬",
+        instructionsNo: [
+          "Gjestene skriver inn spørsmål fra telefonen",
+          "Spørsmål kan modereres av toastmaster/vert",
+          "Populære spørsmål stemmes opp av gjestene",
+          "Brudeparet svarer på de mest populære spørsmålene",
+        ],
+        instructionsEn: [
+          "Guests submit questions from their phone",
+          "Questions can be moderated by the toastmaster/host",
+          "Popular questions are upvoted by guests",
+          "The couple answers the most popular questions",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   confirmation: {
@@ -287,6 +408,48 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til bursdagsfeiringen på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to the birthday celebration on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "two_truths",
+        labelNo: "To sannheter og en løgn",
+        labelEn: "Two Truths and a Lie",
+        descriptionNo: "Gjett hva som er sant og usant!",
+        descriptionEn: "Guess what's true and false!",
+        icon: "🤥",
+        instructionsNo: [
+          "Jubilanten forteller tre ting om seg selv",
+          "To av dem er sanne, en er løgn",
+          "Gjestene stemmer på hvilken de tror er løgn",
+          "Jubilanten avslører svaret!",
+        ],
+        instructionsEn: [
+          "The birthday person tells three things about themselves",
+          "Two are true, one is a lie",
+          "Guests vote on which one is the lie",
+          "The birthday person reveals the answer!",
+        ],
+        presetQuestions: [],
+      },
+      {
+        mode: "qa_open",
+        labelNo: "Åpne spørsmål",
+        labelEn: "Open Q&A",
+        descriptionNo: "Still spørsmål til jubilanten",
+        descriptionEn: "Ask questions to the birthday person",
+        icon: "💬",
+        instructionsNo: [
+          "Gjestene skriver inn spørsmål",
+          "Populære spørsmål stemmes opp",
+          "Jubilanten svarer på de mest populære",
+        ],
+        instructionsEn: [
+          "Guests submit questions",
+          "Popular questions are upvoted",
+          "The birthday person answers the most popular ones",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   anniversary: {
@@ -464,6 +627,48 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til konferansen på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to the conference on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "icebreaker",
+        labelNo: "Icebreaker",
+        labelEn: "Icebreaker",
+        descriptionNo: "Bli bedre kjent med kollegene!",
+        descriptionEn: "Get to know your colleagues better!",
+        icon: "🧊",
+        instructionsNo: [
+          "Deltakerne svarer på icebreaker-spørsmål",
+          "Svarene vises anonymt eller med navn",
+          "Perfekt for å bli kjent og bryte isen",
+        ],
+        instructionsEn: [
+          "Participants answer icebreaker questions",
+          "Answers shown anonymously or with names",
+          "Perfect for getting to know each other",
+        ],
+        presetQuestions: [],
+      },
+      {
+        mode: "qa_open",
+        labelNo: "Spørsmål til foredragsholder",
+        labelEn: "Speaker Q&A",
+        descriptionNo: "Deltakerne stiller spørsmål til taleren",
+        descriptionEn: "Attendees ask questions to the speaker",
+        icon: "🎤",
+        instructionsNo: [
+          "Deltakerne sender inn spørsmål under presentasjonen",
+          "Spørsmål kan modereres av arrangør",
+          "Populære spørsmål stemmes opp",
+          "Taleren svarer på de mest populære spørsmålene",
+        ],
+        instructionsEn: [
+          "Attendees submit questions during the presentation",
+          "Questions can be moderated by the organizer",
+          "Popular questions are upvoted",
+          "The speaker answers the most popular questions",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   seminar: {
@@ -505,6 +710,46 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til seminaret på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to the seminar on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "icebreaker",
+        labelNo: "Icebreaker",
+        labelEn: "Icebreaker",
+        descriptionNo: "Bli bedre kjent med deltakerne!",
+        descriptionEn: "Get to know the participants!",
+        icon: "🧊",
+        instructionsNo: [
+          "Deltakerne svarer på icebreaker-spørsmål",
+          "Svarene kan deles anonymt eller med navn",
+          "Perfekt for å bryte isen i en workshop",
+        ],
+        instructionsEn: [
+          "Participants answer icebreaker questions",
+          "Answers can be shared anonymously or with names",
+          "Perfect for breaking the ice in a workshop",
+        ],
+        presetQuestions: [],
+      },
+      {
+        mode: "qa_open",
+        labelNo: "Spørsmål til foredragsholder",
+        labelEn: "Speaker Q&A",
+        descriptionNo: "Deltakerne stiller spørsmål til innleder",
+        descriptionEn: "Attendees ask questions to the speaker",
+        icon: "🎤",
+        instructionsNo: [
+          "Deltakerne sender inn spørsmål under presentasjonen",
+          "Spørsmål kan modereres av arrangør",
+          "Populære spørsmål stemmes opp",
+        ],
+        instructionsEn: [
+          "Attendees submit questions during the presentation",
+          "Questions can be moderated by the organizer",
+          "Popular questions are upvoted",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   kickoff: {
@@ -546,6 +791,46 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til kickoffen på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to the kickoff on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "icebreaker",
+        labelNo: "Icebreaker",
+        labelEn: "Icebreaker",
+        descriptionNo: "Bli kjent på tvers av avdelinger!",
+        descriptionEn: "Get to know colleagues across departments!",
+        icon: "🧊",
+        instructionsNo: [
+          "Alle svarer på oppvarmingsspørsmål",
+          "Del svarene i små grupper eller for hele rommet",
+          "Perfekt for å starte kickoffen med energi",
+        ],
+        instructionsEn: [
+          "Everyone answers warm-up questions",
+          "Share answers in small groups or for the whole room",
+          "Perfect to start the kickoff with energy",
+        ],
+        presetQuestions: [],
+      },
+      {
+        mode: "quiz",
+        labelNo: "Bedriftsquiz",
+        labelEn: "Company Quiz",
+        descriptionNo: "Test kunnskapen om bedriften og kollegaene!",
+        descriptionEn: "Test your knowledge about the company and colleagues!",
+        icon: "🧠",
+        instructionsNo: [
+          "Arrangøren legger inn spørsmål om bedriften",
+          "Deltakerne svarer i sanntid",
+          "Den med flest riktige svar vinner!",
+        ],
+        instructionsEn: [
+          "The organizer adds questions about the company",
+          "Participants answer in real-time",
+          "The one with the most correct answers wins!",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   // ─── B2B: Social & Relationship Building ──────────────────
@@ -588,6 +873,46 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til sommerfesten på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to the summer party on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "quiz",
+        labelNo: "Sommerfest-quiz",
+        labelEn: "Summer Party Quiz",
+        descriptionNo: "Morsom quiz for hele gjengen!",
+        descriptionEn: "Fun quiz for the whole crew!",
+        icon: "☀️",
+        instructionsNo: [
+          "Spill individuelt eller i lag",
+          "Spørsmål om alt og ingenting",
+          "Vinnerne får en premie!",
+        ],
+        instructionsEn: [
+          "Play individually or in teams",
+          "Questions about everything and nothing",
+          "Winners get a prize!",
+        ],
+        presetQuestions: [],
+      },
+      {
+        mode: "icebreaker",
+        labelNo: "Sommer-icebreaker",
+        labelEn: "Summer Icebreaker",
+        descriptionNo: "Bli bedre kjent med kollegaene!",
+        descriptionEn: "Get to know your colleagues better!",
+        icon: "🧊",
+        instructionsNo: [
+          "Svar på lette og morsomme spørsmål",
+          "Del favorittferieminner og sommerplaner",
+          "Perfekt for uformell stemning",
+        ],
+        instructionsEn: [
+          "Answer light and fun questions",
+          "Share favorite vacation memories and summer plans",
+          "Perfect for a casual atmosphere",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   christmas_party: {
@@ -629,6 +954,46 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til julebordet på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to the Christmas party on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "quiz",
+        labelNo: "Julebordsquiz",
+        labelEn: "Christmas Quiz",
+        descriptionNo: "Test julekunnskapen til kollegaene!",
+        descriptionEn: "Test your colleagues' Christmas knowledge!",
+        icon: "🎅",
+        instructionsNo: [
+          "Spill lagvis eller individuelt",
+          "Spørsmål om jul, bedriften og kollegaene",
+          "Laget med flest poeng vinner!",
+        ],
+        instructionsEn: [
+          "Play in teams or individually",
+          "Questions about Christmas, the company and colleagues",
+          "The team with the most points wins!",
+        ],
+        presetQuestions: [],
+      },
+      {
+        mode: "icebreaker",
+        labelNo: "Jule-icebreaker",
+        labelEn: "Christmas Icebreaker",
+        descriptionNo: "Morsomme julerelaterte spørsmål!",
+        descriptionEn: "Fun Christmas-related questions!",
+        icon: "🎄",
+        instructionsNo: [
+          "Svar på julerelaterte oppvarmingsspørsmål",
+          "Del favorittjuletradisjoner og minner",
+          "Perfekt for å komme i julestemning",
+        ],
+        instructionsEn: [
+          "Answer Christmas-related warm-up questions",
+          "Share favorite Christmas traditions and memories",
+          "Perfect for getting into the holiday spirit",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   team_building: {
@@ -670,6 +1035,46 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til teambuildingen på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to the team building event on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "two_truths",
+        labelNo: "To sannheter, én løgn",
+        labelEn: "Two Truths, One Lie",
+        descriptionNo: "Hvor godt kjenner du kollegaene?",
+        descriptionEn: "How well do you know your colleagues?",
+        icon: "🤔",
+        instructionsNo: [
+          "Hver person deler to sannheter og én løgn",
+          "De andre gjetter hva som er løgn",
+          "Riktig gjett gir poeng!",
+        ],
+        instructionsEn: [
+          "Each person shares two truths and one lie",
+          "Others guess which is the lie",
+          "Correct guesses earn points!",
+        ],
+        presetQuestions: [],
+      },
+      {
+        mode: "icebreaker",
+        labelNo: "Icebreaker",
+        labelEn: "Icebreaker",
+        descriptionNo: "Oppvarmingsspørsmål for teamet!",
+        descriptionEn: "Warm-up questions for the team!",
+        icon: "🧊",
+        instructionsNo: [
+          "Svar på morsomme og uventede spørsmål",
+          "Del svarene i teamet",
+          "Perfekt for å bygge samhold",
+        ],
+        instructionsEn: [
+          "Answer fun and unexpected questions",
+          "Share answers within the team",
+          "Perfect for building cohesion",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   // ─── B2B: External-facing ─────────────────────────────────
@@ -712,6 +1117,27 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til produktlanseringen på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to the product launch on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "qa_open",
+        labelNo: "Spørsmål om produktet",
+        labelEn: "Product Q&A",
+        descriptionNo: "Deltakerne stiller spørsmål om det nye produktet",
+        descriptionEn: "Attendees ask questions about the new product",
+        icon: "🚀",
+        instructionsNo: [
+          "Send inn spørsmål under lanseringen",
+          "Spørsmål kan modereres av arrangør",
+          "De mest populære spørsmålene besvares live",
+        ],
+        instructionsEn: [
+          "Submit questions during the launch",
+          "Questions can be moderated by the organizer",
+          "The most popular questions are answered live",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   trade_fair: {
@@ -753,6 +1179,27 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til messen på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to the trade fair on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "qa_open",
+        labelNo: "Spørsmål til utstillere",
+        labelEn: "Exhibitor Q&A",
+        descriptionNo: "Still spørsmål til utstillerne på messen",
+        descriptionEn: "Ask questions to the exhibitors at the fair",
+        icon: "🎪",
+        instructionsNo: [
+          "Send inn spørsmål til foredragsholdere og utstillere",
+          "Spørsmål kan modereres av arrangør",
+          "Populære spørsmål prioriteres",
+        ],
+        instructionsEn: [
+          "Submit questions to speakers and exhibitors",
+          "Questions can be moderated by the organizer",
+          "Popular questions are prioritized",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   // ─── B2B: HR & Internal Celebrations ──────────────────────
@@ -836,6 +1283,46 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til gallaen på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to the awards night on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "quiz",
+        labelNo: "Gallakviss",
+        labelEn: "Gala Quiz",
+        descriptionNo: "Underholdende quiz mellom rettene!",
+        descriptionEn: "Entertaining quiz between courses!",
+        icon: "🏆",
+        instructionsNo: [
+          "Quiz mellom hovedrett og dessert",
+          "Spørsmål om bedriftens historie og høydepunkter",
+          "Vinnerlaget får en overraskelsespremie!",
+        ],
+        instructionsEn: [
+          "Quiz between main course and dessert",
+          "Questions about company history and highlights",
+          "The winning team gets a surprise prize!",
+        ],
+        presetQuestions: [],
+      },
+      {
+        mode: "qa_open",
+        labelNo: "Spørsmål til ledelsen",
+        labelEn: "Q&A with Management",
+        descriptionNo: "Still spørsmål til ledelsen under gallaen",
+        descriptionEn: "Ask questions to management during the gala",
+        icon: "🎤",
+        instructionsNo: [
+          "Send inn spørsmål anonymt eller med navn",
+          "De mest populære spørsmålene besvares live",
+          "Arrangøren modererer spørsmålene",
+        ],
+        instructionsEn: [
+          "Submit questions anonymously or with your name",
+          "The most popular questions are answered live",
+          "The organizer moderates the questions",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   employee_day: {
@@ -877,6 +1364,46 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til ansattdagen på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to the employee day on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "icebreaker",
+        labelNo: "Icebreaker",
+        labelEn: "Icebreaker",
+        descriptionNo: "Bli bedre kjent på tvers av avdelinger!",
+        descriptionEn: "Get to know people across departments!",
+        icon: "🧊",
+        instructionsNo: [
+          "Svar på oppvarmingsspørsmål",
+          "Del morsomme fakta om deg selv",
+          "Perfekt for å bygge fellesskap",
+        ],
+        instructionsEn: [
+          "Answer warm-up questions",
+          "Share fun facts about yourself",
+          "Perfect for building community",
+        ],
+        presetQuestions: [],
+      },
+      {
+        mode: "qa_open",
+        labelNo: "Spørsmål til ledelsen",
+        labelEn: "Q&A with Management",
+        descriptionNo: "Still spørsmål til ledelsen under ansattdagen",
+        descriptionEn: "Ask questions to management during employee day",
+        icon: "🎤",
+        instructionsNo: [
+          "Send inn spørsmål anonymt eller med navn",
+          "Populære spørsmål stemmes opp",
+          "Ledelsen svarer live",
+        ],
+        instructionsEn: [
+          "Submit questions anonymously or with your name",
+          "Popular questions are upvoted",
+          "Management answers live",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   onboarding_day: {
@@ -918,6 +1445,46 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
       shareMessageNo: "Hei {name}! Du er invitert til onboarding-dagen på Evendi. Din invitasjonskode: {code}. Last ned Evendi og skriv inn koden for å få tilgang.",
       shareMessageEn: "Hi {name}! You're invited to the onboarding day on Evendi. Your invitation code: {code}. Download Evendi and enter the code to get access.",
     },
+    qaGames: [
+      {
+        mode: "two_truths",
+        labelNo: "To sannheter, én løgn",
+        labelEn: "Two Truths, One Lie",
+        descriptionNo: "Bli kjent med de nye kollegaene!",
+        descriptionEn: "Get to know your new colleagues!",
+        icon: "🤔",
+        instructionsNo: [
+          "Hver person deler to sannheter og én løgn",
+          "De andre gjetter hva som er løgn",
+          "Morsom måte å bli kjent på!",
+        ],
+        instructionsEn: [
+          "Each person shares two truths and one lie",
+          "Others guess which is the lie",
+          "Fun way to get to know each other!",
+        ],
+        presetQuestions: [],
+      },
+      {
+        mode: "icebreaker",
+        labelNo: "Icebreaker",
+        labelEn: "Icebreaker",
+        descriptionNo: "Oppvarmingsspørsmål for nyansatte!",
+        descriptionEn: "Warm-up questions for new employees!",
+        icon: "🧊",
+        instructionsNo: [
+          "Svar på lette oppvarmingsspørsmål",
+          "Del litt om deg selv med teamet",
+          "Perfekt for første dag på jobb",
+        ],
+        instructionsEn: [
+          "Answer light warm-up questions",
+          "Share a bit about yourself with the team",
+          "Perfect for the first day at work",
+        ],
+        presetQuestions: [],
+      },
+    ],
   },
 
   // ─── B2B: General catch-all ───────────────────────────────
@@ -1022,11 +1589,366 @@ export function getCorporateCatchAll(): EventTypeConfig | undefined {
   return getCorporateEventTypes().find(e => !e.corporateSubCategory);
 }
 
+// ─── Vendor Category Registry (Single Source of Truth) ──────────
+/**
+ * Every vendor category slug used across client + server.
+ * DB stores Norwegian display names; client uses English slugs.
+ * This registry bridges both systems.
+ */
+export const VENDOR_CATEGORY_SLUGS = [
+  "photographer",
+  "videographer",
+  "photo-video",
+  "florist",
+  "catering",
+  "music",
+  "dj",
+  "venue",
+  "cake",
+  "bakery",
+  "planner",
+  "coordinator",
+  "beauty",
+  "hair",
+  "makeup",
+  "transport",
+  "dress",
+  "attire",
+  "entertainment",
+  "decoration",
+  "invitations",
+  "confectionery",
+  "bar",
+  "photobooth",
+  "rings",
+  "accommodation",
+  "pets",
+] as const;
+
+export type VendorCategorySlug = (typeof VENDOR_CATEGORY_SLUGS)[number];
+
+export interface VendorCategoryInfo {
+  slug: VendorCategorySlug;
+  /** Norwegian display name (matches DB `vendor_categories.name`) */
+  dbName: string;
+  /** Norwegian label shown to couples */
+  labelNo: string;
+  /** English label */
+  labelEn: string;
+  /** EvendiIcon name */
+  icon: string;
+  /** Gradient colors [start, end] for marketplace UI */
+  gradient: [string, string];
+  /** Route name for vendor-details admin screen (null = no dedicated screen) */
+  detailsRoute: string | null;
+  /** Alias slugs that resolve to this category */
+  aliases?: VendorCategorySlug[];
+}
+
+export const VENDOR_CATEGORIES: Record<VendorCategorySlug, VendorCategoryInfo> = {
+  photographer: {
+    slug: "photographer",
+    dbName: "Fotograf",
+    labelNo: "Fotograf",
+    labelEn: "Photographer",
+    icon: "camera",
+    gradient: ["#667eea", "#764ba2"],
+    detailsRoute: "PhotographerDetails",
+  },
+  videographer: {
+    slug: "videographer",
+    dbName: "Videograf",
+    labelNo: "Videograf",
+    labelEn: "Videographer",
+    icon: "video",
+    gradient: ["#f093fb", "#f5576c"],
+    detailsRoute: "PhotographerDetails",
+  },
+  "photo-video": {
+    slug: "photo-video",
+    dbName: "Fotograf", // Composite — maps to Fotograf in DB
+    labelNo: "Foto & Video",
+    labelEn: "Photo & Video",
+    icon: "camera",
+    gradient: ["#667eea", "#f5576c"],
+    detailsRoute: "PhotoVideoDetails",
+  },
+  florist: {
+    slug: "florist",
+    dbName: "Blomster",
+    labelNo: "Blomster",
+    labelEn: "Florist",
+    icon: "sun",
+    gradient: ["#43e97b", "#38f9d7"],
+    detailsRoute: "FloristDetails",
+  },
+  catering: {
+    slug: "catering",
+    dbName: "Catering",
+    labelNo: "Catering",
+    labelEn: "Catering",
+    icon: "coffee",
+    gradient: ["#fa709a", "#fee140"],
+    detailsRoute: "CateringDetails",
+  },
+  music: {
+    slug: "music",
+    dbName: "Musikk",
+    labelNo: "Musikk/DJ",
+    labelEn: "Music/DJ",
+    icon: "music",
+    gradient: ["#4facfe", "#00f2fe"],
+    detailsRoute: "MusicDetails",
+    aliases: ["dj"],
+  },
+  dj: {
+    slug: "dj",
+    dbName: "Musikk",
+    labelNo: "DJ",
+    labelEn: "DJ",
+    icon: "music",
+    gradient: ["#4facfe", "#00f2fe"],
+    detailsRoute: "MusicDetails",
+  },
+  venue: {
+    slug: "venue",
+    dbName: "Venue",
+    labelNo: "Lokale",
+    labelEn: "Venue",
+    icon: "home",
+    gradient: ["#a18cd1", "#fbc2eb"],
+    detailsRoute: "VenueDetails",
+  },
+  cake: {
+    slug: "cake",
+    dbName: "Kake",
+    labelNo: "Kake",
+    labelEn: "Cake",
+    icon: "gift",
+    gradient: ["#fccb90", "#d57eeb"],
+    detailsRoute: "CakeDetails",
+    aliases: ["bakery"],
+  },
+  bakery: {
+    slug: "bakery",
+    dbName: "Kake",
+    labelNo: "Kake",
+    labelEn: "Bakery",
+    icon: "gift",
+    gradient: ["#fccb90", "#d57eeb"],
+    detailsRoute: "CakeDetails",
+  },
+  planner: {
+    slug: "planner",
+    dbName: "Planlegger",
+    labelNo: "Planlegger",
+    labelEn: "Planner",
+    icon: "clipboard",
+    gradient: ["#667eea", "#764ba2"],
+    detailsRoute: "PlannerDetails",
+    aliases: ["coordinator"],
+  },
+  coordinator: {
+    slug: "coordinator",
+    dbName: "Planlegger",
+    labelNo: "Koordinator",
+    labelEn: "Coordinator",
+    icon: "clipboard",
+    gradient: ["#667eea", "#764ba2"],
+    detailsRoute: "PlannerDetails",
+  },
+  beauty: {
+    slug: "beauty",
+    dbName: "Hår & Makeup",
+    labelNo: "Hår & Makeup",
+    labelEn: "Hair & Makeup",
+    icon: "scissors",
+    gradient: ["#f093fb", "#f5576c"],
+    detailsRoute: "BeautyDetails",
+    aliases: ["hair", "makeup"],
+  },
+  hair: {
+    slug: "hair",
+    dbName: "Hår & Makeup",
+    labelNo: "Hår",
+    labelEn: "Hair",
+    icon: "scissors",
+    gradient: ["#f093fb", "#f5576c"],
+    detailsRoute: "BeautyDetails",
+  },
+  makeup: {
+    slug: "makeup",
+    dbName: "Hår & Makeup",
+    labelNo: "Makeup",
+    labelEn: "Makeup",
+    icon: "scissors",
+    gradient: ["#f093fb", "#f5576c"],
+    detailsRoute: "BeautyDetails",
+  },
+  transport: {
+    slug: "transport",
+    dbName: "Transport",
+    labelNo: "Transport",
+    labelEn: "Transport",
+    icon: "truck",
+    gradient: ["#4facfe", "#43e97b"],
+    detailsRoute: "TransportDetails",
+  },
+  dress: {
+    slug: "dress",
+    dbName: "Drakt & Dress",
+    labelNo: "Brudekjole",
+    labelEn: "Bridal Dress",
+    icon: "heart",
+    gradient: ["#fbc2eb", "#a18cd1"],
+    detailsRoute: "DressDetails",
+    aliases: ["attire"],
+  },
+  attire: {
+    slug: "attire",
+    dbName: "Drakt & Dress",
+    labelNo: "Antrekk",
+    labelEn: "Attire",
+    icon: "shopping-bag",
+    gradient: ["#fbc2eb", "#a18cd1"],
+    detailsRoute: "DressDetails",
+  },
+  entertainment: {
+    slug: "entertainment",
+    dbName: "Underholdning",
+    labelNo: "Underholdning",
+    labelEn: "Entertainment",
+    icon: "smile",
+    gradient: ["#f6d365", "#fda085"],
+    detailsRoute: null,
+  },
+  decoration: {
+    slug: "decoration",
+    dbName: "Dekorasjon",
+    labelNo: "Dekorasjon",
+    labelEn: "Decoration",
+    icon: "star",
+    gradient: ["#a1c4fd", "#c2e9fb"],
+    detailsRoute: null,
+  },
+  invitations: {
+    slug: "invitations",
+    dbName: "Invitasjoner",
+    labelNo: "Invitasjoner",
+    labelEn: "Invitations",
+    icon: "mail",
+    gradient: ["#ffecd2", "#fcb69f"],
+    detailsRoute: null,
+  },
+  confectionery: {
+    slug: "confectionery",
+    dbName: "Konfektyrer",
+    labelNo: "Konfektyrer",
+    labelEn: "Confectionery",
+    icon: "gift",
+    gradient: ["#fccb90", "#d57eeb"],
+    detailsRoute: null,
+  },
+  bar: {
+    slug: "bar",
+    dbName: "Bar & Drikke",
+    labelNo: "Bar & Drikke",
+    labelEn: "Bar & Drinks",
+    icon: "coffee",
+    gradient: ["#ff9a9e", "#fad0c4"],
+    detailsRoute: null,
+  },
+  photobooth: {
+    slug: "photobooth",
+    dbName: "Fotoboks",
+    labelNo: "Fotoboks",
+    labelEn: "Photo Booth",
+    icon: "aperture",
+    gradient: ["#667eea", "#764ba2"],
+    detailsRoute: null,
+  },
+  rings: {
+    slug: "rings",
+    dbName: "Ringer",
+    labelNo: "Ringer",
+    labelEn: "Rings",
+    icon: "heart",
+    gradient: ["#fbc2eb", "#a18cd1"],
+    detailsRoute: null,
+  },
+  accommodation: {
+    slug: "accommodation",
+    dbName: "Overnatting",
+    labelNo: "Overnatting",
+    labelEn: "Accommodation",
+    icon: "home",
+    gradient: ["#a18cd1", "#fbc2eb"],
+    detailsRoute: null,
+  },
+  pets: {
+    slug: "pets",
+    dbName: "Husdyr",
+    labelNo: "Husdyr",
+    labelEn: "Pets",
+    icon: "heart",
+    gradient: ["#43e97b", "#38f9d7"],
+    detailsRoute: null,
+  },
+};
+
+// ── Helper: resolve category slug → info ─────────────────────
+export function getVendorCategoryInfo(slug: string): VendorCategoryInfo | undefined {
+  return VENDOR_CATEGORIES[slug as VendorCategorySlug];
+}
+
+/** Get Norwegian label for a category slug. Falls back to the slug itself. */
+export function getVendorCategoryLabel(slug: string): string {
+  return VENDOR_CATEGORIES[slug as VendorCategorySlug]?.labelNo ?? slug;
+}
+
+/** Get icon name for a category slug. Falls back to "briefcase". */
+export function getVendorCategoryIcon(slug: string): string {
+  return VENDOR_CATEGORIES[slug as VendorCategorySlug]?.icon ?? "briefcase";
+}
+
+/** Get gradient colors for a category slug. Falls back to default. */
+export function getVendorCategoryGradient(slug: string): [string, string] {
+  return VENDOR_CATEGORIES[slug as VendorCategorySlug]?.gradient ?? ["#667eea", "#764ba2"];
+}
+
+/** Get DB name for a category slug. Returns undefined for unknown slugs. */
+export function getVendorCategoryDbName(slug: string): string | undefined {
+  return VENDOR_CATEGORIES[slug as VendorCategorySlug]?.dbName;
+}
+
+/** Get the vendor-details route name for a category slug. */
+export function getVendorDetailsRoute(slug: string): string | null {
+  return VENDOR_CATEGORIES[slug as VendorCategorySlug]?.detailsRoute ?? null;
+}
+
+/** Build slug → DB name map (for server-side slug resolution). */
+export function buildCategorySlugMap(): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const [slug, info] of Object.entries(VENDOR_CATEGORIES)) {
+    map[slug] = info.dbName;
+  }
+  return map;
+}
+
+/** Get gradient colors by DB name (Norwegian). Falls back to default. */
+export function getVendorCategoryGradientByDbName(dbName: string): [string, string] {
+  for (const info of Object.values(VENDOR_CATEGORIES)) {
+    if (info.dbName === dbName) return info.gradient;
+  }
+  return ["#667eea", "#764ba2"];
+}
+
 // ─── Vendor Category → Event Type Mapping ───────────────────────
 // Which vendor categories are relevant for which event types
 export const VENDOR_CATEGORY_EVENT_MAP: Record<string, EventType[]> = {
   "Fotograf": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "baby_shower", "conference", "kickoff", "summer_party", "christmas_party", "product_launch", "trade_fair", "corporate_anniversary", "awards_night", "employee_day", "corporate_event"],
   "Videograf": ["wedding", "confirmation", "anniversary", "conference", "kickoff", "product_launch", "corporate_anniversary", "awards_night", "corporate_event"],
+  "Foto & Video": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "conference", "kickoff", "product_launch", "corporate_anniversary", "awards_night", "corporate_event"],
   "Blomster": ["wedding", "confirmation", "anniversary", "engagement", "awards_night", "corporate_anniversary"],
   "Catering": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "baby_shower", "conference", "seminar", "kickoff", "summer_party", "christmas_party", "team_building", "product_launch", "corporate_anniversary", "awards_night", "employee_day", "onboarding_day", "corporate_event"],
   "Musikk": ["wedding", "confirmation", "birthday", "anniversary", "engagement", "summer_party", "christmas_party", "awards_night", "corporate_anniversary", "corporate_event"],

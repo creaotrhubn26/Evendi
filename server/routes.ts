@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
+import { spawn } from "node:child_process";
 import { WebSocketServer, type WebSocket } from "ws";
 import crypto from "node:crypto";
 import { db } from "./db";
@@ -18,31 +19,7 @@ function generateSessionToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-interface VendorSession {
-  vendorId: string;
-  createdAt: Date;
-  expiresAt: Date;
-}
-
-const VENDOR_SESSIONS: Map<string, VendorSession> = new Map();
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
-
-interface CoupleSessionCache {
-  coupleId: string;
-  expiresAt: Date;
-}
-const COUPLE_SESSIONS: Map<string, CoupleSessionCache> = new Map();
-
-function cleanExpiredSessions() {
-  const now = new Date();
-  for (const [token, session] of VENDOR_SESSIONS.entries()) {
-    if (session.expiresAt < now) {
-      VENDOR_SESSIONS.delete(token);
-    }
-  }
-}
-
-setInterval(cleanExpiredSessions, 60 * 60 * 1000);
 
 const YR_CACHE: Map<string, { data: any; expires: Date }> = new Map();
 
@@ -226,42 +203,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
-  // Diagnostic endpoint to check server health and environment
-  app.get("/api/diagnostics", (req: Request, res: Response) => {
-    const diagnostics = {
-      timestamp: new Date().toISOString(),
-      environment: {
-        NODE_ENV: process.env.NODE_ENV,
-        HAS_DATABASE_URL: !!process.env.DATABASE_URL,
-        HAS_ADMIN_SECRET: !!process.env.ADMIN_SECRET,
-        ADMIN_SECRET_VALUE: process.env.ADMIN_SECRET || "NOT SET",
-      },
-      node_version: process.version,
-      build_version: "ch-full-access",
-    };
-    res.json(diagnostics);
-  });
-
-  // Test endpoint to debug query issues
-  app.get("/api/test-query/:id", async (req: Request, res: Response) => {
-    const { id } = req.params;
-    try {
-      console.log("[TestQuery] Testing query with ID:", id);
-      
-      const result = await db.select({
-        id: coupleProfiles.id,
-        email: coupleProfiles.email,
-        displayName: coupleProfiles.displayName,
-      }).from(coupleProfiles).where(eq(coupleProfiles.id, id));
-      
-      console.log("[TestQuery] Success, found:", result.length);
-      res.json({ success: true, data: result });
-    } catch (error) {
-      console.error("[TestQuery] Error:", error);
-      res.status(500).json({ error: "Query failed", details: error instanceof Error ? error.message : String(error) });
-    }
-  });
-
   app.get("/api/weather", async (req: Request, res: Response) => {
     try {
       const lat = parseFloat(req.query.lat as string);
@@ -316,6 +257,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.all("/api/evendi/weather-location/*", async (req: Request, res: Response) => {
     try {
+      const prefix = "/api/evendi/weather-location/";
+      const pathWithoutQuery = req.originalUrl.split("?")[0];
+      if (!pathWithoutQuery.startsWith(prefix)) {
+        return res.status(400).json({ error: "Ugyldig path" });
+      }
+
+      const relativePath = pathWithoutQuery.slice(prefix.length);
+      const method = req.method.toUpperCase();
+
+      const allowList = [
+        { method: "GET", regex: /^search$/ },
+        { method: "GET", regex: /^([^/]+)$/ },
+        { method: "POST", regex: /^([^/]+)\/venue$/ },
+        { method: "GET", regex: /^([^/]+)\/travel$/ },
+        { method: "GET", regex: /^([^/]+)\/event-weather$/ },
+        { method: "POST", regex: /^sync-from-project\/([^/]+)$/ , requiresAdmin: true },
+      ];
+
+      const matchEntry = allowList.find((entry) => entry.method === method && entry.regex.test(relativePath));
+      if (!matchEntry) {
+        return res.status(404).json({ error: "Not found" });
+      }
+
+      if (matchEntry.requiresAdmin) {
+        if (!(await checkAdminAuth(req, res))) return;
+      } else {
+        const coupleId = await checkCoupleAuth(req, res);
+        if (!coupleId) return;
+
+        const match = matchEntry.regex.exec(relativePath);
+        const pathCoupleId = match?.[1];
+        if (pathCoupleId && pathCoupleId !== coupleId) {
+          return res.status(403).json({ error: "Ingen tilgang til dette brudeparet" });
+        }
+      }
+
       const targetUrl = `${CREATORHUB_BRIDGE_URL}${req.originalUrl}`;
       const fetchOptions: RequestInit = {
         method: req.method,
@@ -343,11 +320,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/vendors/:vendorId/travel-from-venue", async (req: Request, res: Response) => {
     try {
       const { vendorId } = req.params;
-      const coupleId = req.query.coupleId as string;
-
-      if (!coupleId) {
-        return res.status(400).json({ error: 'coupleId er påkrevd' });
-      }
+      const coupleId = await checkCoupleAuth(req, res);
+      if (!coupleId) return;
 
       // Get vendor location from DB
       const vendorResult = await db.execute(
@@ -981,20 +955,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? cuisineTypes.split(",").map(c => c.trim().toLowerCase())
         : [];
 
-      // Map client-side category slugs to DB category names
-      const CATEGORY_SLUG_MAP: Record<string, string> = {
-        "venue": "Venue",
-        "photographer": "Fotograf",
-        "videographer": "Videograf",
-        "catering": "Catering",
-        "florist": "Blomster",
-        "music": "Musikk",
-        "cake": "Kake",
-        "attire": "Drakt & Dress",
-        "beauty": "Hår & Makeup",
-        "transport": "Transport",
-        "planner": "Planlegger",
-      };
+      // Map client-side category slugs to DB category names (from shared registry)
+      const { buildCategorySlugMap } = await import("../shared/event-types");
+      const CATEGORY_SLUG_MAP = buildCategorySlugMap();
 
       // Resolve category slug to DB category ID
       let resolvedCategoryId: string | null = null;
@@ -1160,44 +1123,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const PUBLIC_APP_SETTINGS_KEYS = new Set([
+    "maintenance_mode",
+    "maintenance_message",
+    "status_message",
+    "status_type",
+    "app_name",
+    "app_tagline",
+    "app_tagline_en",
+    "app_description",
+    "app_company_description",
+    "app_logo_url",
+    "support_email",
+    "support_phone",
+    "app_website",
+    "app_instagram_url",
+    "app_instagram_handle",
+    "app_version",
+    "min_app_version",
+    "help_show_documentation",
+    "help_show_faq",
+    "help_show_videoguides",
+    "help_show_whatsnew",
+    "help_show_status",
+    "help_show_email_support",
+    "help_show_norwedfilm",
+    "documentation_features",
+    "documentation_video_url",
+    "documentation_video_title",
+    "documentation_video_description",
+    "vendor_availability_highlight_ms",
+    "vendor_availability_highlight_intensity",
+    "wedding_date_min",
+    "wedding_date_max",
+    "design_primary_color",
+    "design_background_color",
+    "design_dark_mode",
+    "design_font_family",
+    "design_font_size",
+    "design_layout_density",
+    "design_button_radius",
+    "design_card_radius",
+    "design_border_width",
+    "logo_use_header",
+    "logo_use_splash",
+    "logo_use_about",
+    "logo_use_auth",
+    "logo_use_admin_header",
+    "logo_use_docs",
+  ]);
+
+  const ADMIN_SETTINGS_KEYS = new Set([
+    ...PUBLIC_APP_SETTINGS_KEYS,
+    "enable_vendor_registration",
+    "require_inspiration_approval",
+    "enable_messaging",
+    "max_file_upload_mb",
+    "privacy_policy_url",
+    "terms_url",
+  ]);
+
   const checkAdminAuth = async (req: Request, res: Response): Promise<boolean> => {
     const authHeader = req.headers.authorization;
-    const apiKey = req.headers["x-api-key"] as string | undefined;
 
-    // Method 1: CreatorHub API key via X-API-Key header
-    if (apiKey && apiKey.startsWith("ch_")) {
-      try {
-        const [project] = await db.select().from(creatorhubProjects)
-          .where(eq(creatorhubProjects.apiKey, apiKey));
-        if (project && project.status === "active") {
-          console.log(`[Admin Auth] CreatorHub project "${project.name}" authenticated via API key`);
-          return true;
-        }
-      } catch (err) {
-        console.error("[Admin Auth] CreatorHub API key check error:", err);
-      }
-      res.status(401).json({ error: "Invalid CreatorHub API key" });
-      return false;
-    }
-
-    // Method 2: CreatorHub API key via Bearer token
-    if (authHeader && authHeader.startsWith("Bearer ch_")) {
-      const key = authHeader.substring(7);
-      try {
-        const [project] = await db.select().from(creatorhubProjects)
-          .where(eq(creatorhubProjects.apiKey, key));
-        if (project && project.status === "active") {
-          console.log(`[Admin Auth] CreatorHub project "${project.name}" authenticated via Bearer token`);
-          return true;
-        }
-      } catch (err) {
-        console.error("[Admin Auth] CreatorHub Bearer check error:", err);
-      }
-      res.status(401).json({ error: "Invalid CreatorHub API key" });
-      return false;
-    }
-
-    // Method 3: Original ADMIN_SECRET
+    // Admin secret only
     const adminSecret = process.env.ADMIN_SECRET;
     if (!adminSecret) {
       res.status(503).json({ error: "Admin-funksjonalitet er ikke konfigurert" });
@@ -1210,6 +1199,493 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     return true;
   };
+
+  type SmokeTestMode = "light" | "full";
+  type SmokeTestStatus = "queued" | "running" | "passed" | "failed";
+  type SmokeTestCheckStatus = "passed" | "failed" | "skipped";
+
+  interface SmokeTestCheckResult {
+    name: string;
+    status: SmokeTestCheckStatus;
+    durationMs: number;
+    error?: string;
+  }
+
+  interface SmokeTestJob {
+    id: string;
+    mode: SmokeTestMode;
+    status: SmokeTestStatus;
+    startedAt?: string;
+    finishedAt?: string;
+    results: SmokeTestCheckResult[];
+    logs: string[];
+  }
+
+  const smokeTestJobs = new Map<string, SmokeTestJob>();
+  let smokeTestLatestId: string | null = null;
+  let smokeTestRunning = false;
+
+  const appendSmokeLog = (job: SmokeTestJob, message: string) => {
+    const ts = new Date().toISOString();
+    job.logs.push(`[${ts}] ${message}`);
+    if (job.logs.length > 2000) {
+      job.logs.splice(0, job.logs.length - 2000);
+    }
+  };
+
+  const finalizeSmokeTest = (job: SmokeTestJob, status: SmokeTestStatus) => {
+    job.status = status;
+    job.finishedAt = new Date().toISOString();
+    smokeTestRunning = false;
+  };
+
+  const runShellCheck = (job: SmokeTestJob, command: string, args: string[]) => {
+    return new Promise<void>((resolve, reject) => {
+      appendSmokeLog(job, `Running: ${[command, ...args].join(" ")}`);
+      const child = spawn(command, args, {
+        cwd: process.cwd(),
+        env: process.env,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      child.stdout.on("data", (chunk) => {
+        const output = String(chunk).trim();
+        if (output) appendSmokeLog(job, output);
+      });
+
+      child.stderr.on("data", (chunk) => {
+        const output = String(chunk).trim();
+        if (output) appendSmokeLog(job, output);
+      });
+
+      child.on("error", (error) => reject(error));
+
+      child.on("close", (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Command exited with code ${code ?? "unknown"}`));
+        }
+      });
+    });
+  };
+
+  const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs = 5000) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const runSmokeTestJob = async (job: SmokeTestJob) => {
+    job.status = "running";
+    job.startedAt = new Date().toISOString();
+    appendSmokeLog(job, `Smoke test started (${job.mode})`);
+
+    const startCheck = async (name: string, fn: () => Promise<void>) => {
+      const started = Date.now();
+      try {
+        await fn();
+        job.results.push({ name, status: "passed", durationMs: Date.now() - started });
+        appendSmokeLog(job, `${name}: passed`);
+        return true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        job.results.push({ name, status: "failed", durationMs: Date.now() - started, error: message });
+        appendSmokeLog(job, `${name}: failed - ${message}`);
+        return false;
+      }
+    };
+
+    const dbOk = await startCheck("db", async () => {
+      await db.execute(sql`select 1 as ok`);
+    });
+    if (!dbOk) {
+      finalizeSmokeTest(job, "failed");
+      return;
+    }
+
+    const envOk = await startCheck("env", async () => {
+      if (!process.env.ADMIN_SECRET) {
+        throw new Error("ADMIN_SECRET is not configured");
+      }
+    });
+    if (!envOk) {
+      finalizeSmokeTest(job, "failed");
+      return;
+    }
+
+    const statsOk = await startCheck("admin-stats", async () => {
+      await db.select({ count: sql<number>`count(*)` }).from(vendors);
+      await db.select({ count: sql<number>`count(*)` }).from(coupleProfiles);
+      await db.select({ count: sql<number>`count(*)` }).from(inspirations);
+      await db.select({ count: sql<number>`count(*)` }).from(conversations);
+      await db.select({ count: sql<number>`count(*)` }).from(messages);
+      await db.select({ count: sql<number>`count(*)` }).from(deliveries);
+      await db.select({ count: sql<number>`count(*)` }).from(vendorOffers);
+    });
+    if (!statsOk) {
+      finalizeSmokeTest(job, "failed");
+      return;
+    }
+
+    const settingsOk = await startCheck("app-settings", async () => {
+      const [row] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(appSettings)
+        .where(inArray(appSettings.key, Array.from(ADMIN_SETTINGS_KEYS)));
+      if (!row || Number(row.count) === 0) {
+        throw new Error("No admin app settings found");
+      }
+    });
+    if (!settingsOk) {
+      finalizeSmokeTest(job, "failed");
+      return;
+    }
+
+    const publicSettingsOk = await startCheck("public-app-settings", async () => {
+      const [row] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(appSettings)
+        .where(inArray(appSettings.key, Array.from(PUBLIC_APP_SETTINGS_KEYS)));
+      if (!row || Number(row.count) === 0) {
+        throw new Error("No public app settings found");
+      }
+    });
+    if (!publicSettingsOk) {
+      finalizeSmokeTest(job, "failed");
+      return;
+    }
+
+    const adminMessagingOk = await startCheck("admin-messaging", async () => {
+      await db.select({ count: sql<number>`count(*)` }).from(adminConversations);
+      await db.select({ count: sql<number>`count(*)` }).from(adminMessages);
+    });
+    if (!adminMessagingOk) {
+      finalizeSmokeTest(job, "failed");
+      return;
+    }
+
+    const vendorMessagingOk = await startCheck("vendor-messaging", async () => {
+      await db.select({ count: sql<number>`count(*)` }).from(conversations);
+      await db.select({ count: sql<number>`count(*)` }).from(messages);
+    });
+    if (!vendorMessagingOk) {
+      finalizeSmokeTest(job, "failed");
+      return;
+    }
+
+    const creatorhubOk = await startCheck("creatorhub-bridge", async () => {
+      await db.select({ count: sql<number>`count(*)` }).from(creatorhubProjects);
+      await db.select({ count: sql<number>`count(*)` }).from(creatorhubProjects).where(eq(creatorhubProjects.status, "active"));
+    });
+    if (!creatorhubOk) {
+      finalizeSmokeTest(job, "failed");
+      return;
+    }
+
+    const deliveryOk = await startCheck("delivery-tracking", async () => {
+      await db.select({ count: sql<number>`count(*)` }).from(deliveries);
+      await db.select({ count: sql<number>`count(*)` }).from(deliveryItems);
+      await db.select({ count: sql<number>`count(*)` }).from(deliveryTracking);
+    });
+    if (!deliveryOk) {
+      finalizeSmokeTest(job, "failed");
+      return;
+    }
+
+    const hasSupabaseEnv = !!(process.env.EXPO_PUBLIC_SUPABASE_URL && process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+    if (hasSupabaseEnv) {
+      const storageEnvOk = await startCheck("storage-env", async () => {
+        if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
+          throw new Error("Supabase storage env is missing");
+        }
+      });
+      if (!storageEnvOk) {
+        finalizeSmokeTest(job, "failed");
+        return;
+      }
+
+      const supabaseHealthOk = await startCheck("supabase-health", async () => {
+        const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/auth/v1/health`;
+        const response = await fetchWithTimeout(url, {}, 5000);
+        if (!response.ok) {
+          throw new Error(`Supabase health check failed (${response.status})`);
+        }
+      });
+      if (!supabaseHealthOk) {
+        finalizeSmokeTest(job, "failed");
+        return;
+      }
+    } else {
+      job.results.push({ name: "storage-env", status: "skipped", durationMs: 0 });
+      job.results.push({ name: "supabase-health", status: "skipped", durationMs: 0 });
+    }
+
+    const creatorhubUrl = process.env.CREATORHUB_API_URL;
+    if (creatorhubUrl) {
+      const creatorhubHealthOk = await startCheck("creatorhub-health", async () => {
+        const response = await fetchWithTimeout(`${creatorhubUrl}/health`, {}, 5000);
+        if (!response.ok) {
+          throw new Error(`CreatorHub health check failed (${response.status})`);
+        }
+      });
+      if (!creatorhubHealthOk) {
+        finalizeSmokeTest(job, "failed");
+        return;
+      }
+    } else {
+      job.results.push({ name: "creatorhub-health", status: "skipped", durationMs: 0 });
+    }
+
+    const baseUrl = process.env.SMOKE_TEST_BASE_URL;
+    const weatherPath = process.env.SMOKE_TEST_WEATHER_PATH || "search?query=oslo";
+    if (baseUrl) {
+      const proxyOk = await startCheck("creatorhub-proxy", async () => {
+        const url = `${baseUrl}/api/evendi/weather-location/${weatherPath}`;
+        const response = await fetchWithTimeout(url, {}, 5000);
+        if (!response.ok) {
+          throw new Error(`CreatorHub proxy failed (${response.status})`);
+        }
+      });
+      if (!proxyOk) {
+        finalizeSmokeTest(job, "failed");
+        return;
+      }
+    } else {
+      job.results.push({ name: "creatorhub-proxy", status: "skipped", durationMs: 0 });
+    }
+
+    const timelineId = process.env.SMOKE_TEST_TIMELINE_ID;
+    const seedFixtures = process.env.SMOKE_TEST_SEED_FIXTURES === "true";
+    const vendorTokenEnv = process.env.SMOKE_TEST_VENDOR_TOKEN;
+    const coupleIdEnv = process.env.SMOKE_TEST_COUPLE_ID;
+    const coupleTokenEnv = process.env.SMOKE_TEST_COUPLE_TOKEN;
+
+    const creatorhubEndpointsOk = await startCheck("creatorhub-endpoints", async () => {
+      if (!baseUrl) {
+        throw new Error("SMOKE_TEST_BASE_URL not configured");
+      }
+
+      let vendorToken = vendorTokenEnv;
+      let coupleId = coupleIdEnv;
+      let seededVendorId: string | null = null;
+      let seededCoupleId: string | null = null;
+      let seededConversationId: string | null = null;
+      let seededCoupleToken: string | null = null;
+
+      if ((!vendorToken || !coupleId || !coupleTokenEnv) && seedFixtures) {
+        const emailSuffix = crypto.randomBytes(4).toString("hex");
+        const vendorEmail = `smoke-vendor-${emailSuffix}@example.com`;
+        const coupleEmail = `smoke-couple-${emailSuffix}@example.com`;
+
+        const [vendor] = await db
+          .insert(vendors)
+          .values({
+            email: vendorEmail,
+            password: hashPassword("SmokeTest123!"),
+            businessName: "Smoke Test Vendor",
+            status: "approved",
+          })
+          .returning({ id: vendors.id });
+        seededVendorId = vendor?.id || null;
+
+        const [couple] = await db
+          .insert(coupleProfiles)
+          .values({
+            email: coupleEmail,
+            displayName: "Smoke Test Couple",
+            password: hashPassword("SmokeTest123!"),
+          })
+          .returning({ id: coupleProfiles.id });
+        seededCoupleId = couple?.id || null;
+
+        if (!seededVendorId || !seededCoupleId) {
+          throw new Error("Failed to seed vendor or couple fixtures");
+        }
+
+        const [conv] = await db
+          .insert(conversations)
+          .values({
+            vendorId: seededVendorId,
+            coupleId: seededCoupleId,
+          })
+          .returning({ id: conversations.id });
+        seededConversationId = conv?.id || null;
+
+        vendorToken = generateSessionToken();
+        await db.insert(vendorSessions).values({
+          vendorId: seededVendorId,
+          token: vendorToken,
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        });
+
+        seededCoupleToken = generateSessionToken();
+        await db.insert(coupleSessions).values({
+          coupleId: seededCoupleId,
+          token: seededCoupleToken,
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        });
+
+        coupleId = seededCoupleId;
+      }
+
+      const coupleToken = coupleTokenEnv || seededCoupleToken;
+      if (!vendorToken || !coupleId || !coupleToken) {
+        throw new Error("Missing vendor token or coupleId for CreatorHub checks");
+      }
+
+      try {
+        const proxyUrl = `${baseUrl}/api/evendi/weather-location/${weatherPath}`;
+        const proxyRes = await fetchWithTimeout(
+          proxyUrl,
+          { headers: { Authorization: `Bearer ${coupleToken}` } },
+          5000
+        );
+        if (!proxyRes.ok) {
+          throw new Error(`creatorhub-proxy failed (${proxyRes.status})`);
+        }
+
+        const bridgeUrl = `${baseUrl}/api/vendor/creatorhub-bridge?coupleId=${coupleId}`;
+        const bridgeRes = await fetchWithTimeout(
+          bridgeUrl,
+          { headers: { Authorization: `Bearer ${vendorToken}` } },
+          5000
+        );
+        if (!bridgeRes.ok) {
+          throw new Error(`creatorhub-bridge failed (${bridgeRes.status})`);
+        }
+
+        if (timelineId) {
+          const timelineUrl = `${baseUrl}/api/vendor/timeline-comments/${timelineId}`;
+          const timelineRes = await fetchWithTimeout(
+            timelineUrl,
+            { headers: { Authorization: `Bearer ${vendorToken}` } },
+            5000
+          );
+          if (!timelineRes.ok) {
+            throw new Error(`timeline-comments failed (${timelineRes.status})`);
+          }
+        }
+      } finally {
+        if (seededConversationId) {
+          await db.delete(conversations).where(eq(conversations.id, seededConversationId));
+        }
+        if (seededVendorId) {
+          await db.delete(vendorSessions).where(eq(vendorSessions.vendorId, seededVendorId));
+          await db.delete(vendors).where(eq(vendors.id, seededVendorId));
+        }
+        if (seededCoupleId) {
+          await db.delete(coupleSessions).where(eq(coupleSessions.coupleId, seededCoupleId));
+          await db.delete(coupleProfiles).where(eq(coupleProfiles.id, seededCoupleId));
+        }
+      }
+    });
+
+    if (!creatorhubEndpointsOk) {
+      finalizeSmokeTest(job, "failed");
+      return;
+    }
+
+    if (job.mode === "full") {
+      const typecheckOk = await startCheck("typecheck", async () => {
+        await runShellCheck(job, "npm", ["run", "check:types", "--", "--pretty", "false", "--skipLibCheck"]);
+      });
+      if (!typecheckOk) {
+        finalizeSmokeTest(job, "failed");
+        return;
+      }
+    } else {
+      job.results.push({ name: "typecheck", status: "skipped", durationMs: 0 });
+    }
+
+    finalizeSmokeTest(job, "passed");
+  };
+
+  // Diagnostic endpoint to check server health and environment
+  app.get("/api/diagnostics", async (req: Request, res: Response) => {
+    if (!(await checkAdminAuth(req, res))) return;
+    const diagnostics = {
+      timestamp: new Date().toISOString(),
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        HAS_DATABASE_URL: !!process.env.DATABASE_URL,
+        HAS_ADMIN_SECRET: !!process.env.ADMIN_SECRET,
+      },
+      node_version: process.version,
+      build_version: "ch-full-access",
+    };
+    res.json(diagnostics);
+  });
+
+  // Test endpoint to debug query issues
+  app.get("/api/test-query/:id", async (req: Request, res: Response) => {
+    if (!(await checkAdminAuth(req, res))) return;
+    const { id } = req.params;
+    try {
+      console.log("[TestQuery] Testing query with ID:", id);
+
+      const result = await db.select({
+        id: coupleProfiles.id,
+        email: coupleProfiles.email,
+        displayName: coupleProfiles.displayName,
+      }).from(coupleProfiles).where(eq(coupleProfiles.id, id));
+
+      console.log("[TestQuery] Success, found:", result.length);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("[TestQuery] Error:", error);
+      res.status(500).json({ error: "Query failed", details: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get("/api/admin/smoke-test", async (req: Request, res: Response) => {
+    if (!(await checkAdminAuth(req, res))) return;
+
+    const latest = smokeTestLatestId ? smokeTestJobs.get(smokeTestLatestId) : null;
+    res.json({ latest: latest || null });
+  });
+
+  app.get("/api/admin/smoke-test/:id", async (req: Request, res: Response) => {
+    if (!(await checkAdminAuth(req, res))) return;
+
+    const job = smokeTestJobs.get(req.params.id);
+    if (!job) return res.status(404).json({ error: "Smoke test not found" });
+    res.json({ job });
+  });
+
+  app.post("/api/admin/smoke-test", async (req: Request, res: Response) => {
+    if (!(await checkAdminAuth(req, res))) return;
+
+    if (smokeTestRunning) {
+      return res.status(409).json({ error: "Smoke test already running", latestId: smokeTestLatestId });
+    }
+
+    const mode: SmokeTestMode = req.body?.mode === "light" ? "light" : "full";
+    const job: SmokeTestJob = {
+      id: crypto.randomUUID(),
+      mode,
+      status: "queued",
+      results: [],
+      logs: [],
+    };
+
+    smokeTestJobs.set(job.id, job);
+    smokeTestLatestId = job.id;
+    smokeTestRunning = true;
+
+    setImmediate(() => {
+      runSmokeTestJob(job).catch((error) => {
+        appendSmokeLog(job, `Smoke test crashed: ${error instanceof Error ? error.message : String(error)}`);
+        finalizeSmokeTest(job, "failed");
+      });
+    });
+
+    res.json({ jobId: job.id, mode });
+  });
 
   app.get("/api/admin/vendors", async (req: Request, res: Response) => {
     if (!(await checkAdminAuth(req, res))) return;
@@ -1396,7 +1872,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return true;
     } catch (error) {
       console.error("Error checking subscription access:", error);
-      return true; // Allow access on error to avoid breaking functionality
+      res.status(503).json({
+        error: "Kunne ikke verifisere abonnement",
+        message: "Prøv igjen om litt.",
+      });
+      return false;
     }
   };
 
@@ -1672,36 +2152,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (e) { /* non-critical */ }
       }
 
-      const [newDelivery] = await db.insert(deliveries).values({
-        vendorId,
-        coupleName: deliveryData.coupleName,
-        coupleEmail: deliveryData.coupleEmail || null,
-        title: deliveryData.title,
-        description: deliveryData.description || null,
-        weddingDate: deliveryData.weddingDate || null,
-        projectId,
-        timelineId,
-        coupleId: deliveryData.coupleId || null,
-        accessCode,
-      }).returning();
+      const result = await db.transaction(async (tx) => {
+        const [newDelivery] = await tx.insert(deliveries).values({
+          vendorId,
+          coupleName: deliveryData.coupleName,
+          coupleEmail: deliveryData.coupleEmail || null,
+          title: deliveryData.title,
+          description: deliveryData.description || null,
+          weddingDate: deliveryData.weddingDate || null,
+          projectId,
+          timelineId,
+          coupleId: deliveryData.coupleId || null,
+          accessCode,
+        }).returning();
 
-      await Promise.all(
-        items.map((item, index) =>
-          db.insert(deliveryItems).values({
-            deliveryId: newDelivery.id,
-            type: item.type,
-            label: item.label,
-            url: item.url,
-            description: item.description || null,
-            sortOrder: index,
-          })
-        )
-      );
+        await Promise.all(
+          items.map((item, index) =>
+            tx.insert(deliveryItems).values({
+              deliveryId: newDelivery.id,
+              type: item.type,
+              label: item.label,
+              url: item.url,
+              description: item.description || null,
+              sortOrder: index,
+            })
+          )
+        );
 
-      const createdItems = await db.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, newDelivery.id));
+        const createdItems = await tx.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, newDelivery.id));
+
+        return { newDelivery, createdItems };
+      });
 
       res.status(201).json({ 
-        delivery: { ...newDelivery, items: createdItems },
+        delivery: { ...result.newDelivery, items: result.createdItems },
         message: `Leveranse opprettet! Tilgangskode: ${accessCode}` 
       });
     } catch (error) {
@@ -1858,12 +2342,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { deliveryId, deliveryItemId, action, accessCode: ac, source } = req.body;
       if (!deliveryId || !action) return res.status(400).json({ error: "deliveryId og action er påkrevd" });
 
+      if (!ac || typeof ac !== "string") {
+        return res.status(401).json({ error: "Tilgangskode er påkrevd" });
+      }
+
       const validActions = ['opened', 'downloaded', 'favorited', 'unfavorited', 'shared', 'viewed_item'];
       if (!validActions.includes(action)) return res.status(400).json({ error: "Ugyldig action" });
 
-      // Verify delivery exists
+      // Verify delivery exists and access code matches
       const [delivery] = await db.select().from(deliveries).where(eq(deliveries.id, deliveryId));
       if (!delivery) return res.status(404).json({ error: "Leveranse ikke funnet" });
+
+      if (delivery.status !== "active") {
+        return res.status(403).json({ error: "Leveransen er ikke aktiv" });
+      }
+
+      if ((delivery.accessCode || "").toUpperCase() !== ac.toUpperCase()) {
+        return res.status(403).json({ error: "Ugyldig tilgangskode" });
+      }
+
+      if (deliveryItemId) {
+        const [item] = await db.select()
+          .from(deliveryItems)
+          .where(and(eq(deliveryItems.id, deliveryItemId), eq(deliveryItems.deliveryId, deliveryId)));
+        if (!item) {
+          return res.status(404).json({ error: "Leveranseelement ikke funnet" });
+        }
+      }
 
       // Insert tracking record
       await db.insert(deliveryTracking).values({
@@ -1872,7 +2377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         coupleId: delivery.coupleId,
         vendorId: delivery.vendorId,
         action,
-        actionDetail: JSON.stringify({ accessCode: ac || null, source: source || 'evendi-app' }),
+        actionDetail: JSON.stringify({ accessCode: ac, source: source || 'evendi-app' }),
       });
 
       // Update counters
@@ -2599,21 +3104,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const token = authHeader.substring(7);
     
-    // Check in-memory cache first
-    const cached = COUPLE_SESSIONS.get(token);
-    if (cached && cached.expiresAt > new Date()) {
-      return cached.coupleId;
-    }
-
     // Check database
     const [session] = await db.select().from(coupleSessions).where(eq(coupleSessions.token, token));
     if (!session || session.expiresAt < new Date()) {
       res.status(401).json({ error: "Sesjon utløpt" });
       return null;
     }
-
-    // Cache the session
-    COUPLE_SESSIONS.set(token, { coupleId: session.coupleId, expiresAt: session.expiresAt });
     return session.coupleId;
   }
 
@@ -2728,8 +3224,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt,
       });
 
-      COUPLE_SESSIONS.set(token, { coupleId: couple.id, expiresAt });
-
       // Remove password hash from response
       const { password: _pw, ...coupleWithoutPassword } = couple;
       res.json({ couple: coupleWithoutPassword, sessionToken: token });
@@ -2747,7 +3241,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.substring(7);
-      COUPLE_SESSIONS.delete(token);
       await db.delete(coupleSessions).where(eq(coupleSessions.token, token));
     }
     res.json({ message: "Logget ut" });
@@ -3876,7 +4369,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reminders endpoints
   app.get("/api/reminders", async (req: Request, res: Response) => {
     try {
-      const allReminders = await db.select().from(reminders).orderBy(reminders.reminderDate);
+      const coupleId = await checkCoupleAuth(req, res);
+      if (!coupleId) return;
+
+      const allReminders = await db.select()
+        .from(reminders)
+        .where(eq(reminders.coupleId, coupleId))
+        .orderBy(reminders.reminderDate);
       res.json(allReminders);
     } catch (error) {
       console.error("Error fetching reminders:", error);
@@ -3886,9 +4385,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/reminders", async (req: Request, res: Response) => {
     try {
+      const coupleId = await checkCoupleAuth(req, res);
+      if (!coupleId) return;
+
       const validatedData = createReminderSchema.parse(req.body);
       const [newReminder] = await db.insert(reminders)
         .values({
+          coupleId,
           title: validatedData.title,
           description: validatedData.description,
           reminderDate: new Date(validatedData.reminderDate),
@@ -3904,6 +4407,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/reminders/:id", async (req: Request, res: Response) => {
     try {
+      const coupleId = await checkCoupleAuth(req, res);
+      if (!coupleId) return;
+
       const { id } = req.params;
       const { isCompleted, notificationId } = req.body;
 
@@ -3913,7 +4419,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [updated] = await db.update(reminders)
         .set(updates)
-        .where(eq(reminders.id, id))
+        .where(and(
+          eq(reminders.id, id),
+          eq(reminders.coupleId, coupleId)
+        ))
         .returning();
 
       if (!updated) {
@@ -3929,9 +4438,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/reminders/:id", async (req: Request, res: Response) => {
     try {
+      const coupleId = await checkCoupleAuth(req, res);
+      if (!coupleId) return;
+
       const { id } = req.params;
       const [deleted] = await db.delete(reminders)
-        .where(eq(reminders.id, id))
+        .where(and(
+          eq(reminders.id, id),
+          eq(reminders.coupleId, coupleId)
+        ))
         .returning();
 
       if (!deleted) {
@@ -3949,9 +4464,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/speeches", async (req: Request, res: Response) => {
     try {
       const coupleId = await checkCoupleAuth(req, res);
+      if (!coupleId) return;
+
       const allSpeeches = await db.select()
         .from(speeches)
-        .where(coupleId ? eq(speeches.coupleId, coupleId) : sql`1=1`)
+        .where(eq(speeches.coupleId, coupleId))
         .orderBy(speeches.sortOrder);
       res.json(allSpeeches);
     } catch (error) {
@@ -3963,18 +4480,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/speeches", async (req: Request, res: Response) => {
     try {
       const coupleId = await checkCoupleAuth(req, res);
+      if (!coupleId) return;
       const validatedData = createSpeechSchema.parse(req.body);
       
       // Get the max sort order
       const existingSpeeches = await db.select()
         .from(speeches)
-        .where(coupleId ? eq(speeches.coupleId, coupleId) : sql`1=1`)
+        .where(eq(speeches.coupleId, coupleId))
         .orderBy(desc(speeches.sortOrder));
       const maxOrder = existingSpeeches.length > 0 ? existingSpeeches[0].sortOrder : 0;
       
       const [newSpeech] = await db.insert(speeches)
         .values({
-          coupleId: coupleId || undefined,
+          coupleId,
           speakerName: validatedData.speakerName,
           role: validatedData.role,
           durationMinutes: validatedData.durationMinutes,
@@ -4026,6 +4544,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/speeches/:id", async (req: Request, res: Response) => {
     try {
       const coupleId = await checkCoupleAuth(req, res);
+      if (!coupleId) return;
       const { id } = req.params;
       const { speakerName, role, durationMinutes, sortOrder, notes, scheduledTime } = req.body;
 
@@ -4039,7 +4558,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [updated] = await db.update(speeches)
         .set(updates)
-        .where(eq(speeches.id, id))
+        .where(and(
+          eq(speeches.id, id),
+          eq(speeches.coupleId, coupleId)
+        ))
         .returning();
 
       if (!updated) {
@@ -4087,15 +4609,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/speeches/:id", async (req: Request, res: Response) => {
     try {
       const coupleId = await checkCoupleAuth(req, res);
+      if (!coupleId) return;
       const { id } = req.params;
       
       // Get speech info before deleting for notification
       const [speechToDelete] = await db.select()
         .from(speeches)
-        .where(eq(speeches.id, id));
+        .where(and(
+          eq(speeches.id, id),
+          eq(speeches.coupleId, coupleId)
+        ));
       
       const [deleted] = await db.delete(speeches)
-        .where(eq(speeches.id, id))
+        .where(and(
+          eq(speeches.id, id),
+          eq(speeches.coupleId, coupleId)
+        ))
         .returning();
 
       if (!deleted) {
@@ -4143,6 +4672,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reorder speeches
   app.post("/api/speeches/reorder", async (req: Request, res: Response) => {
     try {
+      const coupleId = await checkCoupleAuth(req, res);
+      if (!coupleId) return;
+
       const { orderedIds } = req.body;
       if (!Array.isArray(orderedIds)) {
         return res.status(400).json({ error: "orderedIds må være en liste" });
@@ -4151,7 +4683,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (let i = 0; i < orderedIds.length; i++) {
         await db.update(speeches)
           .set({ sortOrder: i, updatedAt: new Date() })
-          .where(eq(speeches.id, orderedIds[i]));
+          .where(and(
+            eq(speeches.id, orderedIds[i]),
+            eq(speeches.coupleId, coupleId)
+          ));
       }
 
       res.json({ success: true });
@@ -4580,13 +5115,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const validatedData = createVendorAvailabilitySchema.parse(req.body);
+      const normalizeDate = (value: string) => {
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return null;
+        return parsed.toISOString().slice(0, 10);
+      };
+      const normalizedDate = normalizeDate(validatedData.date);
+      if (!normalizedDate) {
+        return res.status(400).json({ error: "Ugyldig dato" });
+      }
       
       // Check if entry already exists for this date
       const [existing] = await db.select()
         .from(vendorAvailability)
         .where(and(
           eq(vendorAvailability.vendorId, vendorId),
-          eq(vendorAvailability.date, validatedData.date)
+          eq(vendorAvailability.date, normalizedDate)
         ));
       
       if (existing) {
@@ -4597,6 +5141,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             status: validatedData.status,
             maxBookings: validatedData.maxBookings,
             notes: validatedData.notes,
+            date: normalizedDate,
             updatedAt: new Date(),
           })
           .where(eq(vendorAvailability.id, existing.id))
@@ -4607,7 +5152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const [created] = await db.insert(vendorAvailability)
           .values({
             vendorId,
-            date: validatedData.date,
+            date: normalizedDate,
             name: validatedData.name,
             status: validatedData.status || "available",
             maxBookings: validatedData.maxBookings,
@@ -4629,6 +5174,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { dates, status, maxBookings, name, notes } = req.body;
+      const normalizeDate = (value: string) => {
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return null;
+        return parsed.toISOString().slice(0, 10);
+      };
       
       if (!Array.isArray(dates) || dates.length === 0) {
         return res.status(400).json({ error: "Må oppgi minst én dato" });
@@ -4638,8 +5188,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Ugyldig status" });
       }
       
+      const normalizedDates = dates
+        .map((date: string) => normalizeDate(date))
+        .filter((date: string | null): date is string => !!date);
+
+      if (normalizedDates.length !== dates.length) {
+        return res.status(400).json({ error: "En eller flere datoer er ugyldige" });
+      }
+
       const results = await Promise.all(
-        dates.map(async (date: string) => {
+        normalizedDates.map(async (date: string) => {
           const [existing] = await db.select()
             .from(vendorAvailability)
             .where(and(
@@ -4649,7 +5207,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (existing) {
             const [updated] = await db.update(vendorAvailability)
-              .set({ status, maxBookings, name, notes, updatedAt: new Date() })
+              .set({ status, maxBookings, name, notes, date, updatedAt: new Date() })
               .where(eq(vendorAvailability.id, existing.id))
               .returning();
             return updated;
@@ -4931,56 +5489,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
         0
       );
 
-      const [offer] = await db.insert(vendorOffers)
-        .values({
-          vendorId,
-          coupleId: validatedData.coupleId,
-          conversationId: validatedData.conversationId || null,
-          title: validatedData.title,
-          message: validatedData.message,
-          totalAmount,
-          validUntil: validatedData.validUntil ? new Date(validatedData.validUntil) : null,
-        })
-        .returning();
-
-      // Insert offer items
-      const items = await Promise.all(
-        validatedData.items.map(async (item, index) => {
-          const [offerItem] = await db.insert(vendorOfferItems)
-            .values({
-              offerId: offer.id,
-              productId: item.productId || null,
-              title: item.title,
-              description: item.description,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              lineTotal: item.quantity * item.unitPrice,
-              sortOrder: index,
-            })
-            .returning();
-          return offerItem;
-        })
-      );
-
-      // If there's a conversation, add a system message about the offer
-      if (validatedData.conversationId) {
-        await db.insert(messages).values({
-          conversationId: validatedData.conversationId,
-          senderType: "vendor",
-          senderId: vendorId,
-          body: `📋 Nytt tilbud: ${validatedData.title}\nTotalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`,
-        });
-
-        // Update conversation
-        await db.update(conversations)
-          .set({ 
-            lastMessageAt: new Date(),
-            coupleUnreadCount: 1,
+      const result = await db.transaction(async (tx) => {
+        const [offer] = await tx.insert(vendorOffers)
+          .values({
+            vendorId,
+            coupleId: validatedData.coupleId,
+            conversationId: validatedData.conversationId || null,
+            title: validatedData.title,
+            message: validatedData.message,
+            totalAmount,
+            validUntil: validatedData.validUntil ? new Date(validatedData.validUntil) : null,
           })
-          .where(eq(conversations.id, validatedData.conversationId));
-      }
+          .returning();
 
-      res.status(201).json({ ...offer, items });
+        const items = await Promise.all(
+          validatedData.items.map(async (item, index) => {
+            const [offerItem] = await tx.insert(vendorOfferItems)
+              .values({
+                offerId: offer.id,
+                productId: item.productId || null,
+                title: item.title,
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                lineTotal: item.quantity * item.unitPrice,
+                sortOrder: index,
+              })
+              .returning();
+            return offerItem;
+          })
+        );
+
+        if (validatedData.conversationId) {
+          await tx.insert(messages).values({
+            conversationId: validatedData.conversationId,
+            senderType: "vendor",
+            senderId: vendorId,
+            body: `📋 Nytt tilbud: ${validatedData.title}\nTotalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`,
+          });
+
+          await tx.update(conversations)
+            .set({ 
+              lastMessageAt: new Date(),
+              coupleUnreadCount: 1,
+            })
+            .where(eq(conversations.id, validatedData.conversationId));
+        }
+
+        return { offer, items };
+      });
+
+      res.status(201).json({ ...result.offer, items: result.items });
     } catch (error) {
       console.error("Error creating vendor offer:", error);
       res.status(500).json({ error: "Kunne ikke opprette tilbud" });
@@ -5160,19 +5719,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return null;
     }
 
-    let coupleId = COUPLE_SESSIONS.get(token)?.coupleId;
-    if (!coupleId) {
-      const [session] = await db.select()
-        .from(coupleSessions)
-        .where(eq(coupleSessions.token, token));
+    const [session] = await db.select()
+      .from(coupleSessions)
+      .where(eq(coupleSessions.token, token));
 
-      if (!session || session.expiresAt < new Date()) {
-        res.status(401).json({ error: "Ugyldig økt" });
-        return null;
-      }
-      coupleId = session.coupleId;
-      COUPLE_SESSIONS.set(token, { coupleId, expiresAt: session.expiresAt });
+    if (!session || session.expiresAt < new Date()) {
+      res.status(401).json({ error: "Ugyldig økt" });
+      return null;
     }
+    const coupleId = session.coupleId;
     return coupleId;
   };
 
@@ -5885,24 +6440,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Couple can accept/decline offers
   app.post("/api/couple/offers/:id/respond", async (req: Request, res: Response) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        return res.status(401).json({ error: "Ikke autentisert" });
-      }
-
-      // Check couple session
-      let coupleId = COUPLE_SESSIONS.get(token)?.coupleId;
-      if (!coupleId) {
-        const [session] = await db.select()
-          .from(coupleSessions)
-          .where(eq(coupleSessions.token, token));
-
-        if (!session || session.expiresAt < new Date()) {
-          return res.status(401).json({ error: "Ugyldig økt" });
-        }
-        coupleId = session.coupleId;
-        COUPLE_SESSIONS.set(token, { coupleId, expiresAt: session.expiresAt });
-      }
+      const coupleId = await checkCoupleAuth(req, res);
+      if (!coupleId) return;
 
       const { id } = req.params;
       const { response } = req.body; // 'accept' or 'decline'
@@ -5971,9 +6510,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
             
             // Update offer status within transaction
-            await tx.update(vendorOffers)
+            const [updatedOffer] = await tx.update(vendorOffers)
               .set(updates)
-              .where(eq(vendorOffers.id, id));
+              .where(and(
+                eq(vendorOffers.id, id),
+                eq(vendorOffers.status, "pending")
+              ))
+              .returning();
+
+            if (!updatedOffer) {
+              throw new Error("Tilbudet ble allerede behandlet");
+            }
           });
         } catch (txError: any) {
           console.error("Transaction error accepting offer:", txError);
@@ -6042,24 +6589,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get offers for a couple
   app.get("/api/couple/offers", async (req: Request, res: Response) => {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        return res.status(401).json({ error: "Ikke autentisert" });
-      }
-
-      // Check couple session
-      let coupleId = COUPLE_SESSIONS.get(token)?.coupleId;
-      if (!coupleId) {
-        const [session] = await db.select()
-          .from(coupleSessions)
-          .where(eq(coupleSessions.token, token));
-
-        if (!session || session.expiresAt < new Date()) {
-          return res.status(401).json({ error: "Ugyldig økt" });
-        }
-        coupleId = session.coupleId;
-        COUPLE_SESSIONS.set(token, { coupleId, expiresAt: session.expiresAt });
-      }
+      const coupleId = await checkCoupleAuth(req, res);
+      if (!coupleId) return;
 
       const offers = await db.select({
         offer: vendorOffers,
@@ -6108,16 +6639,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get couples that the vendor has conversations with (for offer recipient selection)
   app.get("/api/vendor/contacts", async (req: Request, res: Response) => {
-    try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        return res.status(401).json({ error: "Ikke autentisert" });
-      }
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
 
-      const session = VENDOR_SESSIONS.get(token);
-      if (!session || session.expiresAt < new Date()) {
-        return res.status(401).json({ error: "Ugyldig økt" });
-      }
+    try {
 
       // Get all couples that have active conversations with this vendor
       const vendorConversations = await db.select({
@@ -6132,7 +6657,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(conversations)
         .leftJoin(coupleProfiles, eq(conversations.coupleId, coupleProfiles.id))
         .where(and(
-          eq(conversations.vendorId, session.vendorId),
+          eq(conversations.vendorId, vendorId),
           eq(conversations.status, "active"),
           eq(conversations.deletedByVendor, false)
         ));
@@ -6152,8 +6677,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin Settings Routes
   // Admin Settings Routes - Public read for design settings (anyone can see the design)
   app.get("/api/admin/settings", async (req: Request, res: Response) => {
+    if (!(await checkAdminAuth(req, res))) return;
     try {
-      const settings = await db.select().from(appSettings);
+      const settings = await db.select().from(appSettings)
+        .where(inArray(appSettings.key, Array.from(ADMIN_SETTINGS_KEYS)));
       res.json(settings);
     } catch (error) {
       console.error("Error fetching settings:", error);
@@ -6339,11 +6866,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Generate a preview session token
       const sessionToken = generateSessionToken();
-      
-      // Store in a temporary cache with expiration (24 hours)
-      COUPLE_SESSIONS.set(sessionToken, {
+      const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+
+      await db.insert(coupleSessions).values({
         coupleId: userId,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        token: sessionToken,
+        expiresAt,
+        isImpersonation: true,
+        impersonatedBy: "admin",
       });
 
       console.log("[Impersonate] Session created for couple:", userId);
@@ -6409,12 +6939,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Generate a preview session token
       const sessionToken = generateSessionToken();
-      
-      // Store in a temporary cache with expiration (24 hours)
-      VENDOR_SESSIONS.set(sessionToken, {
+      const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+
+      await db.insert(vendorSessions).values({
         vendorId: userId,
-        createdAt: new Date(),
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        token: sessionToken,
+        expiresAt,
+        isImpersonation: true,
+        impersonatedBy: "admin",
       });
 
       console.log("[Impersonate Vendor] Session created for vendor:", userId);
@@ -6643,19 +7175,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       const { id } = req.params;
-      // Delete related data
-      await db.delete(vendorFeatures).where(eq(vendorFeatures.vendorId, id));
-      await db.delete(vendorInspirationCategories).where(eq(vendorInspirationCategories.vendorId, id));
-      await db.delete(deliveryItems).where(sql`delivery_id IN (SELECT id FROM deliveries WHERE vendor_id = ${id})`);
-      await db.delete(deliveries).where(eq(deliveries.vendorId, id));
-      await db.delete(inspirationMedia).where(sql`inspiration_id IN (SELECT id FROM inspirations WHERE vendor_id = ${id})`);
-      await db.delete(inspirations).where(eq(inspirations.vendorId, id));
-      await db.delete(messages).where(sql`conversation_id IN (SELECT id FROM conversations WHERE vendor_id = ${id})`);
-      await db.delete(conversations).where(eq(conversations.vendorId, id));
-      await db.delete(vendorOfferItems).where(sql`offer_id IN (SELECT id FROM vendor_offers WHERE vendor_id = ${id})`);
-      await db.delete(vendorOffers).where(eq(vendorOffers.vendorId, id));
-      await db.delete(vendorProducts).where(eq(vendorProducts.vendorId, id));
-      await db.delete(vendors).where(eq(vendors.id, id));
+      await db.transaction(async (tx) => {
+        // Delete related data
+        await tx.delete(vendorFeatures).where(eq(vendorFeatures.vendorId, id));
+        await tx.delete(vendorInspirationCategories).where(eq(vendorInspirationCategories.vendorId, id));
+        await tx.delete(deliveryItems).where(sql`delivery_id IN (SELECT id FROM deliveries WHERE vendor_id = ${id})`);
+        await tx.delete(deliveries).where(eq(deliveries.vendorId, id));
+        await tx.delete(inspirationMedia).where(sql`inspiration_id IN (SELECT id FROM inspirations WHERE vendor_id = ${id})`);
+        await tx.delete(inspirations).where(eq(inspirations.vendorId, id));
+        await tx.delete(messages).where(sql`conversation_id IN (SELECT id FROM conversations WHERE vendor_id = ${id})`);
+        await tx.delete(conversations).where(eq(conversations.vendorId, id));
+        await tx.delete(vendorOfferItems).where(sql`offer_id IN (SELECT id FROM vendor_offers WHERE vendor_id = ${id})`);
+        await tx.delete(vendorOffers).where(eq(vendorOffers.vendorId, id));
+        await tx.delete(vendorProducts).where(eq(vendorProducts.vendorId, id));
+        await tx.delete(vendors).where(eq(vendors.id, id));
+      });
       res.json({ message: "Leverandør slettet" });
     } catch (error) {
       console.error("Error deleting vendor:", error);
@@ -6695,7 +7229,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Generate unique access token and code
       const accessToken = crypto.randomBytes(32).toString('hex');
-      const accessCode = Math.random().toString().slice(2, 8); // 6-digit code
+      let accessCode = "";
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const candidate = crypto.randomInt(0, 100000000).toString().padStart(8, "0");
+        const [existing] = await db.select({ id: coordinatorInvitations.id })
+          .from(coordinatorInvitations)
+          .where(and(
+            eq(coordinatorInvitations.accessCode, candidate),
+            eq(coordinatorInvitations.status, "active")
+          ));
+        if (!existing) {
+          accessCode = candidate;
+          break;
+        }
+      }
+      if (!accessCode) {
+        return res.status(500).json({ error: "Kunne ikke generere tilgangskode" });
+      }
       
       const [invitation] = await db.insert(coordinatorInvitations)
         .values({
@@ -6940,6 +7490,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!existing) {
         return res.status(404).json({ error: "Ugyldig invitasjon" });
+      }
+
+      if (!{"pending": true, "sent": true}[existing.status as string]) {
+        return res.status(409).json({ error: "Invitasjonen er allerede besvart" });
+      }
+
+      if (typeof attending !== "boolean") {
+        return res.status(400).json({ error: "Ugyldig svar" });
       }
 
       const expires = existing.expiresAt ? new Date(existing.expiresAt) : null;
@@ -7189,6 +7747,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Coordinator access by code
   app.post("/api/coordinator/access-by-code", async (req: Request, res: Response) => {
     try {
+      const COORDINATOR_CODE_LIMIT_MAX = 20;
+      const COORDINATOR_CODE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+      const key = req.ip || "unknown";
+      const nowMs = Date.now();
+      const store = (req.app as any).locals.coordinatorCodeRateLimit || new Map<string, { count: number; resetAt: number }>();
+      (req.app as any).locals.coordinatorCodeRateLimit = store;
+      const entry = store.get(key);
+      if (!entry || entry.resetAt <= nowMs) {
+        store.set(key, { count: 1, resetAt: nowMs + COORDINATOR_CODE_LIMIT_WINDOW_MS });
+      } else {
+        entry.count += 1;
+        if (entry.count > COORDINATOR_CODE_LIMIT_MAX) {
+          return res.status(429).json({ error: "For mange forsok. Prov igjen senere." });
+        }
+      }
+
       const { code } = req.body;
       
       const [invitation] = await db.select()
@@ -7200,6 +7774,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!invitation) {
         return res.status(404).json({ error: "Ugyldig kode" });
+      }
+
+      if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
+        await db.update(coordinatorInvitations)
+          .set({ status: "expired" })
+          .where(eq(coordinatorInvitations.id, invitation.id));
+        return res.status(403).json({ error: "Tilgangen har utløpt" });
       }
       
       // Return the token for redirect
@@ -9350,10 +9931,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Get all feedback (protected by admin secret)
   app.get("/api/admin/feedback", async (req: Request, res: Response) => {
-    const adminSecret = req.headers["x-admin-secret"];
-    if (adminSecret !== process.env.ADMIN_SECRET) {
-      return res.status(401).json({ error: "Ikke autorisert" });
-    }
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const feedback = await db.select()
@@ -9369,10 +9947,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Update feedback status
   app.patch("/api/admin/feedback/:id", async (req: Request, res: Response) => {
-    const adminSecret = req.headers["x-admin-secret"];
-    if (adminSecret !== process.env.ADMIN_SECRET) {
-      return res.status(401).json({ error: "Ikke autorisert" });
-    }
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const { id } = req.params;
@@ -9392,10 +9967,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Approve/reject vendor review
   app.patch("/api/admin/reviews/:id", async (req: Request, res: Response) => {
-    const adminSecret = req.headers["x-admin-secret"];
-    if (adminSecret !== process.env.ADMIN_SECRET) {
-      return res.status(401).json({ error: "Ikke autorisert" });
-    }
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const { id } = req.params;
@@ -9420,10 +9992,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Get pending reviews for moderation
   app.get("/api/admin/reviews/pending", async (req: Request, res: Response) => {
-    const adminSecret = req.headers["x-admin-secret"];
-    if (adminSecret !== process.env.ADMIN_SECRET) {
-      return res.status(401).json({ error: "Ikke autorisert" });
-    }
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const reviews = await db.select({
@@ -9505,10 +10074,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Admin: Get all checklists (all couples)
   app.get("/api/admin/checklists", async (req: Request, res: Response) => {
-    const adminSecret = req.headers["x-admin-secret"];
-    if (adminSecret !== process.env.ADMIN_SECRET) {
-      return res.status(401).json({ error: "Ikke autorisert" });
-    }
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const checklists = await db.select({
@@ -9539,10 +10105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Get checklist for specific couple
   app.get("/api/admin/checklists/:coupleId", async (req: Request, res: Response) => {
-    const adminSecret = req.headers["x-admin-secret"];
-    if (adminSecret !== process.env.ADMIN_SECRET) {
-      return res.status(401).json({ error: "Ikke autorisert" });
-    }
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const { coupleId } = req.params;
@@ -9565,10 +10128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Update any checklist task
   app.patch("/api/admin/checklists/:id", async (req: Request, res: Response) => {
-    const adminSecret = req.headers["x-admin-secret"];
-    if (adminSecret !== process.env.ADMIN_SECRET) {
-      return res.status(401).json({ error: "Ikke autorisert" });
-    }
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const { id } = req.params;
@@ -9605,10 +10165,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Delete any checklist task
   app.delete("/api/admin/checklists/:id", async (req: Request, res: Response) => {
-    const adminSecret = req.headers["x-admin-secret"];
-    if (adminSecret !== process.env.ADMIN_SECRET) {
-      return res.status(401).json({ error: "Ikke autorisert" });
-    }
+    if (!(await checkAdminAuth(req, res))) return;
 
     try {
       const { id } = req.params;
@@ -9706,29 +10263,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Create linked reminder if requested
-      if (createReminder && monthsBefore !== undefined) {
-        const [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-        
-        if (couple?.weddingDate) {
-          const weddingDate = new Date(couple.weddingDate);
-          const reminderDate = new Date(weddingDate);
-          reminderDate.setMonth(reminderDate.getMonth() - monthsBefore);
+      const updated = await db.transaction(async (tx) => {
+        if (createReminder && monthsBefore !== undefined) {
+          const [couple] = await tx.select().from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
           
-          const [reminder] = await db.insert(reminders).values({
-            title: title || existing.title,
-            description: notes || `Fra sjekkliste: ${title || existing.title}`,
-            reminderDate: reminderDate,
-            category: "planning",
-          }).returning();
+          if (couple?.weddingDate) {
+            const weddingDate = new Date(couple.weddingDate);
+            const reminderDate = new Date(weddingDate);
+            reminderDate.setMonth(reminderDate.getMonth() - monthsBefore);
+            
+            const [reminder] = await tx.insert(reminders).values({
+              coupleId,
+              title: title || existing.title,
+              description: notes || `Fra sjekkliste: ${title || existing.title}`,
+              reminderDate: reminderDate,
+              category: "planning",
+            }).returning();
 
-          updateData.linkedReminderId = reminder.id;
+            updateData.linkedReminderId = reminder.id;
+          }
         }
-      }
 
-      const [updated] = await db.update(checklistTasks)
-        .set(updateData)
-        .where(eq(checklistTasks.id, id))
-        .returning();
+        const [updated] = await tx.update(checklistTasks)
+          .set(updateData)
+          .where(eq(checklistTasks.id, id))
+          .returning();
+
+        return updated;
+      });
 
       res.json(updated);
     } catch (error) {
@@ -11809,11 +12371,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== APP SETTINGS ROUTES =====
-
   // Get app settings (public)
   app.get("/api/app-settings", async (req: Request, res: Response) => {
     try {
-      const settings = await db.select().from(appSettings);
+      const settings = await db.select().from(appSettings)
+        .where(inArray(appSettings.key, Array.from(PUBLIC_APP_SETTINGS_KEYS)));
       res.json(settings);
     } catch (error) {
       console.error("Error fetching app settings:", error);
@@ -11825,6 +12387,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/app-settings/:key", async (req: Request, res: Response) => {
     try {
       const { key } = req.params;
+      if (!PUBLIC_APP_SETTINGS_KEYS.has(key)) {
+        return res.status(404).json({ error: "Innstilling ikke funnet" });
+      }
       const [setting] = await db.select()
         .from(appSettings)
         .where(eq(appSettings.key, key));
@@ -12403,7 +12968,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const commentsResult = await db.execute(sql`
             SELECT id, author_type, author_name, message, is_private, created_at
             FROM wedding_timeline_comments
-            WHERE timeline_id = ${(timeline as any).id}
+            WHERE timeline_id = ${(timeline as any).id} AND is_private = false
             ORDER BY created_at ASC
           `);
           comments = commentsResult.rows || [];
@@ -12440,6 +13005,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  async function resolveTimelineCoupleId(timelineId: string): Promise<string | null> {
+    const timelineResult = await db.execute(sql`
+      SELECT LOWER(p.client_email) AS client_email
+      FROM wedding_timelines t
+      JOIN legacy.projects p ON t.project_id = p.id
+      WHERE t.id = ${timelineId}
+      LIMIT 1
+    `);
+
+    const clientEmail = (timelineResult.rows || [])[0]?.client_email as string | undefined;
+    if (!clientEmail) return null;
+
+    const coupleResult = await db.execute(sql`
+      SELECT id
+      FROM couple_profiles
+      WHERE LOWER(email) = ${clientEmail}
+      LIMIT 1
+    `);
+
+    const coupleId = (coupleResult.rows || [])[0]?.id as string | undefined;
+    return coupleId ?? null;
+  }
+
   // GET /api/vendor/timeline-comments/:timelineId — Get timeline comments
   app.get("/api/vendor/timeline-comments/:timelineId", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
@@ -12447,6 +13035,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { timelineId } = req.params;
+
+      const coupleId = await resolveTimelineCoupleId(timelineId);
+      if (!coupleId) {
+        return res.status(404).json({ error: "Tidslinje ikke funnet" });
+      }
+
+      const [conv] = await db.select({ id: conversations.id })
+        .from(conversations)
+        .where(and(eq(conversations.vendorId, vendorId), eq(conversations.coupleId, coupleId)));
+      if (!conv) {
+        return res.status(403).json({ error: "Ingen tilgang til dette paret" });
+      }
 
       const result = await db.execute(sql`
         SELECT id, author_type, author_name, message, is_private, created_at
@@ -12475,9 +13075,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Melding er påkrevd" });
       }
 
-      // Verify timeline exists
-      const tlCheck = await db.execute(sql`SELECT id FROM wedding_timelines WHERE id = ${timelineId}`);
-      if (!(tlCheck.rows || []).length) return res.status(404).json({ error: "Tidslinje ikke funnet" });
+      const coupleId = await resolveTimelineCoupleId(timelineId);
+      if (!coupleId) {
+        return res.status(404).json({ error: "Tidslinje ikke funnet" });
+      }
+
+      const [conv] = await db.select({ id: conversations.id })
+        .from(conversations)
+        .where(and(eq(conversations.vendorId, vendorId), eq(conversations.coupleId, coupleId)));
+      if (!conv) {
+        return res.status(403).json({ error: "Ingen tilgang til dette paret" });
+      }
 
       // Get vendor name
       const [vendor] = await db.select({ businessName: vendors.businessName })
@@ -12522,9 +13130,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!title) return res.status(400).json({ error: "Tittel er påkrevd" });
 
-      // Verify timeline exists
-      const tlCheck = await db.execute(sql`SELECT id FROM wedding_timelines WHERE id = ${timelineId}`);
-      if (!(tlCheck.rows || []).length) return res.status(404).json({ error: "Tidslinje ikke funnet" });
+      const coupleId = await resolveTimelineCoupleId(timelineId);
+      if (!coupleId) {
+        return res.status(404).json({ error: "Tidslinje ikke funnet" });
+      }
+
+      const [conv] = await db.select({ id: conversations.id })
+        .from(conversations)
+        .where(and(eq(conversations.vendorId, vendorId), eq(conversations.coupleId, coupleId)));
+      if (!conv) {
+        return res.status(403).json({ error: "Ingen tilgang til dette paret" });
+      }
 
       const id = crypto.randomUUID();
 
@@ -12547,11 +13163,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Wedding Role Invitations — Join/Invite System
   // ==========================================
 
+  const INVITE_RATE_LIMIT_MAX = 20;
+  const INVITE_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+  const inviteRateLimit = new Map<string, { count: number; resetAt: number }>();
+
+  const checkInviteRateLimit = (req: Request, res: Response): boolean => {
+    const key = req.ip || "unknown";
+    const now = Date.now();
+    const entry = inviteRateLimit.get(key);
+    if (!entry || entry.resetAt <= now) {
+      inviteRateLimit.set(key, { count: 1, resetAt: now + INVITE_RATE_LIMIT_WINDOW_MS });
+      return true;
+    }
+    entry.count += 1;
+    if (entry.count > INVITE_RATE_LIMIT_MAX) {
+      res.status(429).json({ error: "For mange forsok. Prov igjen senere." });
+      return false;
+    }
+    return true;
+  };
+
   // Generate a unique invite code
   function generateInviteCode(): string {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No I/O/0/1 for clarity
     let code = "WED-";
-    for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    for (let i = 0; i < 7; i++) code += chars[Math.floor(Math.random() * chars.length)];
     return code;
   }
 
@@ -12709,6 +13345,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Validate invite code and get basic info (for JoinWeddingScreen)
   app.post("/api/partner/validate-code", async (req: Request, res: Response) => {
     try {
+      if (!checkInviteRateLimit(req, res)) return;
       const { code } = req.body;
       if (!code) return res.status(400).json({ error: "Invitasjonskode er påkrevd" });
 
@@ -12768,6 +13405,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Join a wedding — redeem invite code
   app.post("/api/partner/join", async (req: Request, res: Response) => {
     try {
+      if (!checkInviteRateLimit(req, res)) return;
       const { code, name, email, role } = req.body;
       if (!code) return res.status(400).json({ error: "Invitasjonskode er påkrevd" });
       if (!name) return res.status(400).json({ error: "Navn er påkrevd" });
@@ -12800,7 +13438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: "accepted",
           email,
           name,
-          role: role || invitation.role,
+          role: invitation.role,
           joinedAt: new Date(),
           lastAccessedAt: new Date(),
           updatedAt: new Date(),
@@ -12905,7 +13543,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           SELECT DISTINCT wt.id, wt.title, wt.wedding_date, wt.status, wt.couple_name, wt.created_at
           FROM wedding_timelines wt
           JOIN creatorhub_projects cp ON wt.project_id = cp.id
-          JOIN conversations c ON c.vendor_id = cp.owner_id
+          JOIN creatorhub_users cu ON cu.project_id = cp.id
+          JOIN conversations c ON c.vendor_id = cu.vendor_id
           WHERE c.couple_id = ${invitation.coupleId}
           ORDER BY wt.created_at DESC LIMIT 1
         `);
@@ -12925,7 +13564,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Get timeline comments if can comment
           if (invitation.canCommentTimeline) {
             const comments = await db.execute(sql`
-              SELECT id, content, author_name, author_role, is_private, created_at
+              SELECT id, message, author_name, author_type, is_private, created_at
               FROM wedding_timeline_comments
               WHERE timeline_id = ${timeline.id} AND is_private = false
               ORDER BY created_at DESC LIMIT 50

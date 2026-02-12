@@ -32,12 +32,13 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getCoupleSession } from "@/lib/storage";
 import { getGuests } from "@/lib/api-guests";
-import { Table, TABLE_CATEGORIES, Speech } from "@/lib/types";
+import { Table, TABLE_CATEGORIES, Speech, QaQuestion, QaSession } from "@/lib/types";
 import { apiRequest } from "@/lib/query-client";
-import { getSpeeches } from "@/lib/storage";
+import { getSpeeches, getQaSessions } from "@/lib/storage";
 import type { WeddingGuest } from "@shared/schema";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 export default function TableSeatingScreen() {
   const insets = useSafeAreaInsets();
@@ -53,6 +54,8 @@ export default function TableSeatingScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [showSpeakers, setShowSpeakers] = useState(true);
+  const [showQaActivity, setShowQaActivity] = useState(false);
+  const [qaSessions, setQaSessions] = useState<QaSession[]>([]);
   const [draggingGuest, setDraggingGuest] = useState<{ guest: WeddingGuest; fromTableId: string | null } | null>(null);
   const [draggingOverTableId, setDraggingOverTableId] = useState<string | null>(null);
 
@@ -102,12 +105,22 @@ export default function TableSeatingScreen() {
     }
   }, []);
 
+  const loadQaSessions = useCallback(async () => {
+    try {
+      const sessions = await getQaSessions();
+      setQaSessions(sessions);
+    } catch (err) {
+      console.warn("Failed to load Q&A sessions:", err);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       loadGuests();
       loadSpeeches();
+      loadQaSessions();
       queryClient.invalidateQueries({ queryKey: ["/api/couple/tables"] });
-    }, [loadGuests, loadSpeeches, queryClient])
+    }, [loadGuests, loadSpeeches, loadQaSessions, queryClient])
   );
 
   const createTableMutation = useMutation({
@@ -286,6 +299,30 @@ export default function TableSeatingScreen() {
     return map;
   }, [speeches]);
 
+  // Map Q&A questions to tables via guest authorId → table assignment
+  const questionsByTable = React.useMemo(() => {
+    const map = new Map<string, { question: QaQuestion; guestName: string }[]>();
+    const activeQuestions = qaSessions
+      .filter((s) => s.isActive)
+      .flatMap((s) => s.questions)
+      .filter((q) => q.status === "approved" || q.status === "highlighted");
+
+    for (const table of tables) {
+      const tableQuestions: { question: QaQuestion; guestName: string }[] = [];
+      for (const q of activeQuestions) {
+        // Match question author to a guest assigned to this table
+        if (table.guests.includes(q.authorId)) {
+          const guest = guests.find((g) => g.id === q.authorId);
+          tableQuestions.push({ question: q, guestName: guest?.name || q.authorName });
+        }
+      }
+      if (tableQuestions.length > 0) {
+        map.set(table.id, tableQuestions);
+      }
+    }
+    return map;
+  }, [qaSessions, tables, guests]);
+
   const statusColor: Record<NonNullable<Speech["status"]>, string> = {
     ready: Colors.dark.accent,
     speaking: "#f59e0b",
@@ -398,6 +435,32 @@ export default function TableSeatingScreen() {
                 {
                   backgroundColor: "#fff",
                   transform: [{ translateX: showSpeakers ? 20 : 0 }],
+                },
+              ]}
+            />
+          </Pressable>
+        </View>
+
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1 }}>
+            <ThemedText style={styles.toggleLabel}>Vis Q&A-aktivitet</ThemedText>
+            <ThemedText style={[styles.toggleHint, { color: theme.textSecondary }]}>
+              Se hvem som stiller spørsmål fra hvert bord
+            </ThemedText>
+          </View>
+          <Pressable
+            onPress={() => setShowQaActivity(!showQaActivity)}
+            style={[
+              styles.toggle,
+              { backgroundColor: showQaActivity ? "#8b5cf6" : theme.backgroundSecondary },
+            ]}
+          >
+            <View
+              style={[
+                styles.toggleKnob,
+                {
+                  backgroundColor: "#fff",
+                  transform: [{ translateX: showQaActivity ? 20 : 0 }],
                 },
               ]}
             />
@@ -532,6 +595,50 @@ export default function TableSeatingScreen() {
                               </ThemedText>
                             </View>
                           ))}
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {showQaActivity && (questionsByTable.get(table.id) || []).length > 0 ? (
+                    <View style={styles.qaOverlay}>
+                      <View style={styles.speechOverlayHeader}>
+                        <EvendiIcon name="message-circle" size={14} color="#8b5cf6" />
+                        <ThemedText style={[styles.speechOverlayTitle, { color: theme.text }]}>
+                          Spørsmål fra bordet
+                        </ThemedText>
+                        <View style={[styles.qaCountBadge, { backgroundColor: "#8b5cf620" }]}>
+                          <ThemedText style={[styles.qaCountText, { color: "#8b5cf6" }]}>
+                            {(questionsByTable.get(table.id) || []).length}
+                          </ThemedText>
+                        </View>
+                      </View>
+                      <View style={styles.speechBadges}>
+                        {(questionsByTable.get(table.id) || []).map(({ question, guestName }) => (
+                          <View
+                            key={question.id}
+                            style={[
+                              styles.speechBadge,
+                              { borderColor: question.status === "highlighted" ? "#f59e0b" : "#8b5cf6" },
+                            ]}
+                          >
+                            <View style={[styles.qaDot, { backgroundColor: question.status === "highlighted" ? "#f59e0b" : "#8b5cf6" }]} />
+                            <View style={{ flex: 1 }}>
+                              <ThemedText style={styles.speechBadgeName} numberOfLines={1}>
+                                {question.isAnonymous ? "Anonym" : guestName}
+                              </ThemedText>
+                              <ThemedText style={[styles.qaQuestionPreview, { color: theme.textSecondary }]} numberOfLines={2}>
+                                {question.text}
+                              </ThemedText>
+                            </View>
+                            {question.status === "highlighted" ? (
+                              <EvendiIcon name="star" size={14} color="#f59e0b" />
+                            ) : (
+                              <ThemedText style={[styles.qaUpvotes, { color: "#8b5cf6" }]}>
+                                ▲ {question.upvotes}
+                              </ThemedText>
+                            )}
+                          </View>
+                        ))}
                       </View>
                     </View>
                   ) : null}
@@ -699,7 +806,8 @@ export default function TableSeatingScreen() {
                 <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                   Bordnavn
                 </ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="TableSeatingScreen-input-1"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
                   value={editingTable.name}
                   onChangeText={(text) => setEditingTable({ ...editingTable, name: text })}
@@ -739,7 +847,8 @@ export default function TableSeatingScreen() {
                 <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                   Antall plasser
                 </ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="TableSeatingScreen-input-2"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
                   value={String(editingTable.seats)}
                   onChangeText={(text) => setEditingTable({ ...editingTable, seats: parseInt(text) || 8 })}
@@ -772,7 +881,8 @@ export default function TableSeatingScreen() {
                 <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                   Notater (private)
                 </ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="TableSeatingScreen-input-3"
                   style={[styles.input, styles.textArea, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
                   value={editingTable.notes || ""}
                   onChangeText={(text) => setEditingTable({ ...editingTable, notes: text })}
@@ -785,7 +895,8 @@ export default function TableSeatingScreen() {
                 <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                   Notater til lokale/dekoratør
                 </ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="TableSeatingScreen-input-4"
                   style={[styles.input, styles.textArea, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
                   value={editingTable.vendorNotes || ""}
                   onChangeText={(text) => setEditingTable({ ...editingTable, vendorNotes: text })}
@@ -916,6 +1027,35 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
     borderRadius: BorderRadius.sm,
     backgroundColor: "rgba(255,255,255,0.02)",
+  },
+  qaOverlay: {
+    marginBottom: Spacing.md,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: "rgba(139,92,246,0.04)",
+  },
+  qaCountBadge: {
+    marginLeft: "auto",
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+  },
+  qaCountText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  qaDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  qaQuestionPreview: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  qaUpvotes: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   dropHint: {
     alignSelf: "flex-start",

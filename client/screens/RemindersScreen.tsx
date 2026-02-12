@@ -25,6 +25,7 @@ import {
 import { getAppLanguage, type AppLanguage } from "@/lib/storage";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 interface Reminder {
   id: string;
@@ -596,7 +597,8 @@ export default function RemindersScreen() {
 
               <View style={styles.inputGroup}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>{copy.titleLabel}</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="RemindersScreen-input-1"
                   testID="input-reminder-title"
                   style={[
                     styles.textInput,
@@ -611,7 +613,8 @@ export default function RemindersScreen() {
 
               <View style={styles.inputGroup}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>{copy.descriptionLabel}</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="RemindersScreen-input-2"
                   testID="input-reminder-description"
                   style={[
                     styles.textInput,
@@ -630,7 +633,8 @@ export default function RemindersScreen() {
               <View style={styles.inputGroup}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>{copy.dateLabel}</ThemedText>
                 {Platform.OS === "web" ? (
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="RemindersScreen-input-3"
                     style={[
                       styles.textInput,
                       { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },

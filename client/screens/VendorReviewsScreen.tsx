@@ -14,16 +14,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import * as Haptics from "expo-haptics";
-
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
-import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
+import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { apiRequest, queryClient } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
-
+import PersistentTextInput from "@/components/PersistentTextInput";
 interface ReviewableContract {
   id: string;
   vendorId: string;
@@ -33,7 +32,6 @@ interface ReviewableContract {
   imageUrl: string | null;
   hasReview: boolean;
 }
-
 interface ExistingReview {
   id: string;
   contractId: string;
@@ -47,27 +45,22 @@ interface ExistingReview {
   createdAt: string;
   businessName: string;
 }
-
 export default function VendorReviewsScreen() {
   const { theme } = useTheme();
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
-
   const [selectedContract, setSelectedContract] = useState<ReviewableContract | null>(null);
   const [rating, setRating] = useState(5);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [isAnonymous, setIsAnonymous] = useState(false);
-
   const { data: contracts = [], isLoading: loadingContracts } = useQuery<ReviewableContract[]>({
     queryKey: ["/api/couple/reviewable-contracts"],
   });
-
   const { data: myReviews = [], isLoading: loadingReviews } = useQuery<ExistingReview[]>({
     queryKey: ["/api/couple/reviews"],
   });
-
   const submitReviewMutation = useMutation({
     mutationFn: async (data: {
       contractId: string;
@@ -93,14 +86,12 @@ export default function VendorReviewsScreen() {
       showToast(error.message || "Kunne ikke sende anmeldelse");
     },
   });
-
   const handleSubmitReview = () => {
     if (!selectedContract) return;
     if (rating < 1 || rating > 5) {
       showToast("Velg antall stjerner (1-5)");
       return;
     }
-
     submitReviewMutation.mutate({
       contractId: selectedContract.id,
       rating,
@@ -109,9 +100,7 @@ export default function VendorReviewsScreen() {
       isAnonymous,
     });
   };
-
   const unreviewedContracts = contracts.filter((c) => !c.hasReview);
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("nb-NO", {
       day: "numeric",
@@ -119,12 +108,10 @@ export default function VendorReviewsScreen() {
       year: "numeric",
     });
   };
-
   const canEdit = (review: ExistingReview) => {
     if (!review.editableUntil) return false;
     return new Date() < new Date(review.editableUntil);
   };
-
   if (loadingContracts || loadingReviews) {
     return (
       <ThemedView style={[styles.container, { paddingTop: headerHeight + Spacing.lg }]}>
@@ -132,7 +119,6 @@ export default function VendorReviewsScreen() {
       </ThemedView>
     );
   }
-
   if (selectedContract) {
     return (
       <ScrollView
@@ -147,7 +133,6 @@ export default function VendorReviewsScreen() {
           <ThemedText style={Typography.h3}>
             Anmeld {selectedContract.businessName}
           </ThemedText>
-
           <View style={styles.ratingContainer}>
             <ThemedText style={styles.label}>Din vurdering</ThemedText>
             <View style={styles.starsRow}>
@@ -169,10 +154,10 @@ export default function VendorReviewsScreen() {
               ))}
             </View>
           </View>
-
           <View style={styles.inputGroup}>
             <ThemedText style={styles.label}>Tittel (valgfritt)</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="VendorReviewsScreen-input-1"
               style={[
                 styles.input,
                 { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
@@ -183,10 +168,10 @@ export default function VendorReviewsScreen() {
               placeholderTextColor={theme.textSecondary}
             />
           </View>
-
           <View style={styles.inputGroup}>
             <ThemedText style={styles.label}>Din anmeldelse</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="VendorReviewsScreen-input-2"
               style={[
                 styles.textArea,
                 { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
@@ -200,7 +185,6 @@ export default function VendorReviewsScreen() {
               textAlignVertical="top"
             />
           </View>
-
           <View style={styles.anonymousRow}>
             <View style={styles.anonymousTextContainer}>
               <ThemedText style={styles.label}>Anonym anmeldelse</ThemedText>
@@ -215,7 +199,6 @@ export default function VendorReviewsScreen() {
               thumbColor={theme.backgroundDefault}
             />
           </View>
-
           <View style={styles.buttonRow}>
             <Pressable
               style={[styles.secondaryButton, { borderColor: theme.border }]}
@@ -235,7 +218,6 @@ export default function VendorReviewsScreen() {
       </ScrollView>
     );
   }
-
   return (
     <ScrollView
       style={styles.container}
@@ -272,7 +254,6 @@ export default function VendorReviewsScreen() {
           ))}
         </>
       ) : null}
-
       {myReviews.length > 0 ? (
         <>
           <ThemedText style={[Typography.h3, { marginTop: Spacing.xl }]}>
@@ -320,7 +301,6 @@ export default function VendorReviewsScreen() {
           ))}
         </>
       ) : null}
-
       {unreviewedContracts.length === 0 && myReviews.length === 0 ? (
         <Card style={styles.emptyCard}>
           <EvendiIcon name="star" size={48} color={theme.textSecondary} />
@@ -333,7 +313,6 @@ export default function VendorReviewsScreen() {
     </ScrollView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,

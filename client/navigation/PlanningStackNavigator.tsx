@@ -1,5 +1,6 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { Pressable } from "react-native";
 
 import PlanningScreen from "@/screens/PlanningScreen";
 import ScheduleScreen from "@/screens/ScheduleScreen";
@@ -26,6 +27,7 @@ import CoupleContractsScreen from "@/screens/CoupleContractsScreen";
 import CoordinatorSharingScreen from "@/screens/CoordinatorSharingScreen";
 import CoordinatorTimelineScreen from "@/screens/CoordinatorTimelineScreen";
 import SpeechListScreen from "@/screens/SpeechListScreen";
+import QaSystemScreen from "@/screens/QaSystemScreen";
 import VendorReviewsScreen from "@/screens/VendorReviewsScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
 import VendorDetailScreen from "@/screens/VendorDetailScreen";
@@ -43,8 +45,10 @@ import { PlanleggerScreen } from "@/screens/PlanleggerScreen";
 import { FotoVideografScreen } from "@/screens/FotoVideografScreen";
 import JoinWeddingScreen from "@/screens/JoinWeddingScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
+import { EvendiIcon } from "@/components/EvendiIcon";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useEventType } from "@/hooks/useEventType";
+import { useTheme } from "@/hooks/useTheme";
 
 export type PlanningStackParamList = {
   Planning: undefined;
@@ -53,9 +57,9 @@ export type PlanningStackParamList = {
   Budget: undefined;
   AITime: undefined;
   Vendors: undefined;
-  VendorMatching: { 
-    category?: string; 
-    guestCount?: number; 
+  VendorMatching: {
+    category?: string;
+    guestCount?: number;
     cuisineTypes?: string[];
     selectedTraditions?: string[];
   };
@@ -68,7 +72,7 @@ export type PlanningStackParamList = {
   Reminders: undefined;
   VendorRegistration: undefined;
   AdminVendors: undefined;
-  DeliveryAccess: { prefillCode?: string; deliveryId?: string; fromShowcase?: boolean } | undefined;
+  DeliveryAccess: undefined;
   Messages: undefined;
   CoupleLogin: undefined;
   Chat: { conversationId: string; vendorName: string };
@@ -77,6 +81,7 @@ export type PlanningStackParamList = {
   CoordinatorSharing: undefined;
   CoordinatorTimeline: undefined;
   SpeechList: undefined;
+  QaSystem: undefined;
   VendorReviews: undefined;
   Feedback: undefined;
   Brudekjole: undefined;
@@ -107,9 +112,22 @@ const Stack = createNativeStackNavigator<PlanningStackParamList>();
 export default function PlanningStackNavigator() {
   const screenOptions = useScreenOptions();
   const { isWedding } = useEventType();
+  const { theme } = useTheme();
 
   return (
-    <Stack.Navigator screenOptions={screenOptions}>
+    <Stack.Navigator
+      screenOptions={({ navigation, route }) => ({
+        ...screenOptions,
+        headerRight:
+          route.name === "Planning"
+            ? undefined
+            : () => (
+                <Pressable onPress={() => navigation.navigate("Planning")}>
+                  <EvendiIcon name="home" size={20} color={theme.text} />
+                </Pressable>
+              ),
+      })}
+    >
       <Stack.Screen
         name="Planning"
         component={PlanningScreen}
@@ -239,6 +257,11 @@ export default function PlanningStackNavigator() {
         name="SpeechList"
         component={SpeechListScreen}
         options={{ title: "Talerliste" }}
+      />
+      <Stack.Screen
+        name="QaSystem"
+        component={QaSystemScreen}
+        options={{ title: "Spørsmål & Svar" }}
       />
       <Stack.Screen
         name="VendorReviews"

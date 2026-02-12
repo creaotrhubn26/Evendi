@@ -26,6 +26,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { showToast } from "@/lib/toast";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 interface AppSetting {
   id: string;
@@ -78,8 +79,15 @@ export default function AdminDesignScreen() {
   const [primaryColor, setPrimaryColor] = useState("#1E6BFF");
   const [backgroundColor, setBackgroundColor] = useState("#0F1F3A");
   const [appName, setAppName] = useState("Evendi");
-  const [tagline, setTagline] = useState("Din bryllupsplanlegger");
+  const [tagline, setTagline] = useState("Ditt arrangement. Perfekt Match.");
+  const [taglineEn, setTaglineEn] = useState("Your Event. Perfectly Matched.");
   const [logoUrl, setLogoUrl] = useState("");
+  const [logoUseHeader, setLogoUseHeader] = useState(true);
+  const [logoUseSplash, setLogoUseSplash] = useState(true);
+  const [logoUseAbout, setLogoUseAbout] = useState(true);
+  const [logoUseAuth, setLogoUseAuth] = useState(true);
+  const [logoUseAdminHeader, setLogoUseAdminHeader] = useState(true);
+  const [logoUseDocs, setLogoUseDocs] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
   const [fontFamily, setFontFamily] = useState("System");
   const [fontSize, setFontSize] = useState("16");
@@ -121,8 +129,15 @@ export default function AdminDesignScreen() {
       setPrimaryColor(getSetting("design_primary_color", "#1E6BFF"));
       setBackgroundColor(getSetting("design_background_color", "#0F1F3A"));
       setAppName(getSetting("app_name", "Evendi"));
-      setTagline(getSetting("app_tagline", "Din bryllupsplanlegger"));
+      setTagline(getSetting("app_tagline", "Ditt arrangement. Perfekt Match."));
+      setTaglineEn(getSetting("app_tagline_en", "Your Event. Perfectly Matched."));
       setLogoUrl(getSetting("app_logo_url", ""));
+      setLogoUseHeader(getSetting("logo_use_header", "true") === "true");
+      setLogoUseSplash(getSetting("logo_use_splash", "true") === "true");
+      setLogoUseAbout(getSetting("logo_use_about", "true") === "true");
+      setLogoUseAuth(getSetting("logo_use_auth", "true") === "true");
+      setLogoUseAdminHeader(getSetting("logo_use_admin_header", "true") === "true");
+      setLogoUseDocs(getSetting("logo_use_docs", "true") === "true");
       setDarkMode(getSetting("design_dark_mode", "true") === "true");
       setFontFamily(getSetting("design_font_family", "System"));
       setFontSize(getSetting("design_font_size", "16"));
@@ -151,7 +166,14 @@ export default function AdminDesignScreen() {
             { key: "design_background_color", value: backgroundColor, category: "design" },
             { key: "app_name", value: appName, category: "branding" },
             { key: "app_tagline", value: tagline, category: "branding" },
+            { key: "app_tagline_en", value: taglineEn, category: "branding" },
             { key: "app_logo_url", value: logoUrl, category: "branding" },
+            { key: "logo_use_header", value: logoUseHeader.toString(), category: "branding" },
+            { key: "logo_use_splash", value: logoUseSplash.toString(), category: "branding" },
+            { key: "logo_use_about", value: logoUseAbout.toString(), category: "branding" },
+            { key: "logo_use_auth", value: logoUseAuth.toString(), category: "branding" },
+            { key: "logo_use_admin_header", value: logoUseAdminHeader.toString(), category: "branding" },
+            { key: "logo_use_docs", value: logoUseDocs.toString(), category: "branding" },
             { key: "design_dark_mode", value: darkMode.toString(), category: "design" },
             { key: "design_font_family", value: fontFamily, category: "design" },
             { key: "design_font_size", value: fontSize, category: "design" },
@@ -266,7 +288,8 @@ export default function AdminDesignScreen() {
           </ThemedText>
           <View style={styles.colorInputRow}>
             <View style={[styles.colorPreview, { backgroundColor: primaryColor }]} />
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminDesignScreen-input-1"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border, flex: 1 }]}
               value={primaryColor}
               onChangeText={setPrimaryColor}
@@ -281,7 +304,8 @@ export default function AdminDesignScreen() {
           </ThemedText>
           <View style={styles.colorInputRow}>
             <View style={[styles.colorPreview, { backgroundColor: backgroundColor }]} />
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminDesignScreen-input-2"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border, flex: 1 }]}
               value={backgroundColor}
               onChangeText={setBackgroundColor}
@@ -298,7 +322,8 @@ export default function AdminDesignScreen() {
           <ThemedText style={styles.sectionTitle}>Branding</ThemedText>
           
           <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Appnavn</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="AdminDesignScreen-input-3"
             style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
             value={appName}
             onChangeText={setAppName}
@@ -307,17 +332,29 @@ export default function AdminDesignScreen() {
           />
 
           <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>Tagline</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="AdminDesignScreen-input-4"
             style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
             value={tagline}
             onChangeText={setTagline}
-            placeholder="Din bryllupsplanlegger"
+            placeholder="Ditt arrangement. Perfekt Match."
+            placeholderTextColor={theme.textMuted}
+          />
+
+          <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>Tagline (EN)</ThemedText>
+          <PersistentTextInput
+            draftKey="AdminDesignScreen-input-5"
+            style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+            value={taglineEn}
+            onChangeText={setTaglineEn}
+            placeholder="Your Event. Perfectly Matched."
             placeholderTextColor={theme.textMuted}
           />
 
           <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>Logo URL</ThemedText>
           <View style={styles.colorInputRow}>
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminDesignScreen-input-6"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border, flex: 1 }]}
               value={logoUrl}
               onChangeText={setLogoUrl}
@@ -340,6 +377,124 @@ export default function AdminDesignScreen() {
               resizeMode="contain"
             />
           ) : null}
+
+          <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.lg }]}>
+            Logo plassering
+          </ThemedText>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={{ fontWeight: "600", marginBottom: 2 }}>
+                Vis i toppmeny
+              </ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textMuted }}>
+                Bruk logo i header
+              </ThemedText>
+            </View>
+            <Switch
+              value={logoUseHeader}
+              onValueChange={(value) => {
+                setLogoUseHeader(value);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              trackColor={{ false: theme.border, true: theme.accent }}
+              thumbColor="#fff"
+            />
+          </View>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={{ fontWeight: "600", marginBottom: 2 }}>
+                Vis i splash
+              </ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textMuted }}>
+                Bruk logo i oppstartsskjerm
+              </ThemedText>
+            </View>
+            <Switch
+              value={logoUseSplash}
+              onValueChange={(value) => {
+                setLogoUseSplash(value);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              trackColor={{ false: theme.border, true: theme.accent }}
+              thumbColor="#fff"
+            />
+          </View>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={{ fontWeight: "600", marginBottom: 2 }}>
+                Vis i Om-siden
+              </ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textMuted }}>
+                Bruk logo i topp på Om-siden
+              </ThemedText>
+            </View>
+            <Switch
+              value={logoUseAbout}
+              onValueChange={(value) => {
+                setLogoUseAbout(value);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              trackColor={{ false: theme.border, true: theme.accent }}
+              thumbColor="#fff"
+            />
+          </View>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={{ fontWeight: "600", marginBottom: 2 }}>
+                Vis i innlogging
+              </ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textMuted }}>
+                Bruk logo i innlogging og registrering
+              </ThemedText>
+            </View>
+            <Switch
+              value={logoUseAuth}
+              onValueChange={(value) => {
+                setLogoUseAuth(value);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              trackColor={{ false: theme.border, true: theme.accent }}
+              thumbColor="#fff"
+            />
+          </View>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={{ fontWeight: "600", marginBottom: 2 }}>
+                Vis i admin-header
+              </ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textMuted }}>
+                Bruk logo i admin-skjermenes header
+              </ThemedText>
+            </View>
+            <Switch
+              value={logoUseAdminHeader}
+              onValueChange={(value) => {
+                setLogoUseAdminHeader(value);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              trackColor={{ false: theme.border, true: theme.accent }}
+              thumbColor="#fff"
+            />
+          </View>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={{ fontWeight: "600", marginBottom: 2 }}>
+                Vis i hjelpesider
+              </ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textMuted }}>
+                Bruk logo i dokumentasjon og status
+              </ThemedText>
+            </View>
+            <Switch
+              value={logoUseDocs}
+              onValueChange={(value) => {
+                setLogoUseDocs(value);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              trackColor={{ false: theme.border, true: theme.accent }}
+              thumbColor="#fff"
+            />
+          </View>
         </View>
       </Animated.View>
 
@@ -416,7 +571,8 @@ export default function AdminDesignScreen() {
             Basis skriftstørrelse
           </ThemedText>
           <View style={styles.colorInputRow}>
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminDesignScreen-input-7"
               value={fontSize}
               onChangeText={setFontSize}
               keyboardType="numeric"
@@ -472,7 +628,8 @@ export default function AdminDesignScreen() {
           
           <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Button-radius</ThemedText>
           <View style={styles.colorInputRow}>
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminDesignScreen-input-8"
               value={buttonRadius}
               onChangeText={setButtonRadius}
               keyboardType="numeric"
@@ -485,7 +642,8 @@ export default function AdminDesignScreen() {
 
           <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>Card-radius</ThemedText>
           <View style={styles.colorInputRow}>
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminDesignScreen-input-9"
               value={cardRadius}
               onChangeText={setCardRadius}
               keyboardType="numeric"
@@ -498,7 +656,8 @@ export default function AdminDesignScreen() {
 
           <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>Border-bredde</ThemedText>
           <View style={styles.colorInputRow}>
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminDesignScreen-input-10"
               value={borderWidth}
               onChangeText={setBorderWidth}
               keyboardType="numeric"

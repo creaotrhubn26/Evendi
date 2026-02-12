@@ -32,7 +32,13 @@ function setupCors(app: express.Application) {
       "https://www.evendi.no",
       "https://api.evendi.no",
       "https://evendi-api.onrender.com",
-      "https://evendi.vercel.app",
+      "https://evendi-evendi.vercel.app",
+      "https://evendi.no",
+      "https://www.evendi.no",
+      "https://app.evendi.no",
+      "https://api.evendi.no",
+      "https://evendi-api.onrender.com",
+      "https://evendi-evendi.vercel.app",
     ];
 
     // Allow custom list via env (comma-separated)

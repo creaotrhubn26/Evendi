@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, Image, Dimensions } from "react-native";
 import Animated, {
   useSharedValue,
@@ -11,22 +11,63 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
-import { Audio } from "expo-av";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useDesignSettings } from "@/hooks/useDesignSettings";
+import { getAppLanguage, type AppLanguage } from "@/lib/storage";
 
 const { width, height } = Dimensions.get("window");
+
+const FALLBACK_LOGO = require("../../assets/images/Evendi_logo_norsk_tagline.png");
+
+function adjustHexColor(hex: string, amount: number): string {
+  const normalized = hex.replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return hex;
+  }
+
+  const num = parseInt(normalized, 16);
+  const r = Math.min(255, Math.max(0, (num >> 16) + amount));
+  const g = Math.min(255, Math.max(0, ((num >> 8) & 0xff) + amount));
+  const b = Math.min(255, Math.max(0, (num & 0xff) + amount));
+
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+
+function getGradientStops(background: string, isDark: boolean): [string, string, string] {
+  const base = background || (isDark ? "#0f1624" : "#f8f9fc");
+  if (!/^#[0-9a-fA-F]{6}$/.test(base)) {
+    return isDark
+      ? ["#0f1624", "#121826", "#0d0f1a"]
+      : ["#f8f9fc", "#ffffff", "#f5f6fa"];
+  }
+
+  return isDark
+    ? [adjustHexColor(base, -14), base, adjustHexColor(base, 8)]
+    : [adjustHexColor(base, 12), "#ffffff", adjustHexColor(base, 4)];
+}
 
 export default function SplashScreen() {
   const systemColorScheme = useColorScheme();
   const { settings } = useDesignSettings();
+  const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
   
   // Use design settings darkMode if available, otherwise fall back to system
   const isDark = settings?.darkMode ?? (systemColorScheme === "dark");
   const colorScheme = isDark ? "dark" : "light";
   const colors = Colors[colorScheme];
+  const primaryColor = settings?.primaryColor ?? colors.accent;
+  const backgroundColor = settings?.backgroundColor ?? colors.backgroundRoot;
+  const appName = settings?.appName ?? "Evendi";
+  const tagline = appLanguage === "en"
+    ? settings?.appTaglineEn ?? "Your Event. Perfectly Matched."
+    : settings?.appTagline ?? "Ditt arrangement. Perfekt Match.";
+  const logoSource = settings?.logoUrl
+    ? { uri: settings.logoUrl }
+    : FALLBACK_LOGO;
+  const showLogo = settings?.logoUseSplash ?? true;
+  const gradientStops = getGradientStops(backgroundColor, isDark);
   
   // Debug: log the color scheme
   console.log("SplashScreen - isDark:", isDark, "darkMode setting:", settings?.darkMode, "system:", systemColorScheme);
@@ -48,9 +89,11 @@ export default function SplashScreen() {
   // Overall fade out at the end
   const fadeOutOpacity = useSharedValue(1);
 
-  const soundRef = useRef<Audio.Sound | null>(null);
-
   useEffect(() => {
+    getAppLanguage().then((lang) => {
+      if (lang) setAppLanguage(lang);
+    });
+
     // Logo animation: fade in and scale (0-1200ms)
     logoOpacity.value = withTiming(1, {
       duration: 1200,
@@ -106,41 +149,7 @@ export default function SplashScreen() {
       })
     );
 
-    // Background audio with fade-out
-    let isMounted = true;
-    (async () => {
-      try {
-        const { sound } = await Audio.Sound.createAsync(
-          require("../../assets/images/ONE NOTE.wav"),
-          { volume: 0.6, shouldPlay: true, isLooping: false }
-        );
-        if (!isMounted) {
-          await sound.unloadAsync();
-          return;
-        }
-        soundRef.current = sound;
-      } catch (error) {
-        // silent fail if audio unavailable
-      }
-    })();
-
-    // Start gradual audio fade at 4500ms
-    const audioFadeStart = setTimeout(async () => {
-      if (soundRef.current) {
-        // Gradual fade over 2 seconds
-        for (let i = 6; i >= 0; i--) {
-          await soundRef.current.setStatusAsync({ volume: i / 10 });
-          await new Promise(resolve => setTimeout(resolve, 285)); // 2000ms / 7 steps
-        }
-      }
-    }, 4500);
-
     return () => {
-      isMounted = false;
-      clearTimeout(audioFadeStart);
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
     };
   }, [contentScale, fadeOutOpacity, lineScale, logoOpacity, logoScale, subtitleOpacity, subtitleTranslateY]);
 
@@ -171,11 +180,7 @@ export default function SplashScreen() {
   return (
     <Animated.View style={[styles.container, fadeOutStyle]}>
       <LinearGradient
-        colors={
-          colorScheme === "light"
-            ? ["#f8f9fc", "#ffffff", "#f5f6fa"]
-            : ["#0f1624", "#121826", "#0d0f1a"]
-        }
+        colors={gradientStops}
         start={{ x: 0.2, y: 0 }}
         end={{ x: 0.8, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -194,32 +199,35 @@ export default function SplashScreen() {
       <Animated.View style={[styles.content, dollyZoomStyle]}>
         {/* Logo */}
         <Animated.View style={logoAnimatedStyle}>
-          <Image
-            source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+          {showLogo ? (
+            <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+          ) : (
+            <ThemedText style={[styles.appName, { color: primaryColor }]}>
+              {appName}
+            </ThemedText>
+          )}
         </Animated.View>
 
         {/* Accent line */}
         <Animated.View
           style={[
             styles.accentLine,
-            { backgroundColor: colors.accent },
+            { backgroundColor: primaryColor },
             lineAnimatedStyle,
           ]}
         />
 
         {/* Subtitle text */}
         <Animated.View style={subtitleAnimatedStyle}>
-          <ThemedText style={[styles.subtitle, { color: colors.accent }]}>
-            A Day To Remember
+          <ThemedText style={[styles.subtitle, { color: primaryColor }]}>
+            {tagline}
           </ThemedText>
         </Animated.View>
+
       </Animated.View>
 
       {/* Subtle bottom accent */}
-      <View style={[styles.bottomAccent, { backgroundColor: colors.accent + "20" }]} />
+      <View style={[styles.bottomAccent, { backgroundColor: `${primaryColor}20` }]} />
     </Animated.View>
   );
 }
@@ -247,6 +255,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     letterSpacing: 0.5,
+  },
+  appName: {
+    fontSize: 42,
+    fontWeight: "600",
+    letterSpacing: 1,
   },
   bottomAccent: {
     position: "absolute",

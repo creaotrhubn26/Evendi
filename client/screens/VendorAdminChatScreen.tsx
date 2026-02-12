@@ -9,31 +9,29 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { useQuery } from "@tanstack/react-query";
 import type { AppSetting } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { showToast } from "@/lib/toast";
-
+import PersistentTextInput from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 const WELCOME_MESSAGE = "Velkommen til Evendi Support!\n\nHer kan du kontakte oss direkte med spørsmål, problemer eller tilbakemeldinger. Vi svarer vanligvis innen 24 timer.\n\nFør du sender melding, sjekk våre ressurser:";
 const HELP_LINKS = [
   { label: "Fullstendig Dokumentasjon", icon: "book-open" as const, screen: "Documentation" as const, url: null },
   { label: "Hjelp & FAQ", icon: "help-circle" as const, screen: null, url: null },
-  { label: "Videoguider", icon: "video" as const, screen: null, url: "https://github.com/creaotrhubn26/wedflow/blob/main/VENDOR_DOCUMENTATION.md#videoguider" },
+  { label: "Videoguider", icon: "video" as const, screen: null, url: "https://github.com/creaotrhubn26/evendi/blob/main/VENDOR_DOCUMENTATION.md#videoguider" },
   { label: "Hva er nytt", icon: "star" as const, screen: "WhatsNew" as const, screenParams: { category: "vendor" }, url: null },
   { label: "Systemstatus", icon: "activity" as const, screen: "Status" as const, url: null },
   { label: "E-post Support", icon: "mail" as const, screen: null, url: "mailto:support@evendi.no" },
   { label: "Norwedfilm.no", icon: "globe" as const, screen: null, url: "https://norwedfilm.no" },
 ];
-
 interface VendorSession { sessionToken: string; vendorId: string; email: string; businessName: string; }
 interface AdminMessage { id: string; senderType: "vendor"|"admin"; body: string; createdAt: string; attachmentUrl?: string|null; attachmentType?: string|null; }
 type MessageStatus = "pending" | "sent" | "error";
 type ChatMessage = AdminMessage & { localId?: string; status?: MessageStatus };
 interface AdminConversation { id: string; vendorId: string; lastMessageAt: string; }
-
 export default function VendorAdminChatScreen() {
   const { theme } = useTheme();
   const headerHeight = useHeaderHeight();
@@ -48,7 +46,6 @@ export default function VendorAdminChatScreen() {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [unseenCount, setUnseenCount] = useState(0);
   const isFirstChat = useMemo(() => messages.length === 0, [messages.length]);
-
   // Fetch app settings to check for active status messages
   const { data: appSettings } = useQuery<AppSetting[]>({
     queryKey: ["app-settings"],
@@ -58,20 +55,17 @@ export default function VendorAdminChatScreen() {
       return res.json();
     },
   });
-
   const hasActiveStatus = useMemo(() => {
     if (!appSettings) return false;
     const maintenanceMode = appSettings.find((s) => s.key === "maintenance_mode")?.value === "true";
     const statusMessage = appSettings.find((s) => s.key === "status_message")?.value;
     return maintenanceMode || !!statusMessage;
   }, [appSettings]);
-
   // Filter help links based on admin settings
   const visibleHelpLinks = useMemo(() => {
     const getSetting = (key: string, defaultValue: string = "true") => {
       return appSettings?.find((s) => s.key === key)?.value ?? defaultValue;
     };
-
     return HELP_LINKS.filter((link) => {
       // Check visibility settings for each link
       switch (link.label) {
@@ -94,13 +88,11 @@ export default function VendorAdminChatScreen() {
       }
     });
   }, [appSettings]);
-
   const loadSessionToken = async (): Promise<string|null> => {
     const raw = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
     if (!raw) return null;
     try { const parsed: VendorSession = JSON.parse(raw); return parsed.sessionToken; } catch { return null; }
   };
-
   const fetchConversation = useCallback(async () => {
     setLoading(true);
     try {
@@ -118,7 +110,6 @@ export default function VendorAdminChatScreen() {
       setLoading(false);
     }
   }, []);
-
   const fetchMessages = useCallback(async () => {
     try {
       const token = await loadSessionToken();
@@ -130,7 +121,6 @@ export default function VendorAdminChatScreen() {
       setMessages(data.reverse());
     } catch (e) { console.error(e); }
   }, []);
-
   const sendMessage = useCallback(async () => {
     if (!input.trim()) return;
     try {
@@ -168,7 +158,6 @@ export default function VendorAdminChatScreen() {
       setSending(false);
     }
   }, [input]);
-
   const retrySend = useCallback(async (msg: ChatMessage) => {
     if (!msg || !msg.body) return;
     try {
@@ -192,13 +181,11 @@ export default function VendorAdminChatScreen() {
       setSending(false);
     }
   }, []);
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchMessages();
     setRefreshing(false);
   }, [fetchMessages]);
-
   const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
     const threshold = 40;
@@ -206,7 +193,6 @@ export default function VendorAdminChatScreen() {
     setIsAtBottom(atBottom);
     if (atBottom) setUnseenCount(0);
   }, []);
-
   useEffect(() => {
     // auto-scroll on new messages if at bottom
     if (isAtBottom) {
@@ -215,15 +201,12 @@ export default function VendorAdminChatScreen() {
       setUnseenCount((c) => c + 1);
     }
   }, [messages.length]);
-
   useEffect(() => { fetchConversation().then(fetchMessages); }, [fetchConversation, fetchMessages]);
-
   useEffect(() => {
     let ws: WebSocket | null = null;
     let reconnectTimer: any = null;
     let closedByUs = false;
     const typingTimers: { admin?: any } = {};
-
     const connect = async () => {
       try {
         const token = await loadSessionToken();
@@ -258,16 +241,13 @@ export default function VendorAdminChatScreen() {
         reconnectTimer = setTimeout(connect, 3000);
       }
     };
-
     connect();
-
     return () => {
       closedByUs = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       try { ws?.close(); } catch {}
     };
   }, []);
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={["top","bottom"]}>
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
@@ -300,12 +280,12 @@ export default function VendorAdminChatScreen() {
                   backgroundColor: appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" 
                     ? theme.error + "15" 
                     : appSettings?.find(s => s.key === "status_type")?.value === "warning"
-                    ? "#FF8C00" + "15"
+                    ? theme.warning + "15"
                     : theme.accent + "15",
                   borderColor: appSettings?.find(s => s.key === "maintenance_mode")?.value === "true"
                     ? theme.error
                     : appSettings?.find(s => s.key === "status_type")?.value === "warning"
-                    ? "#FF8C00"
+                    ? theme.warning
                     : theme.accent,
                 }]}>
                   <EvendiIcon 
@@ -314,7 +294,7 @@ export default function VendorAdminChatScreen() {
                     color={appSettings?.find(s => s.key === "maintenance_mode")?.value === "true" 
                       ? theme.error 
                       : appSettings?.find(s => s.key === "status_type")?.value === "warning"
-                      ? "#FF8C00"
+                      ? theme.warning
                       : theme.accent
                     } 
                   />
@@ -397,13 +377,11 @@ export default function VendorAdminChatScreen() {
             const bubbleBg = isVendor ? theme.accent : theme.backgroundElevated;
             const textColor = isVendor ? theme.buttonText : theme.text;
             const metaColor = isVendor ? theme.textSecondary : theme.textMuted;
-
             const Body = () => (
               <Text style={[styles.body, { color: textColor }]}>
                 {renderAutolinkedText(item.body, textColor)}
               </Text>
             );
-
             return (
               <View style={[styles.bubble, isVendor ? styles.vendorAlign : styles.adminAlign, { backgroundColor: bubbleBg }]}>
                 <Body />
@@ -427,8 +405,8 @@ export default function VendorAdminChatScreen() {
           onPress={() => { listRef.current?.scrollToEnd({ animated: true }); setUnseenCount(0); }}
           style={[styles.toBottomBtn, { backgroundColor: theme.accent }]}
         >
-          <EvendiIcon name="arrow-down" size={16} color="#FFFFFF" />
-          <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "600" }}>{unseenCount}</Text>
+          <EvendiIcon name="arrow-down" size={16} color={theme.buttonText} />
+          <Text style={{ color: theme.buttonText, fontSize: 12, fontWeight: "600" }}>{unseenCount}</Text>
         </Pressable>
       )}
       {input.length > 0 && !sending && (
@@ -437,7 +415,8 @@ export default function VendorAdminChatScreen() {
         </View>
       )}
       <View style={[styles.inputBar, { backgroundColor: theme.backgroundSecondary }] }>
-        <TextInput
+        <PersistentTextInput
+          draftKey="VendorAdminChatScreen-input-1"
           style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundDefault }]} 
           placeholder="Skriv en melding…"
           placeholderTextColor={theme.textMuted}
@@ -446,13 +425,12 @@ export default function VendorAdminChatScreen() {
           editable={!loading && !sending}
         />
         <Pressable style={[styles.sendBtn, { backgroundColor: theme.accent }]} onPress={sendMessage} disabled={sending || !input.trim()}>
-          {sending ? <ActivityIndicator color="#FFFFFF" /> : <EvendiIcon name="send" size={18} color="#FFFFFF" />}
+          {sending ? <ActivityIndicator color={theme.buttonText} /> : <EvendiIcon name="send" size={18} color={theme.buttonText} />}
         </Pressable>
       </View>
     </SafeAreaView>
   );
 }
-
 // Simple URL autolinker for message body
 function renderAutolinkedText(text: string, color: string) {
   const parts: Array<{ text: string; url?: string }> = [];
@@ -477,7 +455,6 @@ function renderAutolinkedText(text: string, color: string) {
     )
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { 

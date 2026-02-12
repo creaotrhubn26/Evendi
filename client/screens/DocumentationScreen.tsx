@@ -38,6 +38,7 @@ import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
 import type { AppSetting, VideoGuide } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const { width } = Dimensions.get("window");
 
@@ -310,12 +311,12 @@ const parseFeaturesSetting = (value: string | undefined, fallbackColor: string) 
 };
 
 // Logo assets
-const LOGO_NO = require("@/assets/images/Evendi_logo_norsk_tagline.png");
-const LOGO_ICON = require("@/assets/images/Evendi_app_icon.png");
+const LOGO_NO = require("../../assets/images/Evendi_logo_norsk_tagline.png");
+const LOGO_ICON = require("../../assets/images/Evendi_app_icon.png");
 
 export default function DocumentationScreen() {
   const headerHeight = useHeaderHeight();
-  const { theme } = useTheme();
+  const { theme, designSettings } = useTheme();
   const { isWedding } = useEventType();
   const queryClient = useQueryClient();
   const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
@@ -328,6 +329,8 @@ export default function DocumentationScreen() {
   const route = useRoute<RouteProp<RootStackParamList, "Documentation">>();
   const adminKey = route.params?.adminKey ?? "";
   const isAdmin = adminKey.length > 0;
+  const logoSource = designSettings.logoUrl ? { uri: designSettings.logoUrl } : LOGO_NO;
+  const showLogo = designSettings.logoUseDocs ?? true;
   const [activeCategory, setActiveCategory] = useState<"vendor" | "couple" | "both">("vendor");
   const [expandedFeature, setExpandedFeature] = useState<string | null>(null);
   const [videoInterested, setVideoInterested] = useState(false);
@@ -637,11 +640,13 @@ export default function DocumentationScreen() {
         {/* Header */}
         <Animated.View entering={FadeInDown.duration(400)}>
           <View style={[styles.header, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <Image
-              source={LOGO_NO}
-              style={styles.headerLogo}
-              resizeMode="contain"
-            />
+            {showLogo ? (
+              <Image source={logoSource} style={styles.headerLogo} resizeMode="contain" />
+            ) : (
+              <ThemedText style={styles.headerTitle}>
+                {designSettings.appName || "Evendi"}
+              </ThemedText>
+            )}
             <ThemedText style={styles.headerTitle}>Slik Bruker Du Evendi</ThemedText>
             <ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
               {appLanguage === "en" ? "Complete guide to all features" : "Komplett guide til alle funksjoner"}
@@ -881,7 +886,8 @@ export default function DocumentationScreen() {
                 ) : (
                   <ThemedText style={[styles.adminGuideHint, { color: theme.textSecondary }]}>Ingen videoguider i valgt kategori.</ThemedText>
                 )}
-                <TextInput
+                <PersistentTextInput
+                  draftKey="DocumentationScreen-input-1"
                   style={[styles.adminInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundSecondary }]}
                   placeholder="Tittel"
                   placeholderTextColor={theme.textMuted}
@@ -891,7 +897,8 @@ export default function DocumentationScreen() {
                     setVideoDirty(true);
                   }}
                 />
-                <TextInput
+                <PersistentTextInput
+                  draftKey="DocumentationScreen-input-2"
                   style={[styles.adminInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundSecondary }]}
                   placeholder="Beskrivelse"
                   placeholderTextColor={theme.textMuted}
@@ -902,7 +909,8 @@ export default function DocumentationScreen() {
                   }}
                   multiline
                 />
-                <TextInput
+                <PersistentTextInput
+                  draftKey="DocumentationScreen-input-3"
                   style={[styles.adminInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundSecondary }]}
                   placeholder="Video-URL (https://...)"
                   placeholderTextColor={theme.textMuted}
@@ -1014,7 +1022,8 @@ export default function DocumentationScreen() {
               </Pressable>
             </View>
 
-            <TextInput
+            <PersistentTextInput
+              draftKey="DocumentationScreen-input-4"
               style={[styles.modalInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundSecondary }]}
               placeholder="Tittel"
               placeholderTextColor={theme.textMuted}
@@ -1023,7 +1032,8 @@ export default function DocumentationScreen() {
                 setEditingFeature((prev) => (prev ? { ...prev, title: text } : prev))
               }
             />
-            <TextInput
+            <PersistentTextInput
+              draftKey="DocumentationScreen-input-5"
               style={[styles.modalInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundSecondary }]}
               placeholder="Beskrivelse"
               placeholderTextColor={theme.textMuted}
@@ -1033,7 +1043,8 @@ export default function DocumentationScreen() {
               }
               multiline
             />
-            <TextInput
+            <PersistentTextInput
+              draftKey="DocumentationScreen-input-6"
               style={[styles.modalInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundSecondary }]}
               placeholder="Ikon (Evendi)"
               placeholderTextColor={theme.textMuted}
@@ -1043,7 +1054,8 @@ export default function DocumentationScreen() {
               }
               autoCapitalize="none"
             />
-            <TextInput
+            <PersistentTextInput
+              draftKey="DocumentationScreen-input-7"
               style={[styles.modalInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundSecondary }]}
               placeholder="Farge (HEX, f.eks. #FF6B6B)"
               placeholderTextColor={theme.textMuted}
@@ -1078,7 +1090,8 @@ export default function DocumentationScreen() {
               ))}
             </View>
 
-            <TextInput
+            <PersistentTextInput
+              draftKey="DocumentationScreen-input-8"
               style={[styles.modalInput, styles.modalSteps, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundSecondary }]}
               placeholder="Steg (ett per linje)"
               placeholderTextColor={theme.textMuted}

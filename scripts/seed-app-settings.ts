@@ -14,15 +14,110 @@ type SettingSeed = {
 
 const SETTINGS: SettingSeed[] = [
   {
+    key: "app_name",
+    value: "Evendi",
+    category: "branding",
+  },
+  {
+    key: "app_tagline",
+    value: "Ditt arrangement. Perfekt Match.",
+    category: "branding",
+  },
+  {
+    key: "app_tagline_en",
+    value: "Your Event. Perfectly Matched.",
+    category: "branding",
+  },
+  {
+    key: "app_logo_url",
+    value: "",
+    category: "branding",
+  },
+  {
+    key: "design_primary_color",
+    value: "#1E6BFF",
+    category: "design",
+  },
+  {
+    key: "design_background_color",
+    value: "#0F1F3A",
+    category: "design",
+  },
+  {
+    key: "design_dark_mode",
+    value: "true",
+    category: "design",
+  },
+  {
+    key: "design_font_family",
+    value: "System",
+    category: "design",
+  },
+  {
+    key: "design_font_size",
+    value: "16",
+    category: "design",
+  },
+  {
+    key: "design_layout_density",
+    value: "standard",
+    category: "design",
+  },
+  {
+    key: "design_button_radius",
+    value: "8",
+    category: "design",
+  },
+  {
+    key: "design_card_radius",
+    value: "12",
+    category: "design",
+  },
+  {
+    key: "design_border_width",
+    value: "1",
+    category: "design",
+  },
+  {
+    key: "logo_use_header",
+    value: "true",
+    category: "branding",
+  },
+  {
+    key: "logo_use_splash",
+    value: "true",
+    category: "branding",
+  },
+  {
+    key: "logo_use_about",
+    value: "true",
+    category: "branding",
+  },
+  {
+    key: "logo_use_auth",
+    value: "true",
+    category: "branding",
+  },
+  {
+    key: "logo_use_admin_header",
+    value: "true",
+    category: "branding",
+  },
+  {
+    key: "logo_use_docs",
+    value: "true",
+    category: "branding",
+  },
+  {
     key: "app_description",
     value:
-      "Evendi er en komplett bryllupsplattform for par og leverandorer i Skandinavia. Planlegg gjestelister, bordplassering, budsjett, timeline og samarbeid med leverandorer i en felles oversikt.",
+      "Evendi er en komplett arrangementsplattform for kunder og leverandorer i Skandinavia. Planlegg gjestelister, bordplassering, budsjett, timeline og samarbeid med leverandorer i en felles oversikt.",
     category: "branding",
   },
   {
     key: "app_company_description",
     value:
-      "Appen er laget av Norwedfilm, et team med erfaring fra bryllupsbransjen som forstar hva par trenger for en stressfri planleggingsprosess.",
+      "Appen er laget av Norwedfilm, et team med erfaring fra eventbransjen som forstar hva arrangorer trenger for en stressfri planleggingsprosess.",
     category: "branding",
   },
   {

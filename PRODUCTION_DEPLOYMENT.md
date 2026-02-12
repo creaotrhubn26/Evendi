@@ -73,7 +73,7 @@ VIPPS_REDIRECT_URL=https://app.evendi.no/subscription/return
 ### Vercel Frontend (EXPO_PUBLIC_*)
 ```
 EXPO_PUBLIC_API_BASE=https://api.evendi.no
-EXPO_PUBLIC_DOMAIN=api.evendi.no
+EXPO_PUBLIC_DOMAIN=app.evendi.no
 ```
 
 Set these in Vercel Dashboard:

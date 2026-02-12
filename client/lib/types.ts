@@ -129,6 +129,61 @@ export interface Vendor {
   hasReviewBadge: boolean;
 }
 
+export interface QaQuestion {
+  id: string;
+  text: string;
+  authorName: string;
+  authorId: string;
+  createdAt: string;
+  upvotes: number;
+  upvotedBy: string[];
+  status: "pending" | "approved" | "answered" | "rejected" | "highlighted";
+  tags: string[];
+  isAnonymous: boolean;
+  answeredBy?: string;
+  answeredAt?: string;
+  answer?: string;
+}
+
+export interface QaSettings {
+  // Q&A display settings
+  showAuthorName: boolean;
+  showScore: boolean;
+  showUpvoteCount: boolean;
+  showTimestamp: boolean;
+  allowAnonymous: boolean;
+  // Game settings
+  gameTimerEnabled: boolean;
+  gameTimerSeconds: number;
+  showGameScore: boolean;
+  showGameLeaderboard: boolean;
+  shuffleQuestions: boolean;
+  audienceCanSeeAnswers: boolean;
+}
+
+export interface GameScore {
+  id: string;
+  gameMode: string;
+  playerName: string;
+  playerId: string;
+  score: number;
+  correctAnswers: number;
+  totalQuestions: number;
+  completedAt: string;
+}
+
+export interface QaSession {
+  id: string;
+  title: string;
+  isActive: boolean;
+  createdAt: string;
+  moderationEnabled: boolean;
+  anonymousAllowed: boolean;
+  questions: QaQuestion[];
+  settings?: QaSettings;
+  gameScores?: GameScore[];
+}
+
 export interface AITimeSlot {
   id: string;
   type: string;

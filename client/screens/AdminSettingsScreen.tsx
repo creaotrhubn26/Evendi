@@ -24,6 +24,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { showToast } from "@/lib/toast";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const useFieldValidation = () => {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -249,7 +250,8 @@ export default function AdminSettingsScreen() {
           <ThemedText style={[styles.label, { color: theme.textSecondary }]}>
             Maks filopplasting (MB)
           </ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="AdminSettingsScreen-input-1"
             style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("maxFileUploadMb")]}
             value={maxFileUploadMb}
             onChangeText={setMaxFileUploadMb}
@@ -269,7 +271,8 @@ export default function AdminSettingsScreen() {
           <ThemedText style={styles.sectionTitle}>Kontakt</ThemedText>
           
           <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Support e-post</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="AdminSettingsScreen-input-2"
             style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("supportEmail")]}
             value={supportEmail}
             onChangeText={setSupportEmail}
@@ -290,7 +293,8 @@ export default function AdminSettingsScreen() {
           <ThemedText style={styles.sectionTitle}>Juridisk</ThemedText>
           
           <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Personvernerklæring URL</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="AdminSettingsScreen-input-3"
             style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("privacyPolicyUrl")]}
             value={privacyPolicyUrl}
             onChangeText={setPrivacyPolicyUrl}
@@ -307,7 +311,8 @@ export default function AdminSettingsScreen() {
           <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>
             Vilkår for bruk URL
           </ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="AdminSettingsScreen-input-4"
             style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("termsUrl")]}
             value={termsUrl}
             onChangeText={setTermsUrl}

@@ -19,6 +19,8 @@ import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import PersistentTextInput from "@/components/PersistentTextInput";
+import { getVendorCategoryIcon } from "@shared/event-types";
 
 // ─────────────────────── Types ──────────────────────────
 
@@ -264,7 +266,7 @@ export default function VendorCreatorHubBridge({ sessionToken, coupleId, onOpenC
           style={styles.projectHeader}
         >
           <View style={styles.projectHeaderLeft}>
-            <EvendiIcon name="briefcase" size={20} color={theme.accent} />
+            <EvendiIcon name={getVendorCategoryIcon(project.category) || "briefcase"} size={20} color={theme.accent} />
             <View style={{ marginLeft: Spacing.sm, flex: 1 }}>
               <ThemedText style={[styles.projectTitle, { color: theme.text }]}>
                 {project.title}
@@ -363,7 +365,8 @@ export default function VendorCreatorHubBridge({ sessionToken, coupleId, onOpenC
                   <ThemedText style={[styles.addFormTitle, { color: theme.text }]}>
                     <EvendiIcon name="plus-circle" size={14} /> Legg til hendelse
                   </ThemedText>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="VendorCreatorHubBridge-input-1"
                     style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                     placeholder="Tittel (f.eks. Detaljbilder sko)"
                     placeholderTextColor={theme.textSecondary}
@@ -371,14 +374,16 @@ export default function VendorCreatorHubBridge({ sessionToken, coupleId, onOpenC
                     onChangeText={setNewEventTitle}
                   />
                   <View style={styles.inputRow}>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="VendorCreatorHubBridge-input-2"
                       style={[styles.input, styles.inputHalf, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                       placeholder="Tidspunkt (f.eks. 11:30)"
                       placeholderTextColor={theme.textSecondary}
                       value={newEventTime}
                       onChangeText={setNewEventTime}
                     />
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="VendorCreatorHubBridge-input-3"
                       style={[styles.input, styles.inputHalf, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                       placeholder="Sted"
                       placeholderTextColor={theme.textSecondary}
@@ -442,7 +447,8 @@ export default function VendorCreatorHubBridge({ sessionToken, coupleId, onOpenC
 
                 {/* Add comment form */}
                 <View style={[styles.commentInputRow, { borderColor: theme.border }]}>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="VendorCreatorHubBridge-input-4"
                     style={[styles.commentInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                     placeholder="Skriv en kommentar til tidslinjen..."
                     placeholderTextColor={theme.textSecondary}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { Image } from "react-native";
+import { Image, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import MainTabNavigator from "@/navigation/MainTabNavigator";
@@ -36,6 +36,7 @@ import AdminDesignScreen from "@/screens/AdminDesignScreen";
 import AdminInspirationsScreen from "@/screens/AdminInspirationsScreen";
 import AdminCategoriesScreen from "@/screens/AdminCategoriesScreen";
 import AdminSettingsScreen from "@/screens/AdminSettingsScreen";
+import AdminSmokeTestScreen from "@/screens/AdminSmokeTestScreen";
 import AdminChecklistsScreen from "@/screens/AdminChecklistsScreen";
 import AdminVendorChatsScreen from "@/screens/AdminVendorChatsScreen";
 import AdminVendorMessagesScreen from "@/screens/AdminVendorMessagesScreen";
@@ -50,9 +51,11 @@ import VendorHelpScreen from "@/screens/VendorHelpScreen";
 import WhatsNewScreen from "@/screens/WhatsNewScreen";
 import DocumentationScreen from "@/screens/DocumentationScreen";
 import VideoGuidesScreen from "@/screens/VideoGuidesScreen";
+import LandingScreen from "@/screens/LandingScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
+import { useTheme } from "@/hooks/useTheme";
 import { AuthProvider } from "@/lib/AuthContext";
-import { migrateFromWedflow } from "@/lib/storage";
+import { ThemedText } from "@/components/ThemedText";
 import {
   VenueDetailsScreen,
   PhotographerDetailsScreen,
@@ -63,6 +66,8 @@ import {
   BeautyDetailsScreen,
   TransportDetailsScreen,
   PlannerDetailsScreen,
+  PhotoVideoDetailsScreen,
+  DressDetailsScreen,
 } from "@/screens/vendor-details";
 
 export type RootStackParamList = {
@@ -94,6 +99,8 @@ export type RootStackParamList = {
   BeautyDetails: undefined;
   TransportDetails: undefined;
   PlannerDetails: undefined;
+  PhotoVideoDetails: undefined;
+  DressDetails: undefined;
   DeliveryCreate: { delivery?: any; coupleId?: string; coupleName?: string; coupleEmail?: string; weddingDate?: string; projectId?: string; timelineId?: string };
   InspirationCreate: undefined;
   ProductCreate: { product?: any };
@@ -122,6 +129,7 @@ export type RootStackParamList = {
   AdminInspirations: { adminKey: string };
   AdminCategories: { adminKey: string };
   AdminSettings: { adminKey: string };
+  AdminSmokeTest: { adminKey: string };
   AdminChecklists: { adminKey: string };
   AdminFAQ: { adminKey: string };
   AdminAppSettings: { adminKey: string };
@@ -135,44 +143,85 @@ export type RootStackParamList = {
   WhatsNew: { category?: "vendor" | "couple" };
   Documentation: { adminKey?: string };
   VideoGuides: undefined;
+  Landing: undefined;
   Main: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const COUPLE_STORAGE_KEY = "evendi_couple_session";
+const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 const ADMIN_STORAGE_KEY = "evendi_admin_key";
 
-export default function RootStackNavigator() {
+export default function RootStackNavigator({ skipSplash = false }: { skipSplash?: boolean }) {
   const screenOptions = useScreenOptions();
-  const [showSplash, setShowSplash] = useState(true);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { designSettings } = useTheme();
+  const [showSplash, setShowSplash] = useState(!skipSplash);
+  const [authMode, setAuthMode] = useState<"none" | "couple" | "vendor" | "admin">("none");
   const [isLoading, setIsLoading] = useState(true);
   const [storedAdminKey, setStoredAdminKey] = useState("");
+  const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList>("Login");
+  const adminLogoSource = designSettings.logoUrl
+    ? { uri: designSettings.logoUrl }
+    : require("../../assets/images/Evendi_logo_norsk_tagline.png");
+  const renderAdminHeaderTitle = () => {
+    if (designSettings.logoUseAdminHeader) {
+      return (
+        <Image
+          source={adminLogoSource}
+          style={{ width: 300, height: 80 }}
+          resizeMode="contain"
+        />
+      );
+    }
+
+    return (
+      <ThemedText style={{ fontSize: 20, fontWeight: "600" }}>
+        {designSettings.appName || "Evendi"}
+      </ThemedText>
+    );
+  };
 
   const handleCoupleLogout = async () => {
     await AsyncStorage.removeItem(COUPLE_STORAGE_KEY);
-    setIsLoggedIn(false);
+    setAuthMode("none");
   };
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Migrate legacy @wedflow/* keys → @evendi/* (one-time, safe)
-        await migrateFromWedflow();
-
-        const [session, adminKey] = await Promise.all([
+        const [coupleSession, vendorSession, adminKey] = await Promise.all([
           AsyncStorage.getItem(COUPLE_STORAGE_KEY),
+          AsyncStorage.getItem(VENDOR_STORAGE_KEY),
           AsyncStorage.getItem(ADMIN_STORAGE_KEY),
         ]);
-        setIsLoggedIn(!!session);
         setStoredAdminKey(adminKey || "");
+
+        if (coupleSession) {
+          setAuthMode("couple");
+          setInitialRoute("Main");
+        } else if (vendorSession) {
+          setAuthMode("vendor");
+          setInitialRoute("VendorDashboard");
+        } else if (adminKey) {
+          setAuthMode("admin");
+          setInitialRoute("AdminMain");
+        } else {
+          setAuthMode("none");
+          setInitialRoute("Login");
+        }
       } catch {
-        setIsLoggedIn(false);
+        setAuthMode("none");
         setStoredAdminKey("");
+        setInitialRoute("Login");
       }
       setIsLoading(false);
     };
+
+    if (skipSplash || Platform.OS === "web") {
+      checkAuth().finally(() => setShowSplash(false));
+      return;
+    }
 
     // Show splash for 3.5 seconds, then check auth
     const timer = setTimeout(() => {
@@ -198,8 +247,12 @@ export default function RootStackNavigator() {
   }
 
   return (
-    <Stack.Navigator screenOptions={screenOptions}>
-      {!isLoggedIn ? (
+    <Stack.Navigator
+      screenOptions={screenOptions}
+      initialRouteName={authMode === "couple" ? "Main" : initialRoute}
+      key={authMode}
+    >
+      {authMode !== "couple" ? (
         <>
           <Stack.Screen
             name="Login"
@@ -210,7 +263,7 @@ export default function RootStackNavigator() {
             {(props) => (
               <CoupleLoginScreen
                 {...props}
-                onLoginSuccess={() => setIsLoggedIn(true)}
+                onLoginSuccess={() => setAuthMode("couple")}
               />
             )}
           </Stack.Screen>
@@ -411,6 +464,22 @@ export default function RootStackNavigator() {
             }}
           />
           <Stack.Screen
+            name="PhotoVideoDetails"
+            component={PhotoVideoDetailsScreen}
+            options={{
+              headerShown: false,
+              presentation: "modal",
+            }}
+          />
+          <Stack.Screen
+            name="DressDetails"
+            component={DressDetailsScreen}
+            options={{
+              headerShown: false,
+              presentation: "modal",
+            }}
+          />
+          <Stack.Screen
             name="DeliveryCreate"
             component={DeliveryCreateScreen}
             options={{
@@ -476,15 +545,10 @@ export default function RootStackNavigator() {
           <Stack.Screen
             name="AdminMain"
             component={AdminDashboardScreen}
+            initialParams={{ adminKey: storedAdminKey }}
             options={{
               headerShown: true,
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
             }}
           />
           <Stack.Screen
@@ -523,6 +587,13 @@ export default function RootStackNavigator() {
             }}
           />
           <Stack.Screen
+            name="AdminSmokeTest"
+            component={AdminSmokeTestScreen}
+            options={{
+              headerTitle: renderAdminHeaderTitle,
+            }}
+          />
+          <Stack.Screen
             name="AdminChecklists"
             component={AdminChecklistsScreen}
             options={{
@@ -533,91 +604,49 @@ export default function RootStackNavigator() {
             name="AdminFAQ"
             component={AdminFAQScreen}
             options={{
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
             }}
           />
           <Stack.Screen
             name="AdminAppSettings"
             component={AdminAppSettingsScreen}
             options={{
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
             }}
           />
           <Stack.Screen
             name="AdminWhatsNew"
             component={AdminWhatsNewScreen}
             options={{
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
             }}
           />
           <Stack.Screen
             name="AdminVideoGuides"
             component={AdminVideoGuidesScreen}
             options={{
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
             }}
           />
           <Stack.Screen
             name="AdminSubscriptions"
             component={AdminSubscriptionsScreen}
             options={{
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
             }}
           />
           <Stack.Screen
             name="AdminPreview"
             component={AdminPreviewScreen}
             options={{
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
             }}
           />
           <Stack.Screen
             name="WhatsNew"
             component={WhatsNewScreen}
             options={{
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
             }}
           />
           <Stack.Screen
@@ -638,65 +667,42 @@ export default function RootStackNavigator() {
             name="VendorAdminChat"
             component={VendorAdminChatScreen}
             options={{
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
             }}
           />
           <Stack.Screen
             name="VendorHelp"
             component={VendorHelpScreen}
             options={{
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
             }}
           />
           <Stack.Screen
             name="Status"
             component={StatusScreen}
             options={{
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
+            }}
+          />
+          <Stack.Screen
+            name="Landing"
+            component={LandingScreen}
+            options={{
+              headerShown: false,
             }}
           />
           <Stack.Screen
             name="Documentation"
             component={DocumentationScreen}
             options={{
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
             }}
           />
           <Stack.Screen
             name="VideoGuides"
             component={VideoGuidesScreen}
             options={{
-              headerTitle: () => (
-                <Image
-                  source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-                  style={{ width: 300, height: 80 }}
-                  resizeMode="contain"
-                />
-              ),
+              headerTitle: renderAdminHeaderTitle,
             }}
           />
         </>

@@ -27,8 +27,10 @@ import type { WeddingGuest } from "@shared/schema";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
+import PersistentTextInput from "@/components/PersistentTextInput";
 import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
+import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
 import { useTheme } from "@/hooks/useTheme";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
@@ -1202,6 +1204,15 @@ export default function CateringScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + Spacing.xl }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
+        {/* Marketplace hero + search + vendor cards */}
+        <VendorCategoryMarketplace
+          category="catering"
+          categoryName="Catering"
+          icon="coffee"
+          subtitle="Nordisk gourmet for arrangementet"
+          selectedTraditions={coupleProfile?.selectedTraditions}
+        />
+
         {/* Tradition hints for catering */}
         {(coupleProfile?.selectedTraditions?.length ?? 0) > 0 && activeTab === "tastings" && (
           <TraditionHintBanner
@@ -1233,7 +1244,8 @@ export default function CateringScreen() {
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Caterer *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="CateringScreen-input-1"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={catererSearch.searchText}
                 onChangeText={catererSearch.onChangeText}
@@ -1266,7 +1278,8 @@ export default function CateringScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Dato *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="CateringScreen-input-2"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={tastingDate}
                 onChangeText={setTastingDate}
@@ -1277,7 +1290,8 @@ export default function CateringScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Klokkeslett</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="CateringScreen-input-3"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={tastingTime}
                 onChangeText={setTastingTime}
@@ -1288,7 +1302,8 @@ export default function CateringScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Sted</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="CateringScreen-input-4"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={tastingLocation}
                 onChangeText={setTastingLocation}
@@ -1314,7 +1329,8 @@ export default function CateringScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="CateringScreen-input-5"
                 style={[styles.formInput, styles.formTextArea, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={tastingNotes}
                 onChangeText={setTastingNotes}
@@ -1369,7 +1385,8 @@ export default function CateringScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Rettnavn *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="CateringScreen-input-6"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={menuDishName}
                 onChangeText={setMenuDishName}
@@ -1380,7 +1397,8 @@ export default function CateringScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Beskrivelse</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="CateringScreen-input-7"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={menuDescription}
                 onChangeText={setMenuDescription}
@@ -1422,7 +1440,8 @@ export default function CateringScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Pris per person (kr)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="CateringScreen-input-8"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={menuPricePerPerson}
                 onChangeText={setMenuPricePerPerson}
@@ -1509,7 +1528,8 @@ export default function CateringScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Gjestens navn *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="CateringScreen-input-9"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={dietaryGuestName}
                 onChangeText={setDietaryGuestName}
@@ -1543,7 +1563,8 @@ export default function CateringScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="CateringScreen-input-10"
                 style={[styles.formInput, styles.formTextArea, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={dietaryNotes}
                 onChangeText={setDietaryNotes}
@@ -1578,7 +1599,8 @@ export default function CateringScreen() {
             <View style={styles.budgetModalFields}>
               <View style={styles.budgetModalField}>
                 <ThemedText style={styles.budgetModalFieldLabel}>Budsjett (kr)</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="CateringScreen-input-11"
                   style={[styles.budgetInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
                   value={budgetInput}
                   onChangeText={setBudgetInput}
@@ -1589,7 +1611,8 @@ export default function CateringScreen() {
               </View>
               <View style={styles.budgetModalField}>
                 <ThemedText style={styles.budgetModalFieldLabel}>Antall gjester</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="CateringScreen-input-12"
                   style={[styles.budgetInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
                   value={guestCountInput}
                   onChangeText={setGuestCountInput}

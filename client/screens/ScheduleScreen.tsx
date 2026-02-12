@@ -42,6 +42,7 @@ import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 import type { ScheduleEvent } from "@shared/schema";
 import { Speech } from "@/lib/types";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const emptyScheduleImage = require("../../assets/images/empty-schedule.png");
 
@@ -522,7 +523,8 @@ export default function ScheduleScreen() {
           </ThemedText>
 
           <View style={styles.inputRow}>
-            <TextInput
+            <PersistentTextInput
+              draftKey="ScheduleScreen-input-1"
               style={[
                 styles.timeInput,
                 {
@@ -537,7 +539,8 @@ export default function ScheduleScreen() {
               onChangeText={setNewTime}
               keyboardType="numbers-and-punctuation"
             />
-            <TextInput
+            <PersistentTextInput
+              draftKey="ScheduleScreen-input-2"
               style={[
                 styles.titleInput,
                 {

@@ -23,6 +23,7 @@ import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 interface Statistics {
   vendors: { total: number; approved: number; pending: number };
@@ -169,6 +170,12 @@ export default function AdminDashboardScreen() {
       description: "Generelle appinnstillinger",
       screen: "AdminSettings" as const,
     },
+    {
+      title: "Smoke test",
+      icon: "check-circle" as const,
+      description: "Kjor raske helsesjekker og typecheck",
+      screen: "AdminSmokeTest" as const,
+    },
   ];
 
   if (!isAuthenticated) {
@@ -191,7 +198,8 @@ export default function AdminDashboardScreen() {
               Skriv inn admin-nøkkelen for å få tilgang
             </ThemedText>
 
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminDashboardScreen-input-1"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
               placeholder="Admin-nøkkel"
               placeholderTextColor={theme.textMuted}

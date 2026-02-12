@@ -8,17 +8,14 @@ import { EvendiIcon, EvendiIconGlyphMap } from "@/components/EvendiIcon";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
-
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { AppSetting } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { showToast } from "@/lib/toast";
-
 type FAQCategory = "vendor" | "couple";
-
 interface FAQItem {
   id: string;
   icon: keyof typeof EvendiIconGlyphMap;
@@ -30,7 +27,6 @@ interface FAQItem {
   createdAt?: string;
   updatedAt?: string;
 }
-
 interface SupportLink {
   label: string;
   icon: keyof typeof EvendiIconGlyphMap;
@@ -40,7 +36,6 @@ interface SupportLink {
   settingKey: string;
   defaultVisible: string;
 }
-
 export default function VendorHelpScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -48,11 +43,9 @@ export default function VendorHelpScreen() {
   const route = useRoute();
   const { theme } = useTheme();
   const [expandedId, setExpandedId] = useState<string | null>(null);
-
   // When opened as CoupleHelp, only show couple FAQ
   const isCoupleMode = route.name === "CoupleHelp";
   const [activeCategory, setActiveCategory] = useState<FAQCategory>(isCoupleMode ? "couple" : "vendor");
-
   // Fetch app settings to control visibility of support links
   const { data: appSettings, refetch: refetchSettings, isFetching: isSettingsFetching } = useQuery<AppSetting[]>({
     queryKey: ["app-settings"],
@@ -62,7 +55,6 @@ export default function VendorHelpScreen() {
       return res.json();
     },
   });
-
   const supportLinks = useMemo(
     () => [
       {
@@ -111,15 +103,12 @@ export default function VendorHelpScreen() {
     ],
     [navigation]
   );
-
   const visibleSupportLinks = useMemo(() => {
     const getSetting = (key: string, defaultValue: string) => {
       return appSettings?.find((s) => s.key === key)?.value ?? defaultValue;
     };
-
     return supportLinks.filter((link) => getSetting(link.settingKey, link.defaultVisible) === "true");
   }, [appSettings, supportLinks]);
-
   // Fetch FAQ from API
   const { data: faqData = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["faq", activeCategory],
@@ -130,7 +119,6 @@ export default function VendorHelpScreen() {
       return res.json() as Promise<FAQItem[]>;
     },
   });
-
   // Compute the most recent updatedAt across all FAQ items
   const lastUpdated = useMemo(() => {
     if (!faqData.length) return null;
@@ -141,14 +129,12 @@ export default function VendorHelpScreen() {
     if (!dates.length) return null;
     return new Date(Math.max(...dates));
   }, [faqData]);
-
   const handleToggle = (index: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const nextId = faqData[index]?.id;
     if (!nextId) return;
     setExpandedId(expandedId === nextId ? null : nextId);
   };
-
   const handleOpenLink = async (url: string | null, onPress?: () => void) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (onPress) {
@@ -166,7 +152,6 @@ export default function VendorHelpScreen() {
       }
     }
   };
-
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
@@ -188,14 +173,15 @@ export default function VendorHelpScreen() {
     >
       <Animated.View entering={FadeInDown.duration(400)}>
         <View style={[styles.header, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-          <EvendiIcon name="help-circle" size={32} color={Colors.dark.accent} />
+          <EvendiIcon name="help-circle" size={32} color={theme.accent} />
           <ThemedText style={styles.headerTitle}>Hjelp & FAQ</ThemedText>
           <ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
             Alt du trenger å vite om Evendi
+            {"\n"}
+            All you need to know about Evendi
           </ThemedText>
         </View>
       </Animated.View>
-
       {!isCoupleMode && (
       <Animated.View entering={FadeInDown.delay(100).duration(400)}>
         <View style={styles.categoryTabs}>
@@ -214,18 +200,19 @@ export default function VendorHelpScreen() {
             <EvendiIcon 
               name="briefcase" 
               size={18} 
-              color={activeCategory === "vendor" ? "#FFFFFF" : theme.textSecondary} 
+              color={activeCategory === "vendor" ? theme.buttonText : theme.textSecondary} 
             />
             <ThemedText 
               style={[
                 styles.categoryTabText,
-                { color: activeCategory === "vendor" ? "#FFFFFF" : theme.textSecondary }
+                { color: activeCategory === "vendor" ? theme.buttonText : theme.textSecondary }
               ]}
             >
               For leverandører
+              {"\n"}
+              For vendors
             </ThemedText>
           </Pressable>
-
           <Pressable
             onPress={() => {
               setActiveCategory("couple");
@@ -241,21 +228,22 @@ export default function VendorHelpScreen() {
             <EvendiIcon 
               name="heart" 
               size={18} 
-              color={activeCategory === "couple" ? "#FFFFFF" : theme.textSecondary} 
+              color={activeCategory === "couple" ? theme.buttonText : theme.textSecondary} 
             />
             <ThemedText 
               style={[
                 styles.categoryTabText,
-                { color: activeCategory === "couple" ? "#FFFFFF" : theme.textSecondary }
+                { color: activeCategory === "couple" ? theme.buttonText : theme.textSecondary }
               ]}
             >
               Hva par trenger
+              {"\n"}
+              What couples need
             </ThemedText>
           </Pressable>
         </View>
       </Animated.View>
       )}
-
       <Animated.View entering={FadeInDown.delay(200).duration(400)}>
         <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <ThemedText style={styles.sectionTitle}>
@@ -308,14 +296,11 @@ export default function VendorHelpScreen() {
           )}
         </View>
       </Animated.View>
-
       <Animated.View entering={FadeInDown.delay(300).duration(400)}>
         <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <ThemedText style={styles.sectionTitle}>Hurtiglenker</ThemedText>
-
           {visibleSupportLinks.map((link) => {
             const isVideo = link.settingKey === "help_show_videoguides";
-
             return (
               <Pressable
                 key={link.label}
@@ -327,7 +312,7 @@ export default function VendorHelpScreen() {
                 ]}
               >
                 <View style={[styles.helpIcon, { backgroundColor: isVideo ? theme.accent + "20" : theme.backgroundSecondary }]}> 
-                  <EvendiIcon name={isVideo ? "play-circle" : link.icon} size={20} color={isVideo ? theme.accent : Colors.dark.accent} />
+                  <EvendiIcon name={isVideo ? "play-circle" : link.icon} size={20} color={isVideo ? theme.accent : theme.accent} />
                 </View>
                 <View style={styles.helpInfo}>
                   <ThemedText style={styles.helpLabel}>{link.label}</ThemedText>
@@ -336,7 +321,7 @@ export default function VendorHelpScreen() {
                   </ThemedText>
                   {isVideo && (
                     <View style={[styles.badge, { backgroundColor: theme.accent }]}> 
-                      <ThemedText style={styles.badgeText}>Video</ThemedText>
+                      <ThemedText style={[styles.badgeText, { color: theme.buttonText }]}>Video</ThemedText>
                     </View>
                   )}
                 </View>
@@ -346,7 +331,6 @@ export default function VendorHelpScreen() {
           })}
         </View>
       </Animated.View>
-
       <Animated.View entering={FadeInDown.delay(400).duration(400)}>
         <View style={[styles.tipBox, { backgroundColor: theme.accent + "15", borderColor: theme.accent }]}>
           <EvendiIcon name="info" size={20} color={theme.accent} />
@@ -359,7 +343,6 @@ export default function VendorHelpScreen() {
     </ScrollView>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
@@ -489,7 +472,6 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#fff",
   },
   tipBox: {
     flexDirection: "row",

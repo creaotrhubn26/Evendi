@@ -28,6 +28,7 @@ import { getApiUrl } from "@/lib/query-client";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { renderIcon } from "@/lib/custom-icons";
 import { showToast } from "@/lib/toast";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const GRID_GAP = Spacing.sm;
@@ -540,7 +541,8 @@ export default function InspirationScreen() {
                 Til: {selectedInspiration?.vendor?.businessName}
               </ThemedText>
 
-              <TextInput
+              <PersistentTextInput
+                draftKey="InspirationScreen-input-1"
                 style={[styles.inquiryInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={inquiryName}
                 onChangeText={setInquiryName}
@@ -548,7 +550,8 @@ export default function InspirationScreen() {
                 placeholderTextColor={theme.textMuted}
               />
 
-              <TextInput
+              <PersistentTextInput
+                draftKey="InspirationScreen-input-2"
                 style={[styles.inquiryInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={inquiryEmail}
                 onChangeText={setInquiryEmail}
@@ -558,7 +561,8 @@ export default function InspirationScreen() {
                 autoCapitalize="none"
               />
 
-              <TextInput
+              <PersistentTextInput
+                draftKey="InspirationScreen-input-3"
                 style={[styles.inquiryInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={inquiryPhone}
                 onChangeText={setInquiryPhone}
@@ -567,7 +571,8 @@ export default function InspirationScreen() {
                 keyboardType="phone-pad"
               />
 
-              <TextInput
+              <PersistentTextInput
+                draftKey="InspirationScreen-input-4"
                 style={[styles.inquiryInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={inquiryEventDate}
                 onChangeText={setInquiryEventDate}
@@ -575,7 +580,8 @@ export default function InspirationScreen() {
                 placeholderTextColor={theme.textMuted}
               />
 
-              <TextInput
+              <PersistentTextInput
+                draftKey="InspirationScreen-input-5"
                 style={[styles.inquiryTextArea, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={inquiryMessage}
                 onChangeText={setInquiryMessage}

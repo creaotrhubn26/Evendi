@@ -21,6 +21,7 @@ import { rescheduleChecklistReminders } from "@/lib/notifications";
 import type { ChecklistTask } from "@shared/schema";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 type ChecklistCategory = "planning" | "vendors" | "attire" | "logistics" | "final";
 
@@ -816,7 +817,8 @@ export default function ChecklistScreen() {
         <Pressable style={styles.modalOverlay} onPress={() => setShowAddModal(false)}>
           <Pressable style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]} onPress={(e) => e.stopPropagation()}>
             <ThemedText type="h3" style={{ marginBottom: Spacing.md }}>{t("Ny oppgave", "New task")}</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="ChecklistScreen-input-1"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={editTitle}
               onChangeText={setEditTitle}
@@ -933,7 +935,8 @@ export default function ChecklistScreen() {
             <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>
               {t("Notater (valgfritt)", "Notes (optional)")}
             </ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="ChecklistScreen-input-2"
               style={[styles.textArea, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={editNotes}
               onChangeText={setEditNotes}
@@ -967,7 +970,8 @@ export default function ChecklistScreen() {
             <ThemedText type="h3" style={{ marginBottom: Spacing.md }}>{t("Rediger oppgave", "Edit task")}</ThemedText>
             
             <ThemedText style={[styles.label, { color: theme.textSecondary }]}>{t("Tittel", "Title")}</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="ChecklistScreen-input-3"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={editTitle}
               onChangeText={setEditTitle}
@@ -1083,7 +1087,8 @@ export default function ChecklistScreen() {
             <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>
               {t("Notater (valgfritt)", "Notes (optional)")}
             </ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="ChecklistScreen-input-4"
               style={[styles.textArea, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={editNotes}
               onChangeText={setEditNotes}
@@ -1113,7 +1118,8 @@ export default function ChecklistScreen() {
         <Pressable style={styles.modalOverlay} onPress={() => setShowPartnerModal(false)}>
           <Pressable style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]} onPress={(e) => e.stopPropagation()}>
             <ThemedText type="h3" style={{ marginBottom: Spacing.md }}>{t("Partner e-post", "Partner email")}</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="ChecklistScreen-input-5"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={partnerEmailDraft}
               onChangeText={setPartnerEmailDraft}

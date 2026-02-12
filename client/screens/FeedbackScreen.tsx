@@ -24,6 +24,7 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import type { AppSetting } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { showToast } from "@/lib/toast";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const CATEGORIES = [
   { id: "bug", label: "Feil/problem", icon: "alert-circle" as const },
@@ -237,7 +238,8 @@ export default function FeedbackScreen() {
 
       <View style={styles.inputGroup}>
         <ThemedText style={styles.label}>Emne</ThemedText>
-        <TextInput
+        <PersistentTextInput
+          draftKey="FeedbackScreen-input-1"
           style={[
             styles.input,
             { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
@@ -252,7 +254,8 @@ export default function FeedbackScreen() {
 
       <View style={styles.inputGroup}>
         <ThemedText style={styles.label}>Din melding</ThemedText>
-        <TextInput
+        <PersistentTextInput
+          draftKey="FeedbackScreen-input-2"
           style={[
             styles.textArea,
             { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },

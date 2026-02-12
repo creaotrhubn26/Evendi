@@ -29,6 +29,7 @@ import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { showToast } from "@/lib/toast";
 import { showConfirm, showOptions } from "@/lib/dialogs";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
@@ -423,7 +424,8 @@ export default function InspirationCreateScreen() {
           </View>
           
           <ThemedText style={[styles.fieldLabel, { color: theme.textMuted }]}>Tittel</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="InspirationCreateScreen-input-1"
             style={[styles.input, { backgroundColor: theme.backgroundRoot, borderColor: theme.border, color: theme.text }]}
             value={title}
             onChangeText={setTitle}
@@ -432,7 +434,8 @@ export default function InspirationCreateScreen() {
           />
 
           <ThemedText style={[styles.fieldLabel, { color: theme.textMuted, marginTop: Spacing.md }]}>Beskrivelse (valgfritt)</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="InspirationCreateScreen-input-2"
             style={[styles.textArea, { backgroundColor: theme.backgroundRoot, borderColor: theme.border, color: theme.text }]}
             value={description}
             onChangeText={setDescription}
@@ -512,7 +515,8 @@ export default function InspirationCreateScreen() {
                   ) : null}
                 </View>
               </View>
-              <TextInput
+              <PersistentTextInput
+                draftKey="InspirationCreateScreen-input-3"
                 style={[styles.mediaInput, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
                 value={item.url}
                 onChangeText={(val) => handleUpdateMedia(index, "url", val)}
@@ -534,7 +538,8 @@ export default function InspirationCreateScreen() {
                   </Pressable>
                 </View>
               ) : null}
-              <TextInput
+              <PersistentTextInput
+                draftKey="InspirationCreateScreen-input-4"
                 style={[styles.mediaInput, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
                 value={item.caption}
                 onChangeText={(val) => handleUpdateMedia(index, "caption", val)}
@@ -574,7 +579,8 @@ export default function InspirationCreateScreen() {
       {showPricing ? (
         <View style={[styles.pricingSection, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <ThemedText style={styles.fieldLabel}>Prissammendrag</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="InspirationCreateScreen-input-5"
             style={[styles.input, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
             value={priceSummary}
             onChangeText={setPriceSummary}
@@ -585,7 +591,8 @@ export default function InspirationCreateScreen() {
           <View style={styles.priceRow}>
             <View style={styles.priceField}>
               <ThemedText style={styles.fieldLabel}>Min. pris (kr)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="InspirationCreateScreen-input-6"
                 style={[styles.input, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
                 value={priceMin}
                 onChangeText={setPriceMin}
@@ -596,7 +603,8 @@ export default function InspirationCreateScreen() {
             </View>
             <View style={styles.priceField}>
               <ThemedText style={styles.fieldLabel}>Maks. pris (kr)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="InspirationCreateScreen-input-7"
                 style={[styles.input, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
                 value={priceMax}
                 onChangeText={setPriceMax}
@@ -608,7 +616,8 @@ export default function InspirationCreateScreen() {
           </View>
 
           <ThemedText style={styles.fieldLabel}>Nettside</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="InspirationCreateScreen-input-8"
             style={[styles.input, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
             value={websiteUrl}
             onChangeText={setWebsiteUrl}
@@ -619,7 +628,8 @@ export default function InspirationCreateScreen() {
           />
 
           <ThemedText style={styles.fieldLabel}>E-post for henvendelser</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="InspirationCreateScreen-input-9"
             style={[styles.input, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
             value={inquiryEmail}
             onChangeText={setInquiryEmail}
@@ -630,7 +640,8 @@ export default function InspirationCreateScreen() {
           />
 
           <ThemedText style={styles.fieldLabel}>Telefon</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="InspirationCreateScreen-input-10"
             style={[styles.input, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
             value={inquiryPhone}
             onChangeText={setInquiryPhone}
@@ -642,7 +653,8 @@ export default function InspirationCreateScreen() {
           <ThemedText style={styles.fieldLabel}>Handlingsknapp</ThemedText>
           <View style={styles.priceRow}>
             <View style={styles.priceField}>
-              <TextInput
+              <PersistentTextInput
+                draftKey="InspirationCreateScreen-input-11"
                 style={[styles.input, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
                 value={ctaLabel}
                 onChangeText={setCtaLabel}
@@ -651,7 +663,8 @@ export default function InspirationCreateScreen() {
               />
             </View>
             <View style={styles.priceField}>
-              <TextInput
+              <PersistentTextInput
+                draftKey="InspirationCreateScreen-input-12"
                 style={[styles.input, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
                 value={ctaUrl}
                 onChangeText={setCtaUrl}

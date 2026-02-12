@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -13,39 +13,36 @@ import { EvendiIcon } from "@/components/EvendiIcon";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-
+import PersistentTextInput from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 const CULTURAL_TRADITIONS = [
-  { key: "norway", name: "Norge", color: "#BA2020" },
-  { key: "sweden", name: "Sverige", color: "#006AA7" },
-  { key: "denmark", name: "Danmark", color: "#C60C30" },
-  { key: "hindu", name: "Hindu", color: "#FF6B35" },
-  { key: "sikh", name: "Sikh", color: "#FF9933" },
-  { key: "muslim", name: "Muslim", color: "#1B5E20" },
-  { key: "jewish", name: "Jødisk", color: "#1565C0" },
-  { key: "chinese", name: "Kinesisk", color: "#D32F2F" },
-  { key: "pakistansk", name: "Pakistansk", color: "#01411C" },
-  { key: "tyrkisk", name: "Tyrkisk", color: "#E30A17" },
-  { key: "arabisk", name: "Arabisk", color: "#006C35" },
-  { key: "somalisk", name: "Somalisk", color: "#4189DD" },
-  { key: "etiopisk", name: "Etiopisk", color: "#009B3A" },
-  { key: "nigeriansk", name: "Nigeriansk", color: "#008751" },
-  { key: "libanesisk", name: "Libanesisk", color: "#EE161F" },
-  { key: "filipino", name: "Filippinsk", color: "#0038A8" },
-  { key: "koreansk", name: "Koreansk", color: "#003478" },
-  { key: "thai", name: "Thai", color: "#A51931" },
-  { key: "iransk", name: "Iransk / Persisk", color: "#239F40" },
+  { key: "norway", name: "Norge" },
+  { key: "sweden", name: "Sverige" },
+  { key: "denmark", name: "Danmark" },
+  { key: "hindu", name: "Hindu" },
+  { key: "sikh", name: "Sikh" },
+  { key: "muslim", name: "Muslim" },
+  { key: "jewish", name: "Jødisk" },
+  { key: "chinese", name: "Kinesisk" },
+  { key: "pakistansk", name: "Pakistansk" },
+  { key: "tyrkisk", name: "Tyrkisk" },
+  { key: "arabisk", name: "Arabisk" },
+  { key: "somalisk", name: "Somalisk" },
+  { key: "etiopisk", name: "Etiopisk" },
+  { key: "nigeriansk", name: "Nigeriansk" },
+  { key: "libanesisk", name: "Libanesisk" },
+  { key: "filipino", name: "Filippinsk" },
+  { key: "koreansk", name: "Koreansk" },
+  { key: "thai", name: "Thai" },
+  { key: "iransk", name: "Iransk / Persisk" },
 ];
-
 interface VendorProfile {
   id: string;
   email: string;
@@ -62,7 +59,6 @@ interface VendorProfile {
   status: string;
   category: { id: string; name: string } | null;
 }
-
 interface CategoryDetails {
   // General fields
   yearsExperience?: number | null;
@@ -132,16 +128,20 @@ interface CategoryDetails {
   plannerVendorNetwork?: boolean | null;
   plannerBudgetManagement?: boolean | null;
 }
-
 interface Props {
   navigation: NativeStackNavigationProp<any>;
 }
-
 export default function VendorProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const culturalTraditions = useMemo(() => {
+    const palette = [theme.accent, theme.success, theme.warning, theme.error, theme.textSecondary];
+    return CULTURAL_TRADITIONS.map((tradition, index) => ({
+      ...tradition,
+      color: palette[index % palette.length],
+    }));
+  }, [theme.accent, theme.success, theme.warning, theme.error, theme.textSecondary]);
   const queryClient = useQueryClient();
-
   const [businessName, setBusinessName] = useState("");
   const [organizationNumber, setOrganizationNumber] = useState("");
   const [description, setDescription] = useState("");
@@ -156,11 +156,9 @@ export default function VendorProfileScreen({ navigation }: Props) {
   // Category-specific details state
   const [categoryDetails, setCategoryDetails] = useState<CategoryDetails>({});
   const [activeSection, setActiveSection] = useState<"basic" | "category" | "general">("basic");
-
   useEffect(() => {
     loadSession();
   }, []);
-
   const loadSession = async () => {
     const sessionData = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
     if (sessionData) {
@@ -170,7 +168,6 @@ export default function VendorProfileScreen({ navigation }: Props) {
       navigation.replace("VendorLogin");
     }
   };
-
   const { data: profile, isLoading } = useQuery<VendorProfile>({
     queryKey: ["/api/vendor/profile"],
     queryFn: async () => {
@@ -185,7 +182,6 @@ export default function VendorProfileScreen({ navigation }: Props) {
     },
     enabled: !!sessionToken,
   });
-
   // Fetch category-specific details
   const { data: categoryDetailsData } = useQuery<{ details: CategoryDetails | null; categoryName: string | null }>({
     queryKey: ["/api/vendor/category-details"],
@@ -201,7 +197,6 @@ export default function VendorProfileScreen({ navigation }: Props) {
     },
     enabled: !!sessionToken,
   });
-
   // Pre-fill form when profile loads
   useEffect(() => {
     if (profile) {
@@ -216,14 +211,12 @@ export default function VendorProfileScreen({ navigation }: Props) {
       setCulturalExpertise(profile.culturalExpertise || []);
     }
   }, [profile]);
-
   // Pre-fill category details when loaded
   useEffect(() => {
     if (categoryDetailsData?.details) {
       setCategoryDetails(categoryDetailsData.details);
     }
   }, [categoryDetailsData]);
-
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!sessionToken) throw new Error("Ikke innlogget");
@@ -272,7 +265,6 @@ export default function VendorProfileScreen({ navigation }: Props) {
       showToast(error.message);
     },
   });
-
   // Save category details
   const saveCategoryDetailsMutation = useMutation({
     mutationFn: async () => {
@@ -303,7 +295,6 @@ export default function VendorProfileScreen({ navigation }: Props) {
       showToast(error.message);
     },
   });
-
   const handleSave = () => {
     if (!businessName.trim()) {
       showToast("Bedriftsnavn er påkrevd");
@@ -311,18 +302,14 @@ export default function VendorProfileScreen({ navigation }: Props) {
     }
     saveMutation.mutate();
   };
-
   const handleSaveCategoryDetails = () => {
     saveCategoryDetailsMutation.mutate();
   };
-
   const updateCategoryDetail = (key: keyof CategoryDetails, value: any) => {
     setCategoryDetails(prev => ({ ...prev, [key]: value }));
   };
-
   // Helper to render category-specific fields based on vendor category
   const getCategoryName = () => profile?.category?.name || categoryDetailsData?.categoryName || "";
-
   // Navigate to detailed category screen
   const navigateToCategoryDetails = () => {
     const category = getCategoryName();
@@ -345,12 +332,10 @@ export default function VendorProfileScreen({ navigation }: Props) {
       navigation.navigate(screenName as any);
     }
   };
-
   const hasCategoryDetailsScreen = () => {
     const category = getCategoryName();
     return ["Venue", "Fotograf", "Videograf", "Blomster", "Catering", "Musikk", "DJ", "Kake", "Hår & Makeup", "Transport", "Planlegger", "Koordinator"].includes(category);
   };
-
   const renderCategoryFields = () => {
     const category = getCategoryName();
     
@@ -360,7 +345,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
           <>
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Kapasitet (min gjester)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorProfileScreen-input-1"
                 style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                 value={categoryDetails.venueCapacityMin?.toString() || ""}
                 onChangeText={(v) => updateCategoryDetail("venueCapacityMin", v ? parseInt(v) : null)}
@@ -371,7 +357,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
             </View>
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Kapasitet (maks gjester)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorProfileScreen-input-2"
                 style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                 value={categoryDetails.venueCapacityMax?.toString() || ""}
                 onChangeText={(v) => updateCategoryDetail("venueCapacityMax", v ? parseInt(v) : null)}
@@ -380,19 +367,20 @@ export default function VendorProfileScreen({ navigation }: Props) {
                 keyboardType="number-pad"
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Overnatting tilgjengelig</ThemedText>
               <Switch
                 value={categoryDetails.venueHasAccommodation || false}
                 onValueChange={(v) => updateCategoryDetail("venueHasAccommodation", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.venueHasAccommodation ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.venueHasAccommodation ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             {categoryDetails.venueHasAccommodation && (
               <View style={styles.inputGroup}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Antall sengeplasser</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VendorProfileScreen-input-3"
                   style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                   value={categoryDetails.venueAccommodationCapacity?.toString() || ""}
                   onChangeText={(v) => updateCategoryDetail("venueAccommodationCapacity", v ? parseInt(v) : null)}
@@ -402,19 +390,20 @@ export default function VendorProfileScreen({ navigation }: Props) {
                 />
               </View>
             )}
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Parkering</ThemedText>
               <Switch
                 value={categoryDetails.venueHasParking || false}
                 onValueChange={(v) => updateCategoryDetail("venueHasParking", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.venueHasParking ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.venueHasParking ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             {categoryDetails.venueHasParking && (
               <View style={styles.inputGroup}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Antall p-plasser</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VendorProfileScreen-input-4"
                   style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                   value={categoryDetails.venueParkingSpaces?.toString() || ""}
                   onChangeText={(v) => updateCategoryDetail("venueParkingSpaces", v ? parseInt(v) : null)}
@@ -424,40 +413,40 @@ export default function VendorProfileScreen({ navigation }: Props) {
                 />
               </View>
             )}
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Catering inkludert</ThemedText>
               <Switch
                 value={categoryDetails.venueHasCatering || false}
                 onValueChange={(v) => updateCategoryDetail("venueHasCatering", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.venueHasCatering ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.venueHasCatering ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Utendørs område</ThemedText>
               <Switch
                 value={categoryDetails.venueOutdoorArea || false}
                 onValueChange={(v) => updateCategoryDetail("venueOutdoorArea", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.venueOutdoorArea ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.venueOutdoorArea ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Universell utforming</ThemedText>
               <Switch
                 value={categoryDetails.venueAccessibility || false}
                 onValueChange={(v) => updateCategoryDetail("venueAccessibility", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.venueAccessibility ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.venueAccessibility ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Skjenkebevilling</ThemedText>
               <Switch
                 value={categoryDetails.venueAlcoholLicense || false}
                 onValueChange={(v) => updateCategoryDetail("venueAlcoholLicense", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.venueAlcoholLicense ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.venueAlcoholLicense ? theme.accent : theme.backgroundSecondary}
               />
             </View>
           </>
@@ -469,7 +458,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
           <>
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Leveringstid (dager)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorProfileScreen-input-5"
                 style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                 value={categoryDetails.photoDeliveryDays?.toString() || ""}
                 onChangeText={(v) => updateCategoryDetail("photoDeliveryDays", v ? parseInt(v) : null)}
@@ -478,55 +468,56 @@ export default function VendorProfileScreen({ navigation }: Props) {
                 keyboardType="number-pad"
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>RAW-filer inkludert</ThemedText>
               <Switch
                 value={categoryDetails.photoIncludesRaw || false}
                 onValueChange={(v) => updateCategoryDetail("photoIncludesRaw", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.photoIncludesRaw ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.photoIncludesRaw ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Album inkludert</ThemedText>
               <Switch
                 value={categoryDetails.photoIncludesAlbum || false}
                 onValueChange={(v) => updateCategoryDetail("photoIncludesAlbum", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.photoIncludesAlbum ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.photoIncludesAlbum ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Second shooter tilgjengelig</ThemedText>
               <Switch
                 value={categoryDetails.photoSecondShooter || false}
                 onValueChange={(v) => updateCategoryDetail("photoSecondShooter", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.photoSecondShooter ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.photoSecondShooter ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Dronefoto/-video</ThemedText>
               <Switch
                 value={categoryDetails.photoDroneAvailable || false}
                 onValueChange={(v) => updateCategoryDetail("photoDroneAvailable", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.photoDroneAvailable ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.photoDroneAvailable ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Reise inkludert</ThemedText>
               <Switch
                 value={categoryDetails.photoTravelIncluded || false}
                 onValueChange={(v) => updateCategoryDetail("photoTravelIncluded", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.photoTravelIncluded ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.photoTravelIncluded ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             {!categoryDetails.photoTravelIncluded && (
               <View style={styles.inputGroup}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Reiseradius (km) uten tillegg</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VendorProfileScreen-input-6"
                   style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                   value={categoryDetails.photoTravelRadius?.toString() || ""}
                   onChangeText={(v) => updateCategoryDetail("photoTravelRadius", v ? parseInt(v) : null)}
@@ -542,49 +533,49 @@ export default function VendorProfileScreen({ navigation }: Props) {
       case "Blomster":
         return (
           <>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Levering inkludert</ThemedText>
               <Switch
                 value={categoryDetails.floristDeliveryAvailable || false}
                 onValueChange={(v) => updateCategoryDetail("floristDeliveryAvailable", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.floristDeliveryAvailable ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.floristDeliveryAvailable ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Oppsett inkludert</ThemedText>
               <Switch
                 value={categoryDetails.floristSetupIncluded || false}
                 onValueChange={(v) => updateCategoryDetail("floristSetupIncluded", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.floristSetupIncluded ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.floristSetupIncluded ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Utleie av vaser/dekor</ThemedText>
               <Switch
                 value={categoryDetails.floristRentalAvailable || false}
                 onValueChange={(v) => updateCategoryDetail("floristRentalAvailable", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.floristRentalAvailable ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.floristRentalAvailable ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Sesongbaserte blomster</ThemedText>
               <Switch
                 value={categoryDetails.floristSeasonalFlowers || false}
                 onValueChange={(v) => updateCategoryDetail("floristSeasonalFlowers", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.floristSeasonalFlowers ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.floristSeasonalFlowers ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Bukettpreservering</ThemedText>
               <Switch
                 value={categoryDetails.floristPreservationService || false}
                 onValueChange={(v) => updateCategoryDetail("floristPreservationService", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.floristPreservationService ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.floristPreservationService ? theme.accent : theme.backgroundSecondary}
               />
             </View>
           </>
@@ -595,7 +586,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
           <>
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Minimum antall gjester</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorProfileScreen-input-7"
                 style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                 value={categoryDetails.cateringMinGuests?.toString() || ""}
                 onChangeText={(v) => updateCategoryDetail("cateringMinGuests", v ? parseInt(v) : null)}
@@ -606,7 +598,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
             </View>
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Maksimum antall gjester</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorProfileScreen-input-8"
                 style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                 value={categoryDetails.cateringMaxGuests?.toString() || ""}
                 onChangeText={(v) => updateCategoryDetail("cateringMaxGuests", v ? parseInt(v) : null)}
@@ -615,40 +608,40 @@ export default function VendorProfileScreen({ navigation }: Props) {
                 keyboardType="number-pad"
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Serveringspersonale inkludert</ThemedText>
               <Switch
                 value={categoryDetails.cateringStaffIncluded || false}
                 onValueChange={(v) => updateCategoryDetail("cateringStaffIncluded", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.cateringStaffIncluded ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.cateringStaffIncluded ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Utstyr inkludert</ThemedText>
               <Switch
                 value={categoryDetails.cateringEquipmentIncluded || false}
                 onValueChange={(v) => updateCategoryDetail("cateringEquipmentIncluded", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.cateringEquipmentIncluded ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.cateringEquipmentIncluded ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Smaksprøver tilgjengelig</ThemedText>
               <Switch
                 value={categoryDetails.cateringTastingAvailable || false}
                 onValueChange={(v) => updateCategoryDetail("cateringTastingAvailable", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.cateringTastingAvailable ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.cateringTastingAvailable ? theme.accent : theme.backgroundSecondary}
               />
             </View>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Drikkeservering</ThemedText>
               <Switch
                 value={categoryDetails.cateringAlcoholService || false}
                 onValueChange={(v) => updateCategoryDetail("cateringAlcoholService", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.cateringAlcoholService ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.cateringAlcoholService ? theme.accent : theme.backgroundSecondary}
               />
             </View>
           </>
@@ -657,13 +650,13 @@ export default function VendorProfileScreen({ navigation }: Props) {
       case "Musikk":
         return (
           <>
-            <View style={styles.switchRow}>
+            <View style={[styles.switchRow, { borderBottomColor: theme.border }]}> 
               <ThemedText style={[styles.switchLabel, { color: theme.text }]}>Lydutstyr inkludert</ThemedText>
               <Switch
                 value={categoryDetails.musicEquipmentIncluded || false}
                 onValueChange={(v) => updateCategoryDetail("musicEquipmentIncluded", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.musicEquipmentIncluded ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.musicEquipmentIncluded ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -671,8 +664,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.musicLightingIncluded || false}
                 onValueChange={(v) => updateCategoryDetail("musicLightingIncluded", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.musicLightingIncluded ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.musicLightingIncluded ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -680,8 +673,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.musicMcServices || false}
                 onValueChange={(v) => updateCategoryDetail("musicMcServices", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.musicMcServices ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.musicMcServices ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -689,8 +682,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.musicPlaylistCustom || false}
                 onValueChange={(v) => updateCategoryDetail("musicPlaylistCustom", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.musicPlaylistCustom ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.musicPlaylistCustom ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -698,8 +691,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.musicLivePerformance || false}
                 onValueChange={(v) => updateCategoryDetail("musicLivePerformance", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.musicLivePerformance ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.musicLivePerformance ? theme.accent : theme.backgroundSecondary}
               />
             </View>
           </>
@@ -713,8 +706,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.cakeDeliveryIncluded || false}
                 onValueChange={(v) => updateCategoryDetail("cakeDeliveryIncluded", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.cakeDeliveryIncluded ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.cakeDeliveryIncluded ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -722,8 +715,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.cakeTastingAvailable || false}
                 onValueChange={(v) => updateCategoryDetail("cakeTastingAvailable", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.cakeTastingAvailable ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.cakeTastingAvailable ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -731,8 +724,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.cakeDessertsAvailable || false}
                 onValueChange={(v) => updateCategoryDetail("cakeDessertsAvailable", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.cakeDessertsAvailable ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.cakeDessertsAvailable ? theme.accent : theme.backgroundSecondary}
               />
             </View>
           </>
@@ -746,8 +739,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.beautyTrialIncluded || false}
                 onValueChange={(v) => updateCategoryDetail("beautyTrialIncluded", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.beautyTrialIncluded ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.beautyTrialIncluded ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -755,8 +748,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.beautyBridalParty || false}
                 onValueChange={(v) => updateCategoryDetail("beautyBridalParty", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.beautyBridalParty ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.beautyBridalParty ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -764,8 +757,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.beautyOnLocation || false}
                 onValueChange={(v) => updateCategoryDetail("beautyOnLocation", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.beautyOnLocation ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.beautyOnLocation ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -773,8 +766,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.beautyLashesAvailable || false}
                 onValueChange={(v) => updateCategoryDetail("beautyLashesAvailable", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.beautyLashesAvailable ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.beautyLashesAvailable ? theme.accent : theme.backgroundSecondary}
               />
             </View>
           </>
@@ -785,7 +778,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
           <>
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Kapasitet (personer)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorProfileScreen-input-9"
                 style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                 value={categoryDetails.transportCapacity?.toString() || ""}
                 onChangeText={(v) => updateCategoryDetail("transportCapacity", v ? parseInt(v) : null)}
@@ -799,8 +793,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.transportDecorationIncluded || false}
                 onValueChange={(v) => updateCategoryDetail("transportDecorationIncluded", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.transportDecorationIncluded ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.transportDecorationIncluded ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -808,8 +802,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.transportChampagneIncluded || false}
                 onValueChange={(v) => updateCategoryDetail("transportChampagneIncluded", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.transportChampagneIncluded ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.transportChampagneIncluded ? theme.accent : theme.backgroundSecondary}
               />
             </View>
           </>
@@ -823,8 +817,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.plannerFullService || false}
                 onValueChange={(v) => updateCategoryDetail("plannerFullService", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.plannerFullService ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.plannerFullService ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -832,8 +826,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.plannerPartialService || false}
                 onValueChange={(v) => updateCategoryDetail("plannerPartialService", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.plannerPartialService ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.plannerPartialService ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -841,8 +835,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.plannerDayOfCoordination || false}
                 onValueChange={(v) => updateCategoryDetail("plannerDayOfCoordination", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.plannerDayOfCoordination ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.plannerDayOfCoordination ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -850,8 +844,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.plannerVendorNetwork || false}
                 onValueChange={(v) => updateCategoryDetail("plannerVendorNetwork", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.plannerVendorNetwork ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.plannerVendorNetwork ? theme.accent : theme.backgroundSecondary}
               />
             </View>
             <View style={styles.switchRow}>
@@ -859,8 +853,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               <Switch
                 value={categoryDetails.plannerBudgetManagement || false}
                 onValueChange={(v) => updateCategoryDetail("plannerBudgetManagement", v)}
-                trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-                thumbColor={categoryDetails.plannerBudgetManagement ? Colors.dark.accent : theme.backgroundSecondary}
+                trackColor={{ false: theme.border, true: theme.accent + "60" }}
+                thumbColor={categoryDetails.plannerBudgetManagement ? theme.accent : theme.backgroundSecondary}
               />
             </View>
           </>
@@ -874,13 +868,13 @@ export default function VendorProfileScreen({ navigation }: Props) {
         );
     }
   };
-
   // Render general business details (applicable to all categories)
   const renderGeneralFields = () => (
     <>
       <View style={styles.inputGroup}>
         <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Antall års erfaring</ThemedText>
-        <TextInput
+        <PersistentTextInput
+          draftKey="VendorProfileScreen-input-10"
           style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
           value={categoryDetails.yearsExperience?.toString() || ""}
           onChangeText={(v) => updateCategoryDetail("yearsExperience", v ? parseInt(v) : null)}
@@ -891,7 +885,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
       </View>
       <View style={styles.inputGroup}>
         <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Antall arrangementer gjennomført</ThemedText>
-        <TextInput
+        <PersistentTextInput
+          draftKey="VendorProfileScreen-input-11"
           style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
           value={categoryDetails.weddingsCompleted?.toString() || ""}
           onChangeText={(v) => updateCategoryDetail("weddingsCompleted", v ? parseInt(v) : null)}
@@ -905,8 +900,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
         <Switch
           value={categoryDetails.insuranceVerified || false}
           onValueChange={(v) => updateCategoryDetail("insuranceVerified", v)}
-          trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-          thumbColor={categoryDetails.insuranceVerified ? Colors.dark.accent : theme.backgroundSecondary}
+          trackColor={{ false: theme.border, true: theme.accent + "60" }}
+          thumbColor={categoryDetails.insuranceVerified ? theme.accent : theme.backgroundSecondary}
         />
       </View>
       <View style={styles.switchRow}>
@@ -914,8 +909,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
         <Switch
           value={categoryDetails.contractIncluded || false}
           onValueChange={(v) => updateCategoryDetail("contractIncluded", v)}
-          trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-          thumbColor={categoryDetails.contractIncluded ? Colors.dark.accent : theme.backgroundSecondary}
+          trackColor={{ false: theme.border, true: theme.accent + "60" }}
+          thumbColor={categoryDetails.contractIncluded ? theme.accent : theme.backgroundSecondary}
         />
       </View>
       <View style={styles.switchRow}>
@@ -923,14 +918,15 @@ export default function VendorProfileScreen({ navigation }: Props) {
         <Switch
           value={categoryDetails.depositRequired || false}
           onValueChange={(v) => updateCategoryDetail("depositRequired", v)}
-          trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-          thumbColor={categoryDetails.depositRequired ? Colors.dark.accent : theme.backgroundSecondary}
+          trackColor={{ false: theme.border, true: theme.accent + "60" }}
+          thumbColor={categoryDetails.depositRequired ? theme.accent : theme.backgroundSecondary}
         />
       </View>
       {categoryDetails.depositRequired && (
         <View style={styles.inputGroup}>
           <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Depositum (%)</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="VendorProfileScreen-input-12"
             style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
             value={categoryDetails.depositPercentage?.toString() || ""}
             onChangeText={(v) => updateCategoryDetail("depositPercentage", v ? parseInt(v) : null)}
@@ -942,7 +938,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
       )}
       <View style={styles.inputGroup}>
         <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Avbestillingsvilkår</ThemedText>
-        <TextInput
+        <PersistentTextInput
+          draftKey="VendorProfileScreen-input-13"
           style={[styles.textArea, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
           value={categoryDetails.cancellationPolicy || ""}
           onChangeText={(v) => updateCategoryDetail("cancellationPolicy", v || null)}
@@ -955,16 +952,14 @@ export default function VendorProfileScreen({ navigation }: Props) {
       </View>
     </>
   );
-
   const isValid = businessName.trim().length >= 2;
-
   if (isLoading || !profile) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
         <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
           <View style={styles.headerContent}>
             <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}>
-              <EvendiIcon name="user" size={20} color="#FFFFFF" />
+              <EvendiIcon name="user" size={20} color={theme.buttonText} />
             </View>
             <View style={styles.headerTextContainer}>
               <ThemedText style={[styles.headerTitle, { color: theme.text }]}>Min profil</ThemedText>
@@ -987,13 +982,12 @@ export default function VendorProfileScreen({ navigation }: Props) {
       </View>
     );
   }
-
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
         <View style={styles.headerContent}>
           <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}>
-            <EvendiIcon name="user" size={20} color="#FFFFFF" />
+              <EvendiIcon name="user" size={20} color={theme.buttonText} />
           </View>
           <View style={styles.headerTextContainer}>
             <ThemedText style={[styles.headerTitle, { color: theme.text }]}>Min profil</ThemedText>
@@ -1010,7 +1004,6 @@ export default function VendorProfileScreen({ navigation }: Props) {
           <EvendiIcon name="x" size={20} color={theme.textSecondary} />
         </Pressable>
       </View>
-
       <KeyboardAwareScrollViewCompat
         style={{ flex: 1 }}
         contentContainerStyle={[
@@ -1025,11 +1018,11 @@ export default function VendorProfileScreen({ navigation }: Props) {
             <ThemedText style={[styles.statusLabel, { color: theme.textSecondary }]}>Status:</ThemedText>
             <View style={[
               styles.statusBadge, 
-              { backgroundColor: profile.status === "approved" ? "#4CAF5020" : profile.status === "pending" ? "#FF980020" : "#EF535020" }
+              { backgroundColor: profile.status === "approved" ? theme.success + "20" : profile.status === "pending" ? theme.warning + "20" : theme.error + "20" }
             ]}>
               <ThemedText style={[
                 styles.statusText, 
-                { color: profile.status === "approved" ? "#4CAF50" : profile.status === "pending" ? "#FF9800" : "#EF5350" }
+                { color: profile.status === "approved" ? theme.success : profile.status === "pending" ? theme.warning : theme.error }
               ]}>
                 {profile.status === "approved" ? "Godkjent" : profile.status === "pending" ? "Venter på godkjenning" : "Avvist"}
               </ThemedText>
@@ -1046,7 +1039,6 @@ export default function VendorProfileScreen({ navigation }: Props) {
             <ThemedText style={[styles.emailText, { color: theme.text }]}>{profile.email}</ThemedText>
           </View>
         </View>
-
         {/* Business Information */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}>
@@ -1055,12 +1047,12 @@ export default function VendorProfileScreen({ navigation }: Props) {
             </View>
             <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Bedriftsinformasjon</ThemedText>
           </View>
-
           <View style={styles.inputGroup}>
-            <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
-              Bedriftsnavn <ThemedText style={{ color: "#EF5350" }}>*</ThemedText>
+            <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}> 
+              Bedriftsnavn <ThemedText style={{ color: theme.error }}>*</ThemedText>
             </ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="VendorProfileScreen-input-14"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={businessName}
               onChangeText={setBusinessName}
@@ -1068,10 +1060,10 @@ export default function VendorProfileScreen({ navigation }: Props) {
               placeholderTextColor={theme.textMuted}
             />
           </View>
-
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Organisasjonsnummer</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="VendorProfileScreen-input-15"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={organizationNumber}
               onChangeText={setOrganizationNumber}
@@ -1080,10 +1072,10 @@ export default function VendorProfileScreen({ navigation }: Props) {
               keyboardType="number-pad"
             />
           </View>
-
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Beskrivelse</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="VendorProfileScreen-input-16"
               style={[styles.textArea, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={description}
               onChangeText={setDescription}
@@ -1095,7 +1087,6 @@ export default function VendorProfileScreen({ navigation }: Props) {
             />
           </View>
         </View>
-
         {/* Contact Information */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}>
@@ -1104,10 +1095,10 @@ export default function VendorProfileScreen({ navigation }: Props) {
             </View>
             <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Kontaktinformasjon</ThemedText>
           </View>
-
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Sted / Område</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="VendorProfileScreen-input-17"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={location}
               onChangeText={setLocation}
@@ -1115,10 +1106,10 @@ export default function VendorProfileScreen({ navigation }: Props) {
               placeholderTextColor={theme.textMuted}
             />
           </View>
-
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Telefon</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="VendorProfileScreen-input-18"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={phone}
               onChangeText={setPhone}
@@ -1127,10 +1118,10 @@ export default function VendorProfileScreen({ navigation }: Props) {
               keyboardType="phone-pad"
             />
           </View>
-
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Nettside</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="VendorProfileScreen-input-19"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={website}
               onChangeText={setWebsite}
@@ -1141,7 +1132,6 @@ export default function VendorProfileScreen({ navigation }: Props) {
             />
           </View>
         </View>
-
         {/* Pricing & Reviews */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}>
@@ -1150,10 +1140,10 @@ export default function VendorProfileScreen({ navigation }: Props) {
             </View>
             <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Priser & Anmeldelser</ThemedText>
           </View>
-
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Prisklasse</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="VendorProfileScreen-input-20"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={priceRange}
               onChangeText={setPriceRange}
@@ -1161,10 +1151,10 @@ export default function VendorProfileScreen({ navigation }: Props) {
               placeholderTextColor={theme.textMuted}
             />
           </View>
-
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Google anmeldelser URL</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="VendorProfileScreen-input-21"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={googleReviewUrl}
               onChangeText={setGoogleReviewUrl}
@@ -1175,7 +1165,6 @@ export default function VendorProfileScreen({ navigation }: Props) {
             />
           </View>
         </View>
-
         {/* Cultural Expertise */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}>
@@ -1184,13 +1173,11 @@ export default function VendorProfileScreen({ navigation }: Props) {
             </View>
             <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Kulturell ekspertise</ThemedText>
           </View>
-
           <ThemedText style={[styles.inputLabel, { color: theme.textSecondary, marginBottom: Spacing.md }]}>
             Velg kulturer og tradisjoner du har erfaring med
           </ThemedText>
-
           <View style={styles.tagsContainer}>
-            {CULTURAL_TRADITIONS.map((tradition) => {
+            {culturalTraditions.map((tradition) => {
               const isSelected = culturalExpertise.includes(tradition.key);
               return (
                 <Pressable
@@ -1212,12 +1199,12 @@ export default function VendorProfileScreen({ navigation }: Props) {
                   ]}
                 >
                   {isSelected && (
-                    <EvendiIcon name="check-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <EvendiIcon name="check-circle" size={14} color={theme.buttonText} style={{ marginRight: 6 }} />
                   )}
                   <ThemedText
                     style={[
                       styles.tagText,
-                      { color: isSelected ? "#FFFFFF" : theme.text },
+                      { color: isSelected ? theme.buttonText : theme.text },
                     ]}
                   >
                     {tradition.name}
@@ -1227,29 +1214,29 @@ export default function VendorProfileScreen({ navigation }: Props) {
             })}
           </View>
         </View>
-
         {/* Save Button */}
         <Pressable
           onPress={handleSave}
           disabled={!isValid || saveMutation.isPending}
           style={({ pressed }) => [
             styles.submitBtn,
-            { backgroundColor: isValid ? theme.accent : theme.border },
+            { backgroundColor: isValid ? theme.accent : theme.border, shadowColor: theme.accent },
             pressed && isValid && { opacity: 0.9, transform: [{ scale: 0.98 }] },
           ]}
         >
           {saveMutation.isPending ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={theme.buttonText} />
           ) : (
             <>
               <View style={styles.submitBtnIcon}>
-                <EvendiIcon name="check" size={16} color="#FFFFFF" />
+                <EvendiIcon name="check" size={16} color={theme.buttonText} />
               </View>
-              <ThemedText style={styles.submitBtnText}>Lagre endringer</ThemedText>
+              <ThemedText style={[styles.submitBtnText, { color: theme.buttonText }]}>
+                Lagre endringer
+              </ThemedText>
             </>
           )}
         </Pressable>
-
         {/* General Business Details */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, marginTop: Spacing.xl }]}>
           <View style={styles.sectionHeader}>
@@ -1258,10 +1245,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
             </View>
             <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Generell forretningsinformasjon</ThemedText>
           </View>
-
           {renderGeneralFields()}
         </View>
-
         {/* Category-Specific Details */}
         {profile.category && (
           <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
@@ -1303,11 +1288,9 @@ export default function VendorProfileScreen({ navigation }: Props) {
                 )}
               </View>
             </View>
-
             {renderCategoryFields()}
           </View>
         )}
-
         {/* Advanced Category Details - Navigate to full screen */}
         {profile.category && hasCategoryDetailsScreen() && (
           <Pressable
@@ -1334,25 +1317,26 @@ export default function VendorProfileScreen({ navigation }: Props) {
             <EvendiIcon name="chevron-right" size={20} color={theme.accent} />
           </Pressable>
         )}
-
         {/* Save Category Details Button */}
         <Pressable
           onPress={handleSaveCategoryDetails}
           disabled={saveCategoryDetailsMutation.isPending}
           style={({ pressed }) => [
             styles.submitBtn,
-            { backgroundColor: theme.accent },
+            { backgroundColor: theme.accent, shadowColor: theme.accent },
             pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
           ]}
         >
           {saveCategoryDetailsMutation.isPending ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={theme.buttonText} />
           ) : (
             <>
               <View style={styles.submitBtnIcon}>
-                <EvendiIcon name="save" size={16} color="#FFFFFF" />
+                <EvendiIcon name="save" size={16} color={theme.buttonText} />
               </View>
-              <ThemedText style={styles.submitBtnText}>Lagre kategori-detaljer</ThemedText>
+              <ThemedText style={[styles.submitBtnText, { color: theme.buttonText }]}>
+                Lagre kategori-detaljer
+              </ThemedText>
             </>
           )}
         </Pressable>
@@ -1360,7 +1344,6 @@ export default function VendorProfileScreen({ navigation }: Props) {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
@@ -1499,7 +1482,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg,
     marginTop: Spacing.md,
     gap: Spacing.sm,
-    shadowColor: "#C9A962",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -1516,7 +1498,6 @@ const styles = StyleSheet.create({
   submitBtnText: {
     fontSize: 17,
     fontWeight: "700",
-    color: "#FFFFFF",
     letterSpacing: 0.2,
   },
   switchRow: {
@@ -1526,7 +1507,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     marginBottom: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.06)",
+    borderBottomColor: "transparent",
   },
   switchLabel: {
     fontSize: 15,

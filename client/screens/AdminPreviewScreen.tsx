@@ -25,6 +25,7 @@ import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { AdminHeader } from "@/components/AdminHeader";
 import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 interface PreviewMode {
   type: "couple" | "vendor";
@@ -284,7 +285,8 @@ export default function AdminPreviewScreen({ route }: { route: RouteProp<RootSta
             </ThemedText>
           </View>
 
-          <TextInput
+          <PersistentTextInput
+            draftKey="AdminPreviewScreen-input-1"
             style={[
               styles.searchInput,
               {

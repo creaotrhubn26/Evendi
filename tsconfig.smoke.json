@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "esModuleInterop": true,
+    "jsx": "react-native",
+    "target": "es2017",
+    "downlevelIteration": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "typeRoots": ["./client/types", "./node_modules/@types"],
+    "paths": {
+      "@/*": ["./client/*"],
+      "@shared/*": ["./shared/*"]
+    },
+    "types": ["node", "react-native-svg"]
+  },
+  "include": ["client/screens/BudgetScenariosScreen.tsx"],
+  "exclude": ["node_modules", "build", "dist", "**/*.test.ts"]
+}

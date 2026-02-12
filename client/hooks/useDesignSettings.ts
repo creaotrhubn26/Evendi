@@ -6,7 +6,14 @@ export interface DesignSettings {
   backgroundColor: string;
   appName: string;
   appTagline: string;
+  appTaglineEn: string;
   logoUrl: string;
+  logoUseHeader: boolean;
+  logoUseSplash: boolean;
+  logoUseAbout: boolean;
+  logoUseAuth: boolean;
+  logoUseAdminHeader: boolean;
+  logoUseDocs: boolean;
   darkMode: boolean;
   fontFamily: string;
   fontSize: string;
@@ -20,8 +27,15 @@ const DEFAULT_SETTINGS: DesignSettings = {
   primaryColor: "#1E6BFF",
   backgroundColor: "#0F1F3A",
   appName: "Evendi",
-  appTagline: "Din arrangementsplanlegger",
+  appTagline: "Ditt arrangement. Perfekt Match.",
+  appTaglineEn: "Your Event. Perfectly Matched.",
   logoUrl: "", // Will be set from backend or use bundled logo in HeaderTitle
+  logoUseHeader: true,
+  logoUseSplash: true,
+  logoUseAbout: true,
+  logoUseAuth: true,
+  logoUseAdminHeader: true,
+  logoUseDocs: true,
   darkMode: true,
   fontFamily: "System",
   fontSize: "16",
@@ -36,7 +50,7 @@ export function useDesignSettings() {
     queryKey: ["design-settings"],
     queryFn: async () => {
       try {
-        const url = new URL("/api/admin/settings", getApiUrl());
+        const url = new URL("/api/app-settings", getApiUrl());
         const response = await fetch(url.toString());
         if (!response.ok) {
           console.log("Failed to fetch design settings:", response.status);
@@ -50,7 +64,8 @@ export function useDesignSettings() {
         return null;
       }
     },
-    staleTime: 1000 * 60 * 60, // 1 hour
+    staleTime: 0,
+    refetchOnMount: "always",
     retry: 1,
   });
 
@@ -72,8 +87,29 @@ export function useDesignSettings() {
         case "app_tagline":
           settings.appTagline = setting.value;
           break;
+        case "app_tagline_en":
+          settings.appTaglineEn = setting.value;
+          break;
         case "app_logo_url":
           settings.logoUrl = setting.value;
+          break;
+        case "logo_use_header":
+          settings.logoUseHeader = setting.value === "true";
+          break;
+        case "logo_use_splash":
+          settings.logoUseSplash = setting.value === "true";
+          break;
+        case "logo_use_about":
+          settings.logoUseAbout = setting.value === "true";
+          break;
+        case "logo_use_auth":
+          settings.logoUseAuth = setting.value === "true";
+          break;
+        case "logo_use_admin_header":
+          settings.logoUseAdminHeader = setting.value === "true";
+          break;
+        case "logo_use_docs":
+          settings.logoUseDocs = setting.value === "true";
           break;
         case "design_dark_mode":
           settings.darkMode = setting.value === "true";

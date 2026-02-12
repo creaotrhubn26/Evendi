@@ -12,42 +12,39 @@ import { EvendiIcon } from "@/components/EvendiIcon";
 import { useMutation } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { signInWithGoogle } from "@/lib/supabase-auth";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { showToast } from "@/lib/toast";
-
+import PersistentTextInput from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 interface VendorSession {
   sessionToken: string;
   vendorId: string;
   email: string;
   businessName: string;
 }
-
 const GOOGLE_LOGO_URI = "https://developers.google.com/identity/images/g-logo.png";
-
 interface Props {
   navigation: NativeStackNavigationProp<any>;
 }
-
 export default function VendorLoginScreen({ navigation }: Props) {
   const headerHeight = useHeaderHeight();
-  const { theme } = useTheme();
-
+  const { theme, designSettings } = useTheme();
+  const logoSource = designSettings.logoUrl
+    ? { uri: designSettings.logoUrl }
+    : require("../../assets/images/Evendi_logo_norsk_tagline.png");
+  const showLogo = designSettings.logoUseAuth ?? true;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-
   const validateField = useCallback((field: string, value: string): string => {
     switch (field) {
       case "email":
@@ -61,24 +58,20 @@ export default function VendorLoginScreen({ navigation }: Props) {
         return "";
     }
   }, []);
-
   const handleBlur = useCallback((field: string, value: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
     const error = validateField(field, value);
     setErrors((prev) => ({ ...prev, [field]: error }));
   }, [validateField]);
-
   const getFieldStyle = useCallback((field: string) => {
     if (touched[field] && errors[field]) {
-      return { borderColor: "#DC3545" };
+      return { borderColor: theme.error };
     }
     return {};
-  }, [touched, errors]);
-
+  }, [touched, errors, theme.error]);
   useEffect(() => {
     checkExistingSession();
   }, []);
-
   const checkExistingSession = async () => {
     const sessionData = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
     if (sessionData) {
@@ -102,7 +95,6 @@ export default function VendorLoginScreen({ navigation }: Props) {
       }
     }
   };
-
   const loginMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/vendors/login", { email, password });
@@ -132,7 +124,6 @@ export default function VendorLoginScreen({ navigation }: Props) {
       showToast(error.message || "Ugyldig e-post eller passord.");
     },
   });
-
   const handleLogin = () => {
     if (!email || !password) {
       showToast("Fyll ut e-post og passord.");
@@ -141,7 +132,6 @@ export default function VendorLoginScreen({ navigation }: Props) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     loginMutation.mutate();
   };
-
   const handleGoogleLogin = async () => {
     try {
       setIsGoogleLoading(true);
@@ -152,7 +142,6 @@ export default function VendorLoginScreen({ navigation }: Props) {
       if (session && session.user) {
         const googleEmail = session.user.email || "";
         const googleName = session.user.user_metadata?.full_name || googleEmail.split("@")[0];
-
         // Send Google info to backend
         const url = new URL("/api/vendors/google-login", getApiUrl());
         const response = await fetch(url.toString(), {
@@ -164,9 +153,7 @@ export default function VendorLoginScreen({ navigation }: Props) {
             googleId: session.user.id,
           }),
         });
-
         const data = await response.json();
-
         if (response.status === 201 || response.status === 200) {
           // Vendor exists and is approved
           if (data.status === "approved" && data.sessionToken) {
@@ -200,7 +187,6 @@ export default function VendorLoginScreen({ navigation }: Props) {
       setIsGoogleLoading(false);
     }
   };
-
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.headerBar, { paddingTop: headerHeight }]}>
@@ -217,22 +203,23 @@ export default function VendorLoginScreen({ navigation }: Props) {
           { paddingTop: Spacing.xl },
         ]}
       >
-        <Image
-          source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-
+        {showLogo ? (
+          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+        ) : (
+          <ThemedText style={styles.logoText}>
+            {designSettings.appName || "Evendi"}
+          </ThemedText>
+        )}
         <ThemedText style={styles.title}>Leverandørportal</ThemedText>
         <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
           Logg inn for å administrere dine leveranser
         </ThemedText>
-
         <View style={styles.form}>
           <View>
             <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("email")]}>
-              <EvendiIcon name="mail" size={18} color={touched.email && errors.email ? "#DC3545" : theme.textMuted} />
-              <TextInput
+              <EvendiIcon name="mail" size={18} color={touched.email && errors.email ? theme.error : theme.textMuted} />
+              <PersistentTextInput
+                draftKey="VendorLoginScreen-input-1"
                 style={[styles.input, { color: theme.text }]}
                 placeholder="E-post"
                 placeholderTextColor={theme.textMuted}
@@ -248,14 +235,14 @@ export default function VendorLoginScreen({ navigation }: Props) {
               />
             </View>
             {touched.email && errors.email ? (
-              <ThemedText style={styles.errorText}>{errors.email}</ThemedText>
+              <ThemedText style={[styles.errorText, { color: theme.error }]}>{errors.email}</ThemedText>
             ) : null}
           </View>
-
           <View>
             <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("password")]}>
-              <EvendiIcon name="lock" size={18} color={touched.password && errors.password ? "#DC3545" : theme.textMuted} />
-              <TextInput
+              <EvendiIcon name="lock" size={18} color={touched.password && errors.password ? theme.error : theme.textMuted} />
+              <PersistentTextInput
+                draftKey="VendorLoginScreen-input-2"
                 style={[styles.input, { color: theme.text }]}
                 placeholder="Passord"
                 placeholderTextColor={theme.textMuted}
@@ -278,28 +265,25 @@ export default function VendorLoginScreen({ navigation }: Props) {
               </Pressable>
             </View>
             {touched.password && errors.password ? (
-              <ThemedText style={styles.errorText}>{errors.password}</ThemedText>
+              <ThemedText style={[styles.errorText, { color: theme.error }]}>{errors.password}</ThemedText>
             ) : null}
           </View>
-
           <Pressable
             onPress={handleLogin}
             disabled={loginMutation.isPending}
-            style={[styles.loginBtn, { backgroundColor: Colors.dark.accent, opacity: loginMutation.isPending ? 0.6 : 1 }]}
+            style={[styles.loginBtn, { backgroundColor: theme.accent, opacity: loginMutation.isPending ? 0.6 : 1 }]}
           >
             {loginMutation.isPending ? (
-              <ActivityIndicator color="#1A1A1A" />
+              <ActivityIndicator color={theme.buttonText} />
             ) : (
-              <ThemedText style={styles.loginBtnText}>Logg inn</ThemedText>
+              <ThemedText style={[styles.loginBtnText, { color: theme.buttonText }]}>Logg inn</ThemedText>
             )}
           </Pressable>
-
           <View style={styles.dividerContainer}>
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <ThemedText style={[styles.dividerText, { color: theme.textMuted }]}>ELLER</ThemedText>
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
           </View>
-
           <Pressable
             onPress={handleGoogleLogin}
             disabled={isGoogleLoading}
@@ -313,7 +297,7 @@ export default function VendorLoginScreen({ navigation }: Props) {
             ]}
           >
             {isGoogleLoading ? (
-              <ActivityIndicator size="small" color={Colors.dark.accent} />
+              <ActivityIndicator size="small" color={theme.accent} />
             ) : (
               <>
                 <Image
@@ -321,14 +305,13 @@ export default function VendorLoginScreen({ navigation }: Props) {
                   style={styles.googleLogo}
                   resizeMode="contain"
                 />
-                <ThemedText style={[styles.googleBtnText, { color: Colors.dark.accent }]}>
+                <ThemedText style={[styles.googleBtnText, { color: theme.accent }]}> 
                   Logg inn med Google
                 </ThemedText>
               </>
             )}
           </Pressable>
         </View>
-
         <ThemedText style={[styles.registerText, { color: theme.textSecondary }]}>
           Har du ikke en konto?
         </ThemedText>
@@ -339,7 +322,7 @@ export default function VendorLoginScreen({ navigation }: Props) {
           accessibilityLabel="Registrer ny leverandør"
           style={styles.registerLink}
         >
-          <ThemedText style={[styles.registerLinkText, { color: Colors.dark.accent }]}>
+          <ThemedText style={[styles.registerLinkText, { color: theme.accent }]}> 
             Registrer deg som leverandør
           </ThemedText>
         </Pressable>
@@ -347,7 +330,6 @@ export default function VendorLoginScreen({ navigation }: Props) {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   headerBar: {
@@ -368,6 +350,12 @@ const styles = StyleSheet.create({
     width: 480,
     height: 160,
     marginBottom: Spacing.xl,
+  },
+  logoText: {
+    fontSize: 32,
+    fontWeight: "600",
+    marginBottom: Spacing.xl,
+    textAlign: "center",
   },
   title: {
     fontSize: 24,
@@ -406,7 +394,6 @@ const styles = StyleSheet.create({
   loginBtnText: {
     fontSize: 17,
     fontWeight: "600",
-    color: "#1A1A1A",
   },
   dividerContainer: {
     flexDirection: "row",
@@ -454,7 +441,6 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 12,
-    color: "#DC3545",
     marginTop: 4,
     marginBottom: Spacing.sm,
     marginLeft: Spacing.sm,

@@ -1,5 +1,6 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { Pressable } from "react-native";
 
 import ProfileScreen from "@/screens/ProfileScreen";
 import PhotoPlanScreen from "@/screens/PhotoPlanScreen";
@@ -28,6 +29,8 @@ import ChatScreen from "@/screens/ChatScreen";
 import StatusScreen from "@/screens/StatusScreen";
 import WhatsNewScreen from "@/screens/WhatsNewScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
+import { EvendiIcon } from "@/components/EvendiIcon";
+import { useTheme } from "@/hooks/useTheme";
 
 export type ProfileStackParamList = {
   Profile: undefined;
@@ -70,9 +73,21 @@ const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
 export default function ProfileStackNavigator() {
   const screenOptions = useScreenOptions();
+  const { theme } = useTheme();
 
   return (
-    <Stack.Navigator screenOptions={screenOptions}>
+    <Stack.Navigator
+      screenOptions={({ navigation, route }) => ({
+        ...screenOptions,
+        headerRight: route.name === "Profile"
+          ? undefined
+          : () => (
+              <Pressable onPress={() => navigation.navigate("Profile")}> 
+                <EvendiIcon name="home" size={20} color={theme.text} />
+              </Pressable>
+            ),
+      })}
+    >
       <Stack.Screen
         name="Profile"
         component={ProfileScreen}

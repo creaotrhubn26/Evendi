@@ -13,6 +13,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import PersistentTextInput from "@/components/PersistentTextInput";
 import {
   getWeddingInvites,
   createWeddingInvite,
@@ -273,14 +274,16 @@ export default function SharePartnerScreen() {
           <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <ThemedText style={styles.formTitle}>Ny invitasjon</ThemedText>
 
-            <TextInput
+            <PersistentTextInput
+              draftKey="SharePartnerScreen-input-1"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
               placeholder="Navn"
               placeholderTextColor={theme.textMuted}
               value={newName}
               onChangeText={setNewName}
             />
-            <TextInput
+            <PersistentTextInput
+              draftKey="SharePartnerScreen-input-2"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
               placeholder="E-post (valgfritt)"
               placeholderTextColor={theme.textMuted}

@@ -16,6 +16,7 @@ import { EvendiIcon } from "@/components/EvendiIcon";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
+import PersistentTextInput from "@/components/PersistentTextInput";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
@@ -181,7 +182,8 @@ export default function JoinWeddingScreen() {
 
       <View style={[styles.codeInputContainer, { backgroundColor: inputBg, borderColor }]}>
         <EvendiIcon name="key" size={20} color={subtextColor} style={{ marginRight: 10 }} />
-        <TextInput
+        <PersistentTextInput
+          draftKey="JoinWeddingScreen-input-3"
           style={[styles.codeInput, { color: textColor }]}
           placeholder="WED-XXXXX"
           placeholderTextColor={subtextColor}
@@ -295,7 +297,8 @@ export default function JoinWeddingScreen() {
         <ThemedText style={[styles.inputLabel, { color: subtextColor }]}>Navn</ThemedText>
         <View style={[styles.inputContainer, { backgroundColor: inputBg, borderColor }]}>
           <EvendiIcon name="user" size={18} color={subtextColor} style={{ marginRight: 10 }} />
-          <TextInput
+          <PersistentTextInput
+            draftKey="JoinWeddingScreen-input-4"
             ref={nameRef}
             style={[styles.textInput, { color: textColor }]}
             placeholder="Ditt fulle navn"
@@ -311,7 +314,8 @@ export default function JoinWeddingScreen() {
         <ThemedText style={[styles.inputLabel, { color: subtextColor, marginTop: Spacing.md }]}>E-post</ThemedText>
         <View style={[styles.inputContainer, { backgroundColor: inputBg, borderColor }]}>
           <EvendiIcon name="mail" size={18} color={subtextColor} style={{ marginRight: 10 }} />
-          <TextInput
+          <PersistentTextInput
+            draftKey="JoinWeddingScreen-input-5"
             ref={emailRef}
             style={[styles.textInput, { color: textColor }]}
             placeholder="din@epost.no"

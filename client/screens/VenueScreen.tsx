@@ -24,8 +24,10 @@ import { TraditionHintBanner } from '@/components/TraditionHintBanner';
 import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
 import { SwipeableRow } from '../components/SwipeableRow';
+import PersistentTextInput from '@/components/PersistentTextInput';
 import { SeatingChart, Table, Guest } from '../components/SeatingChart';
 import { VendorSearchField } from '@/components/VendorSearchField';
+import { VendorCategoryMarketplace } from '@/components/VendorCategoryMarketplace';
 import { useTheme } from '../hooks/useTheme';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
@@ -784,43 +786,36 @@ export function VenueScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={['bottom']}>
-      <View style={[styles.header, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <View style={styles.headerContent}>
-          <View style={[styles.iconCircle, { backgroundColor: Colors.dark.accent + '15' }]}>
-            <EvendiIcon name="home" size={24} color={Colors.dark.accent} />
-          </View>
-          <View style={styles.headerText}>
-            <ThemedText style={styles.headerTitle}>Lokale</ThemedText>
-            <ThemedText style={[styles.headerSubtitle, { color: theme.textMuted }]}>
-              Bryllupslokaler og bordplassering
-            </ThemedText>
-          </View>
-        </View>
-      </View>
-
-      <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        {['bookings', 'seating', 'timeline'].map((tab) => (
-          <Pressable
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.activeTab]}
-            onPress={() => {
-              setActiveTab(tab as TabType);
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-          >
-            <ThemedText style={[styles.tabText, activeTab === tab && { color: Colors.dark.accent }]}>
-              {tab === 'bookings' ? 'Lokaler' : tab === 'seating' ? 'Bord' : 'Tidslinje'}
-            </ThemedText>
-            {activeTab === tab && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
-          </Pressable>
-        ))}
-      </View>
-
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        <VendorCategoryMarketplace
+          category="venue"
+          categoryName="Lokale"
+          icon="home"
+          subtitle="Bryllupslokaler og bordplassering"
+        />
+
+        <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+          {['bookings', 'seating', 'timeline'].map((tab) => (
+            <Pressable
+              key={tab}
+              style={[styles.tab, activeTab === tab && styles.activeTab]}
+              onPress={() => {
+                setActiveTab(tab as TabType);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+            >
+              <ThemedText style={[styles.tabText, activeTab === tab && { color: Colors.dark.accent }]}>
+                {tab === 'bookings' ? 'Lokaler' : tab === 'seating' ? 'Bord' : 'Tidslinje'}
+              </ThemedText>
+              {activeTab === tab && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
+            </Pressable>
+          ))}
+        </View>
+
         {activeTab === 'bookings' && renderBookingsTab()}
         {activeTab === 'seating' && renderSeatingTab()}
         {activeTab === 'timeline' && renderTimelineTab()}
@@ -963,7 +958,8 @@ export function VenueScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Dato *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VenueScreen-input-1"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="DD.MM.YYYY"
                 placeholderTextColor={theme.textSecondary}
@@ -975,7 +971,8 @@ export function VenueScreen() {
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.formLabel}>Tid</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VenueScreen-input-2"
                   style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                   placeholder="HH:MM"
                   placeholderTextColor={theme.textSecondary}
@@ -986,7 +983,8 @@ export function VenueScreen() {
 
               <View style={[styles.formGroup, { flex: 1, marginLeft: Spacing.md }]}>
                 <ThemedText style={styles.formLabel}>Kapasitet</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VenueScreen-input-3"
                   style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                   placeholder="f.eks. 150"
                   placeholderTextColor={theme.textSecondary}
@@ -999,7 +997,8 @@ export function VenueScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Lokasjon</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VenueScreen-input-4"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="f.eks. Oslo sentrum"
                 placeholderTextColor={theme.textSecondary}
@@ -1011,7 +1010,8 @@ export function VenueScreen() {
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Adresse</ThemedText>
               <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VenueScreen-input-5"
                   style={[styles.input, { borderColor: theme.border, color: theme.text, flex: 1 }]}
                   placeholder="Gate, postnummer, sted"
                   placeholderTextColor={theme.textSecondary}
@@ -1032,7 +1032,8 @@ export function VenueScreen() {
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.formLabel}>Maks gjester</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VenueScreen-input-6"
                   style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                   placeholder="f.eks. 150"
                   placeholderTextColor={theme.textSecondary}
@@ -1044,7 +1045,8 @@ export function VenueScreen() {
 
               <View style={[styles.formGroup, { flex: 1, marginLeft: Spacing.md }]}>
                 <ThemedText style={styles.formLabel}>Inviterte gjester</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VenueScreen-input-7"
                   style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                   placeholder="f.eks. 120"
                   placeholderTextColor={theme.textSecondary}
@@ -1057,7 +1059,8 @@ export function VenueScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Når må lokalet forlates?</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VenueScreen-input-8"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="f.eks. 23:00"
                 placeholderTextColor={theme.textSecondary}
@@ -1164,14 +1167,16 @@ export function VenueScreen() {
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Når skal dere besøke lokalet?</ThemedText>
               <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VenueScreen-input-9"
                   style={[styles.input, { borderColor: theme.border, color: theme.text, flex: 2 }]}
                   placeholder="DD.MM.YYYY"
                   placeholderTextColor={theme.textSecondary}
                   value={siteVisitDate}
                   onChangeText={setSiteVisitDate}
                 />
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VenueScreen-input-10"
                   style={[styles.input, { borderColor: theme.border, color: theme.text, flex: 1 }]}
                   placeholder="HH:MM"
                   placeholderTextColor={theme.textSecondary}
@@ -1183,7 +1188,8 @@ export function VenueScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Hva likte vi?</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VenueScreen-input-11"
                 style={[styles.input, { borderColor: theme.border, color: theme.text, minHeight: 80 }]}
                 placeholder="Atmosfære, utsikt, plassering, muligheter..."
                 placeholderTextColor={theme.textSecondary}
@@ -1196,7 +1202,8 @@ export function VenueScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Hva var vi usikre på?</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VenueScreen-input-12"
                 style={[styles.input, { borderColor: theme.border, color: theme.text, minHeight: 80 }]}
                 placeholder="Kapasitet, pris, tilgjengelighet, begrensninger..."
                 placeholderTextColor={theme.textSecondary}
@@ -1209,7 +1216,8 @@ export function VenueScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VenueScreen-input-13"
                 style={[styles.input, { borderColor: theme.border, color: theme.text, minHeight: 80 }]}
                 placeholder="Tilleggsinformasjon om lokalet..."
                 placeholderTextColor={theme.textSecondary}

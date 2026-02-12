@@ -36,6 +36,7 @@ import { generateId, getCoupleSession } from "@/lib/storage";
 import { getCoupleProfile } from "@/lib/api-couples";
 import { TRADITION_BUDGET_ITEMS, getPerPersonBudget, CULTURAL_LABELS } from "@/constants/tradition-data";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const useFieldValidation = () => {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -419,7 +420,8 @@ export default function BudgetScreen() {
             </ThemedText>
             {editingBudget ? (
               <View style={styles.budgetEditRow}>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="BudgetScreen-input-1"
                   style={[styles.budgetInput, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   value={budgetInput}
                   onChangeText={setBudgetInput}
@@ -616,7 +618,8 @@ export default function BudgetScreen() {
           <ThemedText type="h3" style={styles.formTitle}>{editingItem ? "Endre utgift" : "Legg til utgift"}</ThemedText>
 
           <View>
-            <TextInput
+            <PersistentTextInput
+              draftKey="BudgetScreen-input-2"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("newLabel")]}
               placeholder="Navn"
               placeholderTextColor={theme.textMuted}
@@ -630,7 +633,8 @@ export default function BudgetScreen() {
           </View>
 
           <View>
-            <TextInput
+            <PersistentTextInput
+              draftKey="BudgetScreen-input-3"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("newCost")]}
               placeholder="Estimert beløp (kr)"
               placeholderTextColor={theme.textMuted}
@@ -648,7 +652,8 @@ export default function BudgetScreen() {
           {editingItem && (
             <>
               <View>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="BudgetScreen-input-4"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   placeholder="Faktisk beløp (kr)"
                   placeholderTextColor={theme.textMuted}

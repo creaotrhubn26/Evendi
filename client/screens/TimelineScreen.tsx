@@ -28,6 +28,7 @@ import {
 import { useVendorLocationIntelligence } from "@/hooks/useVendorLocationIntelligence";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApiUrl } from "@/lib/query-client";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 type ScheduleInterval = {
   id: string;
@@ -991,7 +992,8 @@ export default function TimelineScreen() {
                   <ThemedText style={[styles.modalLabel, { color: theme.textSecondary }]}>
                     Ny tid (HH:MM)
                   </ThemedText>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="TimelineScreen-input-1"
                     style={[styles.timeInput, { borderColor: Colors.dark.accent, color: theme.text }]}
                     placeholder="14:30"
                     placeholderTextColor={theme.textSecondary}
@@ -1043,11 +1045,13 @@ export default function TimelineScreen() {
             </View>
             <View style={styles.modalSection}>
               <ThemedText style={[styles.modalLabel, { color: theme.textSecondary }]}>Tittel</ThemedText>
-              <TextInput style={[styles.timeInput, { borderColor: theme.border, color: theme.text }]} value={newTitle} onChangeText={setNewTitle} placeholder="F.eks. Inngang" placeholderTextColor={theme.textSecondary} />
+              <PersistentTextInput style={[styles.timeInput, { borderColor: theme.border, color: theme.text }]} value={newTitle} onChangeText={setNewTitle} placeholder="F.eks. Inngang" placeholderTextColor={theme.textSecondary} />
+                draftKey="TimelineScreen-input-2"
             </View>
             <View style={styles.modalSection}>
               <ThemedText style={[styles.modalLabel, { color: theme.textSecondary }]}>Tid (HH:MM)</ThemedText>
-              <TextInput style={[styles.timeInput, { borderColor: Colors.dark.accent, color: theme.text }]} value={newEventTime} onChangeText={setNewEventTime} placeholder="14:00" placeholderTextColor={theme.textSecondary} maxLength={5} keyboardType="numeric" />
+              <PersistentTextInput style={[styles.timeInput, { borderColor: Colors.dark.accent, color: theme.text }]} value={newEventTime} onChangeText={setNewEventTime} placeholder="14:00" placeholderTextColor={theme.textSecondary} maxLength={5} keyboardType="numeric" />
+                draftKey="TimelineScreen-input-3"
               <ThemedText style={[styles.modalHint, { color: theme.textSecondary }]}>Timer: 00-23, minutter: 00-59</ThemedText>
             </View>
                 <View style={styles.modalSection}>

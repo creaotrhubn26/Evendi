@@ -14,6 +14,7 @@ import { showConfirm } from "@/lib/dialogs";
 import type { VideoGuide } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 type Category = "vendor" | "couple";
 
@@ -252,7 +253,8 @@ export default function AdminVideoGuidesScreen({ route }: Props) {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.label}>Tittel</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="AdminVideoGuidesScreen-input-1"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 value={formData.title}
                 onChangeText={(val) => setFormData({ ...formData, title: val })}
@@ -263,7 +265,8 @@ export default function AdminVideoGuidesScreen({ route }: Props) {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.label}>Beskrivelse</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="AdminVideoGuidesScreen-input-2"
                 style={[styles.input, styles.textArea, { borderColor: theme.border, color: theme.text }]}
                 value={formData.description}
                 onChangeText={(val) => setFormData({ ...formData, description: val })}
@@ -276,7 +279,8 @@ export default function AdminVideoGuidesScreen({ route }: Props) {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.label}>Video URL</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="AdminVideoGuidesScreen-input-3"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 value={formData.videoUrl}
                 onChangeText={(val) => setFormData({ ...formData, videoUrl: val })}
@@ -287,7 +291,8 @@ export default function AdminVideoGuidesScreen({ route }: Props) {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.label}>Thumbnail URL</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="AdminVideoGuidesScreen-input-4"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 value={formData.thumbnail}
                 onChangeText={(val) => setFormData({ ...formData, thumbnail: val })}
@@ -300,7 +305,8 @@ export default function AdminVideoGuidesScreen({ route }: Props) {
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.label}>Varighet (optional)</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminVideoGuidesScreen-input-5"
                   style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                   value={formData.duration}
                   onChangeText={(val) => setFormData({ ...formData, duration: val })}
@@ -310,7 +316,8 @@ export default function AdminVideoGuidesScreen({ route }: Props) {
               </View>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.label}>Sortering</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminVideoGuidesScreen-input-6"
                   style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                   value={formData.sortOrder.toString()}
                   onChangeText={(val) => setFormData({ ...formData, sortOrder: parseInt(val) || 0 })}

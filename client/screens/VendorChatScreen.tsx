@@ -22,17 +22,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeIn } from "react-native-reanimated";
 import * as ImagePicker from "expo-image-picker";
 import { uploadChatImage, isSupabaseConfigured } from "@/lib/supabase-storage";
-
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
-
+import PersistentTextInput from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 interface Message {
   id: string;
   conversationId: string;
@@ -45,7 +43,6 @@ interface Message {
   attachmentUrl?: string | null;
   attachmentType?: string | null;
 }
-
 interface ConversationDetails {
   id: string;
   couple: {
@@ -56,9 +53,7 @@ interface ConversationDetails {
   };
   coupleTypingAt?: string | null;
 }
-
 type Props = NativeStackScreenProps<RootStackParamList, "VendorChat">;
-
 export default function VendorChatScreen({ route, navigation }: Props) {
   const { conversationId } = route.params as { conversationId: string; coupleName: string };
   const insets = useSafeAreaInsets();
@@ -67,7 +62,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
   const { isWedding } = useEventType();
   const queryClient = useQueryClient();
   const flatListRef = useRef<FlatList>(null);
-
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
@@ -87,7 +81,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
   const wsRef = useRef<WebSocket | null>(null);
   const wsTypingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [coupleTypingWs, setCoupleTypingWs] = useState(false);
-
   const deleteMessageMutation = useMutation({
     mutationFn: async (messageId: string) => {
       const response = await fetch(new URL(`/api/vendor/messages/${messageId}`, getApiUrl()).toString(), {
@@ -102,7 +95,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
   });
-
   const editMessageMutation = useMutation({
     mutationFn: async ({ messageId, body }: { messageId: string; body: string }) => {
       const response = await fetch(new URL(`/api/vendor/messages/${messageId}`, getApiUrl()).toString(), {
@@ -123,7 +115,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
   });
-
   const deleteConversationMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch(new URL(`/api/vendor/conversations/${conversationId}`, getApiUrl()).toString(), {
@@ -139,7 +130,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       navigation.goBack();
     },
   });
-
   const handleDeleteMessage = (messageId: string) => {
     Alert.alert(
       "Slett melding",
@@ -154,17 +144,14 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       ]
     );
   };
-
   const handleEditMessage = (message: Message) => {
     setEditingMessage(message);
     setMessageText(message.body);
   };
-
   const handleCancelEdit = () => {
     setEditingMessage(null);
     setMessageText("");
   };
-
   const handleMessageAction = (message: Message) => {
     Alert.alert(
       "Meldingshandlinger",
@@ -183,7 +170,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       ]
     );
   };
-
   const handleDeleteConversation = () => {
     Alert.alert(
       "Slett samtale",
@@ -198,7 +184,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       ]
     );
   };
-
   useLayoutEffect(() => {
     navigation.setOptions({
       headerLeft: () => (
@@ -221,12 +206,10 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       ),
     });
   }, [navigation, sessionToken, theme, showSearch, showCoupleInfo]);
-
   useEffect(() => {
     loadSession();
     loadDraft();
   }, []);
-
   const loadSession = async () => {
     const session = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
     if (session) {
@@ -234,7 +217,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       setSessionToken(parsed.sessionToken);
     }
   };
-
   const loadDraft = async () => {
     const draftKey = `vendor_draft_${conversationId}`;
     const draft = await AsyncStorage.getItem(draftKey);
@@ -242,7 +224,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       setMessageText(draft);
     }
   };
-
   const saveDraft = async (text: string) => {
     const draftKey = `vendor_draft_${conversationId}`;
     if (text.trim()) {
@@ -251,12 +232,10 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       await AsyncStorage.removeItem(draftKey);
     }
   };
-
   const clearDraft = async () => {
     const draftKey = `vendor_draft_${conversationId}`;
     await AsyncStorage.removeItem(draftKey);
   };
-
   const updateTypingStatus = async () => {
     if (!sessionToken) return;
     try {
@@ -271,7 +250,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       // Silently fail - typing indicator is not critical
     }
   };
-
   const handleTextChange = (text: string) => {
     setMessageText(text);
     saveDraft(text);
@@ -285,27 +263,23 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       // Stop typing after 3 seconds of inactivity
     }, 3000) as unknown as NodeJS.Timeout;
   };
-
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       Alert.alert("Tillatelse nødvendig", "Vi trenger tilgang til bildene dine for å kunne sende bilder.");
       return;
     }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       quality: 0.8,
       base64: true,
     });
-
     if (!result.canceled && result.assets[0]) {
       setSelectedImage(result.assets[0].uri);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
-
   const uploadImage = async (imageUri: string): Promise<string> => {
     // Use Supabase Storage if configured, otherwise use base64
     if (isSupabaseConfigured()) {
@@ -322,7 +296,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       });
     }
   };
-
   const { data: conversationDetails } = useQuery<ConversationDetails>({
     queryKey: ["/api/vendor/conversations", conversationId, "details"],
     queryFn: async () => {
@@ -337,7 +310,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     enabled: !!sessionToken && !!conversationId,
     refetchInterval: 30000,
   });
-
   const { data: messages = [], isLoading } = useQuery<Message[]>({
     queryKey: ["/api/vendor/conversations", conversationId, "messages"],
     queryFn: async () => {
@@ -352,7 +324,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     enabled: !!sessionToken && !!conversationId,
     refetchInterval: false,
   });
-
   const formatLastActive = (dateStr: string | null): string => {
     if (!dateStr) return "Aldri aktiv";
     const date = new Date(dateStr);
@@ -369,45 +340,45 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     if (diffDays < 7) return `Aktiv ${diffDays} dager siden`;
     return date.toLocaleDateString("nb-NO", { day: "numeric", month: "short" });
   };
-
+  const resolveTemplateColor = useCallback((color?: string) => {
+    if (!color) return theme.accent;
+    if (color === "success") return theme.success;
+    if (color === "warning") return theme.warning;
+    if (color === "accent") return theme.accent;
+    if (color.startsWith("#")) return theme.accent;
+    return color;
+  }, [theme.accent, theme.success, theme.warning]);
   // ---- Quick Message Templates (built-in + custom) ----
   // Context: Vendor replying TO a couple — organized by wedding workflow stage
   const CUSTOM_TEMPLATES_KEY = "evendi_vendor_custom_quick_templates";
-
   const builtInTemplates = [
     // --- Booking & inquiry replies (most common vendor-to-couple context) ---
-    { id: "inq-1", label: "Takk for henvendelsen", message: "Tusen takk for henvendelsen! Jeg er ledig den datoen og vil gjerne høre mer om planene deres. Kan vi avtale et møte?", category: "inquiry", color: "#2196F3" },
-    { id: "inq-2", label: "Pris & pakker", message: "Så hyggelig! Jeg sender over prisinfo og pakketilbudene mine. Ta gjerne en titt og si ifra om noe passer.", category: "inquiry", color: "#9C27B0" },
-    { id: "inq-3", label: "Ikke ledig", message: "Takk for at dere tenkte på meg! Dessverre er jeg booket den datoen. Lykke til med planleggingen! 💛", category: "inquiry", color: "#FF9800" },
-    { id: "inq-4", label: "Avtale møte", message: "Flott! La oss ta et uforpliktende møte. Passer det for dere denne uken? Jeg er fleksibel på tidspunkt.", category: "inquiry", color: "#4CAF50" },
-
+    { id: "inq-1", label: "Takk for henvendelsen", message: "Tusen takk for henvendelsen! Jeg er ledig den datoen og vil gjerne høre mer om planene deres. Kan vi avtale et møte?", category: "inquiry", color: "accent" },
+    { id: "inq-2", label: "Pris & pakker", message: "Så hyggelig! Jeg sender over prisinfo og pakketilbudene mine. Ta gjerne en titt og si ifra om noe passer.", category: "inquiry", color: "accent" },
+    { id: "inq-3", label: "Ikke ledig", message: "Takk for at dere tenkte på meg! Dessverre er jeg booket den datoen. Lykke til med planleggingen! 💛", category: "inquiry", color: "warning" },
+    { id: "inq-4", label: "Avtale møte", message: "Flott! La oss ta et uforpliktende møte. Passer det for dere denne uken? Jeg er fleksibel på tidspunkt.", category: "inquiry", color: "success" },
     // --- Booking confirmed ---
-    { id: "book-1", label: "Gleder meg!", message: "Perfekt! Jeg gleder meg til å jobbe med dere. Kontrakten er på vei — sjekk e-posten. 🎉", category: "booking", color: "#E91E63" },
-    { id: "book-2", label: "Tilbud sendt", message: "Tilbudet er sendt — sjekk innboksen din. Si ifra om du har noen spørsmål!", category: "booking", color: "#2196F3" },
-    { id: "book-3", label: "Kontrakt signert", message: "✅ Kontrakten er mottatt og alt er i orden! Jeg kommer tilbake med en detaljert tidsplan etter hvert.", category: "booking", color: "#4CAF50" },
-
+    { id: "book-1", label: "Gleder meg!", message: "Perfekt! Jeg gleder meg til å jobbe med dere. Kontrakten er på vei — sjekk e-posten. 🎉", category: "booking", color: "accent" },
+    { id: "book-2", label: "Tilbud sendt", message: "Tilbudet er sendt — sjekk innboksen din. Si ifra om du har noen spørsmål!", category: "booking", color: "accent" },
+    { id: "book-3", label: "Kontrakt signert", message: "✅ Kontrakten er mottatt og alt er i orden! Jeg kommer tilbake med en detaljert tidsplan etter hvert.", category: "booking", color: "success" },
     // --- Pre-wedding planning ---
-    { id: "plan-1", label: "Tidsplan klar", message: isWedding ? "📋 Tidsplanen for bryllupsdagen er klar! Sjekk den og gi meg beskjed om noe bør justeres." : "📋 Tidsplanen for arrangementet er klar! Sjekk den og gi meg beskjed om noe bør justeres.", category: "planning", color: "#2196F3" },
-    { id: "plan-2", label: "Trenger info", message: "Hei! Jeg trenger noen detaljer fra dere for å planlegge best mulig. Kan dere sende meg adresse og kontaktinfo for lokalet?", category: "planning", color: "#FF9800" },
-    { id: "plan-3", label: "Befaring avtalt", message: "Befaring av lokalet er avtalt — jeg tar kontakt med dem direkte. Dere trenger ikke gjøre noe mer her!", category: "planning", color: "#4CAF50" },
-
+    { id: "plan-1", label: "Tidsplan klar", message: isWedding ? "📋 Tidsplanen for bryllupsdagen er klar! Sjekk den og gi meg beskjed om noe bør justeres." : "📋 Tidsplanen for arrangementet er klar! Sjekk den og gi meg beskjed om noe bør justeres.", category: "planning", color: "accent" },
+    { id: "plan-2", label: "Trenger info", message: "Hei! Jeg trenger noen detaljer fra dere for å planlegge best mulig. Kan dere sende meg adresse og kontaktinfo for lokalet?", category: "planning", color: "warning" },
+    { id: "plan-3", label: "Befaring avtalt", message: "Befaring av lokalet er avtalt — jeg tar kontakt med dem direkte. Dere trenger ikke gjøre noe mer her!", category: "planning", color: "success" },
     // --- Wedding day coordination ---
-    { id: "wd-onway", label: "På vei", message: "🚗 Jeg er på vei til lokalet nå! Regner med å være der ca. kl. {tid}.", category: "weddingday", color: "#2196F3" },
-    { id: "wd-arrived", label: "Er fremme", message: "📍 Jeg er på plass og setter opp utstyret. Alt ser bra ut!", category: "weddingday", color: "#4CAF50" },
-    { id: "wd-ready", label: "Alt klart", message: "✅ Alt er klart fra min side! Bare gi signal når vi skal begynne.", category: "weddingday", color: "#4CAF50" },
-    { id: "wd-delay", label: "Litt forsinket", message: "⏰ Beklager — vi er ca. 15 min forsinket. Holder dere oppdatert!", category: "weddingday", color: "#FF9800" },
-
+    { id: "wd-onway", label: "På vei", message: "🚗 Jeg er på vei til lokalet nå! Regner med å være der ca. kl. {tid}.", category: "weddingday", color: "accent" },
+    { id: "wd-arrived", label: "Er fremme", message: "📍 Jeg er på plass og setter opp utstyret. Alt ser bra ut!", category: "weddingday", color: "success" },
+    { id: "wd-ready", label: "Alt klart", message: "✅ Alt er klart fra min side! Bare gi signal når vi skal begynne.", category: "weddingday", color: "success" },
+    { id: "wd-delay", label: "Litt forsinket", message: "⏰ Beklager — vi er ca. 15 min forsinket. Holder dere oppdatert!", category: "weddingday", color: "warning" },
     // --- Post-wedding / delivery ---
-    { id: "del-1", label: "Levering snart", message: "Bildene/videoen er nesten ferdig! Dere kan forvente leveranse innen {antall} dager. 📸", category: "delivery", color: "#9C27B0" },
-    { id: "del-2", label: "Galleriet er klart", message: "🎉 Galleriet er klart! Dere finner det her: [link]. Håper dere blir fornøyde!", category: "delivery", color: "#E91E63" },
-    { id: "del-3", label: "Sniktitt", message: "Her er en liten sniktitt fra bryllupet deres! 🫶 Resten kommer snart.", category: "delivery", color: "#E91E63" },
+    { id: "del-1", label: "Levering snart", message: "Bildene/videoen er nesten ferdig! Dere kan forvente leveranse innen {antall} dager. 📸", category: "delivery", color: "accent" },
+    { id: "del-2", label: "Galleriet er klart", message: "🎉 Galleriet er klart! Dere finner det her: [link]. Håper dere blir fornøyde!", category: "delivery", color: "accent" },
+    { id: "del-3", label: "Sniktitt", message: "Her er en liten sniktitt fra bryllupet deres! 🫶 Resten kommer snart.", category: "delivery", color: "accent" },
   ];
-
   const allQuickTemplates = [...builtInTemplates, ...customQuickReplies.map((t) => ({ ...t, isCustom: true }))];
   const filteredQuickTemplates = quickReplyCategory === "all"
     ? allQuickTemplates
     : allQuickTemplates.filter((t) => t.category === quickReplyCategory);
-
   const quickReplyCategories = [
     { value: "all", label: "Alle", icon: "grid" as const },
     { value: "inquiry", label: "Henvendelse", icon: "message-circle" as const },
@@ -417,7 +388,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     { value: "delivery", label: "Levering", icon: "package" as const },
     ...(customQuickReplies.length > 0 ? [{ value: "custom", label: "Mine", icon: "star" as const }] : []),
   ];
-
   // Load custom templates from AsyncStorage
   useEffect(() => {
     AsyncStorage.getItem(CUSTOM_TEMPLATES_KEY).then((raw) => {
@@ -430,7 +400,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       }
     });
   }, []);
-
   const saveCustomTemplate = useCallback(() => {
     if (!newTemplateLabel.trim() || !newTemplateMessage.trim()) {
       Alert.alert("Feil", "Navn og melding er påkrevd");
@@ -441,7 +410,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       label: newTemplateLabel.trim(),
       message: newTemplateMessage.trim(),
       category: newTemplateCategory,
-      color: "#9C27B0",
+      color: theme.accent,
     };
     const updated = [...customQuickReplies, newTemplate];
     setCustomQuickReplies(updated);
@@ -451,8 +420,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     setNewTemplateCategory("custom");
     setShowCreateTemplate(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [newTemplateLabel, newTemplateMessage, newTemplateCategory, customQuickReplies]);
-
+  }, [newTemplateLabel, newTemplateMessage, newTemplateCategory, customQuickReplies, theme.accent]);
   const deleteCustomTemplate = useCallback((templateId: string) => {
     Alert.alert("Slett mal", "Er du sikker på at du vil slette denne malen?", [
       { text: "Avbryt", style: "cancel" },
@@ -468,7 +436,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       },
     ]);
   }, [customQuickReplies]);
-
   const sendMutation = useMutation({
     mutationFn: async (messageData: { body: string; attachmentUrl?: string; attachmentType?: string }) => {
       const response = await fetch(new URL("/api/vendor/messages", getApiUrl()).toString(), {
@@ -491,7 +458,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
   });
-
   const handleSend = async () => {
     if (!messageText.trim() && !selectedImage) return;
     
@@ -523,14 +489,12 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       setIsUploading(false);
     }
   };
-
   const handleQuickReply = (reply: string) => {
     setMessageText(reply);
     setShowQuickReplies(false);
     saveDraft(reply);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const renderAttachment = (item: Message) => {
     if (!item.attachmentUrl) return null;
     
@@ -546,7 +510,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     
     return null;
   };
-
   const isCoupleTyping = () => {
     if (coupleTypingWs) return true;
     if (!conversationDetails?.coupleTypingAt) return false;
@@ -554,29 +517,24 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     const now = new Date().getTime();
     return (now - typingTime) < 5000; // Show if typed within last 5 seconds
   };
-
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString("no-NO", { hour: "2-digit", minute: "2-digit" });
   };
-
   const formatDateSeparator = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
     if (days === 0) return "I dag";
     if (days === 1) return "I går";
     return date.toLocaleDateString("no-NO", { day: "numeric", month: "long" });
   };
-
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
     const isFromMe = item.senderType === "vendor";
     const showDateSeparator =
       index === 0 ||
       new Date(messages[index - 1].createdAt).toDateString() !== new Date(item.createdAt).toDateString();
-
     return (
       <Animated.View entering={FadeIn.duration(200)}>
         {showDateSeparator ? (
@@ -601,15 +559,16 @@ export default function VendorChatScreen({ route, navigation }: Props) {
             accessibilityHint={isFromMe ? "Trykk og hold for å redigere eller slette" : undefined}
             style={[
               styles.messageBubble,
+              { shadowColor: theme.textMuted },
               isFromMe
-                ? { backgroundColor: Colors.dark.accent }
+                ? { backgroundColor: theme.accent }
                 : { backgroundColor: theme.backgroundDefault, borderWidth: 1, borderColor: theme.border },
             ]}
           >
             <ThemedText
               style={[
                 styles.messageText,
-                { color: isFromMe ? "#000000" : theme.text },
+                { color: isFromMe ? theme.buttonText : theme.text },
               ]}
             >
               {item.body}
@@ -620,7 +579,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
                 <ThemedText
                   style={[
                     styles.editedLabel,
-                    { color: isFromMe ? "rgba(0,0,0,0.7)" : theme.textMuted },
+                    { color: isFromMe ? theme.buttonText : theme.textMuted, opacity: isFromMe ? 0.7 : 1 },
                   ]}
                 >
                   redigert
@@ -629,7 +588,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
               <ThemedText
                 style={[
                   styles.messageTime,
-                  { color: isFromMe ? "rgba(0,0,0,0.75)" : theme.textMuted },
+                  { color: isFromMe ? theme.buttonText : theme.textMuted, opacity: isFromMe ? 0.75 : 1 },
                 ]}
               >
                 {formatTime(item.createdAt)}
@@ -637,9 +596,9 @@ export default function VendorChatScreen({ route, navigation }: Props) {
               {isFromMe ? (
                 <View style={styles.readReceipt}>
                   {item.readAt ? (
-                    <EvendiIcon name="check-circle" size={13} color="rgba(0,0,0,0.8)" />
+                    <EvendiIcon name="check-circle" size={13} color={theme.buttonText} />
                   ) : (
-                    <EvendiIcon name="check" size={13} color="rgba(0,0,0,0.65)" />
+                    <EvendiIcon name="check" size={13} color={theme.buttonText} />
                   )}
                 </View>
               ) : null}
@@ -649,30 +608,27 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       </Animated.View>
     );
   };
-
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.dark.accent} />
+          <ActivityIndicator size="large" color={theme.accent} />
         </View>
       </View>
     );
   }
-
   const lastActiveText = formatLastActive(conversationDetails?.couple?.lastActiveAt ?? null);
   const isActive = lastActiveText === "Aktiv nå";
-
   const filteredMessages = searchQuery
     ? messages.filter(msg => msg.body.toLowerCase().includes(searchQuery.toLowerCase()))
     : messages;
-
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       {showSearch && (
         <View style={[styles.searchBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
           <EvendiIcon name="search" size={18} color={theme.textMuted} />
-          <TextInput
+          <PersistentTextInput
+            draftKey="VendorChatScreen-input-1"
             style={[styles.searchInput, { color: theme.text }]}
             placeholder="Søk i meldinger..."
             placeholderTextColor={theme.textMuted}
@@ -687,11 +643,10 @@ export default function VendorChatScreen({ route, navigation }: Props) {
           )}
         </View>
       )}
-
       {showCoupleInfo && conversationDetails?.couple && (
         <View style={[styles.coupleInfoCard, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
           <View style={styles.coupleInfoRow}>
-            <EvendiIcon name="user" size={16} color={Colors.dark.accent} />
+            <EvendiIcon name="user" size={16} color={theme.accent} />
             <ThemedText style={styles.coupleInfoText}>{conversationDetails.couple.displayName}</ThemedText>
           </View>
           <View style={styles.coupleInfoRow}>
@@ -708,7 +663,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
           </Pressable>
         </View>
       )}
-
       <FlatList
         ref={flatListRef}
         data={filteredMessages}
@@ -721,8 +675,8 @@ export default function VendorChatScreen({ route, navigation }: Props) {
         }}
         ListHeaderComponent={
           <View style={[styles.lastActiveBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-            <View style={[styles.activeIndicator, { backgroundColor: isActive ? "#4CAF50" : theme.textMuted }]} />
-            <ThemedText style={[styles.lastActiveText, { color: isActive ? "#4CAF50" : theme.textMuted }]}>
+            <View style={[styles.activeIndicator, { backgroundColor: isActive ? theme.success : theme.textMuted }]} />
+            <ThemedText style={[styles.lastActiveText, { color: isActive ? theme.success : theme.textMuted }]}> 
               {lastActiveText}
             </ThemedText>
           </View>
@@ -734,7 +688,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
           }
         }}
       />
-
       <View
         style={[
           styles.inputContainer,
@@ -748,7 +701,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
         {editingMessage && (
           <View style={[styles.editingBanner, { backgroundColor: theme.backgroundElevated, borderBottomColor: theme.border }]}>
             <View style={{ flex: 1 }}>
-              <ThemedText style={[styles.editingLabel, { color: Colors.dark.accent }]}>
+              <ThemedText style={[styles.editingLabel, { color: theme.accent }]}>
                 Redigerer melding
               </ThemedText>
               <ThemedText numberOfLines={1} style={[styles.editingPreview, { color: theme.textMuted }]}>
@@ -760,7 +713,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
             </Pressable>
           </View>
         )}
-
         {showQuickReplies && (
           <View style={[styles.quickRepliesContainer, { backgroundColor: theme.backgroundRoot, borderBottomColor: theme.border }]}>
             <View style={styles.quickRepliesHeader}>
@@ -769,7 +721,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
               </ThemedText>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <Pressable onPress={() => setShowCreateTemplate(true)}>
-                  <EvendiIcon name="plus" size={16} color={Colors.dark.accent} />
+                  <EvendiIcon name="plus" size={16} color={theme.accent} />
                 </Pressable>
                 <Pressable onPress={() => setShowQuickReplies(false)}>
                   <EvendiIcon name="x" size={16} color={theme.textMuted} />
@@ -785,13 +737,13 @@ export default function VendorChatScreen({ route, navigation }: Props) {
                   style={[
                     styles.categoryChip,
                     {
-                      backgroundColor: quickReplyCategory === cat.value ? Colors.dark.accent + "20" : theme.backgroundDefault,
-                      borderColor: quickReplyCategory === cat.value ? Colors.dark.accent : theme.border,
+                      backgroundColor: quickReplyCategory === cat.value ? theme.accent + "20" : theme.backgroundDefault,
+                      borderColor: quickReplyCategory === cat.value ? theme.accent : theme.border,
                     },
                   ]}
                 >
-                  <EvendiIcon name={cat.icon} size={12} color={quickReplyCategory === cat.value ? Colors.dark.accent : theme.textMuted} />
-                  <ThemedText style={[styles.categoryChipText, { color: quickReplyCategory === cat.value ? Colors.dark.accent : theme.textSecondary }]}>
+                  <EvendiIcon name={cat.icon} size={12} color={quickReplyCategory === cat.value ? theme.accent : theme.textMuted} />
+                  <ThemedText style={[styles.categoryChipText, { color: quickReplyCategory === cat.value ? theme.accent : theme.textSecondary }]}>
                     {cat.label}
                   </ThemedText>
                 </Pressable>
@@ -800,7 +752,9 @@ export default function VendorChatScreen({ route, navigation }: Props) {
             {/* Template Chips */}
             <ScrollView style={{ maxHeight: 200 }}>
               <View style={styles.quickRepliesGrid}>
-                {filteredQuickTemplates.map((template) => (
+                {filteredQuickTemplates.map((template) => {
+                  const templateColor = resolveTemplateColor(template.color);
+                  return (
                   <Pressable
                     key={template.id}
                     onPress={() => handleQuickReply(template.message)}
@@ -809,17 +763,18 @@ export default function VendorChatScreen({ route, navigation }: Props) {
                         deleteCustomTemplate(template.id);
                       }
                     }}
-                    style={[styles.quickReplyChip, { backgroundColor: template.color + "15", borderColor: template.color }]}
+                    style={[styles.quickReplyChip, { backgroundColor: templateColor + "15", borderColor: templateColor }]}
                   >
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <ThemedText style={[styles.quickReplyLabel, { color: template.color }]}>{template.label}</ThemedText>
+                      <ThemedText style={[styles.quickReplyLabel, { color: templateColor }]}>{template.label}</ThemedText>
                       {"isCustom" in template && (template as any).isCustom && (
-                        <EvendiIcon name="star" size={10} color={template.color} />
+                        <EvendiIcon name="star" size={10} color={templateColor} />
                       )}
                     </View>
                     <ThemedText style={[styles.quickReplyText, { color: theme.textSecondary }]} numberOfLines={1}>{template.message}</ThemedText>
                   </Pressable>
-                ))}
+                  );
+                })}
                 {filteredQuickTemplates.length === 0 && (
                   <ThemedText style={{ fontSize: 13, color: theme.textMuted, textAlign: "center", paddingVertical: 8 }}>
                     Ingen maler i denne kategorien
@@ -830,14 +785,13 @@ export default function VendorChatScreen({ route, navigation }: Props) {
             {/* Create new template button */}
             <Pressable
               onPress={() => setShowCreateTemplate(true)}
-              style={[styles.addTemplateBtn, { borderColor: Colors.dark.accent }]}
+              style={[styles.addTemplateBtn, { borderColor: theme.accent }]}
             >
-              <EvendiIcon name="plus" size={14} color={Colors.dark.accent} />
-              <ThemedText style={{ fontSize: 12, color: Colors.dark.accent, fontWeight: "600" }}>Ny mal</ThemedText>
+              <EvendiIcon name="plus" size={14} color={theme.accent} />
+              <ThemedText style={{ fontSize: 12, color: theme.accent, fontWeight: "600" }}>Ny mal</ThemedText>
             </Pressable>
           </View>
         )}
-
         {/* Create Custom Template Modal */}
         <Modal visible={showCreateTemplate} animationType="slide" transparent>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
@@ -849,7 +803,8 @@ export default function VendorChatScreen({ route, navigation }: Props) {
                     <EvendiIcon name="x" size={20} color={theme.textSecondary} />
                   </Pressable>
                 </View>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VendorChatScreen-input-2"
                   style={[styles.modalInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                   placeholder="Navn / Label (f.eks. Fremme)"
                   placeholderTextColor={theme.textMuted}
@@ -857,7 +812,8 @@ export default function VendorChatScreen({ route, navigation }: Props) {
                   onChangeText={setNewTemplateLabel}
                   maxLength={40}
                 />
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VendorChatScreen-input-3"
                   style={[styles.modalInput, styles.modalTextArea, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                   placeholder="Melding (f.eks. 🏛️ Vi er fremme og klare!)"
                   placeholderTextColor={theme.textMuted}
@@ -873,11 +829,11 @@ export default function VendorChatScreen({ route, navigation }: Props) {
                       key={cat}
                       onPress={() => setNewTemplateCategory(cat)}
                       style={[styles.categoryChip, {
-                        backgroundColor: newTemplateCategory === cat ? Colors.dark.accent + "20" : theme.backgroundRoot,
-                        borderColor: newTemplateCategory === cat ? Colors.dark.accent : theme.border,
+                        backgroundColor: newTemplateCategory === cat ? theme.accent + "20" : theme.backgroundRoot,
+                        borderColor: newTemplateCategory === cat ? theme.accent : theme.border,
                       }]}
                     >
-                      <ThemedText style={{ fontSize: 12, color: newTemplateCategory === cat ? Colors.dark.accent : theme.textSecondary }}>
+                      <ThemedText style={{ fontSize: 12, color: newTemplateCategory === cat ? theme.accent : theme.textSecondary }}>
                         {cat === "general" ? "Svar" : cat === "status" ? "Status" : cat === "timing" ? "Tid" : cat === "location" ? "Sted" : cat === "coordination" ? "Team" : "Egen"}
                       </ThemedText>
                     </Pressable>
@@ -885,17 +841,16 @@ export default function VendorChatScreen({ route, navigation }: Props) {
                 </ScrollView>
                 <Pressable
                   onPress={saveCustomTemplate}
-                  style={[styles.saveTemplateBtn, { backgroundColor: Colors.dark.accent, opacity: (!newTemplateLabel.trim() || !newTemplateMessage.trim()) ? 0.5 : 1 }]}
+                  style={[styles.saveTemplateBtn, { backgroundColor: theme.accent, opacity: (!newTemplateLabel.trim() || !newTemplateMessage.trim()) ? 0.5 : 1 }]}
                   disabled={!newTemplateLabel.trim() || !newTemplateMessage.trim()}
                 >
-                  <EvendiIcon name="save" size={16} color="#1A1A1A" />
-                  <ThemedText style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A" }}>Lagre</ThemedText>
+                  <EvendiIcon name="save" size={16} color={theme.buttonText} />
+                  <ThemedText style={{ fontSize: 14, fontWeight: "600", color: theme.buttonText }}>Lagre</ThemedText>
                 </Pressable>
               </View>
             </View>
           </KeyboardAvoidingView>
         </Modal>
-
         {isCoupleTyping() && (
           <View style={[styles.typingIndicator, { backgroundColor: theme.backgroundDefault }]}>
             <View style={styles.typingDots}>
@@ -908,7 +863,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
             </ThemedText>
           </View>
         )}
-
         {selectedImage && (
           <View style={[styles.imagePreview, { backgroundColor: theme.backgroundRoot, borderTopColor: theme.border }]}>
             <Image source={{ uri: selectedImage }} style={styles.previewImage} resizeMode="cover" />
@@ -916,11 +870,10 @@ export default function VendorChatScreen({ route, navigation }: Props) {
               onPress={() => setSelectedImage(null)}
               style={styles.removeImageBtn}
             >
-              <EvendiIcon name="x-circle" size={24} color="#fff" />
+              <EvendiIcon name="x-circle" size={24} color={theme.buttonText} />
             </Pressable>
           </View>
         )}
-
         <View style={styles.inputRow}>
           <Pressable 
             onPress={() => {
@@ -929,15 +882,16 @@ export default function VendorChatScreen({ route, navigation }: Props) {
             }}
             style={styles.quickReplyBtn}
           >
-            <EvendiIcon name="zap" size={20} color={showQuickReplies ? Colors.dark.accent : theme.textMuted} />
+            <EvendiIcon name="zap" size={20} color={showQuickReplies ? theme.accent : theme.textMuted} />
           </Pressable>
           <Pressable 
             onPress={pickImage}
             style={styles.imagePickerBtn}
           >
-            <EvendiIcon name="image" size={20} color={selectedImage ? Colors.dark.accent : theme.textMuted} />
+            <EvendiIcon name="image" size={20} color={selectedImage ? theme.accent : theme.textMuted} />
           </Pressable>
-          <TextInput
+          <PersistentTextInput
+            draftKey="VendorChatScreen-input-4"
             style={[
               styles.textInput,
               { backgroundColor: theme.backgroundRoot, color: theme.text },
@@ -962,17 +916,17 @@ export default function VendorChatScreen({ route, navigation }: Props) {
             style={[
               styles.sendButton,
               {
-                backgroundColor: (messageText.trim() || selectedImage) ? Colors.dark.accent : theme.backgroundRoot,
+                backgroundColor: (messageText.trim() || selectedImage) ? theme.accent : theme.backgroundRoot,
               },
             ]}
           >
             {sendMutation.isPending || editMessageMutation.isPending || isUploading ? (
-              <ActivityIndicator size="small" color="#1A1A1A" />
+              <ActivityIndicator size="small" color={theme.buttonText} />
             ) : (
               <EvendiIcon
                 name={editingMessage ? "check" : "send"}
                 size={20}
-                color={messageText.trim() ? "#1A1A1A" : theme.textMuted}
+                color={messageText.trim() ? theme.buttonText : theme.textMuted}
               />
             )}
           </Pressable>
@@ -981,7 +935,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: {
@@ -1015,7 +968,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 18,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 2,

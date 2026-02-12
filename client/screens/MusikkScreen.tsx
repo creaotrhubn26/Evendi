@@ -28,15 +28,14 @@ import {
 } from '@/lib/api-couple-data';
 import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
-import { VendorSuggestions } from '@/components/VendorSuggestions';
-import { VendorActionBar } from '@/components/VendorActionBar';
+import { VendorCategoryMarketplace } from '@/components/VendorCategoryMarketplace';
 import { useTheme } from '../hooks/useTheme';
-import { useVendorSearch } from '@/hooks/useVendorSearch';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
 import { getSpeeches } from '@/lib/storage';
 import { Speech } from '@/lib/types';
 import { showToast } from '@/lib/toast';
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 type TabType = 'bookings' | 'timeline';
 type NavigationProp = NativeStackNavigationProp<PlanningStackParamList>;
@@ -66,9 +65,6 @@ export function MusikkScreen() {
     additionalNotes: '',
   });
   const [savingPreferences, setSavingPreferences] = useState(false);
-
-  // Vendor search for music autocomplete
-  const musicSearch = useVendorSearch({ category: 'music' });
 
   const COUPLE_STORAGE_KEY = 'evendi_couple_session';
 
@@ -283,106 +279,59 @@ export function MusikkScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={['bottom']}>
-      <View style={[styles.header, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <View style={styles.headerContent}>
-          <View style={[styles.iconCircle, { backgroundColor: Colors.dark.accent + '15' }]}>
-            <EvendiIcon name="music" size={24} color={Colors.dark.accent} />
-          </View>
-          <View style={styles.headerText}>
-            <ThemedText style={styles.headerTitle}>Musikk & DJ</ThemedText>
-            <ThemedText style={[styles.headerSubtitle, { color: theme.textMuted }]}>
-              Band, DJ og musikere
-            </ThemedText>
-          </View>
-        </View>
-      </View>
-
-      <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <Pressable
-          style={[styles.tab, activeTab === 'bookings' && styles.activeTab]}
-          onPress={() => {
-            setActiveTab('bookings');
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }}
-        >
-          <ThemedText style={[styles.tabText, activeTab === 'bookings' && { color: Colors.dark.accent }]}>
-            Bookinger
-          </ThemedText>
-          {activeTab === 'bookings' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
-        </Pressable>
-        <Pressable
-          style={[styles.tab, activeTab === 'timeline' && styles.activeTab]}
-          onPress={() => {
-            setActiveTab('timeline');
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }}
-        >
-          <ThemedText style={[styles.tabText, activeTab === 'timeline' && { color: Colors.dark.accent }]}>
-            Tidslinje
-          </ThemedText>
-          {activeTab === 'timeline' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
-        </Pressable>
-      </View>
-
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Tradition hints for music */}
+        {/* Marketplace hero + search + vendor cards + CTA */}
+        <VendorCategoryMarketplace
+          category="music"
+          categoryName="Musikk & DJ"
+          icon="music"
+          subtitle="Band, DJ og musikere for arrangementet"
+          selectedTraditions={coupleProfile?.selectedTraditions}
+        />
+
+        {/* Tradition hints */}
         {(coupleProfile?.selectedTraditions?.length ?? 0) > 0 && (
           <TraditionHintBanner
             traditions={coupleProfile?.selectedTraditions || []}
             category="music"
           />
         )}
+
+        {/* Tab bar */}
+        <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+          <Pressable
+            style={[styles.tab, activeTab === 'bookings' && styles.activeTab]}
+            onPress={() => {
+              setActiveTab('bookings');
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <ThemedText style={[styles.tabText, activeTab === 'bookings' && { color: Colors.dark.accent }]}>
+              Bookinger
+            </ThemedText>
+            {activeTab === 'bookings' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
+          </Pressable>
+          <Pressable
+            style={[styles.tab, activeTab === 'timeline' && styles.activeTab]}
+            onPress={() => {
+              setActiveTab('timeline');
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <ThemedText style={[styles.tabText, activeTab === 'timeline' && { color: Colors.dark.accent }]}>
+              Tidslinje
+            </ThemedText>
+            {activeTab === 'timeline' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
+          </Pressable>
+        </View>
+
+        {/* Tab content */}
         {activeTab === 'bookings' ? (
-          <Animated.View entering={FadeInDown.duration(300)} style={styles.emptyState}>
-            <EvendiIcon name="heart" size={48} color={theme.primary} style={{ opacity: 0.6 }} />
-            <ThemedText style={[styles.emptyTitle, { color: theme.text, fontWeight: '600' }]}>
-              Hva er soundtracket til dagen?
-            </ThemedText>
-            <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
-              La oss finne musikken som får dere til å danse.
-            </ThemedText>
-
-            <View style={{ width: '100%', marginTop: Spacing.md }}>
-              <ThemedText style={[styles.searchLabel, { color: theme.textSecondary }]}>Søk etter musikk/DJ</ThemedText>
-              <TextInput
-                style={[styles.searchInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
-                value={musicSearch.searchText}
-                onChangeText={musicSearch.onChangeText}
-                placeholder="Søk etter registrert musikk/DJ..."
-                placeholderTextColor={theme.textSecondary}
-              />
-              {musicSearch.selectedVendor && (
-                <VendorActionBar
-                  vendor={musicSearch.selectedVendor}
-                  vendorCategory="music"
-                  onClear={musicSearch.clearSelection}
-                  icon="music"
-                />
-              )}
-              <VendorSuggestions
-                suggestions={musicSearch.suggestions}
-                isLoading={musicSearch.isLoading}
-                onSelect={musicSearch.onSelectVendor}
-                onViewProfile={(v) => navigation.navigate('VendorDetail', {
-                  vendorId: v.id,
-                  vendorName: v.businessName,
-                  vendorDescription: v.description || '',
-                  vendorLocation: v.location || '',
-                  vendorPriceRange: v.priceRange || '',
-                  vendorCategory: 'music',
-                })}
-                icon="music"
-              />
-            </View>
-
-            <Button onPress={handleFindMusic} style={styles.findButton}>
-              Finn musikk
-            </Button>
-
+          <Animated.View entering={FadeInDown.duration(300)} style={styles.bookingsContent}>
             <View style={[styles.prefCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}> 
               <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Spillelister & ønskelåter</ThemedText>
               <ThemedText style={[styles.sectionSubtitle, { color: theme.textMuted }]}> 
@@ -392,7 +341,8 @@ export function MusikkScreen() {
               <View style={styles.prefField}>
                 <ThemedText style={[styles.prefLabel, { color: theme.textSecondary }]}>Spotify spilleliste</ThemedText>
                 <View style={styles.prefRow}>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="MusikkScreen-input-2"
                     style={[styles.prefInput, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
                     placeholder="https://open.spotify.com/..."
                     placeholderTextColor={theme.textMuted}
@@ -420,7 +370,8 @@ export function MusikkScreen() {
               <View style={styles.prefField}>
                 <ThemedText style={[styles.prefLabel, { color: theme.textSecondary }]}>YouTube spilleliste</ThemedText>
                 <View style={styles.prefRow}>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="MusikkScreen-input-3"
                     style={[styles.prefInput, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
                     placeholder="https://youtube.com/playlist?..."
                     placeholderTextColor={theme.textMuted}
@@ -447,7 +398,8 @@ export function MusikkScreen() {
 
               <View style={styles.prefField}>
                 <ThemedText style={[styles.prefLabel, { color: theme.textSecondary }]}>Inngangssang</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="MusikkScreen-input-4"
                   style={[styles.prefInput, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
                   placeholder="Artist - Sang"
                   placeholderTextColor={theme.textMuted}
@@ -458,7 +410,8 @@ export function MusikkScreen() {
 
               <View style={styles.prefField}>
                 <ThemedText style={[styles.prefLabel, { color: theme.textSecondary }]}>Første dans</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="MusikkScreen-input-5"
                   style={[styles.prefInput, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
                   placeholder="Artist - Sang"
                   placeholderTextColor={theme.textMuted}
@@ -469,7 +422,8 @@ export function MusikkScreen() {
 
               <View style={styles.prefField}>
                 <ThemedText style={[styles.prefLabel, { color: theme.textSecondary }]}>Siste sang</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="MusikkScreen-input-6"
                   style={[styles.prefInput, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
                   placeholder="Artist - Sang"
                   placeholderTextColor={theme.textMuted}
@@ -480,7 +434,8 @@ export function MusikkScreen() {
 
               <View style={styles.prefField}>
                 <ThemedText style={[styles.prefLabel, { color: theme.textSecondary }]}>Ikke spill</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="MusikkScreen-input-7"
                   style={[styles.prefInput, styles.prefNotes, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
                   placeholder="Sanger eller sjangre som må unngås"
                   placeholderTextColor={theme.textMuted}
@@ -492,7 +447,8 @@ export function MusikkScreen() {
 
               <View style={styles.prefField}>
                 <ThemedText style={[styles.prefLabel, { color: theme.textSecondary }]}>Ekstra notater</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="MusikkScreen-input-8"
                   style={[styles.prefInput, styles.prefNotes, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
                   placeholder="F.eks. ønsket stemning eller sjanger"
                   placeholderTextColor={theme.textMuted}
@@ -587,26 +543,6 @@ export function MusikkScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerText: { flex: 1 },
-  headerTitle: { fontSize: 24, fontWeight: '700' },
-  headerSubtitle: { fontSize: 14, marginTop: 2 },
   tabBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -627,17 +563,18 @@ const styles = StyleSheet.create({
     height: 2,
   },
   content: { flex: 1 },
-  scrollContent: { flexGrow: 1, padding: Spacing.lg },
+  scrollContent: { flexGrow: 1 },
+  bookingsContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
   emptyState: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
     gap: Spacing.md,
-    paddingVertical: Spacing['3xl'],
+    paddingVertical: Spacing.lg,
   },
-  emptyTitle: { fontSize: 20, fontWeight: '600', textAlign: 'center' },
+  emptyTitle: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
   emptyText: { fontSize: 14, textAlign: 'center', maxWidth: 280 },
-  findButton: { marginTop: Spacing.md },
   prefCard: {
     marginTop: Spacing.lg,
     padding: Spacing.md,
@@ -684,14 +621,6 @@ const styles = StyleSheet.create({
   },
   savePreferencesButton: {
     marginTop: Spacing.sm,
-  },
-  searchLabel: { fontSize: 14, fontWeight: '600', marginBottom: Spacing.xs },
-  searchInput: {
-    height: 44,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: Spacing.md,
-    fontSize: 15,
   },
   timelineContainer: { gap: Spacing.lg },
   timelineItem: {

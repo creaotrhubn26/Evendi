@@ -14,16 +14,13 @@ import { useQuery } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
-
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 interface VendorProduct {
   id: string;
   title: string;
@@ -43,18 +40,15 @@ interface VendorProduct {
   venueAccommodationAvailable?: boolean;
   venueCheckoutTime?: string | null;
 }
-
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
-
 export default function VendorInventoryScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   
   const [isRefreshing, setIsRefreshing] = useState(false);
-
   const { data: products = [], isLoading, refetch } = useQuery<VendorProduct[]>({
     queryKey: ["/api/vendor/products"],
     queryFn: async () => {
@@ -68,22 +62,18 @@ export default function VendorInventoryScreen({ navigation }: Props) {
       return response.json();
     },
   });
-
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await refetch();
     setIsRefreshing(false);
   };
-
   const inventoryProducts = products.filter(p => p.trackInventory);
-
   const getStatusColor = (available: number, total: number) => {
     const percentage = (available / total) * 100;
-    if (percentage > 30) return "#4CAF50";
-    if (percentage > 10) return "#FF9800";
-    return "#F44336";
+    if (percentage > 30) return theme.success;
+    if (percentage > 10) return theme.warning;
+    return theme.error;
   };
-
   const inventorySummary = useMemo(() => {
     return inventoryProducts.reduce(
       (acc, product) => {
@@ -98,7 +88,6 @@ export default function VendorInventoryScreen({ navigation }: Props) {
       { totalStock: 0, totalAvailable: 0, totalBuffer: 0, totalReserved: 0 }
     );
   }, [inventoryProducts]);
-
   const renderProductCard = ({ item, index }: { item: VendorProduct; index: number }) => {
     const total = item.availableQuantity || 0;
     const available = Math.max(total - item.bookingBuffer, 0);
@@ -107,7 +96,6 @@ export default function VendorInventoryScreen({ navigation }: Props) {
     const warningPercent = percentage;
     const warningColor = statusColor;
     const isLowStock = total > 0 && warningPercent <= 10;
-
     return (
       <Animated.View entering={FadeInDown.duration(300).delay(index * 50)}>
         <Pressable
@@ -135,7 +123,6 @@ export default function VendorInventoryScreen({ navigation }: Props) {
             </View>
             <EvendiIcon name="chevron-right" size={20} color={theme.textMuted} />
           </View>
-
           <View style={styles.statsContainer}>
             <View style={styles.statBox}>
               <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
@@ -145,7 +132,6 @@ export default function VendorInventoryScreen({ navigation }: Props) {
                 {total + item.bookingBuffer}
               </ThemedText>
             </View>
-
             <View style={styles.statBox}>
               <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
                 Buffer
@@ -154,7 +140,6 @@ export default function VendorInventoryScreen({ navigation }: Props) {
                 {item.bookingBuffer}
               </ThemedText>
             </View>
-
             <View style={styles.statBox}>
               <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
                 Tilgjengelig
@@ -163,7 +148,6 @@ export default function VendorInventoryScreen({ navigation }: Props) {
                 {total}
               </ThemedText>
             </View>
-
             <View style={styles.statBox}>
               <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
                 Max/dato
@@ -173,7 +157,6 @@ export default function VendorInventoryScreen({ navigation }: Props) {
               </ThemedText>
             </View>
           </View>
-
           <View style={styles.progressBarContainer}>
             <View style={[styles.progressBarBg, { backgroundColor: theme.border }]}>
               <View
@@ -190,7 +173,6 @@ export default function VendorInventoryScreen({ navigation }: Props) {
               {percentage.toFixed(0)}% tilgjengelig
             </ThemedText>
           </View>
-
           {isLowStock && (
             <View style={[styles.warningBadge, { backgroundColor: warningColor + "20" }]}> 
               <EvendiIcon name="alert-triangle" size={14} color={warningColor} />
@@ -199,7 +181,6 @@ export default function VendorInventoryScreen({ navigation }: Props) {
               </ThemedText>
             </View>
           )}
-
           {/* Venue-specific details */}
           {item.categoryTag && item.categoryTag.toLowerCase() === "venue" && (item.venueMaxGuests || item.venueAddress) && (
             <View style={[styles.venueDetailsBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
@@ -221,15 +202,15 @@ export default function VendorInventoryScreen({ navigation }: Props) {
               )}
               <View style={styles.venueBadgesRow}>
                 {item.venueCateringIncluded && (
-                  <View style={[styles.venueBadge, { backgroundColor: "#4CAF50" + "20" }]}>
-                    <ThemedText style={[styles.venueBadgeText, { color: "#4CAF50" }]}>
+                  <View style={[styles.venueBadge, { backgroundColor: theme.success + "20" }]}>
+                    <ThemedText style={[styles.venueBadgeText, { color: theme.success }]}>
                       Servering
                     </ThemedText>
                   </View>
                 )}
                 {item.venueAccommodationAvailable && (
-                  <View style={[styles.venueBadge, { backgroundColor: "#2196F3" + "20" }]}>
-                    <ThemedText style={[styles.venueBadgeText, { color: "#2196F3" }]}>
+                  <View style={[styles.venueBadge, { backgroundColor: theme.accent + "20" }]}>
+                    <ThemedText style={[styles.venueBadgeText, { color: theme.accent }]}>
                       Overnatting
                     </ThemedText>
                   </View>
@@ -244,7 +225,6 @@ export default function VendorInventoryScreen({ navigation }: Props) {
               </View>
             </View>
           )}
-
           <View style={[styles.infoBox, { backgroundColor: theme.accent + "12", borderColor: theme.accent + "30" }]}>
             <EvendiIcon name="info" size={14} color={theme.accent} />
             <ThemedText style={[styles.infoText, { color: theme.text, flex: 1, marginLeft: Spacing.xs }]}>
@@ -255,18 +235,16 @@ export default function VendorInventoryScreen({ navigation }: Props) {
       </Animated.View>
     );
   };
-
   if (isLoading) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
-        <ActivityIndicator size="large" color={Colors.dark.accent} />
+        <ActivityIndicator size="large" color={theme.accent} />
         <ThemedText style={[styles.loadingText, { color: theme.textMuted }]}>
           Laster lagerbeholdning...
         </ThemedText>
       </View>
     );
   }
-
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View
@@ -280,8 +258,8 @@ export default function VendorInventoryScreen({ navigation }: Props) {
         ]}
       >
         <View style={styles.headerContent}>
-          <View style={[styles.headerIconCircle, { backgroundColor: Colors.dark.accent }]}>
-            <EvendiIcon name="package" size={20} color="#FFFFFF" />
+          <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}>
+            <EvendiIcon name="package" size={20} color={theme.buttonText} />
           </View>
           <View style={styles.headerTextContainer}>
             <ThemedText style={[styles.headerTitle, { color: theme.text }]}>
@@ -302,7 +280,6 @@ export default function VendorInventoryScreen({ navigation }: Props) {
           <EvendiIcon name="x" size={20} color={theme.textSecondary} />
         </Pressable>
       </View>
-
       {inventoryProducts.length === 0 ? (
         <View style={styles.emptyState}>
           <View style={[styles.emptyIconCircle, { backgroundColor: theme.accent + "15" }]}>
@@ -324,8 +301,8 @@ export default function VendorInventoryScreen({ navigation }: Props) {
               },
             ]}
           >
-            <EvendiIcon name="plus" size={18} color="#FFFFFF" />
-            <ThemedText style={styles.emptyButtonText}>Gå til produkter</ThemedText>
+            <EvendiIcon name="plus" size={18} color={theme.buttonText} />
+            <ThemedText style={[styles.emptyButtonText, { color: theme.buttonText }]}>Gå til produkter</ThemedText>
           </Pressable>
         </View>
       ) : (
@@ -374,7 +351,7 @@ export default function VendorInventoryScreen({ navigation }: Props) {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={Colors.dark.accent}
+              tintColor={theme.accent}
             />
           }
         />
@@ -382,7 +359,6 @@ export default function VendorInventoryScreen({ navigation }: Props) {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { justifyContent: "center", alignItems: "center" },
@@ -609,6 +585,5 @@ const styles = StyleSheet.create({
   emptyButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#FFFFFF",
   },
 });

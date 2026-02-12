@@ -26,13 +26,12 @@ import {
 import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
 import { SwipeableRow } from '../components/SwipeableRow';
-import { VendorSuggestions } from '@/components/VendorSuggestions';
-import { VendorActionBar } from '@/components/VendorActionBar';
+import { VendorCategoryMarketplace } from '@/components/VendorCategoryMarketplace';
 import { useTheme } from '../hooks/useTheme';
-import { useVendorSearch } from '@/hooks/useVendorSearch';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
 import { showToast } from '@/lib/toast';
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 type TabType = 'sessions' | 'timeline';
 type NavigationProp = NativeStackNavigationProp<PlanningStackParamList>;
@@ -88,9 +87,6 @@ export function FotografScreen() {
     depositPaid: false,
     budget: 0,
   };
-
-  // Vendor search for photographer autocomplete
-  const photographerSearch = useVendorSearch({ category: 'photographer' });
 
   // Mutations
   const createSessionMutation = useMutation({
@@ -174,102 +170,62 @@ export function FotografScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={['bottom']}>
-      <View style={[styles.header, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <View style={styles.headerContent}>
-          <View style={[styles.iconCircle, { backgroundColor: Colors.dark.accent + '15' }]}>
-            <EvendiIcon name="camera" size={24} color={Colors.dark.accent} />
-          </View>
-          <View style={styles.headerText}>
-            <ThemedText style={styles.headerTitle}>Fotograf</ThemedText>
-            <ThemedText style={[styles.headerSubtitle, { color: theme.textMuted }]}>
-              Finn og book fotograf
-            </ThemedText>
-          </View>
-        </View>
-      </View>
-
-      <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <Pressable
-          style={[styles.tab, activeTab === 'sessions' && styles.activeTab]}
-          onPress={() => {
-            setActiveTab('sessions');
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }}
-        >
-          <ThemedText style={[styles.tabText, activeTab === 'sessions' && { color: Colors.dark.accent }]}>
-            Økter
-          </ThemedText>
-          {activeTab === 'sessions' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
-        </Pressable>
-        <Pressable
-          style={[styles.tab, activeTab === 'timeline' && styles.activeTab]}
-          onPress={() => {
-            setActiveTab('timeline');
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }}
-        >
-          <ThemedText style={[styles.tabText, activeTab === 'timeline' && { color: Colors.dark.accent }]}>
-            Tidslinje
-          </ThemedText>
-          {activeTab === 'timeline' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
-        </Pressable>
-      </View>
-
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {/* Marketplace hero + search + vendor cards + CTA */}
+        <VendorCategoryMarketplace
+          category="photographer"
+          categoryName="Fotograf"
+          icon="camera"
+          subtitle="Finn og book den perfekte fotografen"
+          selectedTraditions={coupleProfile?.selectedTraditions}
+        />
+
+        {/* Tab bar */}
+        <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+          <Pressable
+            style={[styles.tab, activeTab === 'sessions' && styles.activeTab]}
+            onPress={() => {
+              setActiveTab('sessions');
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <ThemedText style={[styles.tabText, activeTab === 'sessions' && { color: Colors.dark.accent }]}>
+              Økter
+            </ThemedText>
+            {activeTab === 'sessions' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
+          </Pressable>
+          <Pressable
+            style={[styles.tab, activeTab === 'timeline' && styles.activeTab]}
+            onPress={() => {
+              setActiveTab('timeline');
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <ThemedText style={[styles.tabText, activeTab === 'timeline' && { color: Colors.dark.accent }]}>
+              Tidslinje
+            </ThemedText>
+            {activeTab === 'timeline' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
+          </Pressable>
+        </View>
+
+        {/* Tab content */}
         {activeTab === 'sessions' ? (
           <Animated.View entering={FadeInDown.duration(300)} style={styles.emptyState}>
-            <EvendiIcon name="heart" size={48} color={theme.primary} style={{ opacity: 0.6 }} />
-            <ThemedText style={[styles.emptyTitle, { color: theme.text, fontWeight: '600' }]}>
-              Hvem skal bevare minnene deres?
+            <EvendiIcon name="camera" size={48} color={theme.textMuted} style={{ opacity: 0.5 }} />
+            <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>
+              Ingen fotoøkter ennå
             </ThemedText>
             <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
-              La oss finne fotografen som forteller historien deres.
+              Bruk søket ovenfor for å finne og booke en fotograf.
             </ThemedText>
-
-            <View style={{ width: '100%', marginTop: Spacing.md }}>
-              <ThemedText style={[styles.searchLabel, { color: theme.textSecondary }]}>Søk etter fotograf</ThemedText>
-              <TextInput
-                style={[styles.searchInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
-                value={photographerSearch.searchText}
-                onChangeText={photographerSearch.onChangeText}
-                placeholder="Søk etter registrert fotograf..."
-                placeholderTextColor={theme.textSecondary}
-              />
-              {photographerSearch.selectedVendor && (
-                <VendorActionBar
-                  vendor={photographerSearch.selectedVendor}
-                  vendorCategory="photographer"
-                  onClear={photographerSearch.clearSelection}
-                  icon="camera"
-                />
-              )}
-              <VendorSuggestions
-                suggestions={photographerSearch.suggestions}
-                isLoading={photographerSearch.isLoading}
-                onSelect={photographerSearch.onSelectVendor}
-                onViewProfile={(v) => navigation.navigate('VendorDetail', {
-                  vendorId: v.id,
-                  vendorName: v.businessName,
-                  vendorDescription: v.description || '',
-                  vendorLocation: v.location || '',
-                  vendorPriceRange: v.priceRange || '',
-                  vendorCategory: 'photographer',
-                })}
-                icon="camera"
-              />
-            </View>
-
-            <Button onPress={handleFindPhotographer} style={styles.findButton}>
-              Finn fotograf
-            </Button>
           </Animated.View>
         ) : (
           <Animated.View entering={FadeInDown.duration(300)} style={styles.timelineContainer}>
-            {TIMELINE_STEPS.map((step, index) => (
+            {TIMELINE_STEPS.map((step) => (
               <View key={step.key} style={styles.timelineItem}>
                 <View style={[styles.timelineIconCircle, { backgroundColor: theme.backgroundSecondary }]}>
                   <EvendiIcon name={step.icon} size={20} color={theme.textMuted} />
@@ -288,26 +244,6 @@ export function FotografScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerText: { flex: 1 },
-  headerTitle: { fontSize: 24, fontWeight: '700' },
-  headerSubtitle: { fontSize: 14, marginTop: 2 },
   tabBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -328,25 +264,15 @@ const styles = StyleSheet.create({
     height: 2,
   },
   content: { flex: 1 },
-  scrollContent: { flexGrow: 1, padding: Spacing.lg },
+  scrollContent: { flexGrow: 1 },
   emptyState: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
     gap: Spacing.md,
-    paddingVertical: Spacing['3xl'],
+    paddingVertical: Spacing['2xl'],
+    paddingHorizontal: Spacing.lg,
   },
-  emptyTitle: { fontSize: 20, fontWeight: '600', textAlign: 'center' },
+  emptyTitle: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
   emptyText: { fontSize: 14, textAlign: 'center', maxWidth: 280 },
-  findButton: { marginTop: Spacing.md },
-  searchLabel: { fontSize: 14, fontWeight: '600', marginBottom: Spacing.xs },
-  searchInput: {
-    height: 44,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: Spacing.md,
-    fontSize: 15,
-  },
   timelineContainer: { gap: Spacing.lg },
   timelineItem: {
     flexDirection: 'row',

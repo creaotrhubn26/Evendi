@@ -42,6 +42,7 @@ import { useVendorLocationIntelligence } from "@/hooks/useVendorLocationIntellig
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 type NavigationProp = NativeStackNavigationProp<PlanningStackParamList>;
 
@@ -190,7 +191,8 @@ export function VendorSearchField({
           {label}
         </ThemedText>
       )}
-      <TextInput
+      <PersistentTextInput
+        draftKey="VendorSearchField-input-1"
         style={[
           styles.input,
           {

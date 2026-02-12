@@ -23,8 +23,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
 import { SwipeableRow } from '../components/SwipeableRow';
+import PersistentTextInput from '@/components/PersistentTextInput';
 import { VendorSuggestions } from '@/components/VendorSuggestions';
 import { VendorActionBar } from '@/components/VendorActionBar';
+import { VendorCategoryMarketplace } from '@/components/VendorCategoryMarketplace';
 import { TraditionHintBanner } from '@/components/TraditionHintBanner';
 import { getCoupleProfile } from '@/lib/api-couples';
 import { getCakeSizingSuggestion } from '@/constants/tradition-data';
@@ -1039,6 +1041,15 @@ export function KakeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} />
         }
       >
+        {/* Marketplace hero + search + vendor cards */}
+        <VendorCategoryMarketplace
+          category="bakery"
+          categoryName="Kake"
+          icon="gift"
+          subtitle={isWedding ? 'Den perfekte bryllupskaken' : 'Finn den perfekte kaken'}
+          selectedTraditions={coupleProfile?.selectedTraditions}
+        />
+
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.primary} />
@@ -1098,7 +1109,8 @@ export function KakeScreen() {
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Bakeri navn *
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="KakeScreen-input-1"
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={bakerySearch.searchText || bakeryName}
                 onChangeText={(text) => {
@@ -1140,7 +1152,8 @@ export function KakeScreen() {
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Dato *
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="KakeScreen-input-2"
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={tastingDate}
                 onChangeText={setTastingDate}
@@ -1151,7 +1164,8 @@ export function KakeScreen() {
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Tidspunkt
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="KakeScreen-input-3"
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={tastingTime}
                 onChangeText={setTastingTime}
@@ -1162,7 +1176,8 @@ export function KakeScreen() {
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Sted
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="KakeScreen-input-4"
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={tastingLocation}
                 onChangeText={setTastingLocation}
@@ -1173,7 +1188,8 @@ export function KakeScreen() {
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Smaker å prøve
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="KakeScreen-input-5"
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={flavorsToTry}
                 onChangeText={setFlavorsToTry}
@@ -1207,7 +1223,8 @@ export function KakeScreen() {
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Notater
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="KakeScreen-input-6"
                 style={[styles.textArea, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={tastingNotes}
                 onChangeText={setTastingNotes}
@@ -1282,7 +1299,8 @@ export function KakeScreen() {
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Navn *
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="KakeScreen-input-7"
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={designName}
                 onChangeText={setDesignName}
@@ -1356,7 +1374,8 @@ export function KakeScreen() {
                     <ThemedText style={{ color: theme.primary, fontWeight: '500' }}>Velg bilde</ThemedText>
                   </TouchableOpacity>
                   <ThemedText style={{ color: theme.textSecondary, marginVertical: 8 }}>eller</ThemedText>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="KakeScreen-input-8"
                     style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                     value={designImageUrl}
                     onChangeText={setDesignImageUrl}
@@ -1371,7 +1390,8 @@ export function KakeScreen() {
                   <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                     Etasjer
                   </ThemedText>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="KakeScreen-input-9"
                     style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                     value={designTiers}
                     onChangeText={setDesignTiers}
@@ -1384,7 +1404,8 @@ export function KakeScreen() {
                   <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                     Porsjoner
                   </ThemedText>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="KakeScreen-input-10"
                     style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                     value={designEstimatedServings}
                     onChangeText={setDesignEstimatedServings}
@@ -1398,7 +1419,8 @@ export function KakeScreen() {
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Smak
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="KakeScreen-input-11"
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={designFlavor}
                 onChangeText={setDesignFlavor}
@@ -1409,7 +1431,8 @@ export function KakeScreen() {
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Fyll
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="KakeScreen-input-12"
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={designFilling}
                 onChangeText={setDesignFilling}
@@ -1420,7 +1443,8 @@ export function KakeScreen() {
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Glasur
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="KakeScreen-input-13"
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={designFrosting}
                 onChangeText={setDesignFrosting}
@@ -1431,7 +1455,8 @@ export function KakeScreen() {
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Estimert pris (NOK)
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="KakeScreen-input-14"
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={designEstimatedPrice}
                 onChangeText={setDesignEstimatedPrice}
@@ -1443,7 +1468,8 @@ export function KakeScreen() {
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Notater
               </ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="KakeScreen-input-15"
                 style={[styles.textArea, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={designNotes}
                 onChangeText={setDesignNotes}
@@ -1537,7 +1563,8 @@ export function KakeScreen() {
             <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
               Budsjett (NOK)
             </ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="KakeScreen-input-16"
               style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
               value={budgetInput}
               onChangeText={setBudgetInput}

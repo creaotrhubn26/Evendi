@@ -27,15 +27,16 @@ import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import PersistentTextInput from "@/components/PersistentTextInput";
 import {
   getImportantPeople,
   createImportantPerson,
   updateImportantPerson,
   deleteImportantPerson,
-  ImportantPerson,
   getWeddingInvites,
   createWeddingInvite,
-  WeddingRoleInvitation,
+  type ImportantPerson,
+  type WeddingRoleInvitation,
 } from "@/lib/api-couple-data";
 
 const ROLE_SUGGESTIONS = [
@@ -416,7 +417,8 @@ export default function ImportantPeopleScreen() {
             {editingPerson ? "Endre person" : "Legg til person"}
           </ThemedText>
 
-          <TextInput
+          <PersistentTextInput
+            draftKey="ImportantPeopleScreen-input-1"
             style={[
               styles.input,
               {
@@ -431,7 +433,8 @@ export default function ImportantPeopleScreen() {
             onChangeText={setNewName}
           />
 
-          <TextInput
+          <PersistentTextInput
+            draftKey="ImportantPeopleScreen-input-2"
             style={[
               styles.input,
               {
@@ -471,7 +474,8 @@ export default function ImportantPeopleScreen() {
             ))}
           </View>
 
-          <TextInput
+          <PersistentTextInput
+            draftKey="ImportantPeopleScreen-input-3"
             style={[
               styles.input,
               {

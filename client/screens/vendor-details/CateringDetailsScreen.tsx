@@ -12,18 +12,16 @@ import { EvendiIcon } from "@/components/EvendiIcon";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { showToast } from "@/lib/toast";
-
+import PersistentTextInput from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 interface CateringDetails {
   // Kapasitet
   minGuests: number | null;
@@ -87,7 +85,6 @@ interface CateringDetails {
   bookingLeadWeeks: number | null;
   finalNumbersDays: number | null;
 }
-
 const defaultDetails: CateringDetails = {
   minGuests: null,
   maxGuests: null,
@@ -132,7 +129,6 @@ const defaultDetails: CateringDetails = {
   bookingLeadWeeks: null,
   finalNumbersDays: null,
 };
-
 const CUISINE_TYPES = [
   "Norsk/Skandinavisk",
   "Fransk",
@@ -147,7 +143,6 @@ const CUISINE_TYPES = [
   "Sjømat",
   "BBQ/Grill",
 ];
-
 export default function CateringDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
   const { isWedding } = useEventType();
@@ -156,7 +151,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
   
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [details, setDetails] = useState<CateringDetails>(defaultDetails);
-
   useEffect(() => {
     AsyncStorage.getItem(VENDOR_STORAGE_KEY).then((data) => {
       if (data) {
@@ -165,7 +159,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
       }
     });
   }, []);
-
   const { data: savedData, isLoading } = useQuery({
     queryKey: ["/api/vendor/catering-details"],
     queryFn: async () => {
@@ -178,13 +171,11 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
     },
     enabled: !!sessionToken,
   });
-
   useEffect(() => {
     if (savedData) {
       setDetails({ ...defaultDetails, ...savedData });
     }
   }, [savedData]);
-
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!sessionToken) throw new Error("Ikke innlogget");
@@ -209,11 +200,9 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
       showToast(error.message);
     },
   });
-
   const updateDetail = <K extends keyof CateringDetails>(key: K, value: CateringDetails[K]) => {
     setDetails(prev => ({ ...prev, [key]: value }));
   };
-
   const toggleCuisine = (cuisine: string) => {
     setDetails(prev => ({
       ...prev,
@@ -222,7 +211,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
         : [...prev.cuisineTypes, cuisine],
     }));
   };
-
   const renderSectionHeader = (icon: string, title: string) => (
     <View style={styles.sectionHeader}>
       <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
@@ -231,7 +219,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
       <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>{title}</ThemedText>
     </View>
   );
-
   const renderSwitch = (label: string, value: boolean, onChange: (v: boolean) => void, description?: string) => (
     <View style={styles.switchContainer}>
       <View style={styles.switchRow}>
@@ -242,13 +229,12 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
         <Switch
           value={value}
           onValueChange={onChange}
-          trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-          thumbColor={value ? Colors.dark.accent : theme.backgroundSecondary}
+          trackColor={{ false: theme.border, true: theme.accent + "60" }}
+          thumbColor={value ? theme.accent : theme.backgroundSecondary}
         />
       </View>
     </View>
   );
-
   const renderInput = (label: string, value: string | null, onChange: (v: string) => void, options?: {
     placeholder?: string;
     keyboardType?: "default" | "number-pad";
@@ -257,7 +243,8 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
     <View style={styles.inputGroup}>
       <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>{label}</ThemedText>
       <View style={styles.inputWrapper}>
-        <TextInput
+        <PersistentTextInput
+          draftKey="CateringDetailsScreen-input-1"
           style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }, options?.suffix && { paddingRight: 50 }]}
           value={value || ""}
           onChangeText={onChange}
@@ -269,7 +256,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
       </View>
     </View>
   );
-
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -293,7 +279,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
       </View>
     );
   }
-
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
@@ -310,7 +295,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
           <EvendiIcon name="x" size={20} color={theme.textSecondary} />
         </Pressable>
       </View>
-
       <KeyboardAwareScrollViewCompat
         style={{ flex: 1 }}
         contentContainerStyle={[styles.content, { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }]}
@@ -325,7 +309,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
           </View>
           {renderInput("Minimum ordresum", details.minOrderValue?.toString() || "", (v) => updateDetail("minOrderValue", v ? parseInt(v) : null), { placeholder: "15000", keyboardType: "number-pad", suffix: "kr" })}
         </View>
-
         {/* Serveringsformat */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("layout", "Serveringsformat")}
@@ -337,7 +320,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
           {renderSwitch("Grazing tables", details.offersGrazing, (v) => updateDetail("offersGrazing", v), "Store serveringsbord")}
           {renderSwitch("Matstasjoner", details.offersFoodStations, (v) => updateDetail("offersFoodStations", v))}
         </View>
-
         {/* Kjøkken */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("globe", "Kjøkkentype")}
@@ -360,7 +342,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
             ))}
           </View>
         </View>
-
         {/* Diett */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("heart", "Diett & Allergier")}
@@ -372,7 +353,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
           {renderSwitch("Kosher", details.kosherOptions, (v) => updateDetail("kosherOptions", v))}
           {renderSwitch("Allergi-tilpasning", details.allergyAccommodation, (v) => updateDetail("allergyAccommodation", v), "Vi tilpasser til allergier")}
         </View>
-
         {/* Personal */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("user-check", "Servering & Personal")}
@@ -382,7 +362,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
           {renderSwitch("Bar-service", details.barServiceIncluded, (v) => updateDetail("barServiceIncluded", v))}
           {details.barServiceIncluded && renderSwitch("Bartendere inkludert", details.bartendersIncluded, (v) => updateDetail("bartendersIncluded", v))}
         </View>
-
         {/* Drikke */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("droplet", "Drikkeservering")}
@@ -393,7 +372,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
           {renderSwitch("Alkoholfrie alternativer", details.nonAlcoholicOptions, (v) => updateDetail("nonAlcoholicOptions", v))}
           {renderSwitch("Kaffe/te-servering", details.coffeeTeaService, (v) => updateDetail("coffeeTeaService", v))}
         </View>
-
         {/* Utstyr */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("box", "Utstyr & Servise")}
@@ -404,7 +382,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
           {renderSwitch("Duker/servietter", details.linens, (v) => updateDetail("linens", v))}
           {renderSwitch("Møbelutleie", details.furnitureRental, (v) => updateDetail("furnitureRental", v), "Bord, stoler etc.")}
         </View>
-
         {/* Leveranse */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("truck", "Levering & Oppsett")}
@@ -414,7 +391,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
           {renderSwitch("Opprydding inkludert", details.cleanupIncluded, (v) => updateDetail("cleanupIncluded", v))}
           {renderSwitch("Matlaging på stedet", details.onSiteCooking, (v) => updateDetail("onSiteCooking", v), "Fersk tilberedning")}
         </View>
-
         {/* Ekstra */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("star", "Ekstra tjenester")}
@@ -430,7 +406,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
           {renderSwitch(isWedding ? "Bryllupskake" : "Festkake", details.cakeAvailable, (v) => updateDetail("cakeAvailable", v))}
           {renderSwitch("Late night snacks", details.lateNightSnacks, (v) => updateDetail("lateNightSnacks", v))}
         </View>
-
         {/* Booking */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("calendar", "Booking")}
@@ -438,7 +413,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
           {renderInput("Book i forveien", details.bookingLeadWeeks?.toString() || "", (v) => updateDetail("bookingLeadWeeks", v ? parseInt(v) : null), { placeholder: "8", keyboardType: "number-pad", suffix: "uker" })}
           {renderInput("Endelig gjestetall", details.finalNumbersDays?.toString() || "", (v) => updateDetail("finalNumbersDays", v ? parseInt(v) : null), { placeholder: "14", keyboardType: "number-pad", suffix: "dager før" })}
         </View>
-
         {/* Save */}
         <Pressable
           onPress={() => saveMutation.mutate()}
@@ -456,7 +430,6 @@ export default function CateringDetailsScreen({ navigation }: { navigation: Nati
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md, borderBottomWidth: 1 },

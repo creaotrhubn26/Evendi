@@ -12,18 +12,16 @@ import { EvendiIcon } from "@/components/EvendiIcon";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { showToast } from "@/lib/toast";
-
+import PersistentTextInput from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 interface FloristDetails {
   // Tjenester
   offersWeddingBouquet: boolean;
@@ -77,7 +75,6 @@ interface FloristDetails {
   maxWeddingsPerWeekend: number | null;
   advanceBookingWeeks: number | null;
 }
-
 const defaultDetails: FloristDetails = {
   offersWeddingBouquet: true,
   offersBridesmaidBouquets: true,
@@ -118,7 +115,6 @@ const defaultDetails: FloristDetails = {
   maxWeddingsPerWeekend: null,
   advanceBookingWeeks: null,
 };
-
 const FLORAL_STYLES = [
   "Romantisk",
   "Klassisk",
@@ -131,7 +127,6 @@ const FLORAL_STYLES = [
   "Hage-stil",
   "Naturlig/Vill",
 ];
-
 export default function FloristDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
   const { isWedding } = useEventType();
@@ -140,7 +135,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
   
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [details, setDetails] = useState<FloristDetails>(defaultDetails);
-
   useEffect(() => {
     AsyncStorage.getItem(VENDOR_STORAGE_KEY).then((data) => {
       if (data) {
@@ -149,7 +143,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
       }
     });
   }, []);
-
   const { data: savedData, isLoading } = useQuery({
     queryKey: ["/api/vendor/florist-details"],
     queryFn: async () => {
@@ -162,13 +155,11 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
     },
     enabled: !!sessionToken,
   });
-
   useEffect(() => {
     if (savedData) {
       setDetails({ ...defaultDetails, ...savedData });
     }
   }, [savedData]);
-
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!sessionToken) throw new Error("Ikke innlogget");
@@ -196,11 +187,9 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
       showToast(error.message);
     },
   });
-
   const updateDetail = <K extends keyof FloristDetails>(key: K, value: FloristDetails[K]) => {
     setDetails(prev => ({ ...prev, [key]: value }));
   };
-
   const toggleStyle = (style: string) => {
     setDetails(prev => ({
       ...prev,
@@ -209,7 +198,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
         : [...prev.floralStyles, style],
     }));
   };
-
   const renderSectionHeader = (icon: string, title: string) => (
     <View style={styles.sectionHeader}>
       <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
@@ -218,7 +206,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
       <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>{title}</ThemedText>
     </View>
   );
-
   const renderSwitch = (label: string, value: boolean, onChange: (v: boolean) => void, description?: string) => (
     <View style={styles.switchContainer}>
       <View style={styles.switchRow}>
@@ -229,13 +216,12 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
         <Switch
           value={value}
           onValueChange={onChange}
-          trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-          thumbColor={value ? Colors.dark.accent : theme.backgroundSecondary}
+          trackColor={{ false: theme.border, true: theme.accent + "60" }}
+          thumbColor={value ? theme.accent : theme.backgroundSecondary}
         />
       </View>
     </View>
   );
-
   const renderInput = (label: string, value: string | null, onChange: (v: string) => void, options?: {
     placeholder?: string;
     keyboardType?: "default" | "number-pad";
@@ -245,7 +231,8 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
     <View style={styles.inputGroup}>
       <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>{label}</ThemedText>
       <View style={styles.inputWrapper}>
-        <TextInput
+        <PersistentTextInput
+          draftKey="FloristDetailsScreen-input-1"
           style={[
             options?.multiline ? styles.textArea : styles.input,
             { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
@@ -264,7 +251,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
       </View>
     </View>
   );
-
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -288,7 +274,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
       </View>
     );
   }
-
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
@@ -305,7 +290,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
           <EvendiIcon name="x" size={20} color={theme.textSecondary} />
         </Pressable>
       </View>
-
       <KeyboardAwareScrollViewCompat
         style={{ flex: 1 }}
         contentContainerStyle={[styles.content, { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }]}
@@ -321,7 +305,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
           {renderSwitch("Corsages", details.offersCorsages, (v) => updateDetail("offersCorsages", v), "Håndleddsblomster")}
           {renderSwitch("Hårblomster", details.offersHairFlowers, (v) => updateDetail("offersHairFlowers", v))}
         </View>
-
         {/* Dekorasjoner */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("layout", "Dekorasjoner")}
@@ -333,7 +316,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
           {renderSwitch("Blomsterbuer", details.offersArches, (v) => updateDetail("offersArches", v), "Arches & bakdrop")}
           {renderSwitch("Installasjoner", details.offersInstallations, (v) => updateDetail("offersInstallations", v), "Hengende dekor, vegger etc.")}
         </View>
-
         {/* Stil */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("star", "Stil")}
@@ -359,7 +341,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
           
           {renderInput("Spesialiteter", details.specialtiesDescription || "", (v) => updateDetail("specialtiesDescription", v || null), { placeholder: "Beskriv dine spesialiteter...", multiline: true })}
         </View>
-
         {/* Materialer */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("feather", "Materialer & Bærekraft")}
@@ -371,7 +352,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
           {renderSwitch("Tørkede blomster", details.offersDriedFlowers, (v) => updateDetail("offersDriedFlowers", v))}
           {renderSwitch("Silkeblomster", details.offersSilkFlowers, (v) => updateDetail("offersSilkFlowers", v))}
         </View>
-
         {/* Leveranse */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("truck", "Leveranse & Oppsett")}
@@ -386,7 +366,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
           {renderSwitch("Oppsett inkludert", details.setupIncluded, (v) => updateDetail("setupIncluded", v), "Vi setter opp dekorasjonene")}
           {renderSwitch("Henting etter arrangement", details.pickupAfterEvent, (v) => updateDetail("pickupAfterEvent", v), "Vi henter vaser/rekvisita")}
         </View>
-
         {/* Utleie */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("box", "Utleie & Ekstra")}
@@ -398,7 +377,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
           {renderSwitch("Bukettpreservering", details.offersPreservation, (v) => updateDetail("offersPreservation", v), isWedding ? "Tørking/pressing av brudebukett" : "Tørking/pressing av bukett")}
           {details.offersPreservation && renderInput("Preserveringsbeskrivelse", details.preservationDescription || "", (v) => updateDetail("preservationDescription", v || null), { placeholder: "Beskriv tjenesten..." })}
         </View>
-
         {/* Konsultasjon */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("message-circle", "Konsultasjon")}
@@ -409,7 +387,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
           {renderSwitch("Prøvebukett tilgjengelig", details.trialBouquetAvailable, (v) => updateDetail("trialBouquetAvailable", v))}
           {details.trialBouquetAvailable && renderInput("Pris prøvebukett", details.trialBouquetFee?.toString() || "", (v) => updateDetail("trialBouquetFee", v ? parseInt(v) : null), { placeholder: "800", keyboardType: "number-pad", suffix: "kr" })}
         </View>
-
         {/* Kapasitet */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("calendar", "Kapasitet & Booking")}
@@ -418,7 +395,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
           {renderInput(isWedding ? "Maks bryllup per helg" : "Maks arrangementer per helg", details.maxWeddingsPerWeekend?.toString() || "", (v) => updateDetail("maxWeddingsPerWeekend", v ? parseInt(v) : null), { placeholder: "2", keyboardType: "number-pad" })}
           {renderInput("Book i forveien", details.advanceBookingWeeks?.toString() || "", (v) => updateDetail("advanceBookingWeeks", v ? parseInt(v) : null), { placeholder: "8", keyboardType: "number-pad", suffix: "uker" })}
         </View>
-
         {/* Save Button */}
         <Pressable
           onPress={() => saveMutation.mutate()}
@@ -444,7 +420,6 @@ export default function FloristDetailsScreen({ navigation }: { navigation: Nativ
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md, borderBottomWidth: 1 },

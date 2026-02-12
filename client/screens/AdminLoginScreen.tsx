@@ -18,6 +18,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 interface Props {
   navigation: NativeStackNavigationProp<any>;
@@ -26,7 +27,11 @@ interface Props {
 }
 
 export default function AdminLoginScreen({ navigation, onLoginSuccess, initialAdminKey }: Props) {
-  const { theme } = useTheme();
+  const { theme, designSettings } = useTheme();
+  const logoSource = designSettings.logoUrl
+    ? { uri: designSettings.logoUrl }
+    : require("../../assets/images/Evendi_logo_norsk_tagline.png");
+  const showLogo = designSettings.logoUseAuth ?? true;
 
   const [adminKey, setAdminKey] = useState(initialAdminKey || "");
   const [isLoading, setIsLoading] = useState(false);
@@ -87,11 +92,13 @@ export default function AdminLoginScreen({ navigation, onLoginSuccess, initialAd
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={styles.content}
       >
-        <Image
-          source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
+        {showLogo ? (
+          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+        ) : (
+          <ThemedText style={styles.logoText}>
+            {designSettings.appName || "Evendi"}
+          </ThemedText>
+        )}
 
         <Animated.View entering={FadeInDown.duration(400)} style={styles.formContainer}>
           <View style={[styles.iconCircle, { backgroundColor: Colors.dark.accent + "20" }]}>
@@ -106,7 +113,8 @@ export default function AdminLoginScreen({ navigation, onLoginSuccess, initialAd
           <View style={styles.form}>
             <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: error ? "#DC3545" : theme.border }]}>
               <EvendiIcon name="key" size={18} color={error ? "#DC3545" : theme.textMuted} />
-              <TextInput
+              <PersistentTextInput
+                draftKey="AdminLoginScreen-input-1"
                 style={[styles.input, { color: theme.text }]}
                 placeholder="Admin-nøkkel"
                 placeholderTextColor={theme.textMuted}
@@ -175,6 +183,13 @@ const styles = StyleSheet.create({
     height: 160,
     alignSelf: "center",
     marginBottom: Spacing["2xl"],
+  },
+  logoText: {
+    fontSize: 32,
+    fontWeight: "600",
+    alignSelf: "center",
+    marginBottom: Spacing["2xl"],
+    textAlign: "center",
   },
   formContainer: {
     alignItems: "center",

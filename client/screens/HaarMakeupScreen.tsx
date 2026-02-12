@@ -28,6 +28,7 @@ import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
 import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
+import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
@@ -35,6 +36,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import { showToast } from "@/lib/toast";
 import { showConfirm, showOptions } from "@/lib/dialogs";
+import PersistentTextInput from "@/components/PersistentTextInput";
 import {
   getHairMakeupData,
   createHairMakeupAppointment,
@@ -44,9 +46,9 @@ import {
   updateHairMakeupLook,
   deleteHairMakeupLook,
   updateHairMakeupTimeline,
-  HairMakeupAppointment,
-  HairMakeupLook,
-  HairMakeupTimeline,
+  type HairMakeupAppointment,
+  type HairMakeupLook,
+  type HairMakeupTimeline,
 } from "@/lib/api-couple-data";
 
 type NavigationProp = NativeStackNavigationProp<PlanningStackParamList>;
@@ -803,6 +805,15 @@ export default function HaarMakeupScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + Spacing.xl }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
+        {/* Marketplace hero + search + vendor cards */}
+        <VendorCategoryMarketplace
+          category="beauty"
+          categoryName="Hår & Makeup"
+          icon="scissors"
+          subtitle="Profesjonell styling for den store dagen"
+          selectedTraditions={coupleProfile?.selectedTraditions}
+        />
+
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.primary} />
@@ -858,7 +869,8 @@ export default function HaarMakeupScreen() {
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Stylist/Salong *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="HaarMakeupScreen-input-1"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={stylistSearch.searchText}
                 onChangeText={stylistSearch.onChangeText}
@@ -937,7 +949,8 @@ export default function HaarMakeupScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Dato *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="HaarMakeupScreen-input-2"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={appointmentDate}
                 onChangeText={setAppointmentDate}
@@ -948,7 +961,8 @@ export default function HaarMakeupScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Klokkeslett</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="HaarMakeupScreen-input-3"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={appointmentTime}
                 onChangeText={setAppointmentTime}
@@ -959,7 +973,8 @@ export default function HaarMakeupScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Sted</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="HaarMakeupScreen-input-4"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={appointmentLocation}
                 onChangeText={setAppointmentLocation}
@@ -970,7 +985,8 @@ export default function HaarMakeupScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="HaarMakeupScreen-input-5"
                 style={[styles.formInput, styles.formTextArea, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={appointmentNotes}
                 onChangeText={setAppointmentNotes}
@@ -1006,7 +1022,8 @@ export default function HaarMakeupScreen() {
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Navn *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="HaarMakeupScreen-input-6"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={lookName}
                 onChangeText={setLookName}
@@ -1068,7 +1085,8 @@ export default function HaarMakeupScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="HaarMakeupScreen-input-7"
                 style={[styles.formInput, styles.formTextArea, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={lookNotes}
                 onChangeText={setLookNotes}
@@ -1098,7 +1116,8 @@ export default function HaarMakeupScreen() {
         <View style={styles.budgetModalOverlay}>
           <View style={[styles.budgetModalContent, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText style={styles.budgetModalTitle}>Budsjett for Hår & Makeup</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="HaarMakeupScreen-input-8"
               style={[styles.budgetInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
               value={budgetInput}
               onChangeText={setBudgetInput}

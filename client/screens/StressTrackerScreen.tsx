@@ -31,6 +31,7 @@ import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const BREATHING_PHASES = [
   { phase: "inhale", label: "Pust inn", duration: 4000 },
@@ -686,7 +687,8 @@ export default function StressTrackerScreen() {
                     })()}
                   </View>
                   <View style={styles.customSessionRow}>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="StressTrackerScreen-input-1"
                       value={customSessionInput}
                       onChangeText={setCustomSessionInput}
                       keyboardType="number-pad"

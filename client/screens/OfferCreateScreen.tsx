@@ -25,6 +25,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
@@ -501,7 +502,8 @@ export default function OfferCreateScreen() {
 
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Tittel</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="OfferCreateScreen-input-1"
                 testID="input-offer-title"
                 style={[
                   styles.textInput,
@@ -516,7 +518,8 @@ export default function OfferCreateScreen() {
 
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Melding (valgfritt)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="OfferCreateScreen-input-2"
                 testID="input-offer-message"
                 style={[
                   styles.textInput,
@@ -546,7 +549,8 @@ export default function OfferCreateScreen() {
                 </Pressable>
               )}
               {Platform.OS === "web" ? (
-                <TextInput
+                <PersistentTextInput
+                  draftKey="OfferCreateScreen-input-3"
                   style={[
                     styles.textInput,
                     { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
@@ -757,7 +761,8 @@ export default function OfferCreateScreen() {
                 Eller legg til manuelt:
               </ThemedText>
               <View style={styles.customItemInputs}>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="OfferCreateScreen-input-4"
                   testID="input-custom-item-title"
                   style={[
                     styles.textInput,
@@ -768,7 +773,8 @@ export default function OfferCreateScreen() {
                   value={customItemTitle}
                   onChangeText={setCustomItemTitle}
                 />
-                <TextInput
+                <PersistentTextInput
+                  draftKey="OfferCreateScreen-input-5"
                   testID="input-custom-item-price"
                   style={[
                     styles.textInput,

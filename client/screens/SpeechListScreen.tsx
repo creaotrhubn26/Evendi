@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useFocusEffect } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
@@ -28,6 +29,7 @@ import { Table } from "@/components/SeatingChart";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 import { useEventType } from "@/hooks/useEventType";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const WEDDING_DEFAULT_SPEECHES: Speech[] = [
   { id: "1", speakerName: "Mor til bruden", role: "Familie", time: "18:00", order: 1, status: "ready", tableId: null },
@@ -54,6 +56,7 @@ export default function SpeechListScreen() {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
   const { isWedding, isCorporate } = useEventType();
+  const navigation = useNavigation<any>();
   
   const DEFAULT_SPEECHES = isWedding ? WEDDING_DEFAULT_SPEECHES : isCorporate ? CORPORATE_DEFAULT_SPEECHES : EVENT_DEFAULT_SPEECHES;
 
@@ -359,6 +362,15 @@ export default function SpeechListScreen() {
     >
       <View style={styles.toolbar}>
         <Pressable
+          onPress={() => navigation.navigate("QaSystem")}
+          style={[styles.exportButton, { borderColor: "#8b5cf6" }]}
+        >
+          <EvendiIcon name="message-circle" size={18} color="#8b5cf6" />
+          <ThemedText style={[styles.exportButtonText, { color: "#8b5cf6" }]}>
+            Q&A
+          </ThemedText>
+        </Pressable>
+        <Pressable
           onPress={handleExportPdf}
           style={[styles.exportButton, { borderColor: Colors.dark.accent }]}
         >
@@ -490,7 +502,8 @@ export default function SpeechListScreen() {
             {editingSpeech ? "Endre tale" : "Legg til tale"}
           </ThemedText>
 
-          <TextInput
+          <PersistentTextInput
+            draftKey="SpeechListScreen-input-1"
             style={[
               styles.input,
               {
@@ -506,7 +519,8 @@ export default function SpeechListScreen() {
           />
 
           <View style={styles.inputRow}>
-            <TextInput
+            <PersistentTextInput
+              draftKey="SpeechListScreen-input-2"
               style={[
                 styles.input,
                 styles.halfInput,
@@ -521,7 +535,8 @@ export default function SpeechListScreen() {
               value={newRole}
               onChangeText={setNewRole}
             />
-            <TextInput
+            <PersistentTextInput
+              draftKey="SpeechListScreen-input-3"
               style={[
                 styles.input,
                 styles.halfInput,
@@ -654,6 +669,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     marginBottom: Spacing.sm,
+    gap: Spacing.sm,
+    flexWrap: "wrap",
   },
   exportButton: {
     flexDirection: "row",

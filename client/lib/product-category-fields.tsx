@@ -5,6 +5,7 @@ import { EvendiIcon } from "@/components/EvendiIcon";
 import * as Haptics from "expo-haptics";
 import { ThemedText } from "@/components/ThemedText";
 import { Spacing, BorderRadius } from "@/constants/theme";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 export interface CategoryFieldsProps {
   metadata: any;
@@ -105,7 +106,8 @@ export function CateringFields({ metadata, setMetadata, theme }: CategoryFieldsP
       <View style={styles.rowInputs}>
         <View style={[styles.inputGroup, { flex: 1 }]}>
           <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Antall porsjoner</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="product-category-fields-input-1"
             style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
             placeholder="F.eks. 10"
             placeholderTextColor={theme.textMuted}
@@ -193,7 +195,8 @@ export function CakeFields({ metadata, setMetadata, theme }: CategoryFieldsProps
       <View style={styles.rowInputs}>
         <View style={[styles.inputGroup, { flex: 1 }]}>
           <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Porsjoner</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="product-category-fields-input-2"
             style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
             placeholder="50"
             placeholderTextColor={theme.textMuted}
@@ -204,7 +207,8 @@ export function CakeFields({ metadata, setMetadata, theme }: CategoryFieldsProps
         </View>
         <View style={[styles.inputGroup, { flex: 1 }]}>
           <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Etasjer</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="product-category-fields-input-3"
             style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
             placeholder="3"
             placeholderTextColor={theme.textMuted}
@@ -299,7 +303,8 @@ export function TransportFields({ metadata, setMetadata, theme }: CategoryFields
       <View style={styles.rowInputs}>
         <View style={[styles.inputGroup, { flex: 1 }]}>
           <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Passasjerkapasitet</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="product-category-fields-input-4"
             style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
             placeholder="4"
             placeholderTextColor={theme.textMuted}
@@ -361,7 +366,8 @@ export function HairMakeupFields({ metadata, setMetadata, theme }: CategoryField
       <View style={styles.rowInputs}>
         <View style={[styles.inputGroup, { flex: 1 }]}>
           <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Varighet (timer)</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="product-category-fields-input-5"
             style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
             placeholder="2"
             placeholderTextColor={theme.textMuted}

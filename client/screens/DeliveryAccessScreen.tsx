@@ -29,6 +29,7 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const GALLERY_COLUMNS = 3;
@@ -644,7 +645,8 @@ export default function DeliveryAccessScreen() {
         <View style={styles.form}>
           <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: errorMessage ? "#EF5350" : theme.border }]}>
             <EvendiIcon name="key" size={18} color={theme.textMuted} />
-            <TextInput
+            <PersistentTextInput
+              draftKey="DeliveryAccessScreen-input-1"
               style={[styles.input, { color: theme.text }]}
               placeholder="Tilgangskode"
               placeholderTextColor={theme.textMuted}

@@ -1,4 +1,4 @@
-name: Wedflow Scheduled Jobs
+name: Evendi Scheduled Jobs
 on:
   schedule:
     # Run offer expiration job every day at midnight UTC

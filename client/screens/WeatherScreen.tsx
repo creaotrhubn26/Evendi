@@ -8,6 +8,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
+import PersistentTextInput from "@/components/PersistentTextInput";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
@@ -461,7 +462,8 @@ export default function WeatherScreen() {
           )}
           {showVenueSearch && (
             <View style={styles.venueSearchContainer}>
-              <TextInput
+              <PersistentTextInput
+                draftKey="WeatherScreen-input-1"
                 style={[styles.searchInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundSecondary }]}
                 placeholder="Søk adresse (Kartverket)..."
                 placeholderTextColor={theme.textMuted}
@@ -504,7 +506,8 @@ export default function WeatherScreen() {
           <View style={[styles.travelContent, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             {/* Custom travel search */}
             <View style={styles.travelSearchRow}>
-              <TextInput
+              <PersistentTextInput
+                draftKey="WeatherScreen-input-2"
                 style={[styles.travelInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundSecondary }]}
                 placeholder="Søk by eller sted..."
                 placeholderTextColor={theme.textMuted}

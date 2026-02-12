@@ -16,6 +16,7 @@ import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 import type { WhatsNewItem } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AdminWhatsNew">;
 
@@ -246,7 +247,8 @@ export default function AdminWhatsNewScreen({ route }: Props) {
 
               <View style={styles.formGroup}>
                 <ThemedText style={styles.label}>Tittel</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminWhatsNewScreen-input-1"
                   style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                   placeholder="f.eks. Ny chat-funksjon"
                   placeholderTextColor={theme.textMuted}
@@ -257,7 +259,8 @@ export default function AdminWhatsNewScreen({ route }: Props) {
 
               <View style={styles.formGroup}>
                 <ThemedText style={styles.label}>Beskrivelse</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminWhatsNewScreen-input-2"
                   style={[styles.input, styles.textArea, { borderColor: theme.border, color: theme.text }]}
                   placeholder="Detaljert beskrivelse av den nye funksjonen..."
                   placeholderTextColor={theme.textMuted}
@@ -296,7 +299,8 @@ export default function AdminWhatsNewScreen({ route }: Props) {
               <View style={styles.formRow}>
                 <View style={[styles.formGroup, { flex: 1 }]}>
                   <ThemedText style={styles.label}>Min versjon</ThemedText>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="AdminWhatsNewScreen-input-3"
                     style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                     placeholder="1.0.0"
                     placeholderTextColor={theme.textMuted}
@@ -307,7 +311,8 @@ export default function AdminWhatsNewScreen({ route }: Props) {
 
                 <View style={[styles.formGroup, { flex: 1 }]}>
                   <ThemedText style={styles.label}>Sortrekkefølge</ThemedText>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="AdminWhatsNewScreen-input-4"
                     style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                     placeholder="0"
                     placeholderTextColor={theme.textMuted}

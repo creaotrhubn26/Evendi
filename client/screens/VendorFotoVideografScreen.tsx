@@ -9,7 +9,6 @@ import * as Haptics from "expo-haptics";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import { useQuery } from "@tanstack/react-query";
 import Animated, { FadeInDown } from "react-native-reanimated";
-
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
@@ -17,11 +16,8 @@ import VendorCreatorHubBridge from "@/components/VendorCreatorHubBridge";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
-
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 type Navigation = NativeStackNavigationProp<any>;
-
 type VendorProduct = {
   id: string;
   title: string;
@@ -30,7 +26,6 @@ type VendorProduct = {
   unitType: string;
   imageUrl: string | null;
 };
-
 type VendorOffer = {
   id: string;
   title: string;
@@ -39,7 +34,6 @@ type VendorOffer = {
   currency: string | null;
   createdAt: string;
 };
-
 export default function VendorFotoVideografScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -48,7 +42,6 @@ export default function VendorFotoVideografScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'prosjekt'>('dashboard');
   const [selectedCoupleId, setSelectedCoupleId] = useState<string | null>(null);
-
   // Fetch vendor's couples from conversations
   const { data: vendorCouples = [] } = useQuery<{ id: string; coupleId: string; coupleName: string }[]>({
     queryKey: ["/api/vendor/conversations-couples-fotovideo"],
@@ -67,14 +60,12 @@ export default function VendorFotoVideografScreen() {
     },
     enabled: !!sessionToken,
   });
-
   // Auto-select first couple
   useEffect(() => {
     if (vendorCouples.length > 0 && !selectedCoupleId) {
       setSelectedCoupleId(vendorCouples[0].coupleId);
     }
   }, [vendorCouples, selectedCoupleId]);
-
   useEffect(() => {
     const loadSession = async () => {
       const data = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
@@ -87,7 +78,6 @@ export default function VendorFotoVideografScreen() {
     };
     loadSession();
   }, [navigation]);
-
   const { data: products = [], isLoading: productsLoading, refetch: refetchProducts } = useQuery<VendorProduct[]>({
     queryKey: ["/api/vendor/products"],
     queryFn: async () => {
@@ -100,7 +90,6 @@ export default function VendorFotoVideografScreen() {
     },
     enabled: !!sessionToken,
   });
-
   const { data: offers = [], isLoading: offersLoading, refetch: refetchOffers } = useQuery<VendorOffer[]>({
     queryKey: ["/api/vendor/offers"],
     queryFn: async () => {
@@ -113,24 +102,20 @@ export default function VendorFotoVideografScreen() {
     },
     enabled: !!sessionToken,
   });
-
   const onRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([refetchProducts(), refetchOffers()]);
     setIsRefreshing(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const goToProducts = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("ProductCreate");
   };
-
   const goToOffers = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("OfferCreate");
   };
-
   const handleDelete = (id: string, type: 'product' | 'offer') => {
     showConfirm({
       title: `Slett ${type === 'product' ? 'produkt' : 'tilbud'}`,
@@ -143,9 +128,7 @@ export default function VendorFotoVideografScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     });
   };
-
   if (!sessionToken) return null;
-
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
       {/* Header */}
@@ -163,7 +146,6 @@ export default function VendorFotoVideografScreen() {
           </View>
         </View>
       </View>
-
       {/* Tab Navigation */}
       <View style={[styles.tabContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <Pressable
@@ -185,7 +167,6 @@ export default function VendorFotoVideografScreen() {
           </ThemedText>
         </Pressable>
       </View>
-
       {/* Tab Content */}
       {activeTab === 'dashboard' ? (
     <ScrollView
@@ -199,7 +180,6 @@ export default function VendorFotoVideografScreen() {
         />
       }
     >
-
       <View style={styles.cardRow}>
         <Pressable
           onPress={goToProducts}
@@ -221,7 +201,6 @@ export default function VendorFotoVideografScreen() {
           </ThemedText>
           <Button style={styles.cardButton} onPress={goToProducts}>Opprett pakke</Button>
         </Pressable>
-
         <Pressable
           onPress={goToOffers}
           style={({ pressed }) => [
@@ -240,14 +219,12 @@ export default function VendorFotoVideografScreen() {
           <Button style={styles.cardButton} onPress={goToOffers}>Send tilbud</Button>
         </Pressable>
       </View>
-
       <View style={[styles.infoBox, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <EvendiIcon name="info" size={16} color={theme.textSecondary} />
         <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>
           Tilby kombinerte foto/video-pakker med rabatt for å øke konvertering.
         </ThemedText>
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Produkter</ThemedText>
@@ -284,7 +261,6 @@ export default function VendorFotoVideografScreen() {
           ))
         )}
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Tilbud</ThemedText>
@@ -365,7 +341,6 @@ export default function VendorFotoVideografScreen() {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   headerSection: {
     flexDirection: "row",

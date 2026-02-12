@@ -14,6 +14,7 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -206,7 +207,8 @@ export default function AdminFAQScreen({ route }: { route: { params: { adminKey:
 
           <View style={styles.formGroup}>
             <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Ikon (Evendi)</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminFAQScreen-input-1"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
               placeholder="f.eks. log-in, package, star"
               placeholderTextColor={theme.textMuted}
@@ -217,7 +219,8 @@ export default function AdminFAQScreen({ route }: { route: { params: { adminKey:
 
           <View style={styles.formGroup}>
             <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Spørsmål</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminFAQScreen-input-2"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
               placeholder="Skriv spørsmål..."
               placeholderTextColor={theme.textMuted}
@@ -228,7 +231,8 @@ export default function AdminFAQScreen({ route }: { route: { params: { adminKey:
 
           <View style={styles.formGroup}>
             <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Svar</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminFAQScreen-input-3"
               style={[styles.textArea, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
               placeholder="Skriv svar..."
               placeholderTextColor={theme.textMuted}
@@ -241,7 +245,8 @@ export default function AdminFAQScreen({ route }: { route: { params: { adminKey:
 
           <View style={styles.formGroup}>
             <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Sorteringsrekkefølge</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminFAQScreen-input-4"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
               placeholder="0"
               placeholderTextColor={theme.textMuted}

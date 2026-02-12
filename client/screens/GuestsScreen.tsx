@@ -37,6 +37,7 @@ import { GUEST_CATEGORIES } from "@/lib/types";
 import { searchContacts, requestContactsPermission, ContactResult } from "@/lib/contacts";
 import { createGuestInvitation, getGuestInvitations } from "@/lib/api-guest-invitations";
 import type { GuestInvitation, WeddingGuest } from "@shared/schema";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 type NavigationProp = NativeStackNavigationProp<GuestsStackParamList>;
 
@@ -825,7 +826,8 @@ export default function GuestsScreen() {
         ]}
       >
         <EvendiIcon name="search" size={18} color={theme.textMuted} />
-        <TextInput
+        <PersistentTextInput
+          draftKey="GuestsScreen-input-1"
           style={[styles.searchInput, { color: theme.text }]}
           placeholder="Søk etter gjest eller kontakt..."
           placeholderTextColor={theme.textMuted}
@@ -928,7 +930,8 @@ export default function GuestsScreen() {
             {editingGuest ? "Endre gjest" : "Legg til gjest"}
           </ThemedText>
           
-          <TextInput
+          <PersistentTextInput
+            draftKey="GuestsScreen-input-2"
             style={[
               styles.addInput,
               { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
@@ -966,7 +969,8 @@ export default function GuestsScreen() {
           </View>
 
           <View style={styles.inputRow}>
-            <TextInput
+            <PersistentTextInput
+              draftKey="GuestsScreen-input-3"
               style={[
                 styles.addInput,
                 styles.halfInput,
@@ -978,7 +982,8 @@ export default function GuestsScreen() {
               onChangeText={setFormPhone}
               keyboardType="phone-pad"
             />
-            <TextInput
+            <PersistentTextInput
+              draftKey="GuestsScreen-input-4"
               style={[
                 styles.addInput,
                 styles.halfInput,
@@ -993,7 +998,8 @@ export default function GuestsScreen() {
             />
           </View>
 
-          <TextInput
+          <PersistentTextInput
+            draftKey="GuestsScreen-input-5"
             style={[
               styles.addInput,
               { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
@@ -1004,7 +1010,8 @@ export default function GuestsScreen() {
             onChangeText={setFormDietary}
           />
 
-          <TextInput
+          <PersistentTextInput
+            draftKey="GuestsScreen-input-6"
             style={[
               styles.addInput,
               { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
@@ -1045,7 +1052,8 @@ export default function GuestsScreen() {
             ))}
           </View>
 
-          <TextInput
+          <PersistentTextInput
+            draftKey="GuestsScreen-input-7"
             style={[
               styles.addInput,
               styles.notesInput,
@@ -1078,7 +1086,8 @@ export default function GuestsScreen() {
           </Pressable>
 
           {formPlusOne ? (
-            <TextInput
+            <PersistentTextInput
+              draftKey="GuestsScreen-input-8"
               style={[
                 styles.addInput,
                 { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
@@ -1090,7 +1099,8 @@ export default function GuestsScreen() {
             />
           ) : null}
 
-          <TextInput
+          <PersistentTextInput
+            draftKey="GuestsScreen-input-9"
             style={[
               styles.addInput,
               styles.notesInput,

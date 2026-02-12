@@ -24,6 +24,7 @@ import { getApiUrl } from "@/lib/query-client";
 import { renderIcon, getAllIconOptions } from "@/lib/custom-icons";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 interface Category {
   id: string;
@@ -275,7 +276,8 @@ export default function AdminCategoriesScreen() {
             </View>
 
             <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Navn</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminCategoriesScreen-input-1"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
               value={name}
               onChangeText={setName}
@@ -305,7 +307,8 @@ export default function AdminCategoriesScreen() {
                 <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>
                   Beskrivelse
                 </ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="AdminCategoriesScreen-input-2"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   value={description}
                   onChangeText={setDescription}

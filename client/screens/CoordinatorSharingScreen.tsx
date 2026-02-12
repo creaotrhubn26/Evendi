@@ -29,6 +29,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
@@ -519,7 +520,8 @@ export default function CoordinatorSharingScreen() {
             <View style={styles.modalBody}>
               <View style={styles.inputGroup}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Navn</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="CoordinatorSharingScreen-input-1"
                   style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                   placeholder="F.eks. Ole Nordmann"
                   placeholderTextColor={theme.textMuted}
@@ -534,7 +536,8 @@ export default function CoordinatorSharingScreen() {
 
               <View style={styles.inputGroup}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Rolle (valgfritt)</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="CoordinatorSharingScreen-input-2"
                   style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                   placeholder="F.eks. Toastmaster, Fotograf, Seremonimester"
                   placeholderTextColor={theme.textMuted}

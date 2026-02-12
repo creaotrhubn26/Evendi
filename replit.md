@@ -1,8 +1,8 @@
-# Evendi - Event Planning App
+# Evendi - Wedding Planning App
 
 ## Overview
 
-Evendi by Norwedfilm is a comprehensive event planning mobile application designed for Scandinavian couples. Built with Expo/React Native for cross-platform mobile and web support, it helps couples organize their wedding day by managing schedules, guests, table seating, speeches, budgets, and vendor coordination.
+Evendi by Norwedfilm is a comprehensive wedding planning mobile application designed for Scandinavian couples. Built with Expo/React Native for cross-platform mobile and web support, it helps couples organize their wedding day by managing schedules, guests, table seating, speeches, budgets, and vendor coordination.
 
 The app follows a "Dark Elegance" design aesthetic with rich black backgrounds (#1A1A1A) and antique gold accents (#C9A962), creating a sophisticated, premium feel appropriate for wedding planning.
 

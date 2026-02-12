@@ -27,6 +27,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 interface Inspiration {
   id: string;
@@ -263,7 +264,8 @@ export default function AdminInspirationsScreen() {
             <ThemedText style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
               Oppgi en begrunnelse (valgfritt):
             </ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminInspirationsScreen-input-1"
               value={rejectReason}
               onChangeText={setRejectReason}
               placeholder="F.eks. lav bildekvalitet"

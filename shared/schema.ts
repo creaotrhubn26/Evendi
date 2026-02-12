@@ -37,7 +37,7 @@ export const vendors = pgTable("vendors", {
   password: text("password").notNull(),
   businessName: text("business_name").notNull(),
   organizationNumber: text("organization_number"),
-  categoryId: varchar("category_id").references(() => vendorCategories.id),
+  categoryId: varchar("category_id").references(() => vendorCategories.id, { onDelete: "set null" }),
   description: text("description"),
   location: text("location"),
   phone: text("phone"),
@@ -59,6 +59,8 @@ export const vendorSessions = pgTable("vendor_sessions", {
   vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
+  isImpersonation: boolean("is_impersonation").notNull().default(false),
+  impersonatedBy: text("impersonated_by"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -361,7 +363,7 @@ export const checklistTasks = pgTable("checklist_tasks", {
   completedBy: varchar("completed_by"), // coupleId who completed it
   assignedTo: varchar("assigned_to"), // Optional: assign to partner
   notes: text("notes"),
-  linkedReminderId: varchar("linked_reminder_id").references(() => reminders.id),
+  linkedReminderId: varchar("linked_reminder_id").references(() => reminders.id, { onDelete: "set null" }),
   isDefault: boolean("is_default").notNull().default(false), // True for system-generated tasks
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
@@ -413,6 +415,8 @@ export const coupleSessions = pgTable("couple_sessions", {
   coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
+  isImpersonation: boolean("is_impersonation").notNull().default(false),
+  impersonatedBy: text("impersonated_by"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -755,6 +759,7 @@ export const reminders = pgTable("reminders", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description"),
   reminderDate: timestamp("reminder_date").notNull(),
@@ -1832,7 +1837,7 @@ export const vendorSubscriptions = pgTable("vendor_subscriptions", {
     .primaryKey()
     .default(sql`gen_random_uuid()`),
   vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
-  tierId: varchar("tier_id").notNull().references(() => subscriptionTiers.id),
+  tierId: varchar("tier_id").notNull().references(() => subscriptionTiers.id, { onDelete: "restrict" }),
   
   // Stripe subscription info
   stripeSubscriptionId: text("stripe_subscription_id"),
@@ -1878,7 +1883,7 @@ export const vendorPayments = pgTable("vendor_payments", {
     .primaryKey()
     .default(sql`gen_random_uuid()`),
   vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
-  subscriptionId: varchar("subscription_id").references(() => vendorSubscriptions.id),
+  subscriptionId: varchar("subscription_id").references(() => vendorSubscriptions.id, { onDelete: "set null" }),
   
   stripePaymentIntentId: text("stripe_payment_intent_id"),
   stripeInvoiceId: text("stripe_invoice_id"),

@@ -9,7 +9,6 @@ import * as Haptics from "expo-haptics";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import { useQuery } from "@tanstack/react-query";
 import Animated, { FadeInDown } from "react-native-reanimated";
-
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
@@ -21,11 +20,8 @@ import { getVendorConfig } from "@/lib/vendor-adapter";
 import { getSpeeches } from "@/lib/storage";
 import { Speech } from "@/lib/types";
 import { SeatingChart, Table } from "@/components/SeatingChart";
-
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 type Navigation = NativeStackNavigationProp<any>;
-
 type VendorProduct = {
   id: string;
   title: string;
@@ -34,7 +30,6 @@ type VendorProduct = {
   unitType: string;
   imageUrl: string | null;
 };
-
 type VendorOffer = {
   id: string;
   title: string;
@@ -43,7 +38,6 @@ type VendorOffer = {
   currency: string | null;
   createdAt: string;
 };
-
 export default function VendorFotografScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -54,9 +48,7 @@ export default function VendorFotografScreen() {
   const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [seatingData, setSeatingData] = useState<{ tables: Table[]; guests?: any[] }>({ tables: [], guests: [] });
   const [selectedCoupleId, setSelectedCoupleId] = useState<string | null>(null);
-
   const vendorConfig = getVendorConfig(null, "Fotograf");
-
   // Fetch vendor's couples from conversations
   const { data: vendorCouples = [] } = useQuery<{ id: string; coupleId: string; coupleName: string }[]>({
     queryKey: ["/api/vendor/conversations-couples"],
@@ -75,14 +67,12 @@ export default function VendorFotografScreen() {
     },
     enabled: !!sessionToken,
   });
-
   // Auto-select first couple
   useEffect(() => {
     if (vendorCouples.length > 0 && !selectedCoupleId) {
       setSelectedCoupleId(vendorCouples[0].coupleId);
     }
   }, [vendorCouples, selectedCoupleId]);
-
   useEffect(() => {
     const loadSession = async () => {
       const data = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
@@ -95,7 +85,6 @@ export default function VendorFotografScreen() {
     };
     loadSession();
   }, [navigation]);
-
   const { data: products = [], isLoading: productsLoading, refetch: refetchProducts } = useQuery<VendorProduct[]>({
     queryKey: ["/api/vendor/products"],
     queryFn: async () => {
@@ -108,7 +97,6 @@ export default function VendorFotografScreen() {
     },
     enabled: !!sessionToken,
   });
-
   const { data: offers = [], isLoading: offersLoading, refetch: refetchOffers } = useQuery<VendorOffer[]>({
     queryKey: ["/api/vendor/offers"],
     queryFn: async () => {
@@ -121,7 +109,6 @@ export default function VendorFotografScreen() {
     },
     enabled: !!sessionToken,
   });
-
   // Speeches query for event coordination
   const speechesQuery = useQuery<Speech[]>({
     queryKey: ['speeches'],
@@ -130,13 +117,11 @@ export default function VendorFotografScreen() {
       return Array.isArray(data) ? data : [];
     },
   });
-
   useEffect(() => {
     if (speechesQuery.data) {
       setSpeeches(speechesQuery.data);
     }
   }, [speechesQuery.data]);
-
   // Load seating chart from local storage (cached from couple's session if on same device)
   useEffect(() => {
     const loadSeating = async () => {
@@ -153,24 +138,20 @@ export default function VendorFotografScreen() {
     };
     loadSeating();
   }, []);
-
   const onRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([refetchProducts(), refetchOffers()]);
     setIsRefreshing(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const goToProducts = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("ProductCreate");
   };
-
   const goToOffers = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("OfferCreate");
   };
-
   const handleDelete = (id: string, type: 'product' | 'offer') => {
     showConfirm({
       title: `Slett ${type === 'product' ? 'produkt' : 'tilbud'}`,
@@ -183,9 +164,7 @@ export default function VendorFotografScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     });
   };
-
   if (!sessionToken) return null;
-
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
       {/* Header */}
@@ -193,7 +172,6 @@ export default function VendorFotografScreen() {
         <ThemedText style={[styles.title, { color: theme.text }]}>Fotograf dashboard</ThemedText>
         <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Event-oversikt og pakkeadministrasjon</ThemedText>
       </View>
-
       {/* Tab Navigation */}
       <View style={[styles.tabContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <Pressable
@@ -233,7 +211,6 @@ export default function VendorFotografScreen() {
           </ThemedText>
         </Pressable>
       </View>
-
       {/* Tab Content */}
       {activeTab === 'dashboard' ? (
     <ScrollView
@@ -262,7 +239,6 @@ export default function VendorFotografScreen() {
           <ThemedText style={[styles.cardBody, { color: theme.textSecondary }]}>Legg til fotopakker med timepriser, antall bilder og leveringstid.</ThemedText>
           <Button style={styles.cardButton} onPress={goToProducts}>Opprett pakke</Button>
         </Pressable>
-
         <Pressable
           onPress={goToOffers}
           style={({ pressed }) => [
@@ -279,12 +255,10 @@ export default function VendorFotografScreen() {
           <Button style={styles.cardButton} onPress={goToOffers}>Send tilbud</Button>
         </Pressable>
       </View>
-
       <View style={[styles.infoBox, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <EvendiIcon name="info" size={16} color={theme.textSecondary} />
         <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>Legg til portfolio-bilder for å øke konvertering.</ThemedText>
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Produkter</ThemedText>
@@ -316,7 +290,6 @@ export default function VendorFotografScreen() {
           ))
         )}
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Tilbud</ThemedText>
@@ -363,7 +336,7 @@ export default function VendorFotografScreen() {
                 Posisjonér deg for å fange taleøyeblikk og publikumsreaksjoner
               </ThemedText>
               {speeches.sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59')).map((speech) => {
-                const statusColor = speech.status === 'speaking' ? '#f59e0b' : speech.status === 'done' ? '#22c55e' : '#9ca3af';
+                const statusColor = speech.status === 'speaking' ? theme.warning : speech.status === 'done' ? theme.success : theme.textMuted;
                 const statusText = speech.status === 'speaking' ? '🔴 NÅ' : speech.status === 'done' ? 'Ferdig' : 'Klar';
                 const tableName = seatingData.tables.find(t => t.id === speech.tableId)?.name || null;
                 return (
@@ -373,7 +346,7 @@ export default function VendorFotografScreen() {
                       styles.speechRow,
                       {
                         borderLeftColor: statusColor,
-                        backgroundColor: speech.status === 'speaking' ? '#f59e0b10' : 'transparent',
+                        backgroundColor: speech.status === 'speaking' ? theme.warning + '10' : 'transparent',
                       },
                     ]}
                   >
@@ -485,7 +458,6 @@ export default function VendorFotografScreen() {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: "700", marginBottom: Spacing.xs },
   subtitle: { fontSize: 14 },

@@ -25,6 +25,7 @@ import { getApiUrl, apiRequest } from "@/lib/query-client";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { showToast } from "@/lib/toast";
 import { showConfirm, showOptions } from "@/lib/dialogs";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
@@ -647,7 +648,8 @@ export default function ChatScreen({ route, navigation }: Props) {
           >
             <EvendiIcon name="image" size={20} color={selectedImage ? Colors.dark.accent : theme.textMuted} />
           </Pressable>
-          <TextInput
+          <PersistentTextInput
+            draftKey="ChatScreen-input-1"
             style={[styles.textInput, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
             placeholder="Skriv en melding..."
             placeholderTextColor={theme.textMuted}

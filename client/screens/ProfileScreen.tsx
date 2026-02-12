@@ -33,6 +33,7 @@ import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 import { useAuth } from "@/lib/AuthContext";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 type NavigationProp = NativeStackNavigationProp<ProfileStackParamList>;
 
@@ -288,7 +289,8 @@ export default function ProfileScreen() {
           {editing ? (
             <View style={styles.editForm}>
               <View>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="ProfileScreen-input-1"
                   style={[
                     styles.input,
                     {
@@ -310,7 +312,8 @@ export default function ProfileScreen() {
               </View>
               <View>
                 {Platform.OS === "web" ? (
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="ProfileScreen-input-2"
                     style={[
                       styles.input,
                       {
@@ -379,7 +382,8 @@ export default function ProfileScreen() {
                   <ThemedText style={[styles.errorText, { color: theme.error }]}>{errors.weddingDate}</ThemedText>
                 ) : null}
               </View>
-              <TextInput
+              <PersistentTextInput
+                draftKey="ProfileScreen-input-3"
                 style={[
                   styles.input,
                   {

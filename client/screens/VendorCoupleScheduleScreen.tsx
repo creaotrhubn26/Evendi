@@ -17,23 +17,20 @@ import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
-
+import PersistentTextInput from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 interface VendorSession {
   sessionToken: string;
   vendorId: string;
   email: string;
   businessName: string;
 }
-
 interface ScheduleEvent {
   id: string;
   time: string;
@@ -41,7 +38,6 @@ interface ScheduleEvent {
   icon?: string;
   notes?: string;
 }
-
 interface Speech {
   id: string;
   speakerName: string;
@@ -51,7 +47,6 @@ interface Speech {
   notes?: string;
   scheduledTime?: string;
 }
-
 interface CoupleScheduleData {
   couple: {
     displayName: string;
@@ -61,7 +56,6 @@ interface CoupleScheduleData {
   speeches: Speech[];
   canViewSpeeches: boolean;
 }
-
 interface SuggestionPayload {
   type: "schedule_change" | "new_event" | "speech_change";
   eventId?: string;
@@ -69,7 +63,6 @@ interface SuggestionPayload {
   suggestedTitle?: string;
   message: string;
 }
-
 const ICON_MAP: Record<string, keyof typeof EvendiIconGlyphMap> = {
   heart: "heart",
   camera: "camera",
@@ -80,28 +73,23 @@ const ICON_MAP: Record<string, keyof typeof EvendiIconGlyphMap> = {
   moon: "moon",
   star: "star",
 };
-
 type Props = NativeStackScreenProps<any, "VendorCoupleSchedule">;
-
 export default function VendorCoupleScheduleScreen({ route, navigation }: Props) {
   const { coupleId, coupleName } = route.params as { coupleId: string; coupleName: string };
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
-
   const [session, setSession] = useState<VendorSession | null>(null);
   const [showSuggestionModal, setShowSuggestionModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
   const [suggestionMessage, setSuggestionMessage] = useState("");
   const [suggestedTime, setSuggestedTime] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
-
   // Load session on mount
   React.useEffect(() => {
     loadSession();
   }, []);
-
   const loadSession = async () => {
     const sessionData = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
     if (sessionData) {
@@ -110,7 +98,6 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
       navigation.goBack();
     }
   };
-
   const { data, isLoading, refetch } = useQuery<CoupleScheduleData>({
     queryKey: ["/api/vendor/couple-schedule", coupleId],
     queryFn: async () => {
@@ -131,7 +118,6 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
     },
     enabled: !!session?.sessionToken && !!coupleId,
   });
-
   const sendSuggestionMutation = useMutation({
     mutationFn: async (payload: SuggestionPayload) => {
       if (!session?.sessionToken) throw new Error("Ikke autentisert");
@@ -170,20 +156,17 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
       showToast(error.message || "Kunne ikke sende forslag");
     },
   });
-
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await refetch();
     setIsRefreshing(false);
   }, [refetch]);
-
   const openSuggestionModal = (event: ScheduleEvent) => {
     setSelectedEvent(event);
     setSuggestedTime(event.time);
     setShowSuggestionModal(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const handleSendSuggestion = () => {
     const trimmedMessage = suggestionMessage.trim();
     const trimmedSuggestedTime = suggestedTime.trim();
@@ -191,12 +174,10 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
       showToast("Skriv en melding med forslaget ditt");
       return;
     }
-
     if (trimmedSuggestedTime && !/^\d{2}:\d{2}$/.test(trimmedSuggestedTime)) {
       showToast("Tid må være i formatet HH:MM");
       return;
     }
-
     const payload: SuggestionPayload = {
       type: "schedule_change",
       eventId: selectedEvent?.id,
@@ -206,10 +187,8 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
           : undefined,
       message: trimmedMessage,
     };
-
     sendSuggestionMutation.mutate(payload);
   };
-
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return "";
     return new Date(dateStr).toLocaleDateString("nb-NO", {
@@ -219,17 +198,14 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
       year: "numeric",
     });
   };
-
   const getTimeDiff = (time1: string, time2: string) => {
     const [h1, m1] = time1.split(":").map(Number);
     const [h2, m2] = time2.split(":").map(Number);
     return (h2 * 60 + m2) - (h1 * 60 + m1);
   };
-
   const renderScheduleItem = ({ item, index }: { item: ScheduleEvent; index: number }) => {
     const nextEvent = data?.schedule[index + 1];
     const timeDiff = nextEvent ? getTimeDiff(item.time, nextEvent.time) : 0;
-
     return (
       <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
         <Pressable
@@ -240,16 +216,16 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
           ]}
         >
           <View style={styles.timeColumn}>
-            <ThemedText style={[styles.time, { color: Colors.dark.accent }]}>
+            <ThemedText style={[styles.time, { color: theme.accent }]}>
               {item.time}
             </ThemedText>
           </View>
           <View style={styles.dotColumn}>
-            <View style={[styles.dot, { backgroundColor: Colors.dark.accent }]}>
+            <View style={[styles.dot, { backgroundColor: theme.accent }]}>
               <EvendiIcon
                 name={ICON_MAP[item.icon || "star"] || "star"}
                 size={12}
-                color="#1A1A1A"
+                color={theme.buttonText}
               />
             </View>
             {nextEvent && (
@@ -264,9 +240,9 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
           >
             <View style={styles.eventHeader}>
               <ThemedText style={styles.eventTitle}>{item.title}</ThemedText>
-              <View style={[styles.suggestBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
-                <EvendiIcon name="message-circle" size={12} color={Colors.dark.accent} />
-                <ThemedText style={[styles.suggestText, { color: Colors.dark.accent }]}>
+              <View style={[styles.suggestBadge, { backgroundColor: theme.accent + "15" }]}>
+                <EvendiIcon name="message-circle" size={12} color={theme.accent} />
+                <ThemedText style={[styles.suggestText, { color: theme.accent }]}>
                   Foreslå
                 </ThemedText>
               </View>
@@ -281,7 +257,6 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
       </Animated.View>
     );
   };
-
   const renderSpeechItem = ({ item, index }: { item: Speech; index: number }) => (
     <Animated.View entering={FadeInDown.delay(index * 50 + 200).duration(300)}>
       <View
@@ -291,8 +266,10 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
         ]}
       >
         <View style={styles.speechHeader}>
-          <View style={[styles.speechNumber, { backgroundColor: Colors.dark.accent }]}>
-            <ThemedText style={styles.speechNumberText}>{index + 1}</ThemedText>
+          <View style={[styles.speechNumber, { backgroundColor: theme.accent }]}>
+            <ThemedText style={[styles.speechNumberText, { color: theme.buttonText }]}>
+              {index + 1}
+            </ThemedText>
           </View>
           <View style={styles.speechInfo}>
             <ThemedText style={styles.speechName}>{item.speakerName}</ThemedText>
@@ -301,7 +278,7 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
             </ThemedText>
           </View>
           <View style={styles.speechMeta}>
-            <ThemedText style={[styles.speechDuration, { color: Colors.dark.accent }]}>
+            <ThemedText style={[styles.speechDuration, { color: theme.accent }]}>
               {item.durationMinutes} min
             </ThemedText>
             {item.scheduledTime && (
@@ -314,18 +291,16 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
       </View>
     </Animated.View>
   );
-
   if (isLoading) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
-        <ActivityIndicator size="large" color={Colors.dark.accent} />
+        <ActivityIndicator size="large" color={theme.accent} />
         <ThemedText style={[styles.loadingText, { color: theme.textSecondary }]}>
           Henter program...
         </ThemedText>
       </View>
     );
   }
-
   if (!data) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
@@ -339,7 +314,6 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
       </View>
     );
   }
-
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <FlatList
@@ -356,16 +330,16 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
         }}
         ListHeaderComponent={
           <View style={[styles.headerCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <EvendiIcon name="calendar" size={24} color={Colors.dark.accent} />
+            <EvendiIcon name="calendar" size={24} color={theme.accent} />
             <ThemedText type="h3" style={styles.headerTitle}>
               {coupleName || data.couple.displayName}
             </ThemedText>
             <ThemedText style={[styles.headerDate, { color: theme.textSecondary }]}>
               {formatDate(data.couple.weddingDate)}
             </ThemedText>
-            <View style={[styles.viewOnlyBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
-              <EvendiIcon name="eye" size={14} color={Colors.dark.accent} />
-              <ThemedText style={[styles.viewOnlyText, { color: Colors.dark.accent }]}>
+            <View style={[styles.viewOnlyBadge, { backgroundColor: theme.accent + "15" }]}>
+              <EvendiIcon name="eye" size={14} color={theme.accent} />
+              <ThemedText style={[styles.viewOnlyText, { color: theme.accent }]}>
                 Kun visning – trykk for å foreslå endringer
               </ThemedText>
             </View>
@@ -375,7 +349,7 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
           data.canViewSpeeches && data.speeches.length > 0 ? (
             <View style={styles.speechSection}>
               <View style={styles.sectionHeader}>
-                <EvendiIcon name="mic" size={18} color={Colors.dark.accent} />
+                <EvendiIcon name="mic" size={18} color={theme.accent} />
                 <ThemedText type="h4" style={styles.sectionTitle}>
                   Taler ({data.speeches.length})
                 </ThemedText>
@@ -397,7 +371,6 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
           </View>
         }
       />
-
       {/* Suggestion Modal */}
       <Modal
         visible={showSuggestionModal}
@@ -415,7 +388,6 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
                 <EvendiIcon name="x" size={24} color={theme.text} />
               </Pressable>
             </View>
-
             {selectedEvent && (
               <>
                 <View style={styles.modalSection}>
@@ -426,7 +398,7 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
                     <EvendiIcon
                       name={ICON_MAP[selectedEvent.icon || "star"] || "star"}
                       size={16}
-                      color={Colors.dark.accent}
+                      color={theme.accent}
                     />
                     <ThemedText style={styles.eventPreviewText}>
                       {selectedEvent.title}
@@ -436,12 +408,12 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
                     </ThemedText>
                   </View>
                 </View>
-
                 <View style={styles.modalSection}>
                   <ThemedText style={[styles.modalLabel, { color: theme.textSecondary }]}>
                     Foreslått ny tid (valgfritt)
                   </ThemedText>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="VendorCoupleScheduleScreen-input-1"
                     style={[
                       styles.timeInput,
                       { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundSecondary },
@@ -454,12 +426,12 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
                     keyboardType="numbers-and-punctuation"
                   />
                 </View>
-
                 <View style={styles.modalSection}>
                   <ThemedText style={[styles.modalLabel, { color: theme.textSecondary }]}>
                     Din melding til brudeparet *
                   </ThemedText>
-                  <TextInput
+                  <PersistentTextInput
+                    draftKey="VendorCoupleScheduleScreen-input-2"
                     style={[
                       styles.messageInput,
                       { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundSecondary },
@@ -473,14 +445,12 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
                     textAlignVertical="top"
                   />
                 </View>
-
-                <View style={[styles.infoBox, { backgroundColor: Colors.dark.accent + "10", borderColor: Colors.dark.accent }]}>
-                  <EvendiIcon name="info" size={16} color={Colors.dark.accent} />
-                  <ThemedText style={[styles.infoText, { color: Colors.dark.accent }]}>
+                <View style={[styles.infoBox, { backgroundColor: theme.accent + "10", borderColor: theme.accent }]}>
+                  <EvendiIcon name="info" size={16} color={theme.accent} />
+                  <ThemedText style={[styles.infoText, { color: theme.accent }]}>
                     Brudeparet vil motta forslaget ditt og kan velge å godta eller avvise endringen.
                   </ThemedText>
                 </View>
-
                 <View style={styles.modalButtonGroup}>
                   <Button
                     onPress={() => setShowSuggestionModal(false)}
@@ -503,7 +473,6 @@ export default function VendorCoupleScheduleScreen({ route, navigation }: Props)
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { justifyContent: "center", alignItems: "center" },
@@ -584,7 +553,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  speechNumberText: { color: "#1A1A1A", fontSize: 14, fontWeight: "700" },
+  speechNumberText: { fontSize: 14, fontWeight: "700" },
   speechInfo: { flex: 1, marginLeft: Spacing.md },
   speechName: { fontSize: 15, fontWeight: "600" },
   speechRole: { fontSize: 12, marginTop: 2 },

@@ -34,6 +34,7 @@ import {
 } from "@/lib/api-couple-data";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const CATEGORY_LABELS: Record<string, string> = {
   ceremony: "Seremoni",
@@ -556,7 +557,8 @@ export default function PhotoPlanScreen() {
             {editingShot ? "Endre bilde" : "Legg til bilde"}
           </ThemedText>
 
-          <TextInput
+          <PersistentTextInput
+            draftKey="PhotoPlanScreen-input-1"
             style={[
               styles.input,
               {
@@ -571,7 +573,8 @@ export default function PhotoPlanScreen() {
             onChangeText={setNewTitle}
           />
 
-          <TextInput
+          <PersistentTextInput
+            draftKey="PhotoPlanScreen-input-2"
             style={[
               styles.input,
               {
@@ -593,7 +596,8 @@ export default function PhotoPlanScreen() {
               <ThemedText style={[styles.locationLabel, { color: theme.text }]}>Sted (valgfritt)</ThemedText>
             </View>
             <View style={{ position: 'relative' }}>
-              <TextInput
+              <PersistentTextInput
+                draftKey="PhotoPlanScreen-input-3"
                 style={[
                   styles.input,
                   {

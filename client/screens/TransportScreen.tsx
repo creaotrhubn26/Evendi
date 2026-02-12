@@ -20,8 +20,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
+import PersistentTextInput from "@/components/PersistentTextInput";
 import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
+import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
 import { useTheme } from "@/hooks/useTheme";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
@@ -583,6 +585,14 @@ export default function TransportScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + Spacing.xl }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
+        {/* Marketplace hero + search + vendor cards */}
+        <VendorCategoryMarketplace
+          category="transport"
+          categoryName="Transport"
+          icon="truck"
+          subtitle="Elegant transport for den store dagen"
+        />
+
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.primary} />
@@ -663,7 +673,8 @@ export default function TransportScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Leverandør</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="TransportScreen-input-1"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={providerSearch.searchText}
                 onChangeText={providerSearch.onChangeText}
@@ -696,7 +707,8 @@ export default function TransportScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Kjøretøybeskrivelse</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="TransportScreen-input-2"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={bookingVehicleDesc}
                 onChangeText={setBookingVehicleDesc}
@@ -708,7 +720,8 @@ export default function TransportScreen() {
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.formLabel}>Henting kl.</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="TransportScreen-input-3"
                   style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                   value={bookingPickupTime}
                   onChangeText={setBookingPickupTime}
@@ -718,7 +731,8 @@ export default function TransportScreen() {
               </View>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.formLabel}>Levering kl.</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="TransportScreen-input-4"
                   style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                   value={bookingDropoffTime}
                   onChangeText={setBookingDropoffTime}
@@ -730,7 +744,8 @@ export default function TransportScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Hentested</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="TransportScreen-input-5"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={bookingPickupLocation}
                 onChangeText={setBookingPickupLocation}
@@ -741,7 +756,8 @@ export default function TransportScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Leveringssted</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="TransportScreen-input-6"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={bookingDropoffLocation}
                 onChangeText={setBookingDropoffLocation}
@@ -753,7 +769,8 @@ export default function TransportScreen() {
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.formLabel}>Sjåfør navn</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="TransportScreen-input-7"
                   style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                   value={bookingDriverName}
                   onChangeText={setBookingDriverName}
@@ -763,7 +780,8 @@ export default function TransportScreen() {
               </View>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.formLabel}>Sjåfør tlf.</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="TransportScreen-input-8"
                   style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                   value={bookingDriverPhone}
                   onChangeText={setBookingDriverPhone}
@@ -776,7 +794,8 @@ export default function TransportScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Pris (kr)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="TransportScreen-input-9"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={bookingPrice}
                 onChangeText={setBookingPrice}
@@ -788,7 +807,8 @@ export default function TransportScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="TransportScreen-input-10"
                 style={[styles.formInput, styles.formTextArea, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={bookingNotes}
                 onChangeText={setBookingNotes}
@@ -816,7 +836,8 @@ export default function TransportScreen() {
         <View style={styles.budgetModalOverlay}>
           <View style={[styles.budgetModalContent, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText style={styles.budgetModalTitle}>Budsjett for Transport</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="TransportScreen-input-11"
               style={[styles.budgetInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
               value={budgetInput}
               onChangeText={setBudgetInput}

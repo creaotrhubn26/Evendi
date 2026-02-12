@@ -29,6 +29,7 @@ import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp, ParamListBase } from "@react-navigation/native";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
@@ -513,7 +514,8 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           <View style={styles.section}>
           <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <EvendiIcon name="users" size={18} color={theme.textMuted} />
-            <TextInput
+            <PersistentTextInput
+              draftKey="DeliveryCreateScreen-input-1"
               style={[styles.input, { color: theme.text }]}
               placeholder="Navn på brudeparet *"
               placeholderTextColor={theme.textMuted}
@@ -523,7 +525,8 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           </View>
           <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <EvendiIcon name="mail" size={18} color={theme.textMuted} />
-            <TextInput
+            <PersistentTextInput
+              draftKey="DeliveryCreateScreen-input-2"
               style={[styles.input, { color: theme.text }]}
               placeholder="E-post (valgfritt)"
               placeholderTextColor={theme.textMuted}
@@ -535,7 +538,8 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           </View>
           <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <EvendiIcon name="calendar" size={18} color={theme.textMuted} />
-            <TextInput
+            <PersistentTextInput
+              draftKey="DeliveryCreateScreen-input-3"
               style={[styles.input, { color: theme.text }]}
               placeholder="Bryllupsdato (valgfritt)"
               placeholderTextColor={theme.textMuted}
@@ -591,7 +595,8 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           <View style={styles.section}>
           <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <EvendiIcon name="tag" size={18} color={theme.textMuted} />
-            <TextInput
+            <PersistentTextInput
+              draftKey="DeliveryCreateScreen-input-4"
               style={[styles.input, { color: theme.text }]}
               placeholder="Tittel *"
               placeholderTextColor={theme.textMuted}
@@ -600,7 +605,8 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
             />
           </View>
           <View style={[styles.inputContainer, styles.textAreaContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <TextInput
+            <PersistentTextInput
+              draftKey="DeliveryCreateScreen-input-5"
               style={[styles.input, styles.textArea, { color: theme.text }]}
               placeholder="Beskrivelse (valgfritt)"
               placeholderTextColor={theme.textMuted}
@@ -671,7 +677,8 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
             </View>
 
             <View style={[styles.itemInput, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}>
-              <TextInput
+              <PersistentTextInput
+                draftKey="DeliveryCreateScreen-input-6"
                 style={[styles.input, { color: theme.text }]}
                 placeholder="Etikett (f.eks. Bryllupsbilder)"
                 placeholderTextColor={theme.textMuted}
@@ -681,7 +688,8 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
             </View>
 
             <View style={[styles.itemInput, { backgroundColor: theme.backgroundRoot, borderColor: item.urlError ? "#EF5350" : theme.border }]}>
-              <TextInput
+              <PersistentTextInput
+                draftKey="DeliveryCreateScreen-input-7"
                 style={[styles.input, { color: theme.text }]}
                 placeholder={item.type === "gallery" ? "Google Drive eller bilde-URL" : "URL (https://...)"}
                 placeholderTextColor={theme.textMuted}

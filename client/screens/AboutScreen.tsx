@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View, Pressable, Linking, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -17,6 +17,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import type { AppSetting } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { getApiUrl } from "@/lib/query-client";
+import { getAppLanguage, type AppLanguage } from "@/lib/storage";
 import { showToast } from "@/lib/toast";
 
 type Theme = ReturnType<typeof useTheme>["theme"];
@@ -27,6 +28,7 @@ export default function AboutScreen() {
   const { theme, designSettings } = useTheme();
   const { isWedding } = useEventType();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
 
   // Fetch app settings to check for active status messages
   const { data: appSettings } = useQuery<AppSetting[]>({
@@ -49,12 +51,26 @@ export default function AboutScreen() {
 
   const getSetting = (key: string, fallback = "") => settingsByKey[key] ?? fallback;
 
+  useEffect(() => {
+    getAppLanguage().then((lang) => {
+      if (lang) setAppLanguage(lang);
+    });
+  }, []);
+
   const maintenanceMode = getSetting("maintenance_mode") === "true";
   const maintenanceMessage = getSetting("maintenance_message");
   const statusMessage = getSetting("status_message").trim();
   const statusType = getSetting("status_type", "info");
   const appName = getSetting("app_name", designSettings.appName ?? "Evendi");
-  const appTagline = getSetting("app_tagline", designSettings.appTagline ?? (isWedding ? "Din bryllupsplanlegger" : "Din arrangementsplanlegger"));
+  const appTagline = appLanguage === "en"
+    ? getSetting(
+        "app_tagline_en",
+        designSettings.appTaglineEn ?? "Your Event. Perfectly Matched.",
+      )
+    : getSetting(
+        "app_tagline",
+        designSettings.appTagline ?? "Ditt arrangement. Perfekt Match.",
+      );
   const appDescription = getSetting(
     "app_description",
     isWedding
@@ -105,15 +121,17 @@ export default function AboutScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerTitle: () => (
-        <Image
-          source={logoSource}
-          style={styles.headerLogo}
-          resizeMode="contain"
-        />
-      ),
+      headerTitle: designSettings.logoUseAbout
+        ? () => (
+            <Image
+              source={logoSource}
+              style={styles.headerLogo}
+              resizeMode="contain"
+            />
+          )
+        : appName,
     });
-  }, [navigation, logoSource]);
+  }, [navigation, logoSource, designSettings.logoUseAbout, appName]);
 
   const handleOpenLink = async (url: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

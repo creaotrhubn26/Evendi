@@ -27,6 +27,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp, ParamListBase } from "@react-navigation/native";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
@@ -952,7 +953,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
 
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Tittel</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="ProductCreateScreen-input-1"
                 testID="input-product-title"
                 style={[
                   styles.textInput,
@@ -1011,7 +1013,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
 
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Beskrivelse (valgfritt)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="ProductCreateScreen-input-2"
                 testID="input-product-description"
                 style={[
                   styles.textInput,
@@ -1030,7 +1033,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
             <View style={styles.rowInputs}>
               <View style={[styles.inputGroup, { flex: 1 }]}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Pris (NOK)</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="ProductCreateScreen-input-3"
                   testID="input-product-price"
                   style={[
                     styles.textInput,
@@ -1095,7 +1099,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
             <View style={styles.rowInputs}>
               <View style={[styles.inputGroup, { flex: 1 }]}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Leveringstid (dager)</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="ProductCreateScreen-input-4"
                   testID="input-product-lead-time"
                   style={[
                     styles.textInput,
@@ -1111,7 +1116,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
 
               <View style={[styles.inputGroup, { flex: 1 }]}>
                 <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Min. antall</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="ProductCreateScreen-input-5"
                   testID="input-product-min-quantity"
                   style={[
                     styles.textInput,
@@ -1128,7 +1134,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
 
             <View style={styles.inputGroup}>
               <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Kategori (valgfritt)</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="ProductCreateScreen-input-6"
                 testID="input-product-category"
                 style={[
                   styles.textInput,
@@ -1236,7 +1243,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Kjøkkentype</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-7"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Norsk, Italiensk, Asiatisk..."
                       placeholderTextColor={theme.textMuted}
@@ -1246,7 +1254,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Retttype</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-8"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Forrett, Hovedrett, Dessert..."
                       placeholderTextColor={theme.textMuted}
@@ -1256,7 +1265,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Antall porsjoner</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-9"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. 80"
                       placeholderTextColor={theme.textMuted}
@@ -1298,7 +1308,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Kakestil</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-10"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Tradisjonell, Naked, Drip..."
                       placeholderTextColor={theme.textMuted}
@@ -1308,7 +1319,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Smaker</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-11"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Sjokolade, Vanilje, Sitron..."
                       placeholderTextColor={theme.textMuted}
@@ -1319,7 +1331,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   <View style={styles.rowInputs}>
                     <View style={[styles.inputGroup, { flex: 1 }]}>
                       <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Porsjoner</ThemedText>
-                      <TextInput
+                      <PersistentTextInput
+                        draftKey="ProductCreateScreen-input-12"
                         style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                         placeholder="F.eks. 50"
                         placeholderTextColor={theme.textMuted}
@@ -1330,7 +1343,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                     </View>
                     <View style={[styles.inputGroup, { flex: 1 }]}>
                       <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Antall lag</ThemedText>
-                      <TextInput
+                      <PersistentTextInput
+                        draftKey="ProductCreateScreen-input-13"
                         style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                         placeholder="F.eks. 3"
                         placeholderTextColor={theme.textMuted}
@@ -1348,7 +1362,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                 <>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Blomstertype</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-14"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Brudebukett, Borddekorasjon..."
                       placeholderTextColor={theme.textMuted}
@@ -1358,7 +1373,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Blomster inkludert</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-15"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Roser, Liljer, Peoner..."
                       placeholderTextColor={theme.textMuted}
@@ -1368,7 +1384,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Sesong tilgjengelighet</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-16"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Vår, Sommer, Hele året..."
                       placeholderTextColor={theme.textMuted}
@@ -1393,7 +1410,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                 <>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Kjøretøytype</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-17"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Limousin, Vintage bil, Buss..."
                       placeholderTextColor={theme.textMuted}
@@ -1403,7 +1421,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Passasjerkapasitet</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-18"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. 4"
                       placeholderTextColor={theme.textMuted}
@@ -1414,7 +1433,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Kjøretøybeskrivelse</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-19"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="Detaljer om kjøretøyet..."
                       placeholderTextColor={theme.textMuted}
@@ -1441,7 +1461,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                 <>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Tjenestetype</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-20"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Hår, Makeup, Begge..."
                       placeholderTextColor={theme.textMuted}
@@ -1451,7 +1472,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Look-type</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-21"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Naturlig, Glamorøs, Vintage..."
                       placeholderTextColor={theme.textMuted}
@@ -1461,7 +1483,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Varighet (timer)</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-22"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. 2"
                       placeholderTextColor={theme.textMuted}
@@ -1487,7 +1510,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                 <>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Pakketype</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-23"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Timebasert, Heldag, Flerdag..."
                       placeholderTextColor={theme.textMuted}
@@ -1498,7 +1522,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   <View style={styles.rowInputs}>
                     <View style={[styles.inputGroup, { flex: 1 }]}>
                       <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Timer inkludert</ThemedText>
-                      <TextInput
+                      <PersistentTextInput
+                        draftKey="ProductCreateScreen-input-24"
                         style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                         placeholder="F.eks. 8"
                         placeholderTextColor={theme.textMuted}
@@ -1509,7 +1534,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                     </View>
                     <View style={[styles.inputGroup, { flex: 1 }]}>
                       <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Bilder levert</ThemedText>
-                      <TextInput
+                      <PersistentTextInput
+                        draftKey="ProductCreateScreen-input-25"
                         style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                         placeholder="F.eks. 500"
                         placeholderTextColor={theme.textMuted}
@@ -1521,7 +1547,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Redigerte bilder</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-26"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. 400"
                       placeholderTextColor={theme.textMuted}
@@ -1546,7 +1573,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                 <>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Pakketype</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-27"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Highlight, Fullfilm, Både..."
                       placeholderTextColor={theme.textMuted}
@@ -1556,7 +1584,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Filmlengde (minutter)</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-28"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. 60"
                       placeholderTextColor={theme.textMuted}
@@ -1567,7 +1596,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Redigeringsstil</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-29"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Cinematic, Documentary, Artistic..."
                       placeholderTextColor={theme.textMuted}
@@ -1595,7 +1625,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                 <>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Type opptreden</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-30"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Band, DJ, Solo, Duo..."
                       placeholderTextColor={theme.textMuted}
@@ -1605,7 +1636,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Sjanger</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-31"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Pop, Jazz, Rock, Klassisk..."
                       placeholderTextColor={theme.textMuted}
@@ -1615,7 +1647,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Varighet (timer)</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-32"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. 4"
                       placeholderTextColor={theme.textMuted}
@@ -1645,7 +1678,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   <View style={styles.rowInputs}>
                     <View style={[styles.inputGroup, { flex: 1 }]}>
                       <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Min. kapasitet</ThemedText>
-                      <TextInput
+                      <PersistentTextInput
+                        draftKey="ProductCreateScreen-input-33"
                         style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                         placeholder="F.eks. 50"
                         placeholderTextColor={theme.textMuted}
@@ -1656,7 +1690,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                     </View>
                     <View style={[styles.inputGroup, { flex: 1 }]}>
                       <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Maks. kapasitet</ThemedText>
-                      <TextInput
+                      <PersistentTextInput
+                        draftKey="ProductCreateScreen-input-34"
                         style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                         placeholder="F.eks. 200"
                         placeholderTextColor={theme.textMuted}
@@ -1668,7 +1703,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Lokasjon</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-35"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Innendørs, Utendørs, Begge..."
                       placeholderTextColor={theme.textMuted}
@@ -1678,7 +1714,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Parkeringsplasser</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-36"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. 50"
                       placeholderTextColor={theme.textMuted}
@@ -1689,7 +1726,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Tilgjengelighetsfunksjoner</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-37"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Rullestoladgang, Heis..."
                       placeholderTextColor={theme.textMuted}
@@ -1709,7 +1747,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                 <>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Tjenestenivå</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-38"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Full, Delvis, Dagskoordinering..."
                       placeholderTextColor={theme.textMuted}
@@ -1720,7 +1759,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   <View style={styles.rowInputs}>
                     <View style={[styles.inputGroup, { flex: 1 }]}>
                       <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Måneder tjeneste</ThemedText>
-                      <TextInput
+                      <PersistentTextInput
+                        draftKey="ProductCreateScreen-input-39"
                         style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                         placeholder="F.eks. 12"
                         placeholderTextColor={theme.textMuted}
@@ -1731,7 +1771,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                     </View>
                     <View style={[styles.inputGroup, { flex: 1 }]}>
                       <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Antall møter</ThemedText>
-                      <TextInput
+                      <PersistentTextInput
+                        draftKey="ProductCreateScreen-input-40"
                         style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                         placeholder="F.eks. 6"
                         placeholderTextColor={theme.textMuted}
@@ -1753,7 +1794,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                 <>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Kombinert pakke</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-41"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. Kun foto, Kun video, Begge..."
                       placeholderTextColor={theme.textMuted}
@@ -1763,7 +1805,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.inputGroup}>
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Totale timer</ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-42"
                       style={[styles.textInput, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                       placeholder="F.eks. 10"
                       placeholderTextColor={theme.textMuted}
@@ -1821,7 +1864,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>
                       Totalt tilgjengelig
                     </ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-43"
                       testID="input-available-quantity"
                       style={[
                         styles.textInput,
@@ -1839,7 +1883,8 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                     <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>
                       Sikkerhetsbuffer
                     </ThemedText>
-                    <TextInput
+                    <PersistentTextInput
+                      draftKey="ProductCreateScreen-input-44"
                       testID="input-booking-buffer"
                       style={[
                         styles.textInput,

@@ -20,8 +20,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
 import { SwipeableRow } from '../components/SwipeableRow';
+import PersistentTextInput from '@/components/PersistentTextInput';
 import { VendorSuggestions } from '../components/VendorSuggestions';
 import { VendorActionBar } from '../components/VendorActionBar';
+import { VendorCategoryMarketplace } from '@/components/VendorCategoryMarketplace';
 import { useTheme } from '../hooks/useTheme';
 import { useVendorSearch } from '../hooks/useVendorSearch';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
@@ -571,43 +573,39 @@ export function PlanleggerScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={['bottom']}>
-      <View style={[styles.header, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <View style={styles.headerContent}>
-          <View style={[styles.iconCircle, { backgroundColor: Colors.dark.accent + '15' }]}>
-            <EvendiIcon name="clipboard" size={24} color={Colors.dark.accent} />
-          </View>
-          <View style={styles.headerText}>
-            <ThemedText style={styles.headerTitle}>Bryllupsplanlegger</ThemedText>
-            <ThemedText style={[styles.headerSubtitle, { color: theme.textMuted }]}>
-              Planlegging og koordinering
-            </ThemedText>
-          </View>
-        </View>
-      </View>
-
-      <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        {['meetings', 'tasks', 'timeline'].map((tab) => (
-          <Pressable
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.activeTab]}
-            onPress={() => {
-              setActiveTab(tab as TabType);
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-          >
-            <ThemedText style={[styles.tabText, activeTab === tab && { color: Colors.dark.accent }]}>
-              {tab === 'meetings' ? 'Møter' : tab === 'tasks' ? 'Oppgaver' : 'Tidslinje'}
-            </ThemedText>
-            {activeTab === tab && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
-          </Pressable>
-        ))}
-      </View>
-
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {/* Marketplace hero + search + vendor cards + CTA */}
+        <VendorCategoryMarketplace
+          category="planner"
+          categoryName="Planlegger"
+          icon="clipboard"
+          subtitle="Profesjonell planlegging og koordinering"
+        />
+
+        {/* Tab bar */}
+        <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+          {['meetings', 'tasks', 'timeline'].map((tab) => (
+            <Pressable
+              key={tab}
+              style={[styles.tab, activeTab === tab && styles.activeTab]}
+              onPress={() => {
+                setActiveTab(tab as TabType);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+            >
+              <ThemedText style={[styles.tabText, activeTab === tab && { color: Colors.dark.accent }]}>
+                {tab === 'meetings' ? 'Møter' : tab === 'tasks' ? 'Oppgaver' : 'Tidslinje'}
+              </ThemedText>
+              {activeTab === tab && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Tab content */}
         {activeTab === 'meetings' && renderMeetingsTab()}
         {activeTab === 'tasks' && renderTasksTab()}
         {activeTab === 'timeline' && renderTimelineTab()}
@@ -631,7 +629,8 @@ export function PlanleggerScreen() {
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Planleggernavn *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="PlanleggerScreen-input-1"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="Søk etter registrert planlegger..."
                 placeholderTextColor={theme.textSecondary}
@@ -664,7 +663,8 @@ export function PlanleggerScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Dato *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="PlanleggerScreen-input-2"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="DD.MM.YYYY"
                 placeholderTextColor={theme.textSecondary}
@@ -676,7 +676,8 @@ export function PlanleggerScreen() {
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.formLabel}>Tid</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="PlanleggerScreen-input-3"
                   style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                   placeholder="HH:MM"
                   placeholderTextColor={theme.textSecondary}
@@ -687,7 +688,8 @@ export function PlanleggerScreen() {
 
               <View style={[styles.formGroup, { flex: 1, marginLeft: Spacing.md }]}>
                 <ThemedText style={styles.formLabel}>Sted</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="PlanleggerScreen-input-4"
                   style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                   placeholder="f.eks. Kontor"
                   placeholderTextColor={theme.textSecondary}
@@ -699,7 +701,8 @@ export function PlanleggerScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Tema</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="PlanleggerScreen-input-5"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="f.eks. Budsjett og gjester"
                 placeholderTextColor={theme.textSecondary}
@@ -710,7 +713,8 @@ export function PlanleggerScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="PlanleggerScreen-input-6"
                 style={[styles.input, { borderColor: theme.border, color: theme.text, minHeight: 80 }]}
                 placeholder="Møtenotater..."
                 placeholderTextColor={theme.textSecondary}
@@ -742,7 +746,8 @@ export function PlanleggerScreen() {
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Oppgavenavn *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="PlanleggerScreen-input-7"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="f.eks. Bestille musikk"
                 placeholderTextColor={theme.textSecondary}
@@ -753,7 +758,8 @@ export function PlanleggerScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Forfallsdato *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="PlanleggerScreen-input-8"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="DD.MM.YYYY"
                 placeholderTextColor={theme.textSecondary}
@@ -800,7 +806,8 @@ export function PlanleggerScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="PlanleggerScreen-input-9"
                 style={[styles.input, { borderColor: theme.border, color: theme.text, minHeight: 80 }]}
                 placeholder="Oppgavedetaljer..."
                 placeholderTextColor={theme.textSecondary}

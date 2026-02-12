@@ -8,7 +8,6 @@ import * as Haptics from "expo-haptics";
 import { EvendiIcon, EvendiIconGlyphMap } from "@/components/EvendiIcon";
 import { useQuery } from "@tanstack/react-query";
 import Animated, { FadeInDown } from "react-native-reanimated";
-
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
@@ -20,11 +19,8 @@ import { getSpeeches } from "@/lib/storage";
 import { Speech } from "@/lib/types";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
-
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 type Navigation = NativeStackNavigationProp<any>;
-
 type VendorProduct = {
   id: string;
   title: string;
@@ -33,7 +29,6 @@ type VendorProduct = {
   unitType: string;
   imageUrl: string | null;
 };
-
 type VendorOffer = {
   id: string;
   title: string;
@@ -47,7 +42,6 @@ type VendorOffer = {
     email: string;
   } | null;
 };
-
 type MusicPreferences = {
   spotifyPlaylistUrl: string | null;
   youtubePlaylistUrl: string | null;
@@ -57,7 +51,6 @@ type MusicPreferences = {
   doNotPlay: string | null;
   additionalNotes: string | null;
 };
-
 type MusicBrief = {
   couple?: {
     id: string;
@@ -77,7 +70,6 @@ type MusicBrief = {
   };
   preferences: MusicPreferences;
 };
-
 type CulturalVendor = {
   id: string;
   businessName: string;
@@ -90,7 +82,6 @@ type CulturalVendor = {
   isFeatured?: boolean;
   isPrioritized?: boolean;
 };
-
 const CULTURE_LABELS: Record<string, string> = {
   norway: "Norsk",
   sweden: "Svensk",
@@ -101,7 +92,6 @@ const CULTURE_LABELS: Record<string, string> = {
   jewish: "Jødisk",
   chinese: "Kinesisk",
 };
-
 const CULTURE_ALIASES: Record<string, string> = {
   norsk: "norway",
   norwegian: "norway",
@@ -116,7 +106,6 @@ const CULTURE_ALIASES: Record<string, string> = {
   jødisk: "jewish",
   kinesisk: "chinese",
 };
-
 const CULTURE_MUSIC_TIPS: Record<string, string[]> = {
   norway: [
     "Hardingfele eller fele til innmarsj gir en klassisk norsk stemning.",
@@ -145,12 +134,10 @@ const CULTURE_MUSIC_TIPS: Record<string, string[]> = {
     "Tradisjonell instrumentalmusikk passer godt ved te-seremoni.",
   ],
 };
-
 const normalizeCultureKey = (key: string) => {
   const normalized = key.trim().toLowerCase();
   return CULTURE_ALIASES[normalized] || normalized;
 };
-
 export default function VendorMusikkScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -163,9 +150,7 @@ export default function VendorMusikkScreen() {
   const [chatVendor, setChatVendor] = useState<CulturalVendor | null>(null);
   const [isChatPickerOpen, setIsChatPickerOpen] = useState(false);
   const [isStartingChat, setIsStartingChat] = useState(false);
-
   const vendorConfig = getVendorConfig(null, "Musikk");
-
   // Load speeches for music coordination
   const speechesQuery = useQuery<Speech[]>({
     queryKey: ['speeches'],
@@ -174,13 +159,11 @@ export default function VendorMusikkScreen() {
       return Array.isArray(data) ? data : [];
     },
   });
-
   useEffect(() => {
     if (speechesQuery.data) {
       setSpeeches(speechesQuery.data || []);
     }
   }, [speechesQuery.data]);
-
   useEffect(() => {
     const loadSession = async () => {
       const data = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
@@ -194,7 +177,6 @@ export default function VendorMusikkScreen() {
     };
     loadSession();
   }, [navigation]);
-
   const { data: products = [], isLoading: productsLoading, refetch: refetchProducts } = useQuery<VendorProduct[]>({
     queryKey: ["/api/vendor/products"],
     queryFn: async () => {
@@ -207,7 +189,6 @@ export default function VendorMusikkScreen() {
     },
     enabled: !!sessionToken,
   });
-
   const { data: offers = [], isLoading: offersLoading, refetch: refetchOffers } = useQuery<VendorOffer[]>({
     queryKey: ["/api/vendor/offers"],
     queryFn: async () => {
@@ -220,19 +201,16 @@ export default function VendorMusikkScreen() {
     },
     enabled: !!sessionToken,
   });
-
   const acceptedOffers = useMemo(
     () => offers.filter((offer) => offer.status === "accepted"),
     [offers]
   );
-
   useEffect(() => {
     if (selectedOfferId) return;
     if (acceptedOffers.length > 0) {
       setSelectedOfferId(acceptedOffers[0].id);
     }
   }, [acceptedOffers, selectedOfferId]);
-
   const { data: musicBrief, isLoading: briefLoading, refetch: refetchBrief } = useQuery<MusicBrief | null>({
     queryKey: ["vendor-music-preferences", selectedOfferId],
     queryFn: async () => {
@@ -246,22 +224,18 @@ export default function VendorMusikkScreen() {
     },
     enabled: !!sessionToken && !!selectedOfferId,
   });
-
   const cultureKeys = useMemo(() => {
     const raw = musicBrief?.couple?.selectedTraditions || [];
     const normalized = raw.map(normalizeCultureKey).filter(Boolean);
     return Array.from(new Set(normalized));
   }, [musicBrief?.couple?.selectedTraditions]);
-
   const cultureLabels = useMemo(() => {
     return cultureKeys.map((key) => CULTURE_LABELS[key] || key);
   }, [cultureKeys]);
-
   const culturalTips = useMemo(() => {
     const tips = cultureKeys.flatMap((key) => CULTURE_MUSIC_TIPS[key] || []);
     return Array.from(new Set(tips));
   }, [cultureKeys]);
-
   const { data: culturalVendors = [], isLoading: cultureLoading, refetch: refetchCulture } = useQuery<CulturalVendor[]>({
     queryKey: ["vendor-music-culture", cultureKeys.join("|"), vendorId],
     queryFn: async () => {
@@ -279,7 +253,6 @@ export default function VendorMusikkScreen() {
     },
     enabled: cultureKeys.length > 0,
   });
-
   const onRefresh = async () => {
     setIsRefreshing(true);
     const refreshPromises: Array<Promise<unknown>> = [refetchProducts(), refetchOffers(), refetchBrief()];
@@ -290,17 +263,14 @@ export default function VendorMusikkScreen() {
     setIsRefreshing(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const goToProducts = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("ProductCreate");
   };
-
   const goToOffers = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("OfferCreate");
   };
-
   const handleDelete = (id: string, type: 'product' | 'offer') => {
     showConfirm({
       title: `Slett ${type === 'product' ? 'produkt' : 'tilbud'}`,
@@ -312,7 +282,6 @@ export default function VendorMusikkScreen() {
       if (confirmed) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     });
   };
-
   const openLink = async (url?: string | null) => {
     if (!url) return;
     const finalUrl = url.startsWith("http") ? url : `https://${url}`;
@@ -323,7 +292,6 @@ export default function VendorMusikkScreen() {
     }
     await Linking.openURL(finalUrl);
   };
-
   const openPhone = async (phone?: string | null) => {
     if (!phone) {
       showToast("Denne leverandoren har ikke registrert telefonnummer.");
@@ -342,7 +310,6 @@ export default function VendorMusikkScreen() {
     }
     await Linking.openURL(phoneUrl);
   };
-
   const openVendorProfile = (vendor: CulturalVendor) => {
     navigation.navigate("VendorPublicProfile", {
       vendorId: vendor.id,
@@ -354,7 +321,6 @@ export default function VendorMusikkScreen() {
       readOnly: true,
     });
   };
-
   const handleStartVendorChat = async (coupleId: string) => {
     if (!sessionToken || !chatVendor) return;
     if (!coupleId) {
@@ -389,7 +355,6 @@ export default function VendorMusikkScreen() {
       setIsStartingChat(false);
     }
   };
-
   const openChatPicker = (vendor: CulturalVendor) => {
     if (acceptedOffers.length === 0) {
       showToast("Du trenger et akseptert tilbud for å velge par.");
@@ -398,9 +363,7 @@ export default function VendorMusikkScreen() {
     setChatVendor(vendor);
     setIsChatPickerOpen(true);
   };
-
   if (!sessionToken) return null;
-
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
@@ -415,7 +378,6 @@ export default function VendorMusikkScreen() {
     >
       <ThemedText style={[styles.title, { color: theme.text }]}>Musikk dashboard</ThemedText>
       <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Publiser musikk- og DJ-pakker, og send tilbud raskt.</ThemedText>
-
       <View style={styles.cardRow}>
         <Pressable
           onPress={goToProducts}
@@ -432,7 +394,6 @@ export default function VendorMusikkScreen() {
           <ThemedText style={[styles.cardBody, { color: theme.textSecondary }]}>Legg til pakker for band, DJ, eller musikere med timepriser og spilleliste.</ThemedText>
           <Button style={styles.cardButton} onPress={goToProducts}>Opprett pakke</Button>
         </Pressable>
-
         <Pressable
           onPress={goToOffers}
           style={({ pressed }) => [
@@ -449,12 +410,10 @@ export default function VendorMusikkScreen() {
           <Button style={styles.cardButton} onPress={goToOffers}>Send tilbud</Button>
         </Pressable>
       </View>
-
       <View style={[styles.infoBox, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <EvendiIcon name="info" size={16} color={theme.textSecondary} />
         <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>Legg til lyd-eksempler og spillelister for å øke konvertering.</ThemedText>
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Produkter</ThemedText>
@@ -486,7 +445,6 @@ export default function VendorMusikkScreen() {
           ))
         )}
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Tilbud</ThemedText>
@@ -520,13 +478,11 @@ export default function VendorMusikkScreen() {
           ))
         )}
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}> 
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Musikkønsker</ThemedText>
           {briefLoading ? <ActivityIndicator size="small" color={theme.accent} /> : null}
         </View>
-
         {acceptedOffers.length === 0 ? (
           <View style={styles.emptyRow}>
             <EvendiIcon name="music" size={18} color={theme.accent} />
@@ -551,14 +507,13 @@ export default function VendorMusikkScreen() {
                   ]}
                 >
                   <ThemedText
-                    style={{ color: selectedOfferId === offer.id ? "#FFFFFF" : theme.textSecondary, fontSize: 12, fontWeight: "600" }}
+                    style={{ color: selectedOfferId === offer.id ? theme.buttonText : theme.textSecondary, fontSize: 12, fontWeight: "600" }}
                   >
                     {offer.couple?.displayName || offer.title}
                   </ThemedText>
                 </Pressable>
               ))}
             </View>
-
             {musicBrief ? (
               <View style={styles.musicBriefBody}>
                 <ThemedText style={[styles.musicBriefTitle, { color: theme.text }]}>Kunde</ThemedText>
@@ -570,7 +525,6 @@ export default function VendorMusikkScreen() {
                     Arrangementsdato: {musicBrief.couple.weddingDate}
                   </ThemedText>
                 ) : null}
-
                 <View style={styles.musicBriefSection}>
                   <ThemedText style={[styles.musicBriefTitle, { color: theme.text }]}>Spillelister</ThemedText>
                   {musicBrief.preferences.spotifyPlaylistUrl ? (
@@ -587,7 +541,6 @@ export default function VendorMusikkScreen() {
                     <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>Ingen lenker enda</ThemedText>
                   ) : null}
                 </View>
-
                 <View style={styles.musicBriefSection}>
                   <ThemedText style={[styles.musicBriefTitle, { color: theme.text }]}>Spesielle sanger</ThemedText>
                   <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
@@ -600,7 +553,6 @@ export default function VendorMusikkScreen() {
                     Siste sang: {musicBrief.preferences.lastSong || "Ikke satt"}
                   </ThemedText>
                 </View>
-
                 {musicBrief.preferences.doNotPlay ? (
                   <View style={styles.musicBriefSection}>
                     <ThemedText style={[styles.musicBriefTitle, { color: theme.text }]}>Ikke spill</ThemedText>
@@ -609,7 +561,6 @@ export default function VendorMusikkScreen() {
                     </ThemedText>
                   </View>
                 ) : null}
-
                 {musicBrief.preferences.additionalNotes ? (
                   <View style={styles.musicBriefSection}>
                     <ThemedText style={[styles.musicBriefTitle, { color: theme.text }]}>Notater</ThemedText>
@@ -618,7 +569,6 @@ export default function VendorMusikkScreen() {
                     </ThemedText>
                   </View>
                 ) : null}
-
                 {cultureKeys.length > 0 ? (
                   <View style={styles.musicBriefSection}>
                     <View style={styles.cultureHeaderRow}>
@@ -646,7 +596,6 @@ export default function VendorMusikkScreen() {
                     )}
                   </View>
                 ) : null}
-
                 {cultureKeys.length > 0 ? (
                   <View style={styles.musicBriefSection}>
                     <View style={styles.cultureHeaderRow}>
@@ -730,7 +679,6 @@ export default function VendorMusikkScreen() {
           </>
         )}
       </View>
-
       {speeches.length > 0 && (
         <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <View style={styles.sectionHeaderRow}>
@@ -744,11 +692,10 @@ export default function VendorMusikkScreen() {
           {speeches
             .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'))
             .map((speech, idx) => {
-              const statusColor = speech.status === 'speaking' ? '#f59e0b' :
-                speech.status === 'done' ? '#16a34a' : theme.textSecondary;
+              const statusColor = speech.status === 'speaking' ? theme.warning :
+                speech.status === 'done' ? theme.success : theme.textSecondary;
               const statusIcon: keyof typeof EvendiIconGlyphMap = speech.status === 'speaking' ? 'mic' :
                 speech.status === 'done' ? 'check-circle' : 'clock';
-
               return (
                 <Animated.View
                   key={speech.id || `${speech.speakerName}-${idx}`}
@@ -779,7 +726,6 @@ export default function VendorMusikkScreen() {
             })}
         </View>
       )}
-
       <Modal
         visible={isChatPickerOpen}
         transparent
@@ -828,7 +774,6 @@ export default function VendorMusikkScreen() {
     </ScrollView>
   );
 }
-
 const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: "700", marginBottom: Spacing.xs },
   subtitle: { fontSize: 14, marginBottom: Spacing.lg },

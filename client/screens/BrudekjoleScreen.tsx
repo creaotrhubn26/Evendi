@@ -23,8 +23,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
+import PersistentTextInput from "@/components/PersistentTextInput";
 import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
+import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
 import { TraditionHintBanner } from "@/components/TraditionHintBanner";
 import { getCoupleProfile } from "@/lib/api-couples";
 import { getCoupleSession } from "@/lib/storage";
@@ -397,6 +399,15 @@ export default function BrudekjoleScreen() {
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.dark.accent} />}
       >
+        {/* Marketplace hero + search + vendor cards */}
+        <VendorCategoryMarketplace
+          category="dress"
+          categoryName="Brudekjole"
+          icon="heart"
+          subtitle={isWedding ? 'Finn drømmekjolen' : 'Finn det perfekte antrekket'}
+          selectedTraditions={coupleProfile?.selectedTraditions}
+        />
+
         {/* Budget Overview */}
         {/* Tradition hints for dress */}
         {(coupleProfile?.selectedTraditions?.length ?? 0) > 0 && (
@@ -750,7 +761,8 @@ export default function BrudekjoleScreen() {
               </Pressable>
             </View>
 
-            <TextInput
+            <PersistentTextInput
+              draftKey="BrudekjoleScreen-input-1"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               placeholder="Søk etter brudesalong..."
               placeholderTextColor={theme.textMuted}
@@ -781,14 +793,16 @@ export default function BrudekjoleScreen() {
             />
 
             <View style={styles.inputRow}>
-              <TextInput
+              <PersistentTextInput
+                draftKey="BrudekjoleScreen-input-2"
                 style={[styles.input, styles.inputHalf, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                 placeholder="Dato (ÅÅÅÅ-MM-DD)"
                 placeholderTextColor={theme.textMuted}
                 value={appointmentDate}
                 onChangeText={setAppointmentDate}
               />
-              <TextInput
+              <PersistentTextInput
+                draftKey="BrudekjoleScreen-input-3"
                 style={[styles.input, styles.inputHalf, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
                 placeholder="Tidspunkt (12:00)"
                 placeholderTextColor={theme.textMuted}
@@ -797,7 +811,8 @@ export default function BrudekjoleScreen() {
               />
             </View>
 
-            <TextInput
+            <PersistentTextInput
+              draftKey="BrudekjoleScreen-input-4"
               style={[styles.input, styles.inputMultiline, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               placeholder="Notater (hva du vil prøve, hvem du tar med...)"
               placeholderTextColor={theme.textMuted}
@@ -840,7 +855,8 @@ export default function BrudekjoleScreen() {
               )}
             </Pressable>
 
-            <TextInput
+            <PersistentTextInput
+              draftKey="BrudekjoleScreen-input-5"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               placeholder="Kjolens navn (f.eks. Pronovias Atelier)"
               placeholderTextColor={theme.textMuted}
@@ -848,7 +864,8 @@ export default function BrudekjoleScreen() {
               onChangeText={setDressName}
             />
 
-            <TextInput
+            <PersistentTextInput
+              draftKey="BrudekjoleScreen-input-6"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               placeholder="Designer"
               placeholderTextColor={theme.textMuted}
@@ -856,7 +873,8 @@ export default function BrudekjoleScreen() {
               onChangeText={setDressDesigner}
             />
 
-            <TextInput
+            <PersistentTextInput
+              draftKey="BrudekjoleScreen-input-7"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               placeholder="Butikk"
               placeholderTextColor={theme.textMuted}
@@ -864,7 +882,8 @@ export default function BrudekjoleScreen() {
               onChangeText={setDressShop}
             />
 
-            <TextInput
+            <PersistentTextInput
+              draftKey="BrudekjoleScreen-input-8"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               placeholder="Pris (kr)"
               placeholderTextColor={theme.textMuted}
@@ -873,7 +892,8 @@ export default function BrudekjoleScreen() {
               keyboardType="numeric"
             />
 
-            <TextInput
+            <PersistentTextInput
+              draftKey="BrudekjoleScreen-input-9"
               style={[styles.input, styles.inputMultiline, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               placeholder="Notater (passform, følelse, detaljer...)"
               placeholderTextColor={theme.textMuted}
@@ -902,7 +922,8 @@ export default function BrudekjoleScreen() {
               </Pressable>
             </View>
 
-            <TextInput
+            <PersistentTextInput
+              draftKey="BrudekjoleScreen-input-10"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               placeholder="Budsjett i kroner"
               placeholderTextColor={theme.textMuted}

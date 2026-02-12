@@ -15,15 +15,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
-
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 interface SiteVisit {
   id: string;
   coupleName: string;
@@ -38,16 +35,13 @@ interface SiteVisit {
   weddingDate: string | null;
   email: string;
 }
-
 interface Props {
   navigation: NativeStackNavigationProp<any>;
 }
-
 export default function VendorSiteVisitsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const [isRefreshing, setIsRefreshing] = useState(false);
-
   const { data: siteVisits = [], isLoading, refetch } = useQuery<SiteVisit[]>({
     queryKey: ["/api/vendor/site-visits"],
     queryFn: async () => {
@@ -61,14 +55,12 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
       return response.json();
     },
   });
-
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await refetch();
     setIsRefreshing(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const openEmail = async (email: string) => {
     try {
       const mailUrl = `mailto:${email}`;
@@ -86,7 +78,6 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
-
   const openMap = async (address: string) => {
     try {
       const encodedAddress = encodeURIComponent(address);
@@ -105,7 +96,6 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
-
   const formatDate = (dateStr: string) => {
     const parsed = new Date(dateStr);
     if (Number.isNaN(parsed.getTime())) return dateStr;
@@ -116,15 +106,13 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
       year: "numeric",
     });
   };
-
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "confirmed": return "#10b981";
-      case "booked": return "#f59e0b";
+      case "confirmed": return theme.success;
+      case "booked": return theme.warning;
       default: return theme.textSecondary;
     }
   };
-
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "confirmed": return "Bekreftet";
@@ -132,11 +120,9 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
       default: return "Vurderes";
     }
   };
-
   const renderSiteVisit = ({ item, index }: { item: SiteVisit; index: number }) => {
     const statusColor = getStatusColor(item.status);
     const address = item.address;
-
     return (
       <Animated.View entering={FadeInDown.duration(300).delay(index * 50)}>
         <View
@@ -160,7 +146,6 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
               </ThemedText>
             </View>
           </View>
-
           <View style={styles.visitInfo}>
             <View style={styles.infoRow}>
               <EvendiIcon name="calendar" size={14} color={theme.accent} />
@@ -169,7 +154,6 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
                 {item.siteVisitTime && ` kl. ${item.siteVisitTime}`}
               </ThemedText>
             </View>
-
             {item.weddingDate && (
               <View style={styles.infoRow}>
                 <EvendiIcon name="heart" size={14} color={theme.textSecondary} />
@@ -178,7 +162,6 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
                 </ThemedText>
               </View>
             )}
-
             {address && (
               <Pressable
                 onPress={() => openMap(address)}
@@ -193,7 +176,6 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
                 </ThemedText>
               </Pressable>
             )}
-
             {(item.invitedGuests || item.maxGuests) && (
               <View style={styles.infoRow}>
                 <EvendiIcon name="users" size={14} color={theme.textSecondary} />
@@ -202,7 +184,6 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
                 </ThemedText>
               </View>
             )}
-
             {item.notes && (
               <View style={[styles.notesBox, { backgroundColor: theme.backgroundSecondary }]}>
                 <ThemedText style={[styles.notesText, { color: theme.textSecondary }]}>
@@ -211,30 +192,27 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
               </View>
             )}
           </View>
-
           <Pressable
             onPress={() => openEmail(item.email)}
             style={[styles.contactButton, { backgroundColor: theme.accent }]}
           >
-            <EvendiIcon name="mail" size={16} color="#FFFFFF" />
-            <ThemedText style={styles.contactButtonText}>Kontakt kunde</ThemedText>
+            <EvendiIcon name="mail" size={16} color={theme.buttonText} />
+            <ThemedText style={[styles.contactButtonText, { color: theme.buttonText }]}>Kontakt kunde</ThemedText>
           </Pressable>
         </View>
       </Animated.View>
     );
   };
-
   if (isLoading) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.backgroundRoot }]}>
-        <ActivityIndicator size="large" color={Colors.dark.accent} />
+        <ActivityIndicator size="large" color={theme.accent} />
         <ThemedText style={[styles.loadingText, { color: theme.textMuted }]}>
           Laster befaringer...
         </ThemedText>
       </View>
     );
   }
-
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View
@@ -248,8 +226,8 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
         ]}
       >
         <View style={styles.headerContent}>
-          <View style={[styles.headerIconCircle, { backgroundColor: Colors.dark.accent }]}>
-            <EvendiIcon name="calendar" size={20} color="#FFFFFF" />
+          <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}>
+            <EvendiIcon name="calendar" size={20} color={theme.buttonText} />
           </View>
           <View style={styles.headerTextContainer}>
             <ThemedText style={[styles.headerTitle, { color: theme.text }]}>
@@ -270,7 +248,6 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
           <EvendiIcon name="x" size={20} color={theme.textSecondary} />
         </Pressable>
       </View>
-
       {siteVisits.length === 0 ? (
         <View style={styles.emptyState}>
           <View style={[styles.emptyIconCircle, { backgroundColor: theme.accent + "15" }]}>
@@ -296,7 +273,7 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={Colors.dark.accent}
+              tintColor={theme.accent}
             />
           }
         />
@@ -304,7 +281,6 @@ export default function VendorSiteVisitsScreen({ navigation }: Props) {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { justifyContent: "center", alignItems: "center" },
@@ -412,7 +388,6 @@ const styles = StyleSheet.create({
   contactButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#FFFFFF",
   },
   emptyState: {
     flex: 1,

@@ -19,6 +19,7 @@ import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 interface AdminConvWithVendor {
   conv: {
@@ -202,7 +203,8 @@ export default function AdminVendorChatsScreen({ route, navigation }: Props) {
         <View style={styles.toolsRow}>
           <View style={[styles.searchBox, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
             <EvendiIcon name="search" size={16} color={theme.textMuted} />
-            <TextInput
+            <PersistentTextInput
+              draftKey="AdminVendorChatsScreen-input-1"
               style={[styles.searchInput, { color: theme.text }]}
               placeholder="Søk på navn eller e-post"
               placeholderTextColor={theme.textMuted}

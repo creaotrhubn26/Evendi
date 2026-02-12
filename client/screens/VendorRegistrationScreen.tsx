@@ -14,14 +14,13 @@ import { EvendiIcon } from "@/components/EvendiIcon";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { renderIcon } from "@/lib/custom-icons";
-
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
-
+import PersistentTextInput from "@/components/PersistentTextInput";
 interface BrregEntity {
   organizationNumber: string;
   name: string;
@@ -33,14 +32,12 @@ interface BrregEntity {
     municipality: string | null;
   } | null;
 }
-
 interface VendorCategory {
   id: string;
   name: string;
   icon: string;
   description: string | null;
 }
-
 interface SubscriptionTier {
   id: string;
   name: string;
@@ -53,12 +50,14 @@ interface SubscriptionTier {
   hasPrioritizedSearch: boolean;
   hasCustomLandingPage: boolean;
 }
-
 export default function VendorRegistrationScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const { theme } = useTheme();
-
+  const { theme, designSettings } = useTheme();
+  const logoSource = designSettings.logoUrl
+    ? { uri: designSettings.logoUrl }
+    : require("../../assets/images/Evendi_logo_norsk_tagline.png");
+  const showLogo = designSettings.logoUseAuth ?? true;
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -73,17 +72,14 @@ export default function VendorRegistrationScreen() {
     priceRange: "",
     tierId: "",
   });
-
   const [showPassword, setShowPassword] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [brregResults, setBrregResults] = useState<BrregEntity[]>([]);
   const [showBrregDropdown, setShowBrregDropdown] = useState(false);
   const [isSearchingBrreg, setIsSearchingBrreg] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-
   const validateField = useCallback((field: string, value: string): string => {
     switch (field) {
       case "email":
@@ -118,13 +114,11 @@ export default function VendorRegistrationScreen() {
         return "";
     }
   }, [formData.password]);
-
   const handleBlur = useCallback((field: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
     const error = validateField(field, formData[field as keyof typeof formData]);
     setErrors((prev) => ({ ...prev, [field]: error }));
   }, [formData, validateField]);
-
   const validateAllFields = useCallback(() => {
     const newErrors: Record<string, string> = {};
     const requiredFields = ["email", "password", "confirmPassword", "businessName", "categoryId"];
@@ -133,31 +127,26 @@ export default function VendorRegistrationScreen() {
       const error = validateField(field, formData[field as keyof typeof formData]);
       if (error) newErrors[field] = error;
     });
-
     ["phone", "website"].forEach((field) => {
       const error = validateField(field, formData[field as keyof typeof formData]);
       if (error) newErrors[field] = error;
     });
-
     setErrors(newErrors);
     setTouched(Object.keys(formData).reduce((acc, key) => ({ ...acc, [key]: true }), {}));
     return Object.keys(newErrors).length === 0;
   }, [formData, validateField]);
-
   const getFieldStyle = useCallback((field: string) => {
     if (touched[field] && errors[field]) {
-      return { borderColor: "#DC3545" };
+      return { borderColor: theme.error };
     }
     return {};
-  }, [touched, errors]);
-
+  }, [touched, errors, theme.error]);
   const searchBrreg = useCallback(async (query: string) => {
     if (query.length < 2) {
       setBrregResults([]);
       setShowBrregDropdown(false);
       return;
     }
-
     setIsSearchingBrreg(true);
     try {
       const url = `${getApiUrl()}/api/brreg/search?q=${encodeURIComponent(query)}`;
@@ -183,25 +172,20 @@ export default function VendorRegistrationScreen() {
       setIsSearchingBrreg(false);
     }
   }, []);
-
   const handleBusinessNameChange = useCallback((value: string) => {
     setFormData((prev) => ({ ...prev, businessName: value }));
-
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
-
     searchTimeoutRef.current = setTimeout(() => {
       searchBrreg(value);
     }, 300);
   }, [searchBrreg]);
-
   const selectBrregEntity = useCallback((entity: BrregEntity) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const location = entity.address
       ? [entity.address.city, entity.address.municipality].filter(Boolean).join(", ")
       : "";
-
     setFormData((prev) => ({
       ...prev,
       businessName: entity.name,
@@ -211,11 +195,9 @@ export default function VendorRegistrationScreen() {
     setBrregResults([]);
     setShowBrregDropdown(false);
   }, []);
-
   const { data: categories = [], isLoading: categoriesLoading } = useQuery<VendorCategory[]>({
     queryKey: ["/api/vendor-categories"],
   });
-
   const { data: subscriptionTiers = [], isLoading: tiersLoading } = useQuery<SubscriptionTier[]>({
     queryKey: ["/api/subscription/tiers"],
     queryFn: async () => {
@@ -227,7 +209,6 @@ export default function VendorRegistrationScreen() {
       return response.json();
     },
   });
-
   const registerMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const { confirmPassword, ...submitData } = data;
@@ -244,27 +225,23 @@ export default function VendorRegistrationScreen() {
       showToast(error.message || "Kunne ikke registrere. Prøv igjen.");
     },
   });
-
   const handleSubmit = () => {
     if (!validateAllFields()) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
-
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     registerMutation.mutate(formData);
   };
-
   const updateField = (field: keyof typeof formData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
-
   if (submitted) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
         <View style={[styles.successContainer, { paddingTop: headerHeight + Spacing.xl }]}>
-          <View style={[styles.successIcon, { backgroundColor: Colors.dark.accent + "20" }]}>
-            <EvendiIcon name="check-circle" size={48} color={Colors.dark.accent} />
+          <View style={[styles.successIcon, { backgroundColor: theme.accent + "20" }]}>
+            <EvendiIcon name="check-circle" size={48} color={theme.accent} />
           </View>
           <ThemedText style={styles.successTitle}>Søknad mottatt!</ThemedText>
           <ThemedText style={[styles.successText, { color: theme.textSecondary }]}>
@@ -274,7 +251,6 @@ export default function VendorRegistrationScreen() {
       </View>
     );
   }
-
   return (
     <KeyboardAwareScrollViewCompat
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
@@ -285,24 +261,25 @@ export default function VendorRegistrationScreen() {
       }}
     >
       <View style={styles.logoContainer}>
-        <Image
-          source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
+        {showLogo ? (
+          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+        ) : (
+          <ThemedText style={styles.logoText}>
+            {designSettings.appName || "Evendi"}
+          </ThemedText>
+        )}
       </View>
       <ThemedText style={styles.title}>Bli en Evendi-leverandør</ThemedText>
       <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
         Registrer din bedrift og nå ut til tusenvis av kunder i Skandinavia.
       </ThemedText>
-
       <View style={styles.section}>
         <ThemedText style={styles.sectionTitle}>Kontoinformasjon</ThemedText>
-
         <View>
           <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("email")]}>
-            <EvendiIcon name="mail" size={18} color={touched.email && errors.email ? "#DC3545" : theme.textMuted} />
-            <TextInput
+            <EvendiIcon name="mail" size={18} color={touched.email && errors.email ? theme.error : theme.textMuted} />
+            <PersistentTextInput
+              draftKey="VendorRegistrationScreen-input-1"
               style={[styles.input, { color: theme.text }]}
               placeholder="E-postadresse *"
               placeholderTextColor={theme.textMuted}
@@ -314,14 +291,14 @@ export default function VendorRegistrationScreen() {
             />
           </View>
           {touched.email && errors.email ? (
-            <ThemedText style={styles.errorText}>{errors.email}</ThemedText>
+            <ThemedText style={[styles.errorText, { color: theme.error }]}>{errors.email}</ThemedText>
           ) : null}
         </View>
-
         <View>
           <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("password")]}>
-            <EvendiIcon name="lock" size={18} color={touched.password && errors.password ? "#DC3545" : theme.textMuted} />
-            <TextInput
+            <EvendiIcon name="lock" size={18} color={touched.password && errors.password ? theme.error : theme.textMuted} />
+            <PersistentTextInput
+              draftKey="VendorRegistrationScreen-input-2"
               style={[styles.input, { color: theme.text }]}
               placeholder="Passord (min. 8 tegn) *"
               placeholderTextColor={theme.textMuted}
@@ -335,14 +312,14 @@ export default function VendorRegistrationScreen() {
             </Pressable>
           </View>
           {touched.password && errors.password ? (
-            <ThemedText style={styles.errorText}>{errors.password}</ThemedText>
+            <ThemedText style={[styles.errorText, { color: theme.error }]}>{errors.password}</ThemedText>
           ) : null}
         </View>
-
         <View>
           <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("confirmPassword")]}>
-            <EvendiIcon name="lock" size={18} color={touched.confirmPassword && errors.confirmPassword ? "#DC3545" : theme.textMuted} />
-            <TextInput
+            <EvendiIcon name="lock" size={18} color={touched.confirmPassword && errors.confirmPassword ? theme.error : theme.textMuted} />
+            <PersistentTextInput
+              draftKey="VendorRegistrationScreen-input-3"
               style={[styles.input, { color: theme.text }]}
               placeholder="Bekreft passord *"
               placeholderTextColor={theme.textMuted}
@@ -353,18 +330,17 @@ export default function VendorRegistrationScreen() {
             />
           </View>
           {touched.confirmPassword && errors.confirmPassword ? (
-            <ThemedText style={styles.errorText}>{errors.confirmPassword}</ThemedText>
+            <ThemedText style={[styles.errorText, { color: theme.error }]}>{errors.confirmPassword}</ThemedText>
           ) : null}
         </View>
       </View>
-
       <View style={styles.section}>
         <ThemedText style={styles.sectionTitle}>Bedriftsinformasjon</ThemedText>
-
         <View style={styles.businessNameContainer}>
           <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <EvendiIcon name="briefcase" size={18} color={theme.textMuted} />
-            <TextInput
+            <PersistentTextInput
+              draftKey="VendorRegistrationScreen-input-4"
               style={[styles.input, { color: theme.text }]}
               placeholder="Bedriftsnavn (søk i Brønnøysundregistrene) *"
               placeholderTextColor={theme.textMuted}
@@ -375,10 +351,9 @@ export default function VendorRegistrationScreen() {
               }}
             />
             {isSearchingBrreg ? (
-              <ActivityIndicator size="small" color={Colors.dark.accent} />
+              <ActivityIndicator size="small" color={theme.accent} />
             ) : null}
           </View>
-
           {showBrregDropdown && brregResults.length > 0 ? (
             <View style={[styles.brregDropdown, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
               <ScrollView style={{ maxHeight: 200 }}>
@@ -411,19 +386,17 @@ export default function VendorRegistrationScreen() {
             </View>
           ) : null}
         </View>
-
         {formData.organizationNumber ? (
-          <View style={[styles.orgNumberBadge, { backgroundColor: Colors.dark.accent + "20", borderColor: Colors.dark.accent }]}>
-            <EvendiIcon name="check-circle" size={14} color={Colors.dark.accent} />
-            <ThemedText style={[styles.orgNumberText, { color: Colors.dark.accent }]}>
+          <View style={[styles.orgNumberBadge, { backgroundColor: theme.accent + "20", borderColor: theme.accent }]}>
+            <EvendiIcon name="check-circle" size={14} color={theme.accent} />
+            <ThemedText style={[styles.orgNumberText, { color: theme.accent }]}>
               Org.nr: {formData.organizationNumber}
             </ThemedText>
           </View>
         ) : null}
-
         <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Velg kategori *</ThemedText>
         {categoriesLoading ? (
-          <ActivityIndicator color={Colors.dark.accent} />
+          <ActivityIndicator color={theme.accent} />
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesScroll}>
             {categories.map((cat) => (
@@ -436,20 +409,20 @@ export default function VendorRegistrationScreen() {
                 style={[
                   styles.categoryChip,
                   {
-                    backgroundColor: formData.categoryId === cat.id ? Colors.dark.accent : theme.backgroundDefault,
-                    borderColor: formData.categoryId === cat.id ? Colors.dark.accent : theme.border,
+                    backgroundColor: formData.categoryId === cat.id ? theme.accent : theme.backgroundDefault,
+                    borderColor: formData.categoryId === cat.id ? theme.accent : theme.border,
                   },
                 ]}
               >
                 {renderIcon(
                   cat.icon || "briefcase",
-                  formData.categoryId === cat.id ? "#1A1A1A" : theme.textSecondary,
+                  formData.categoryId === cat.id ? theme.buttonText : theme.textSecondary,
                   16,
                 )}
                 <ThemedText
                   style={[
                     styles.categoryText,
-                    { color: formData.categoryId === cat.id ? "#1A1A1A" : theme.text },
+                    { color: formData.categoryId === cat.id ? theme.buttonText : theme.text },
                   ]}
                 >
                   {cat.name}
@@ -458,16 +431,15 @@ export default function VendorRegistrationScreen() {
             ))}
           </ScrollView>
         )}
-
         {/* Subscription Tier Selection */}
         <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.lg }]}>
           Velg hvilket abonnement som passer deg *
         </ThemedText>
-        <ThemedText style={[styles.trialInfo, { color: Colors.dark.accent }]}>
+        <ThemedText style={[styles.trialInfo, { color: theme.accent }]}>
           🎉 30 dager gratis prøveperiode - ingen binding!
         </ThemedText>
         {tiersLoading ? (
-          <ActivityIndicator color={Colors.dark.accent} />
+          <ActivityIndicator color={theme.accent} />
         ) : (
           <View style={styles.tiersContainer}>
             {subscriptionTiers.map((tier) => (
@@ -480,8 +452,8 @@ export default function VendorRegistrationScreen() {
                 style={[
                   styles.tierCard,
                   {
-                    backgroundColor: formData.tierId === tier.id ? Colors.dark.accent + "15" : theme.backgroundDefault,
-                    borderColor: formData.tierId === tier.id ? Colors.dark.accent : theme.border,
+                    backgroundColor: formData.tierId === tier.id ? theme.accent + "15" : theme.backgroundDefault,
+                    borderColor: formData.tierId === tier.id ? theme.accent : theme.border,
                     borderWidth: 2,
                   },
                 ]}
@@ -490,7 +462,7 @@ export default function VendorRegistrationScreen() {
                   <View style={styles.tierHeader}>
                     <ThemedText style={styles.tierName}>{tier.displayName}</ThemedText>
                     {formData.tierId === tier.id && (
-                      <EvendiIcon name="check-circle" size={20} color={Colors.dark.accent} />
+                      <EvendiIcon name="check-circle" size={20} color={theme.accent} />
                     )}
                   </View>
                   {tier.description && (
@@ -498,7 +470,7 @@ export default function VendorRegistrationScreen() {
                       {tier.description}
                     </ThemedText>
                   )}
-                  <ThemedText style={[styles.tierPrice, { color: Colors.dark.accent }]}>
+                  <ThemedText style={[styles.tierPrice, { color: theme.accent }]}>
                     {tier.priceNok} NOK/mnd
                   </ThemedText>
                   <View style={styles.tierFeatures}>
@@ -534,14 +506,14 @@ export default function VendorRegistrationScreen() {
         )}
         {touched.tierId && errors.tierId ? (
           <View style={styles.errorContainer}>
-            <EvendiIcon name="alert-circle" size={14} color="#EF5350" />
-            <ThemedText style={styles.errorText}>{errors.tierId}</ThemedText>
+            <EvendiIcon name="alert-circle" size={14} color={theme.error} />
+            <ThemedText style={[styles.errorText, { color: theme.error }]}>{errors.tierId}</ThemedText>
           </View>
         ) : null}
-
         <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <EvendiIcon name="map-pin" size={18} color={theme.textMuted} />
-          <TextInput
+          <PersistentTextInput
+            draftKey="VendorRegistrationScreen-input-5"
             style={[styles.input, { color: theme.text }]}
             placeholder="Sted (f.eks. Oslo, Norge)"
             placeholderTextColor={theme.textMuted}
@@ -549,10 +521,10 @@ export default function VendorRegistrationScreen() {
             onChangeText={(v) => updateField("location", v)}
           />
         </View>
-
         <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <EvendiIcon name="phone" size={18} color={theme.textMuted} />
-          <TextInput
+          <PersistentTextInput
+            draftKey="VendorRegistrationScreen-input-6"
             style={[styles.input, { color: theme.text }]}
             placeholder="Telefonnummer"
             placeholderTextColor={theme.textMuted}
@@ -561,10 +533,10 @@ export default function VendorRegistrationScreen() {
             keyboardType="phone-pad"
           />
         </View>
-
         <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <EvendiIcon name="globe" size={18} color={theme.textMuted} />
-          <TextInput
+          <PersistentTextInput
+            draftKey="VendorRegistrationScreen-input-7"
             style={[styles.input, { color: theme.text }]}
             placeholder="Nettside (valgfritt)"
             placeholderTextColor={theme.textMuted}
@@ -574,10 +546,10 @@ export default function VendorRegistrationScreen() {
             autoCapitalize="none"
           />
         </View>
-
         <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <EvendiIcon name="dollar-sign" size={18} color={theme.textMuted} />
-          <TextInput
+          <PersistentTextInput
+            draftKey="VendorRegistrationScreen-input-8"
             style={[styles.input, { color: theme.text }]}
             placeholder="Prisklasse (f.eks. 20 000 - 40 000 kr)"
             placeholderTextColor={theme.textMuted}
@@ -585,9 +557,9 @@ export default function VendorRegistrationScreen() {
             onChangeText={(v) => updateField("priceRange", v)}
           />
         </View>
-
         <View style={[styles.textAreaContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-          <TextInput
+          <PersistentTextInput
+            draftKey="VendorRegistrationScreen-input-9"
             style={[styles.textArea, { color: theme.text }]}
             placeholder="Beskriv din bedrift og tjenester..."
             placeholderTextColor={theme.textMuted}
@@ -598,32 +570,29 @@ export default function VendorRegistrationScreen() {
           />
         </View>
       </View>
-
       <Pressable
         onPress={handleSubmit}
         disabled={registerMutation.isPending}
         style={[
           styles.submitButton,
-          { backgroundColor: Colors.dark.accent, opacity: registerMutation.isPending ? 0.7 : 1 },
+          { backgroundColor: theme.accent, opacity: registerMutation.isPending ? 0.7 : 1 },
         ]}
       >
         {registerMutation.isPending ? (
-          <ActivityIndicator color="#1A1A1A" />
+          <ActivityIndicator color={theme.buttonText} />
         ) : (
           <>
-            <ThemedText style={styles.submitText}>Send søknad</ThemedText>
-            <EvendiIcon name="arrow-right" size={20} color="#1A1A1A" />
+            <ThemedText style={[styles.submitText, { color: theme.buttonText }]}>Send søknad</ThemedText>
+            <EvendiIcon name="arrow-right" size={20} color={theme.buttonText} />
           </>
         )}
       </Pressable>
-
       <ThemedText style={[styles.disclaimer, { color: theme.textMuted }]}>
         Ved å registrere deg godtar du våre vilkår og retningslinjer for leverandører.
       </ThemedText>
     </KeyboardAwareScrollViewCompat>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   logoContainer: {
@@ -634,6 +603,12 @@ const styles = StyleSheet.create({
     width: 480,
     height: 160,
   },
+    logoText: {
+      fontSize: 28,
+      fontWeight: "600",
+      marginBottom: Spacing.lg,
+      textAlign: "center",
+    },
   successContainer: {
     flex: 1,
     alignItems: "center",
@@ -738,7 +713,6 @@ const styles = StyleSheet.create({
   submitText: {
     fontSize: 17,
     fontWeight: "600",
-    color: "#1A1A1A",
   },
   disclaimer: {
     fontSize: 13,
@@ -809,7 +783,6 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 12,
-    color: "#DC3545",
     marginTop: 4,
     marginBottom: Spacing.sm,
     marginLeft: Spacing.sm,

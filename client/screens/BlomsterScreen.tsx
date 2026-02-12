@@ -25,8 +25,10 @@ import { TraditionHintBanner } from '@/components/TraditionHintBanner';
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
+import PersistentTextInput from "@/components/PersistentTextInput";
 import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
+import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
 import { useTheme } from "@/hooks/useTheme";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
@@ -817,6 +819,15 @@ export default function BlomsterScreen() {
         ]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
+        {/* Marketplace hero + search + vendor cards */}
+        <VendorCategoryMarketplace
+          category="florist"
+          categoryName="Blomster"
+          icon="sun"
+          subtitle="Vakre buketter og dekorasjoner"
+          selectedTraditions={coupleProfile?.selectedTraditions}
+        />
+
         {/* Tradition hints for flowers */}
         {(coupleProfile?.selectedTraditions?.length ?? 0) > 0 && activeTab === "appointments" && (
           <TraditionHintBanner
@@ -847,7 +858,8 @@ export default function BlomsterScreen() {
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Florist *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="BlomsterScreen-input-1"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={floristSearch.searchText}
                 onChangeText={floristSearch.onChangeText}
@@ -903,7 +915,8 @@ export default function BlomsterScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Dato *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="BlomsterScreen-input-2"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={appointmentDate}
                 onChangeText={setAppointmentDate}
@@ -914,7 +927,8 @@ export default function BlomsterScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Klokkeslett</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="BlomsterScreen-input-3"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={appointmentTime}
                 onChangeText={setAppointmentTime}
@@ -925,7 +939,8 @@ export default function BlomsterScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Sted</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="BlomsterScreen-input-4"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={appointmentLocation}
                 onChangeText={setAppointmentLocation}
@@ -936,7 +951,8 @@ export default function BlomsterScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="BlomsterScreen-input-5"
                 style={[styles.formInput, styles.formTextArea, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={appointmentNotes}
                 onChangeText={setAppointmentNotes}
@@ -1006,7 +1022,8 @@ export default function BlomsterScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Navn *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="BlomsterScreen-input-6"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={selectionName}
                 onChangeText={setSelectionName}
@@ -1017,7 +1034,8 @@ export default function BlomsterScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Beskrivelse</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="BlomsterScreen-input-7"
                 style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={selectionDescription}
                 onChangeText={setSelectionDescription}
@@ -1045,7 +1063,8 @@ export default function BlomsterScreen() {
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.formLabel}>Antall</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="BlomsterScreen-input-8"
                   style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                   value={selectionQuantity}
                   onChangeText={setSelectionQuantity}
@@ -1056,7 +1075,8 @@ export default function BlomsterScreen() {
               </View>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.formLabel}>Pris (kr)</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="BlomsterScreen-input-9"
                   style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                   value={selectionPrice}
                   onChangeText={setSelectionPrice}
@@ -1069,7 +1089,8 @@ export default function BlomsterScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="BlomsterScreen-input-10"
                 style={[styles.formInput, styles.formTextArea, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
                 value={selectionNotes}
                 onChangeText={setSelectionNotes}
@@ -1107,7 +1128,8 @@ export default function BlomsterScreen() {
         <View style={styles.budgetModalOverlay}>
           <View style={[styles.budgetModalContent, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText style={styles.budgetModalTitle}>Budsjett for Blomster</ThemedText>
-            <TextInput
+            <PersistentTextInput
+              draftKey="BlomsterScreen-input-11"
               style={[styles.budgetInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
               value={budgetInput}
               onChangeText={setBudgetInput}

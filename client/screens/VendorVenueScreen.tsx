@@ -8,23 +8,20 @@ import * as Haptics from "expo-haptics";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Animated, { FadeInDown } from "react-native-reanimated";
-
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
 import { SeatingChart, Table, Guest } from "@/components/SeatingChart";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
 import { showToast } from "@/lib/toast";
 import { showConfirm, showOptions } from "@/lib/dialogs";
-
+import PersistentTextInput from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 type Navigation = NativeStackNavigationProp<any>;
 type TabType = 'bookings' | 'seating' | 'timeline';
-
 type VendorProduct = {
   id: string;
   title: string;
@@ -33,7 +30,6 @@ type VendorProduct = {
   unitType: string;
   imageUrl: string | null;
 };
-
 type VendorOffer = {
   id: string;
   title: string;
@@ -42,7 +38,6 @@ type VendorOffer = {
   currency: string | null;
   createdAt: string;
 };
-
 type VendorVenueBooking = {
   id: string;
   coupleName: string;
@@ -59,7 +54,6 @@ type VendorVenueBooking = {
   accommodationAvailable?: boolean;
   checkoutTime?: string;
 };
-
 type VendorAvailability = {
   id: string;
   date: string;
@@ -67,14 +61,12 @@ type VendorAvailability = {
   maxBookings?: number;
   notes?: string;
 };
-
 type VendorVenueTimeline = {
   siteVisitDone?: boolean;
   contractSigned?: boolean;
   depositReceived?: boolean;
   floorPlanFinalized?: boolean;
 };
-
 export default function VendorVenueScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -83,19 +75,16 @@ export default function VendorVenueScreen() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('bookings');
-
   // Planner state
   const [bookings, setBookings] = useState<VendorVenueBooking[]>([]);
   const [availability, setAvailability] = useState<VendorAvailability[]>([]);
   const [timeline, setTimeline] = useState<VendorVenueTimeline>({});
   const [seatingTables, setSeatingTables] = useState<Table[]>([]);
   const [seatingGuests, setSeatingGuests] = useState<Guest[]>([]);
-
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [editingBooking, setEditingBooking] = useState<VendorVenueBooking | null>(null);
   const [editingAvailability, setEditingAvailability] = useState<VendorAvailability | null>(null);
-
   // Booking form
   const [coupleName, setCoupleName] = useState("");
   const [bookingDate, setBookingDate] = useState("");
@@ -110,15 +99,12 @@ export default function VendorVenueScreen() {
   const [bookingCateringIncluded, setBookingCateringIncluded] = useState(false);
   const [bookingAccommodationAvailable, setBookingAccommodationAvailable] = useState(false);
   const [bookingCheckoutTime, setBookingCheckoutTime] = useState("");
-
   // Availability form
   const [availDate, setAvailDate] = useState("");
   const [availStatus, setAvailStatus] = useState<"available" | "blocked" | "limited">("available");
   const [availMaxBookings, setAvailMaxBookings] = useState("");
   const [availNotes, setAvailNotes] = useState("");
-
   const vendorConfig = getVendorConfig(null, "Venue");
-
   useEffect(() => {
     const loadSession = async () => {
       const data = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
@@ -131,7 +117,6 @@ export default function VendorVenueScreen() {
     };
     loadSession();
   }, [navigation]);
-
   const { data: products = [], isLoading: productsLoading, refetch: refetchProducts } = useQuery<VendorProduct[]>({
     queryKey: ["/api/vendor/products"],
     queryFn: async () => {
@@ -144,7 +129,6 @@ export default function VendorVenueScreen() {
     },
     enabled: !!sessionToken,
   });
-
   const { data: offers = [], isLoading: offersLoading, refetch: refetchOffers } = useQuery<VendorOffer[]>({
     queryKey: ["/api/vendor/offers"],
     queryFn: async () => {
@@ -157,7 +141,6 @@ export default function VendorVenueScreen() {
     },
     enabled: !!sessionToken,
   });
-
   const bookingsQuery = useQuery<VendorVenueBooking[]>({
     queryKey: ["/api/vendor/venue/bookings", sessionToken],
     enabled: !!sessionToken,
@@ -169,13 +152,11 @@ export default function VendorVenueScreen() {
       return res.json();
     },
   });
-
   useEffect(() => {
     if (bookingsQuery.data) {
       setBookings(Array.isArray(bookingsQuery.data) ? bookingsQuery.data : []);
     }
   }, [bookingsQuery.data]);
-
   const availabilityQuery = useQuery<VendorAvailability[]>({
     queryKey: ["/api/vendor/venue/availability", sessionToken],
     enabled: !!sessionToken,
@@ -187,13 +168,11 @@ export default function VendorVenueScreen() {
       return res.json();
     },
   });
-
   useEffect(() => {
     if (availabilityQuery.data) {
       setAvailability(Array.isArray(availabilityQuery.data) ? availabilityQuery.data : []);
     }
   }, [availabilityQuery.data]);
-
   const timelineQuery = useQuery<VendorVenueTimeline>({
     queryKey: ["/api/vendor/venue/timeline", sessionToken],
     enabled: !!sessionToken,
@@ -205,13 +184,11 @@ export default function VendorVenueScreen() {
       return res.json();
     },
   });
-
   useEffect(() => {
     if (timelineQuery.data) {
       setTimeline(timelineQuery.data || {});
     }
   }, [timelineQuery.data]);
-
   const seatingQuery = useQuery<{ tables: Table[]; guests: Guest[] }>({
     queryKey: ["/api/vendor/venue/seating", sessionToken],
     enabled: !!sessionToken,
@@ -223,14 +200,12 @@ export default function VendorVenueScreen() {
       return res.json();
     },
   });
-
   useEffect(() => {
     if (seatingQuery.data) {
       setSeatingTables(seatingQuery.data?.tables || []);
       setSeatingGuests(seatingQuery.data?.guests || []);
     }
   }, [seatingQuery.data]);
-
   const plannerMutation = useMutation({
     mutationFn: async ({ kind, payload }: { kind: "bookings" | "availability" | "timeline"; payload: any }) => {
       if (!sessionToken) return;
@@ -244,24 +219,20 @@ export default function VendorVenueScreen() {
       });
     },
   });
-
   const persistAndCache = (kind: "bookings" | "availability" | "timeline", payload: any) => {
     if (!sessionToken) return;
     const key = [`/api/vendor/venue/${kind}`, sessionToken];
     queryClient.setQueryData(key, payload);
     plannerMutation.mutate({ kind, payload });
   };
-
   const handleSeatingTablesChange = (tables: Table[]) => {
     setSeatingTables(tables);
     persistSeating(tables, seatingGuests);
   };
-
   const handleSeatingGuestsChange = (guests: Guest[]) => {
     setSeatingGuests(guests);
     persistSeating(seatingTables, guests);
   };
-
   const persistSeating = async (tables: Table[], guests: Guest[]) => {
     if (!sessionToken) return;
     const key = ["/api/vendor/venue/seating", sessionToken];
@@ -277,7 +248,6 @@ export default function VendorVenueScreen() {
       body: JSON.stringify(payload),
     });
   };
-
   const onRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([
@@ -291,17 +261,14 @@ export default function VendorVenueScreen() {
     setIsRefreshing(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const goToProducts = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("ProductCreate");
   };
-
   const goToOffers = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("OfferCreate");
   };
-
   const handleDelete = async (id: string, type: 'product' | 'offer') => {
     const confirmed = await showConfirm({
       title: `Slett ${type === 'product' ? 'produkt' : 'tilbud'}`,
@@ -313,7 +280,6 @@ export default function VendorVenueScreen() {
     if (!confirmed) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
-
   const openBookingModal = (booking?: VendorVenueBooking) => {
     if (booking) {
       setEditingBooking(booking);
@@ -346,7 +312,6 @@ export default function VendorVenueScreen() {
     }
     setShowBookingModal(true);
   };
-
   const saveBooking = () => {
     if (!coupleName.trim() || !bookingDate.trim()) {
       showToast("Kundenavn og dato er påkrevd");
@@ -375,7 +340,6 @@ export default function VendorVenueScreen() {
     setShowBookingModal(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
-
   const deleteBooking = async (id: string) => {
     const confirmed = await showConfirm({
       title: "Slett booking",
@@ -390,23 +354,20 @@ export default function VendorVenueScreen() {
     persistAndCache("bookings", next);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
-
   const updateBookingStatus = (id: string, newStatus: 'considering' | 'booked' | 'confirmed') => {
     const next = bookings.map(b => b.id === id ? { ...b, status: newStatus } : b);
     setBookings(next);
     persistAndCache('bookings', next);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const getStatusColor = (status?: string) => {
     switch (status) {
-      case 'confirmed': return '#10b981'; // green
-      case 'booked': return '#f59e0b'; // orange
+      case 'confirmed': return theme.success;
+      case 'booked': return theme.warning;
       case 'considering':
       default: return theme.textSecondary; // gray
     }
   };
-
   const getStatusLabel = (status?: string) => {
     switch (status) {
       case 'confirmed': return 'Bekreftet';
@@ -415,7 +376,6 @@ export default function VendorVenueScreen() {
       default: return 'Vurderes';
     }
   };
-
   const duplicateBooking = (booking: VendorVenueBooking) => {
     const copy: VendorVenueBooking = {
       ...booking,
@@ -428,7 +388,6 @@ export default function VendorVenueScreen() {
     persistAndCache("bookings", next);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
-
   const openAvailabilityModal = (block?: VendorAvailability) => {
     if (block) {
       setEditingAvailability(block);
@@ -445,7 +404,6 @@ export default function VendorVenueScreen() {
     }
     setShowAvailabilityModal(true);
   };
-
   const saveAvailability = () => {
     if (!availDate.trim()) {
       showToast("Dato er påkrevd");
@@ -466,7 +424,6 @@ export default function VendorVenueScreen() {
     setShowAvailabilityModal(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
-
   const deleteAvailability = async (id: string) => {
     const confirmed = await showConfirm({
       title: "Slett blokkering",
@@ -481,21 +438,18 @@ export default function VendorVenueScreen() {
     persistAndCache("availability", next);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
-
   const toggleTimeline = (key: keyof VendorVenueTimeline) => {
     const next = { ...timeline, [key]: !timeline[key] };
     setTimeline(next);
     persistAndCache("timeline", next);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const renderBookingsTab = () => (
     <View style={styles.tabContent}>
       <View style={[styles.infoBox, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <EvendiIcon name="info" size={16} color={theme.textSecondary} />
         <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>Legg til bilder av lokalet og tidligere arrangementer for å øke konvertering.</ThemedText>
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Bookingforespørsler</ThemedText>
@@ -565,7 +519,6 @@ export default function VendorVenueScreen() {
           ))
         )}
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Tilgjengelighet</ThemedText>
@@ -608,7 +561,6 @@ export default function VendorVenueScreen() {
       </View>
     </View>
   );
-
   const renderSeatingTab = () => (
     <View style={{ flex: 1 }}>
       <SeatingChart
@@ -620,7 +572,6 @@ export default function VendorVenueScreen() {
       />
     </View>
   );
-
   const renderTimelineTab = () => (
     <View style={styles.tabContent}>
       <View style={[styles.timelineCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
@@ -635,7 +586,7 @@ export default function VendorVenueScreen() {
             <View
               style={[styles.timelineCheckbox, { borderColor: theme.border }, timeline[step.key as keyof VendorVenueTimeline] && { backgroundColor: theme.primary, borderColor: theme.primary }]}
             >
-              {timeline[step.key as keyof VendorVenueTimeline] && <EvendiIcon name="check" size={12} color="#fff" />}
+              {timeline[step.key as keyof VendorVenueTimeline] && <EvendiIcon name="check" size={12} color={theme.buttonText} />}
             </View>
             <View style={styles.timelineStepContent}>
               <EvendiIcon name={step.icon} size={16} color={theme.textSecondary} />
@@ -648,15 +599,13 @@ export default function VendorVenueScreen() {
       </View>
     </View>
   );
-
   if (!sessionToken) return null;
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={['bottom']}>
       <View style={[styles.header, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
         <View style={styles.headerContent}>
-          <View style={[styles.iconCircle, { backgroundColor: Colors.dark.accent + '15' }]}>
-            <EvendiIcon name="home" size={24} color={Colors.dark.accent} />
+          <View style={[styles.iconCircle, { backgroundColor: theme.accent + '15' }]}>
+            <EvendiIcon name="home" size={24} color={theme.accent} />
           </View>
           <View style={styles.headerText}>
             <ThemedText style={styles.headerTitle}>Lokale</ThemedText>
@@ -666,7 +615,6 @@ export default function VendorVenueScreen() {
           </View>
         </View>
       </View>
-
       <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
         {['bookings', 'seating', 'timeline'].map((tab) => (
           <Pressable
@@ -677,14 +625,13 @@ export default function VendorVenueScreen() {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}
           >
-            <ThemedText style={[styles.tabText, activeTab === tab && { color: Colors.dark.accent }]}>
+            <ThemedText style={[styles.tabText, activeTab === tab && { color: theme.accent }]}>
               {tab === 'bookings' ? 'Bookinger' : tab === 'seating' ? 'Bord' : 'Tidslinje'}
             </ThemedText>
-            {activeTab === tab && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
+            {activeTab === tab && <View style={[styles.tabIndicator, { backgroundColor: theme.accent }]} />}
           </Pressable>
         ))}
       </View>
-
       {activeTab === 'seating' ? (
         renderSeatingTab()
       ) : (
@@ -703,7 +650,6 @@ export default function VendorVenueScreen() {
           {activeTab === 'timeline' && renderTimelineTab()}
         </ScrollView>
       )}
-
       {/* Booking Modal */}
       <Modal visible={showBookingModal} animationType="slide" onRequestClose={() => setShowBookingModal(false)}>
         <View style={[styles.modalContainer, { backgroundColor: theme.backgroundRoot }]}> 
@@ -716,11 +662,11 @@ export default function VendorVenueScreen() {
               <ThemedText style={[styles.modalSave, { color: theme.primary }]}>Lagre</ThemedText>
             </Pressable>
           </View>
-
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Kundenavn *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorVenueScreen-input-1"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="f.eks. Anna & Jonas"
                 placeholderTextColor={theme.textSecondary}
@@ -728,10 +674,10 @@ export default function VendorVenueScreen() {
                 onChangeText={setCoupleName}
               />
             </View>
-
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Dato *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorVenueScreen-input-2"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="DD.MM.YYYY"
                 placeholderTextColor={theme.textSecondary}
@@ -739,11 +685,11 @@ export default function VendorVenueScreen() {
                 onChangeText={setBookingDate}
               />
             </View>
-
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <ThemedText style={styles.formLabel}>Tid</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VendorVenueScreen-input-3"
                   style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                   placeholder="HH:MM"
                   placeholderTextColor={theme.textSecondary}
@@ -753,7 +699,8 @@ export default function VendorVenueScreen() {
               </View>
               <View style={[styles.formGroup, { flex: 1, marginLeft: Spacing.md }]}>
                 <ThemedText style={styles.formLabel}>Kapasitet</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="VendorVenueScreen-input-4"
                   style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                   placeholder="f.eks. 150"
                   placeholderTextColor={theme.textSecondary}
@@ -763,10 +710,10 @@ export default function VendorVenueScreen() {
                 />
               </View>
             </View>
-
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Lokasjon</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorVenueScreen-input-5"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="f.eks. Oslo sentrum"
                 placeholderTextColor={theme.textSecondary}
@@ -774,14 +721,13 @@ export default function VendorVenueScreen() {
                 onChangeText={setBookingLocation}
               />
             </View>
-
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Status</ThemedText>
               <View style={styles.statusContainer}>
                 {[
                   { value: 'considering', label: 'Vurderes', icon: 'search', color: theme.textSecondary },
-                  { value: 'booked', label: 'Booket', icon: 'calendar', color: '#f59e0b' },
-                  { value: 'confirmed', label: 'Bekreftet', icon: 'check-circle', color: '#10b981' },
+                  { value: 'booked', label: 'Booket', icon: 'calendar', color: theme.warning },
+                  { value: 'confirmed', label: 'Bekreftet', icon: 'check-circle', color: theme.success },
                 ].map((statusOption) => (
                   <Pressable
                     key={statusOption.value}
@@ -815,10 +761,10 @@ export default function VendorVenueScreen() {
                 ))}
               </View>
             </View>
-
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorVenueScreen-input-6"
                 style={[styles.input, { borderColor: theme.border, color: theme.text, minHeight: 80 }]}
                 placeholder="Detaljer om avtalen"
                 placeholderTextColor={theme.textSecondary}
@@ -831,7 +777,6 @@ export default function VendorVenueScreen() {
           </ScrollView>
         </View>
       </Modal>
-
       {/* Availability Modal */}
       <Modal visible={showAvailabilityModal} animationType="slide" onRequestClose={() => setShowAvailabilityModal(false)}>
         <View style={[styles.modalContainer, { backgroundColor: theme.backgroundRoot }]}> 
@@ -844,11 +789,11 @@ export default function VendorVenueScreen() {
               <ThemedText style={[styles.modalSave, { color: theme.primary }]}>Lagre</ThemedText>
             </Pressable>
           </View>
-
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Dato *</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorVenueScreen-input-7"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="DD.MM.YYYY"
                 placeholderTextColor={theme.textSecondary}
@@ -856,7 +801,6 @@ export default function VendorVenueScreen() {
                 onChangeText={setAvailDate}
               />
             </View>
-
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Status</ThemedText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
@@ -864,17 +808,27 @@ export default function VendorVenueScreen() {
                   <Pressable
                     key={s}
                     onPress={() => setAvailStatus(s)}
-                    style={[styles.categoryChip, availStatus === s && { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}
+                    style={[
+                      styles.categoryChip,
+                      {
+                        backgroundColor: availStatus === s ? theme.primary + "20" : theme.backgroundSecondary,
+                        borderColor: availStatus === s ? theme.primary : theme.border,
+                      },
+                    ]}
                   >
-                    <ThemedText style={styles.categoryChipText}>{s}</ThemedText>
+                    <ThemedText
+                      style={[styles.categoryChipText, { color: availStatus === s ? theme.primary : theme.text }]}
+                    >
+                      {s}
+                    </ThemedText>
                   </Pressable>
                 ))}
               </ScrollView>
             </View>
-
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Maks bookinger</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorVenueScreen-input-8"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="f.eks. 2"
                 placeholderTextColor={theme.textSecondary}
@@ -883,10 +837,10 @@ export default function VendorVenueScreen() {
                 keyboardType="numeric"
               />
             </View>
-
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="VendorVenueScreen-input-9"
                 style={[styles.input, { borderColor: theme.border, color: theme.text, minHeight: 80 }]}
                 placeholder="Detaljer om blokkeringen"
                 placeholderTextColor={theme.textSecondary}
@@ -902,7 +856,6 @@ export default function VendorVenueScreen() {
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
@@ -1021,6 +974,6 @@ const styles = StyleSheet.create({
   formRow: { flexDirection: 'row' },
   input: { borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.md, fontSize: 14 },
   categoryScroll: { marginRight: -Spacing.lg },
-  categoryChip: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.md, marginRight: Spacing.sm, backgroundColor: '#f0f0f0', borderWidth: 1, borderColor: '#ccc' },
+  categoryChip: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.md, marginRight: Spacing.sm, borderWidth: 1 },
   categoryChipText: { fontSize: 12, fontWeight: '500' },
 });

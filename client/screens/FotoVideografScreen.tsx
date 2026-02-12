@@ -9,12 +9,11 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
-import { VendorSuggestions } from '@/components/VendorSuggestions';
-import { VendorActionBar } from '@/components/VendorActionBar';
+import { VendorCategoryMarketplace } from '@/components/VendorCategoryMarketplace';
 import { useTheme } from '../hooks/useTheme';
-import { useVendorSearch } from '@/hooks/useVendorSearch';
 import { Colors, Spacing } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 type TabType = 'sessions' | 'timeline';
 type NavigationProp = NativeStackNavigationProp<PlanningStackParamList>;
@@ -33,9 +32,6 @@ export function FotoVideografScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('sessions');
   const [refreshing, setRefreshing] = useState(false);
 
-  // Vendor search for photo-video autocomplete
-  const photoVideoSearch = useVendorSearch({ category: 'photo-video' });
-
   const onRefresh = async () => {
     setRefreshing(true);
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -49,104 +45,57 @@ export function FotoVideografScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={['bottom']}>
-      <View style={[styles.header, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <View style={styles.headerContent}>
-          <View style={[styles.iconCircle, { backgroundColor: Colors.dark.accent + '15' }]}>
-            <View style={styles.dualIconContainer}>
-              <EvendiIcon name="camera" size={20} color={Colors.dark.accent} />
-              <EvendiIcon name="video" size={20} color={Colors.dark.accent} />
-            </View>
-          </View>
-          <View style={styles.headerText}>
-            <ThemedText style={styles.headerTitle}>Foto & Video</ThemedText>
-            <ThemedText style={[styles.headerSubtitle, { color: theme.textMuted }]}>
-              Fotograf og videograf i ett
-            </ThemedText>
-          </View>
-        </View>
-      </View>
-
-      <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <Pressable
-          style={[styles.tab, activeTab === 'sessions' && styles.activeTab]}
-          onPress={() => {
-            setActiveTab('sessions');
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }}
-        >
-          <ThemedText style={[styles.tabText, activeTab === 'sessions' && { color: Colors.dark.accent }]}>
-            Økter
-          </ThemedText>
-          {activeTab === 'sessions' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
-        </Pressable>
-        <Pressable
-          style={[styles.tab, activeTab === 'timeline' && styles.activeTab]}
-          onPress={() => {
-            setActiveTab('timeline');
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }}
-        >
-          <ThemedText style={[styles.tabText, activeTab === 'timeline' && { color: Colors.dark.accent }]}>
-            Tidslinje
-          </ThemedText>
-          {activeTab === 'timeline' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
-        </Pressable>
-      </View>
-
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {/* Marketplace hero + search + vendor cards + CTA */}
+        <VendorCategoryMarketplace
+          category="photo-video"
+          categoryName="Foto & Video"
+          icon="camera"
+          subtitle="Fotograf og videograf i ett"
+        />
+
+        {/* Tab bar */}
+        <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+          <Pressable
+            style={[styles.tab, activeTab === 'sessions' && styles.activeTab]}
+            onPress={() => {
+              setActiveTab('sessions');
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <ThemedText style={[styles.tabText, activeTab === 'sessions' && { color: Colors.dark.accent }]}>
+              Økter
+            </ThemedText>
+            {activeTab === 'sessions' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
+          </Pressable>
+          <Pressable
+            style={[styles.tab, activeTab === 'timeline' && styles.activeTab]}
+            onPress={() => {
+              setActiveTab('timeline');
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <ThemedText style={[styles.tabText, activeTab === 'timeline' && { color: Colors.dark.accent }]}>
+              Tidslinje
+            </ThemedText>
+            {activeTab === 'timeline' && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
+          </Pressable>
+        </View>
+
+        {/* Tab content */}
         {activeTab === 'sessions' ? (
           <Animated.View entering={FadeInDown.duration(300)} style={styles.emptyState}>
-            <View style={styles.dualIconLarge}>
-              <EvendiIcon name="camera" size={32} color={theme.textMuted} />
-              <EvendiIcon name="video" size={32} color={theme.textMuted} />
-            </View>
+            <EvendiIcon name="camera" size={48} color={theme.textMuted} style={{ opacity: 0.5 }} />
             <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>
               Ingen foto-/videoøkter ennå
             </ThemedText>
             <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
-              Start med å finne en leverandør som tilbyr både foto og video
+              Bruk søket ovenfor for å finne en leverandør som tilbyr både foto og video.
             </ThemedText>
-
-            <View style={{ width: '100%', marginTop: Spacing.md }}>
-              <ThemedText style={[styles.searchLabel, { color: theme.textSecondary }]}>Søk etter leverandør</ThemedText>
-              <TextInput
-                style={[styles.searchInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
-                value={photoVideoSearch.searchText}
-                onChangeText={photoVideoSearch.onChangeText}
-                placeholder="Søk etter registrert foto & video..."
-                placeholderTextColor={theme.textSecondary}
-              />
-              {photoVideoSearch.selectedVendor && (
-                <VendorActionBar
-                  vendor={photoVideoSearch.selectedVendor}
-                  vendorCategory="photo-video"
-                  onClear={photoVideoSearch.clearSelection}
-                  icon="camera"
-                />
-              )}
-              <VendorSuggestions
-                suggestions={photoVideoSearch.suggestions}
-                isLoading={photoVideoSearch.isLoading}
-                onSelect={photoVideoSearch.onSelectVendor}
-                onViewProfile={(v) => navigation.navigate('VendorDetail', {
-                  vendorId: v.id,
-                  vendorName: v.businessName,
-                  vendorDescription: v.description || '',
-                  vendorLocation: v.location || '',
-                  vendorPriceRange: v.priceRange || '',
-                  vendorCategory: 'photo-video',
-                })}
-                icon="camera"
-              />
-            </View>
-
-            <Button onPress={handleFindProvider} style={styles.findButton}>
-              Finn foto & video
-            </Button>
           </Animated.View>
         ) : (
           <Animated.View entering={FadeInDown.duration(300)} style={styles.timelineContainer}>
@@ -169,36 +118,6 @@ export function FotoVideografScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dualIconContainer: {
-    flexDirection: 'row',
-    gap: 4,
-    alignItems: 'center',
-  },
-  dualIconLarge: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  headerText: { flex: 1 },
-  headerTitle: { fontSize: 24, fontWeight: '700' },
-  headerSubtitle: { fontSize: 14, marginTop: 2 },
   tabBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -219,26 +138,16 @@ const styles = StyleSheet.create({
     height: 2,
   },
   content: { flex: 1 },
-  scrollContent: { flexGrow: 1, padding: Spacing.lg },
+  scrollContent: { flexGrow: 1 },
   emptyState: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
     gap: Spacing.md,
-    paddingVertical: Spacing['3xl'],
+    paddingVertical: Spacing['2xl'],
+    paddingHorizontal: Spacing.lg,
   },
-  emptyTitle: { fontSize: 20, fontWeight: '600', textAlign: 'center' },
+  emptyTitle: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
   emptyText: { fontSize: 14, textAlign: 'center', maxWidth: 280 },
-  findButton: { marginTop: Spacing.md },
-  searchLabel: { fontSize: 14, fontWeight: '600', marginBottom: Spacing.xs },
-  searchInput: {
-    height: 44,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: Spacing.md,
-    fontSize: 15,
-  },
-  timelineContainer: { gap: Spacing.lg },
+  timelineContainer: { gap: Spacing.lg, padding: Spacing.lg },
   timelineItem: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -9,6 +9,7 @@ import { Spacing, BorderRadius } from '@/constants/theme';
 import { Speech } from '@/lib/types';
 import { showToast } from '@/lib/toast';
 import { showConfirm } from '@/lib/dialogs';
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 export type TableShape = 'round' | 'rectangle' | 'square';
 export type TableCategory = 'family' | 'friends' | 'speakers' | 'kids' | 'groomsmen' | 'bridesmaids' | 'other';
@@ -557,7 +558,8 @@ export function SeatingChart({
 
         <View style={styles.searchBox}>
           <EvendiIcon name="search" size={16} color={theme.textSecondary} />
-          <TextInput
+          <PersistentTextInput
+            draftKey="SeatingChart-input-1"
             style={[styles.searchInput, { color: theme.text }]}
             placeholder="Search guests..."
             placeholderTextColor={theme.textSecondary}
@@ -915,7 +917,8 @@ export function SeatingChart({
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Table Name</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="SeatingChart-input-2"
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 placeholder="e.g., Table 1"
                 placeholderTextColor={theme.textSecondary}
@@ -926,7 +929,8 @@ export function SeatingChart({
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Number of Seats</ThemedText>
-              <TextInput
+              <PersistentTextInput
+                draftKey="SeatingChart-input-3"
                 style={[styles.input, { borderColor: parseInt(tableSeats, 10) === 0 || isNaN(parseInt(tableSeats, 10)) ? '#ef4444' : theme.border, color: theme.text }]}
                 placeholder="e.g., 8"
                 placeholderTextColor={theme.textSecondary}
@@ -1075,7 +1079,8 @@ export function SeatingChart({
             <View style={styles.modalContent}>
               <View style={styles.formGroup}>
                 <ThemedText style={styles.formLabel}>Guest Name</ThemedText>
-                <TextInput
+                <PersistentTextInput
+                  draftKey="SeatingChart-input-4"
                   style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                   placeholder="e.g., John Smith"
                   placeholderTextColor={theme.textSecondary}

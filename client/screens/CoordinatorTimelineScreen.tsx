@@ -15,6 +15,7 @@ import { Speech } from "@/lib/types";
 import { useQuery } from "@tanstack/react-query";
 import { SeatingChart, Table } from "@/components/SeatingChart";
 import { showToast } from "@/lib/toast";
+import PersistentTextInput from "@/components/PersistentTextInput";
 
 
 interface ScheduleEvent {
@@ -224,7 +225,8 @@ export default function CoordinatorTimelineScreen() {
       {!accessToken ? (
         <View style={[styles.accessCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <ThemedText style={[styles.accessLabel, { color: theme.textSecondary }]}>Tilgangskode</ThemedText>
-          <TextInput
+          <PersistentTextInput
+            draftKey="CoordinatorTimelineScreen-input-1"
             value={code}
             onChangeText={setCode}
             placeholder="Angi kode"

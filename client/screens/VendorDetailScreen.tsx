@@ -18,19 +18,18 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown } from "react-native-reanimated";
-
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
-import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
+import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import { getApiUrl } from "@/lib/query-client";
 import { useVendorLocationIntelligence } from "@/hooks/useVendorLocationIntelligence";
-
+import { getVendorCategoryLabel, getVendorCategoryIcon } from "@shared/event-types";
+import { getBadgePalette } from "@/lib/badgePalette";
 const COUPLE_STORAGE_KEY = "evendi_couple_session";
-
 interface VendorReview {
   id: string;
   rating: number;
@@ -45,7 +44,6 @@ interface VendorReview {
     createdAt: string;
   } | null;
 }
-
 interface VendorProduct {
   id: string;
   title: string;
@@ -62,7 +60,6 @@ interface VendorProduct {
   venueAccommodationAvailable?: boolean;
   venueCheckoutTime?: string | null;
 }
-
 interface VendorReviewsResponse {
   reviews: VendorReview[];
   googleReviewUrl: string | null;
@@ -71,21 +68,20 @@ interface VendorReviewsResponse {
     average: number;
   };
 }
-
 export default function VendorDetailScreen() {
   const route = useRoute<any>();
   const navigation = useNavigation<NativeStackNavigationProp<PlanningStackParamList>>();
   const { theme } = useTheme();
+  const accentBadge = getBadgePalette(theme, "accent");
+  const successBadge = getBadgePalette(theme, "success");
+  const warningBadge = getBadgePalette(theme, "warning");
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const [isStartingChat, setIsStartingChat] = useState(false);
-
   const { vendorId, vendorName, vendorDescription, vendorLocation, vendorPriceRange, vendorCategory } = route.params || {};
-
   // Location intelligence
   const locationIntel = useVendorLocationIntelligence();
-
   // Calculate travel on mount if vendor has location
   React.useEffect(() => {
     if (vendorId && vendorLocation && locationIntel.venueCoordinates) {
@@ -96,20 +92,16 @@ export default function VendorDetailScreen() {
       });
     }
   }, [vendorId, vendorLocation, locationIntel.venueCoordinates]);
-
   const vendorTravel = vendorId ? locationIntel.getVendorTravel(vendorId) : null;
   const travelBadge = vendorId ? locationIntel.getTravelBadge(vendorId) : null;
-
   const { data, isLoading, error } = useQuery<VendorReviewsResponse>({
     queryKey: [`/api/vendors/${vendorId}/reviews`],
     enabled: !!vendorId,
   });
-
   const { data: products = [] } = useQuery<VendorProduct[]>({
     queryKey: [`/api/vendors/${vendorId}/products`],
     enabled: !!vendorId,
   });
-
   /** Start (or resume) a chat conversation with this vendor */
   const handleStartChat = async () => {
     setIsStartingChat(true);
@@ -121,7 +113,6 @@ export default function VendorDetailScreen() {
         return;
       }
       const { sessionToken } = JSON.parse(sessionData);
-
       const response = await fetch(
         new URL("/api/couples/messages", getApiUrl()).toString(),
         {
@@ -136,15 +127,12 @@ export default function VendorDetailScreen() {
           }),
         }
       );
-
       if (!response.ok) {
         const err = await response.json().catch(() => null);
         throw new Error(err?.error || "Kunne ikke starte samtale");
       }
-
       const msg = await response.json();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
       navigation.navigate("Chat", {
         conversationId: msg.conversationId,
         vendorName: vendorName || "Leverandør",
@@ -155,7 +143,6 @@ export default function VendorDetailScreen() {
       setIsStartingChat(false);
     }
   };
-
   const handleOpenGoogle = async () => {
     if (!data?.googleReviewUrl) return;
     try {
@@ -165,7 +152,6 @@ export default function VendorDetailScreen() {
       Alert.alert("Kunne ikke åpne", "Vennligst prøv igjen senere");
     }
   };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("nb-NO", {
       day: "numeric",
@@ -173,43 +159,12 @@ export default function VendorDetailScreen() {
       year: "numeric",
     });
   };
-
   const getCategoryLabel = (category: string) => {
-    const labels: Record<string, string> = {
-      photographer: "Fotograf",
-      videographer: "Videograf",
-      dj: "DJ",
-      florist: "Blomster",
-      caterer: "Catering",
-      venue: "Lokale",
-      planner: "Planlegger",
-      music: "Musikk/DJ",
-      cake: "Kake",
-      attire: "Antrekk",
-      beauty: "Hår & Makeup",
-      transport: "Transport",
-    };
-    return labels[category] || category;
+    return getVendorCategoryLabel(category);
   };
-
   const getCategoryIcon = (category: string): keyof typeof EvendiIconGlyphMap => {
-    const icons: Record<string, keyof typeof EvendiIconGlyphMap> = {
-      photographer: "camera",
-      videographer: "video",
-      dj: "music",
-      florist: "sun",
-      caterer: "coffee",
-      venue: "home",
-      planner: "clipboard",
-      music: "music",
-      cake: "gift",
-      attire: "shopping-bag",
-      beauty: "scissors",
-      transport: "truck",
-    };
-    return icons[category] || "briefcase";
+    return getVendorCategoryIcon(category) as keyof typeof EvendiIconGlyphMap;
   };
-
   return (
     <ScrollView
       style={styles.container}
@@ -239,72 +194,68 @@ export default function VendorDetailScreen() {
             </ThemedText>
           </View>
         ) : null}
-
         {/* Travel info from venue */}
         {(travelBadge || vendorTravel?.isLoading) && (
-          <View style={[styles.travelCard, { backgroundColor: "#2196F308", borderColor: "#2196F320" }]}>
+          <View style={[styles.travelCard, { backgroundColor: theme.accent + "08", borderColor: theme.accent + "20" }]}>
             <View style={styles.travelCardHeader}>
-              <EvendiIcon name="navigation" size={14} color="#2196F3" />
+              <EvendiIcon name="navigation" size={14} color={theme.accent} />
               {vendorTravel?.isLoading ? (
                 <View style={styles.travelCardLoading}>
-                  <ActivityIndicator size={10} color="#2196F3" />
-                  <ThemedText style={[styles.travelCardText, { color: "#2196F3" }]}>
+                  <ActivityIndicator size={10} color={theme.accent} />
+                  <ThemedText style={[styles.travelCardText, { color: theme.accent }]}>
                     Beregner reisetid...
                   </ThemedText>
                 </View>
               ) : (
-                <ThemedText style={[styles.travelCardBold, { color: "#2196F3" }]}>
+                <ThemedText style={[styles.travelCardBold, { color: theme.accent }]}>
                   {travelBadge}
                 </ThemedText>
               )}
             </View>
-
             {locationIntel.venueName && !vendorTravel?.isLoading && (
               <ThemedText style={[styles.travelCardFrom, { color: theme.textMuted }]}>
                 Fra lokalet ({locationIntel.venueName})
               </ThemedText>
             )}
-
             {vendorTravel?.travel && (
               <View style={styles.travelCardDetails}>
                 {vendorTravel.travel.fuelCostNok > 0 && (
-                  <View style={[styles.travelDetailBadge, { backgroundColor: "#FF980010" }]}>
-                    <EvendiIcon name="droplet" size={10} color="#FF9800" />
-                    <ThemedText style={[styles.travelDetailText, { color: "#FF9800" }]}>
+                  <View style={[styles.travelDetailBadge, { backgroundColor: theme.warning + "10" }]}>
+                    <EvendiIcon name="droplet" size={10} color={theme.warning} />
+                    <ThemedText style={[styles.travelDetailText, { color: theme.warning }]}>
                       Drivstoff: ~{Math.round(vendorTravel.travel.fuelCostNok)} kr
                     </ThemedText>
                   </View>
                 )}
                 {vendorTravel.travel.tollEstimateNok > 0 && (
-                  <View style={[styles.travelDetailBadge, { backgroundColor: "#9C27B010" }]}>
-                    <EvendiIcon name="credit-card" size={10} color="#9C27B0" />
-                    <ThemedText style={[styles.travelDetailText, { color: "#9C27B0" }]}>
+                  <View style={[styles.travelDetailBadge, { backgroundColor: theme.accent + "10" }]}>
+                    <EvendiIcon name="credit-card" size={10} color={theme.accent} />
+                    <ThemedText style={[styles.travelDetailText, { color: theme.accent }]}>
                       Bompenger: ~{Math.round(vendorTravel.travel.tollEstimateNok)} kr
                     </ThemedText>
                   </View>
                 )}
               </View>
             )}
-
             {/* Quick action buttons */}
             <View style={styles.travelCardActions}>
               <Pressable
                 onPress={() => locationIntel.openDirections({
                   id: vendorId, businessName: vendorName || '', location: vendorLocation,
                 })}
-                style={[styles.travelActionBtn, { backgroundColor: "#2196F312" }]}
+                style={[styles.travelActionBtn, { backgroundColor: theme.accent + "12" }]}
               >
-                <EvendiIcon name="navigation" size={12} color="#2196F3" />
-                <ThemedText style={[styles.travelActionText, { color: "#2196F3" }]}>Kjørerute</ThemedText>
+                <EvendiIcon name="navigation" size={12} color={theme.accent} />
+                <ThemedText style={[styles.travelActionText, { color: theme.accent }]}>Kjørerute</ThemedText>
               </Pressable>
               <Pressable
                 onPress={() => locationIntel.openVendorOnMap({
                   id: vendorId, businessName: vendorName || '', location: vendorLocation,
                 })}
-                style={[styles.travelActionBtn, { backgroundColor: "#4CAF5012" }]}
+                style={[styles.travelActionBtn, { backgroundColor: theme.success + "12" }]}
               >
-                <EvendiIcon name="map" size={12} color="#4CAF50" />
-                <ThemedText style={[styles.travelActionText, { color: "#4CAF50" }]}>Vis på kart</ThemedText>
+                <EvendiIcon name="map" size={12} color={theme.success} />
+                <ThemedText style={[styles.travelActionText, { color: theme.success }]}>Vis på kart</ThemedText>
               </Pressable>
             </View>
           </View>
@@ -320,7 +271,6 @@ export default function VendorDetailScreen() {
           </ThemedText>
         ) : null}
       </Card>
-
       {/* Action Bar — Contact / Chat / Appointment */}
       <Animated.View entering={FadeInDown.delay(100).duration(300)} style={styles.actionBar}>
         <Pressable
@@ -328,12 +278,11 @@ export default function VendorDetailScreen() {
           disabled={isStartingChat}
           style={[styles.actionButton, { backgroundColor: theme.primary }]}
         >
-          <EvendiIcon name="message-circle" size={18} color="#FFFFFF" />
-          <ThemedText style={styles.actionButtonText}>
+            <EvendiIcon name="message-circle" size={18} color={theme.buttonText} />
+            <ThemedText style={[styles.actionButtonText, { color: theme.buttonText }]}> 
             {isStartingChat ? "Starter..." : "Send melding"}
           </ThemedText>
         </Pressable>
-
         <Pressable
           onPress={() => {
             navigation.goBack();
@@ -347,7 +296,6 @@ export default function VendorDetailScreen() {
           </ThemedText>
         </Pressable>
       </Animated.View>
-
       {isLoading ? (
         <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: Spacing.xl }} />
       ) : error ? (
@@ -390,9 +338,9 @@ export default function VendorDetailScreen() {
                     {Object.keys(metadata).length > 0 && (
                       <View style={styles.metadataRow}>
                         {metadata.offersTasteSample && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#4CAF5015" }]}>
-                            <EvendiIcon name="coffee" size={10} color="#4CAF50" />
-                            <ThemedText style={[styles.metadataText, { color: "#4CAF50" }]}>Smaksprøve</ThemedText>
+                          <View style={[styles.metadataBadge, { backgroundColor: successBadge.backgroundColor }]}> 
+                            <EvendiIcon name="coffee" size={10} color={successBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: successBadge.textColor }]}>Smaksprøve</ThemedText>
                           </View>
                         )}
                         {metadata.cuisineType && (
@@ -403,125 +351,125 @@ export default function VendorDetailScreen() {
                           </View>
                         )}
                         {metadata.isVegetarian && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
-                            <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Vegetar</ThemedText>
+                          <View style={[styles.metadataBadge, { backgroundColor: successBadge.backgroundColor }]}> 
+                            <ThemedText style={[styles.metadataText, { color: successBadge.textColor }]}>Vegetar</ThemedText>
                           </View>
                         )}
                         {metadata.isVegan && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
-                            <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Vegan</ThemedText>
+                          <View style={[styles.metadataBadge, { backgroundColor: successBadge.backgroundColor }]}> 
+                            <ThemedText style={[styles.metadataText, { color: successBadge.textColor }]}>Vegan</ThemedText>
                           </View>
                         )}
                         {metadata.cakeStyle && (
-                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
-                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.cakeStyle.charAt(0).toUpperCase() + metadata.cakeStyle.slice(1)}
                             </ThemedText>
                           </View>
                         )}
                         {metadata.numberOfTiers && (
-                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
-                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.numberOfTiers} etasjer
                             </ThemedText>
                           </View>
                         )}
                         {metadata.flowerItemType && (
-                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
-                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.flowerItemType.charAt(0).toUpperCase() + metadata.flowerItemType.slice(1)}
                             </ThemedText>
                           </View>
                         )}
                         {metadata.vehicleType && (
-                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
-                            <EvendiIcon name="truck" size={10} color={theme.accent} />
-                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="truck" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.vehicleType.charAt(0).toUpperCase() + metadata.vehicleType.slice(1)}
                             </ThemedText>
                           </View>
                         )}
                         {metadata.passengerCapacity && (
-                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
-                            <EvendiIcon name="users" size={10} color={theme.accent} />
-                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="users" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.passengerCapacity} plasser
                             </ThemedText>
                           </View>
                         )}
                         {metadata.serviceType && (
-                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
-                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.serviceType.charAt(0).toUpperCase() + metadata.serviceType.slice(1)}
                             </ThemedText>
                           </View>
                         )}
                         {metadata.includesTrialSession && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#9C27B015" }]}>
-                            <EvendiIcon name="check" size={10} color="#9C27B0" />
-                            <ThemedText style={[styles.metadataText, { color: "#9C27B0" }]}>Prøveskyss</ThemedText>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="check" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}>Prøveskyss</ThemedText>
                           </View>
                         )}
                         
                         {/* Fotograf metadata */}
                         {metadata.packageType && metadata.hoursIncluded && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#2196F315" }]}>
-                            <EvendiIcon name="camera" size={10} color="#2196F3" />
-                            <ThemedText style={[styles.metadataText, { color: "#2196F3" }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="camera" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.packageType} - {metadata.hoursIncluded}t
                             </ThemedText>
                           </View>
                         )}
                         {metadata.photosDelivered && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#2196F315" }]}>
-                            <EvendiIcon name="image" size={10} color="#2196F3" />
-                            <ThemedText style={[styles.metadataText, { color: "#2196F3" }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="image" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.photosDelivered} bilder
                             </ThemedText>
                           </View>
                         )}
                         {metadata.printRightsIncluded && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#00BCD415" }]}>
-                            <EvendiIcon name="printer" size={10} color="#00BCD4" />
-                            <ThemedText style={[styles.metadataText, { color: "#00BCD4" }]}>Trykkerett</ThemedText>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="printer" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}>Trykkerett</ThemedText>
                           </View>
                         )}
                         
                         {/* Videograf metadata */}
                         {metadata.filmDurationMinutes && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#9C27B015" }]}>
-                            <EvendiIcon name="film" size={10} color="#9C27B0" />
-                            <ThemedText style={[styles.metadataText, { color: "#9C27B0" }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="film" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.filmDurationMinutes} min
                             </ThemedText>
                           </View>
                         )}
                         {metadata.editingStyle && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#673AB715" }]}>
-                            <ThemedText style={[styles.metadataText, { color: "#673AB7" }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.editingStyle.charAt(0).toUpperCase() + metadata.editingStyle.slice(1)}
                             </ThemedText>
                           </View>
                         )}
                         {metadata.droneFootageIncluded && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#FF980015" }]}>
-                            <EvendiIcon name="navigation" size={10} color="#FF9800" />
-                            <ThemedText style={[styles.metadataText, { color: "#FF9800" }]}>Drone</ThemedText>
+                          <View style={[styles.metadataBadge, { backgroundColor: warningBadge.backgroundColor }]}> 
+                            <EvendiIcon name="navigation" size={10} color={warningBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: warningBadge.textColor }]}>Drone</ThemedText>
                           </View>
                         )}
                         
                         {/* Musikk metadata */}
                         {metadata.performanceType && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#E91E6315" }]}>
-                            <EvendiIcon name="music" size={10} color="#E91E63" />
-                            <ThemedText style={[styles.metadataText, { color: "#E91E63" }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="music" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.performanceType.toUpperCase()}
                             </ThemedText>
                           </View>
                         )}
                         {metadata.genre && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#F4433615" }]}>
-                            <ThemedText style={[styles.metadataText, { color: "#F44336" }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.genre.charAt(0).toUpperCase() + metadata.genre.slice(1)}
                             </ThemedText>
                           </View>
@@ -535,62 +483,61 @@ export default function VendorDetailScreen() {
                           </View>
                         )}
                         {metadata.equipmentIncluded && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#FF572215" }]}>
-                            <EvendiIcon name="headphones" size={10} color="#FF5722" />
-                            <ThemedText style={[styles.metadataText, { color: "#FF5722" }]}>Utstyr</ThemedText>
+                          <View style={[styles.metadataBadge, { backgroundColor: warningBadge.backgroundColor }]}> 
+                            <EvendiIcon name="headphones" size={10} color={warningBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: warningBadge.textColor }]}>Utstyr</ThemedText>
                           </View>
                         )}
                         
                         {/* Venue metadata */}
                         {metadata.capacityMax && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#79554815" }]}>
-                            <EvendiIcon name="users" size={10} color="#795548" />
-                            <ThemedText style={[styles.metadataText, { color: "#795548" }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="users" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.capacityMin && `${metadata.capacityMin}-`}{metadata.capacityMax} gjester
                             </ThemedText>
                           </View>
                         )}
                         {metadata.indoorOutdoor && (
-                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
-                            <EvendiIcon name="home" size={10} color={theme.accent} />
-                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="home" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.indoorOutdoor.charAt(0).toUpperCase() + metadata.indoorOutdoor.slice(1)}
                             </ThemedText>
                           </View>
                         )}
                         {metadata.cateringIncluded && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
-                            <EvendiIcon name="coffee" size={10} color="#8BC34A" />
-                            <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Catering</ThemedText>
+                          <View style={[styles.metadataBadge, { backgroundColor: successBadge.backgroundColor }]}> 
+                            <EvendiIcon name="coffee" size={10} color={successBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: successBadge.textColor }]}>Catering</ThemedText>
                           </View>
                         )}
                         
                         {/* Planlegger metadata */}
                         {metadata.serviceLevel && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#00BCD415" }]}>
-                            <EvendiIcon name="clipboard" size={10} color="#00BCD4" />
-                            <ThemedText style={[styles.metadataText, { color: "#00BCD4" }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="clipboard" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.serviceLevel.charAt(0).toUpperCase() + metadata.serviceLevel.slice(1)}
                             </ThemedText>
                           </View>
                         )}
                         {metadata.monthsOfService && (
-                          <View style={[styles.metadataBadge, { backgroundColor: theme.accent + "15" }]}>
-                            <EvendiIcon name="calendar" size={10} color={theme.accent} />
-                            <ThemedText style={[styles.metadataText, { color: theme.accent }]}>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="calendar" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}> 
                               {metadata.monthsOfService} mnd
                             </ThemedText>
                           </View>
                         )}
                         {metadata.vendorCoordinationIncluded && (
-                          <View style={[styles.metadataBadge, { backgroundColor: "#00968815" }]}>
-                            <EvendiIcon name="users" size={10} color="#009688" />
-                            <ThemedText style={[styles.metadataText, { color: "#009688" }]}>Koordinering</ThemedText>
+                          <View style={[styles.metadataBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                            <EvendiIcon name="users" size={10} color={accentBadge.textColor} />
+                            <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}>Koordinering</ThemedText>
                           </View>
                         )}
                       </View>
                     )}
-
                     {/* Venue-specific details */}
                     {product.categoryTag === 'venue' && (product.venueMaxGuests || product.venueAddress) && (
                       <View style={[styles.venueDetailsBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
@@ -612,15 +559,15 @@ export default function VendorDetailScreen() {
                         )}
                         <View style={styles.venueBadgesRow}>
                           {product.venueCateringIncluded && (
-                            <View style={[styles.venueBadge, { backgroundColor: "#4CAF5020" }]}>
-                              <EvendiIcon name="coffee" size={10} color="#4CAF50" />
-                              <ThemedText style={[styles.metadataText, { color: "#4CAF50" }]}>Servering inkludert</ThemedText>
+                            <View style={[styles.venueBadge, { backgroundColor: successBadge.backgroundColor }]}> 
+                              <EvendiIcon name="coffee" size={10} color={successBadge.textColor} />
+                              <ThemedText style={[styles.metadataText, { color: successBadge.textColor }]}>Servering inkludert</ThemedText>
                             </View>
                           )}
                           {product.venueAccommodationAvailable && (
-                            <View style={[styles.venueBadge, { backgroundColor: "#2196F320" }]}>
-                              <EvendiIcon name="home" size={10} color="#2196F3" />
-                              <ThemedText style={[styles.metadataText, { color: "#2196F3" }]}>Overnatting tilgjengelig</ThemedText>
+                            <View style={[styles.venueBadge, { backgroundColor: accentBadge.backgroundColor }]}> 
+                              <EvendiIcon name="home" size={10} color={accentBadge.textColor} />
+                              <ThemedText style={[styles.metadataText, { color: accentBadge.textColor }]}>Overnatting tilgjengelig</ThemedText>
                             </View>
                           )}
                           {product.venueCheckoutTime && (
@@ -658,7 +605,6 @@ export default function VendorDetailScreen() {
               </ThemedText>
             </View>
           </Card>
-
           {data?.googleReviewUrl ? (
             <Pressable
               style={[styles.googleButton, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}
@@ -670,11 +616,9 @@ export default function VendorDetailScreen() {
               </ThemedText>
             </Pressable>
           ) : null}
-
           <ThemedText style={[Typography.h3, { marginTop: Spacing.xl, marginBottom: Spacing.md }]}>
             Anmeldelser
           </ThemedText>
-
           {data?.reviews && data.reviews.length > 0 ? (
             data.reviews.map((review) => (
               <Card key={review.id} style={styles.reviewCard}>
@@ -729,7 +673,6 @@ export default function VendorDetailScreen() {
     </ScrollView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -872,7 +815,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
   },
   actionButtonText: {
-    color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "700",
   },

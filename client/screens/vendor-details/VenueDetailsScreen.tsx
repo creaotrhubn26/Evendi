@@ -13,18 +13,16 @@ import { EvendiIcon } from "@/components/EvendiIcon";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { showToast } from "@/lib/toast";
-
+import PersistentTextInput from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 interface TableSetup {
   id: string;
   type: "round" | "rectangular" | "oval" | "square";
@@ -32,7 +30,6 @@ interface TableSetup {
   quantity: number;
   description?: string;
 }
-
 interface VenueDetails {
   // Kapasitet
   capacityMin: number | null;
@@ -83,7 +80,6 @@ interface VenueDetails {
   decorRestrictions: string | null;
   vendorRestrictions: string | null;
 }
-
 const defaultVenueDetails: VenueDetails = {
   capacityMin: null,
   capacityMax: null,
@@ -121,14 +117,12 @@ const defaultVenueDetails: VenueDetails = {
   decorRestrictions: null,
   vendorRestrictions: null,
 };
-
 const TABLE_TYPES = [
   { value: "round", label: "Rundt", icon: "circle" },
   { value: "rectangular", label: "Langbord", icon: "minus" },
   { value: "oval", label: "Ovalt", icon: "maximize-2" },
   { value: "square", label: "Kvadratisk", icon: "square" },
 ] as const;
-
 export default function VenueDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
   const { isWedding } = useEventType();
@@ -139,7 +133,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
   const [details, setDetails] = useState<VenueDetails>(defaultVenueDetails);
   const [showAddTable, setShowAddTable] = useState(false);
   const [newTable, setNewTable] = useState<Partial<TableSetup>>({ type: "round", seatsPerTable: 8, quantity: 1 });
-
   useEffect(() => {
     AsyncStorage.getItem(VENDOR_STORAGE_KEY).then((data) => {
       if (data) {
@@ -148,7 +141,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
       }
     });
   }, []);
-
   const { data: venueData, isLoading } = useQuery({
     queryKey: ["/api/vendor/venue-details"],
     queryFn: async () => {
@@ -161,13 +153,11 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
     },
     enabled: !!sessionToken,
   });
-
   useEffect(() => {
     if (venueData) {
       setDetails({ ...defaultVenueDetails, ...venueData });
     }
   }, [venueData]);
-
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!sessionToken) throw new Error("Ikke innlogget");
@@ -195,11 +185,9 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
       showToast(error.message);
     },
   });
-
   const updateDetail = <K extends keyof VenueDetails>(key: K, value: VenueDetails[K]) => {
     setDetails(prev => ({ ...prev, [key]: value }));
   };
-
   const addTableSetup = () => {
     if (!newTable.seatsPerTable || !newTable.quantity) {
       showToast("Fyll inn antall seter og antall bord");
@@ -219,18 +207,15 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
     setNewTable({ type: "round", seatsPerTable: 8, quantity: 1 });
     setShowAddTable(false);
   };
-
   const removeTableSetup = (id: string) => {
     setDetails(prev => ({
       ...prev,
       tableSetups: prev.tableSetups.filter(t => t.id !== id),
     }));
   };
-
   const getTotalSeats = () => {
     return details.tableSetups.reduce((sum, t) => sum + (t.seatsPerTable * t.quantity), 0);
   };
-
   const renderSectionHeader = (icon: string, title: string) => (
     <View style={styles.sectionHeader}>
       <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
@@ -239,7 +224,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
       <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>{title}</ThemedText>
     </View>
   );
-
   const renderSwitch = (label: string, value: boolean, onChange: (v: boolean) => void, description?: string) => (
     <View style={styles.switchContainer}>
       <View style={styles.switchRow}>
@@ -252,13 +236,12 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
         <Switch
           value={value}
           onValueChange={onChange}
-          trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
-          thumbColor={value ? Colors.dark.accent : theme.backgroundSecondary}
+          trackColor={{ false: theme.border, true: theme.accent + "60" }}
+          thumbColor={value ? theme.accent : theme.backgroundSecondary}
         />
       </View>
     </View>
   );
-
   const renderInput = (label: string, value: string | null, onChange: (v: string) => void, options?: {
     placeholder?: string;
     keyboardType?: "default" | "number-pad" | "decimal-pad";
@@ -268,7 +251,8 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
     <View style={styles.inputGroup}>
       <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>{label}</ThemedText>
       <View style={styles.inputWrapper}>
-        <TextInput
+        <PersistentTextInput
+          draftKey="VenueDetailsScreen-input-1"
           style={[
             options?.multiline ? styles.textArea : styles.input,
             { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
@@ -289,7 +273,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
       </View>
     </View>
   );
-
   const renderAvailabilityBadge = (available: boolean, availableText: string, unavailableText: string) => (
     <View style={[
       styles.availabilityBadge,
@@ -308,7 +291,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
       </ThemedText>
     </View>
   );
-
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -332,7 +314,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
       </View>
     );
   }
-
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
@@ -349,7 +330,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
           <EvendiIcon name="x" size={20} color={theme.textSecondary} />
         </Pressable>
       </View>
-
       <KeyboardAwareScrollViewCompat
         style={{ flex: 1 }}
         contentContainerStyle={[styles.content, { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }]}
@@ -364,7 +344,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
             {renderAvailabilityBadge(details.hasOutdoorArea, "Utendørs", "Kun innendørs")}
           </View>
         </View>
-
         {/* Kapasitet */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("users", "Kapasitet")}
@@ -373,7 +352,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
             {renderInput("Minimum gjester", details.capacityMin?.toString() || "", (v) => updateDetail("capacityMin", v ? parseInt(v) : null), { placeholder: "F.eks. 30", keyboardType: "number-pad" })}
             {renderInput("Maksimum gjester", details.capacityMax?.toString() || "", (v) => updateDetail("capacityMax", v ? parseInt(v) : null), { placeholder: "F.eks. 150", keyboardType: "number-pad" })}
           </View>
-
           <ThemedText style={[styles.subSectionTitle, { color: theme.textSecondary }]}>Kapasitet per arrangement</ThemedText>
           <View style={styles.rowInputs}>
             {renderInput("Seremoni", details.ceremonyCapacity?.toString() || "", (v) => updateDetail("ceremonyCapacity", v ? parseInt(v) : null), { placeholder: "Sitteplasser", keyboardType: "number-pad" })}
@@ -381,7 +359,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
           </View>
           {renderInput("Fest/dans", details.partyCapacity?.toString() || "", (v) => updateDetail("partyCapacity", v ? parseInt(v) : null), { placeholder: "Stående", keyboardType: "number-pad" })}
         </View>
-
         {/* Bordoppsett */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("grid", "Bordoppsett")}
@@ -414,7 +391,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
               </View>
             </View>
           )}
-
           {showAddTable ? (
             <View style={[styles.addTableForm, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}>
               <ThemedText style={[styles.addTableTitle, { color: theme.text }]}>Legg til bordtype</ThemedText>
@@ -437,12 +413,10 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
                   </Pressable>
                 ))}
               </View>
-
               <View style={styles.rowInputs}>
                 {renderInput("Seter per bord", newTable.seatsPerTable?.toString() || "", (v) => setNewTable(prev => ({ ...prev, seatsPerTable: v ? parseInt(v) : undefined })), { placeholder: "8", keyboardType: "number-pad" })}
                 {renderInput("Antall bord", newTable.quantity?.toString() || "", (v) => setNewTable(prev => ({ ...prev, quantity: v ? parseInt(v) : undefined })), { placeholder: "10", keyboardType: "number-pad" })}
               </View>
-
               <View style={styles.addTableActions}>
                 <Pressable onPress={() => setShowAddTable(false)} style={[styles.cancelBtn, { borderColor: theme.border }]}>
                   <ThemedText style={[styles.cancelBtnText, { color: theme.textSecondary }]}>Avbryt</ThemedText>
@@ -459,16 +433,13 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
               <ThemedText style={[styles.addTableBtnText, { color: theme.accent }]}>Legg til bordtype</ThemedText>
             </Pressable>
           )}
-
           {renderSwitch("Tillat egendefinert oppsett", details.customTableSetupAllowed, (v) => updateDetail("customTableSetupAllowed", v), isWedding ? "Brudeparet kan ønske annet oppsett" : "Kunden kan ønske annet oppsett")}
         </View>
-
         {/* Overnatting */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("moon", "Overnatting")}
           
           {renderSwitch("Tilbyr overnatting", details.hasAccommodation, (v) => updateDetail("hasAccommodation", v), "Gjester kan overnatte")}
-
           {details.hasAccommodation && (
             <>
               {renderSwitch("På stedet", details.accommodationOnSite, (v) => updateDetail("accommodationOnSite", v), "Overnatting er på samme lokasjon")}
@@ -488,7 +459,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
               )}
             </>
           )}
-
           {!details.hasAccommodation && (
             <View style={[styles.infoBox, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}>
               <EvendiIcon name="info" size={16} color={theme.textSecondary} />
@@ -498,13 +468,11 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
             </View>
           )}
         </View>
-
         {/* Parkering */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("truck", "Parkering")}
           
           {renderSwitch("Har parkering", details.hasParking, (v) => updateDetail("hasParking", v))}
-
           {details.hasParking && (
             <>
               {renderInput("Antall plasser", details.parkingSpaces?.toString() || "", (v) => updateDetail("parkingSpaces", v ? parseInt(v) : null), { placeholder: "F.eks. 50", keyboardType: "number-pad" })}
@@ -513,13 +481,11 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
             </>
           )}
         </View>
-
         {/* Mat & Drikke */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("coffee", "Mat & Drikke")}
           
           {renderSwitch("Tilbyr catering", details.hasCatering, (v) => updateDetail("hasCatering", v), "Lokalet har egen mat-tjeneste")}
-
           {details.hasCatering && (
             <View style={styles.cateringTypeSelector}>
               <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Type catering</ThemedText>
@@ -547,11 +513,9 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
               ))}
             </View>
           )}
-
           {renderSwitch("Skjenkebevilling", details.hasAlcoholLicense, (v) => updateDetail("hasAlcoholLicense", v), "Tillatelse til å servere alkohol")}
           {details.hasAlcoholLicense && !details.hasCatering && renderInput("Korkasjeavgift", details.corkageFee?.toString() || "", (v) => updateDetail("corkageFee", v ? parseInt(v) : null), { placeholder: "Avgift per flaske", keyboardType: "number-pad", suffix: "kr" })}
         </View>
-
         {/* Fasiliteter */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("check-square", "Fasiliteter")}
@@ -565,7 +529,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
           {renderSwitch("Kjøkken tilgjengelig", details.hasKitchen, (v) => updateDetail("hasKitchen", v), "For catering-bruk")}
           {renderSwitch(isWedding ? "Brudesuite" : "Forberedelsesrom", details.hasBridalSuite, (v) => updateDetail("hasBridalSuite", v), "Rom for klargjøring")}
         </View>
-
         {/* Regler */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("alert-circle", "Regler & Begrensninger")}
@@ -577,7 +540,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
           {renderInput("Dekorasjonsbegrensninger", details.decorRestrictions || "", (v) => updateDetail("decorRestrictions", v || null), { placeholder: "F.eks. Ingen konfetti, tape på vegg...", multiline: true })}
           {renderInput("Leverandørbegrensninger", details.vendorRestrictions || "", (v) => updateDetail("vendorRestrictions", v || null), { placeholder: "F.eks. Kun godkjente fotografer...", multiline: true })}
         </View>
-
         {/* Save Button */}
         <Pressable
           onPress={() => saveMutation.mutate()}
@@ -603,7 +565,6 @@ export default function VenueDetailsScreen({ navigation }: { navigation: NativeS
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,

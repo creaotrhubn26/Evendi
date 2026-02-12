@@ -27,6 +27,11 @@ export function getApiUrl(): string {
 
     if (isLocalhost) return "http://localhost:5000";
     if (isLanIp) return `http://${host}:5000`;
+
+    if (envApiUrl && !envApiUrl.includes("trycloudflare.com")) {
+      return envApiUrl;
+    }
+
     if (envDomain && host === envDomain.replace(/^https?:\/\//, "")) {
       return `https://${host}`;
     }

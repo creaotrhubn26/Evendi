@@ -8,7 +8,6 @@ import * as Haptics from "expo-haptics";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import { useQuery } from "@tanstack/react-query";
 import Animated, { FadeInDown } from "react-native-reanimated";
-
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
@@ -17,11 +16,8 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
 import { showConfirm } from "@/lib/dialogs";
-
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-
 type Navigation = NativeStackNavigationProp<any>;
-
 type VendorProduct = {
   id: string;
   title: string;
@@ -30,7 +26,6 @@ type VendorProduct = {
   unitType: string;
   imageUrl: string | null;
 };
-
 type VendorOffer = {
   id: string;
   title: string;
@@ -39,16 +34,13 @@ type VendorOffer = {
   currency: string | null;
   createdAt: string;
 };
-
 export default function VendorTransportScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const navigation = useNavigation<Navigation>();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
   const vendorConfig = getVendorConfig(null, "Transport");
-
   useEffect(() => {
     const loadSession = async () => {
       const data = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
@@ -61,7 +53,6 @@ export default function VendorTransportScreen() {
     };
     loadSession();
   }, [navigation]);
-
   const { data: products = [], isLoading: productsLoading, refetch: refetchProducts } = useQuery<VendorProduct[]>({
     queryKey: ["/api/vendor/products"],
     queryFn: async () => {
@@ -74,7 +65,6 @@ export default function VendorTransportScreen() {
     },
     enabled: !!sessionToken,
   });
-
   const { data: offers = [], isLoading: offersLoading, refetch: refetchOffers } = useQuery<VendorOffer[]>({
     queryKey: ["/api/vendor/offers"],
     queryFn: async () => {
@@ -87,24 +77,20 @@ export default function VendorTransportScreen() {
     },
     enabled: !!sessionToken,
   });
-
   const onRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([refetchProducts(), refetchOffers()]);
     setIsRefreshing(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-
   const goToProducts = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("ProductCreate");
   };
-
   const goToOffers = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("OfferCreate");
   };
-
   const handleDelete = (id: string, type: 'product' | 'offer') => {
     showConfirm({
       title: `Slett ${type === 'product' ? 'produkt' : 'tilbud'}`,
@@ -116,9 +102,7 @@ export default function VendorTransportScreen() {
       if (confirmed) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     });
   };
-
   if (!sessionToken) return null;
-
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
@@ -133,7 +117,6 @@ export default function VendorTransportScreen() {
     >
       <ThemedText style={[styles.title, { color: theme.text }]}>Transport dashboard</ThemedText>
       <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Opprett transportpakker (bil, buss, shuttle) og håndter tilbud.</ThemedText>
-
       <View style={styles.cardRow}>
         <Pressable
           onPress={goToProducts}
@@ -150,7 +133,6 @@ export default function VendorTransportScreen() {
           <ThemedText style={[styles.cardBody, { color: theme.textSecondary }]}>Legg til kapasitet, ruter og pris per time/dag.</ThemedText>
           <Button style={styles.cardButton} onPress={goToProducts}>Opprett pakke</Button>
         </Pressable>
-
         <Pressable
           onPress={goToOffers}
           style={({ pressed }) => [
@@ -167,12 +149,10 @@ export default function VendorTransportScreen() {
           <Button style={styles.cardButton} onPress={goToOffers}>Send tilbud</Button>
         </Pressable>
       </View>
-
       <View style={[styles.infoBox, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <EvendiIcon name="info" size={16} color={theme.textSecondary} />
         <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>Hold tilgjengelighet og kapasitet oppdatert for raske svar.</ThemedText>
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Produkter</ThemedText>
@@ -204,7 +184,6 @@ export default function VendorTransportScreen() {
           ))
         )}
       </View>
-
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Tilbud</ThemedText>
@@ -238,7 +217,6 @@ export default function VendorTransportScreen() {
     </ScrollView>
   );
 }
-
 const styles = StyleSheet.create({
   title: {
     fontSize: 24,
@@ -321,7 +299,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: "#00000010",
     gap: Spacing.sm,
   },
   chevronBtn: {

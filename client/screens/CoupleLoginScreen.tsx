@@ -26,13 +26,14 @@ import { signInWithGoogle } from "@/lib/supabase-auth";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { showToast } from "@/lib/toast";
 import { showOptions } from "@/lib/dialogs";
-import { 
-  EVENT_TYPE_CONFIGS, 
-  getGroupedEventTypes, 
+import PersistentTextInput from "@/components/PersistentTextInput";
+import {
+  EVENT_TYPE_CONFIGS,
+  getGroupedEventTypes,
   getCorporateGrouped,
   getCorporateCatchAll,
-  type EventType, 
-  type EventCategory 
+  type EventType,
+  type EventCategory,
 } from "@shared/event-types";
 
 const COUPLE_STORAGE_KEY = "evendi_couple_session";
@@ -64,7 +65,11 @@ interface Props {
 
 export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props) {
   const headerHeight = useHeaderHeight();
-  const { theme } = useTheme();
+  const { theme, designSettings } = useTheme();
+  const logoSource = designSettings.logoUrl
+    ? { uri: designSettings.logoUrl }
+    : require("../../assets/images/Evendi_logo_norsk_tagline.png");
+  const showLogo = designSettings.logoUseAuth ?? true;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -263,11 +268,13 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={styles.content}
       >
-        <Image
-          source={require("../../assets/images/Evendi_logo_norsk_tagline.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
+        {showLogo ? (
+          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+        ) : (
+          <ThemedText style={styles.logoText}>
+            {designSettings.appName || "Evendi"}
+          </ThemedText>
+        )}
 
         <ThemedText style={styles.title}>Velkommen til Evendi</ThemedText>
         <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
@@ -280,7 +287,8 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
           <View>
             <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("email")]}>
               <EvendiIcon name="mail" size={18} color={touched.email && errors.email ? "#DC3545" : theme.textMuted} />
-              <TextInput
+              <PersistentTextInput
+                draftKey="CoupleLoginScreen-input-1"
                 style={[styles.input, { color: theme.text }]}
                 placeholder="E-postadresse"
                 placeholderTextColor={theme.textMuted}
@@ -299,7 +307,8 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
           <View>
             <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("password")]}>
               <EvendiIcon name="lock" size={18} color={touched.password && errors.password ? "#DC3545" : theme.textMuted} />
-              <TextInput
+              <PersistentTextInput
+                draftKey="CoupleLoginScreen-input-2"
                 style={[styles.input, { color: theme.text }]}
                 placeholder="Passord"
                 placeholderTextColor={theme.textMuted}
@@ -322,7 +331,8 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
             <View>
               <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }, getFieldStyle("displayName")]}>
                 <EvendiIcon name="user" size={18} color={touched.displayName && errors.displayName ? "#DC3545" : theme.textMuted} />
-                <TextInput
+                <PersistentTextInput
+                  draftKey="CoupleLoginScreen-input-3"
                   style={[styles.input, { color: theme.text }]}
                   placeholder="Ditt navn"
                   placeholderTextColor={theme.textMuted}
@@ -706,6 +716,13 @@ const styles = StyleSheet.create({
     height: 160,
     marginBottom: Spacing.lg,
     marginTop: Spacing.md,
+  },
+  logoText: {
+    fontSize: 32,
+    fontWeight: "600",
+    marginBottom: Spacing.lg,
+    marginTop: Spacing.md,
+    textAlign: "center",
   },
   title: {
     fontSize: 24,
