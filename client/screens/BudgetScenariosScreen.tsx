@@ -11,9 +11,11 @@ import { useNavigation } from "@react-navigation/native";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getBudgetItems, getTotalBudget, getAppLanguage, type AppLanguage } from "@/lib/storage";
 import { BudgetItem } from "@/lib/types";
+import { getCurrencyCode } from "@/lib/format-currency";
 
 interface ScenarioItem extends BudgetItem {
   included: boolean;
@@ -144,12 +146,13 @@ export default function BudgetScenariosScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const navigation = useNavigation();
 
   const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
   const t = useCallback((nb: string, en: string) => (appLanguage === "en" ? en : nb), [appLanguage]);
   const locale = appLanguage === "en" ? "en-US" : "nb-NO";
-  const currencyLabel = t("kr", "NOK");
+  const currencyLabel = getCurrencyCode(getSetting);
   const formatCurrency = useCallback(
     (amount: number) => `${amount.toLocaleString(locale)} ${currencyLabel}`,
     [currencyLabel, locale]

@@ -20,6 +20,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency, getCurrencyCode } from "@/lib/format-currency";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { CateringFields, CakeFields, FlowerFields, TransportFields, HairMakeupFields } from "@/lib/product-category-fields";
@@ -163,6 +165,7 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme, isDark } = useTheme();
+  const { getSetting } = useAppSettings();
   const { isWedding } = useEventType();
   const queryClient = useQueryClient();
   
@@ -933,7 +936,9 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                     <EvendiIcon name="copy" size={14} color={theme.accent} />
                     <View style={styles.templateChipContent}>
                       <ThemedText style={[styles.templateChipName, { color: theme.text }]}>{template.name}</ThemedText>
-                      <ThemedText style={[styles.templateChipPrice, { color: theme.textMuted }]}>{template.price} kr</ThemedText>
+                      <ThemedText style={[styles.templateChipPrice, { color: theme.textMuted }]}> 
+                        {formatCurrency(template.price, getSetting)}
+                      </ThemedText>
                     </View>
                   </Pressable>
                 ))}
@@ -1032,7 +1037,9 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
 
             <View style={styles.rowInputs}>
               <View style={[styles.inputGroup, { flex: 1 }]}>
-                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>Pris (NOK)</ThemedText>
+                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>
+                  Pris ({getCurrencyCode(getSetting)})
+                </ThemedText>
                 <PersistentTextInput
                   draftKey="ProductCreateScreen-input-3"
                   testID="input-product-price"
@@ -1056,7 +1063,7 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
                   >
                     <EvendiIcon name="zap" size={12} color="#f59e0b" />
                     <ThemedText style={styles.suggestionText}>
-                      Foreslått: {getSuggestedPrice(vendorCategory)} kr
+                      Foreslått: {formatCurrency(getSuggestedPrice(vendorCategory), getSetting)}
                     </ThemedText>
                   </Pressable>
                 )}
@@ -1935,7 +1942,7 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
               </View>
               <ThemedText style={[styles.pricePreviewText, { color: theme.text }]}>
                 {parseFloat(unitPrice) > 0
-                  ? `${parseFloat(unitPrice).toLocaleString("nb-NO")} kr / ${UNIT_TYPES.find(u => u.value === unitType)?.label.toLowerCase()}`
+                  ? `${formatCurrency(parseFloat(unitPrice), getSetting)} / ${UNIT_TYPES.find(u => u.value === unitType)?.label.toLowerCase()}`
                   : "Angi pris for forhåndsvisning"}
               </ThemedText>
             </View>

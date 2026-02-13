@@ -11,6 +11,8 @@ import { Button } from "@/components/Button";
 import PersistentTextInput from "@/components/PersistentTextInput";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getWeddingDetails, getCoupleSession } from "@/lib/storage";
 import { getApiUrl } from "@/lib/query-client";
@@ -112,6 +114,7 @@ export default function WeatherScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const { isWedding, config } = useEventType();
 
   const eventDayLabel = isWedding ? "Bryllupsdagen" : config.labelNo + "en";
@@ -540,7 +543,7 @@ export default function WeatherScreen() {
                   </View>
                   <View style={styles.travelStat}>
                     <EvendiIcon name="dollar-sign" size={14} color={theme.textSecondary} />
-                    <ThemedText style={[styles.travelValue, { color: theme.textSecondary }]}>~{Math.round(customTravelResult.travel.fuelCostNok)} kr</ThemedText>
+                    <ThemedText style={[styles.travelValue, { color: theme.textSecondary }]}>~{formatCurrency(Math.round(customTravelResult.travel.fuelCostNok), getSetting)}</ThemedText>
                   </View>
                 </View>
                 {customTravelResult.origin.weather && customTravelResult.venue.weather && (
@@ -566,7 +569,7 @@ export default function WeatherScreen() {
                     <View style={styles.travelRowInfo}>
                       <ThemedText style={[styles.travelTime, { color: Colors.dark.accent }]}>{city.drivingFormatted}</ThemedText>
                       <ThemedText style={[styles.travelDist, { color: theme.textSecondary }]}>{city.roadDistanceKm} km</ThemedText>
-                      <ThemedText style={[styles.travelCost, { color: theme.textMuted }]}>~{Math.round(city.fuelCostNok)} kr</ThemedText>
+                      <ThemedText style={[styles.travelCost, { color: theme.textMuted }]}>~{formatCurrency(Math.round(city.fuelCostNok), getSetting)}</ThemedText>
                     </View>
                   </View>
                 ))}

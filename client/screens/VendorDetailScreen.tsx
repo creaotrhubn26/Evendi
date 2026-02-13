@@ -24,6 +24,8 @@ import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import { getApiUrl } from "@/lib/query-client";
 import { useVendorLocationIntelligence } from "@/hooks/useVendorLocationIntelligence";
@@ -72,6 +74,7 @@ export default function VendorDetailScreen() {
   const route = useRoute<any>();
   const navigation = useNavigation<NativeStackNavigationProp<PlanningStackParamList>>();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const accentBadge = getBadgePalette(theme, "accent");
   const successBadge = getBadgePalette(theme, "success");
   const warningBadge = getBadgePalette(theme, "warning");
@@ -223,7 +226,7 @@ export default function VendorDetailScreen() {
                   <View style={[styles.travelDetailBadge, { backgroundColor: theme.warning + "10" }]}>
                     <EvendiIcon name="droplet" size={10} color={theme.warning} />
                     <ThemedText style={[styles.travelDetailText, { color: theme.warning }]}>
-                      Drivstoff: ~{Math.round(vendorTravel.travel.fuelCostNok)} kr
+                      Drivstoff: ~{formatCurrency(Math.round(vendorTravel.travel.fuelCostNok), getSetting)}
                     </ThemedText>
                   </View>
                 )}
@@ -231,7 +234,7 @@ export default function VendorDetailScreen() {
                   <View style={[styles.travelDetailBadge, { backgroundColor: theme.accent + "10" }]}>
                     <EvendiIcon name="credit-card" size={10} color={theme.accent} />
                     <ThemedText style={[styles.travelDetailText, { color: theme.accent }]}>
-                      Bompenger: ~{Math.round(vendorTravel.travel.tollEstimateNok)} kr
+                      Bompenger: ~{formatCurrency(Math.round(vendorTravel.travel.tollEstimateNok), getSetting)}
                     </ThemedText>
                   </View>
                 )}
@@ -316,7 +319,7 @@ export default function VendorDetailScreen() {
               {products.map((product) => {
                 const metadata = product.metadata || {};
                 const formatPrice = (priceInOre: number) => {
-                  return (priceInOre / 100).toLocaleString("nb-NO", { minimumFractionDigits: 0 }) + " kr";
+                  return formatCurrency(priceInOre / 100, getSetting);
                 };
                 
                 return (

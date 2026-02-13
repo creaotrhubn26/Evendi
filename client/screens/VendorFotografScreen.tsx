@@ -14,9 +14,12 @@ import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
 import VendorCreatorHubBridge from "@/components/VendorCreatorHubBridge";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { getCurrencyCode } from "@/lib/format-currency";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
+import { useVendorProfile } from "@/hooks/useVendorProfile";
 import { getSpeeches } from "@/lib/storage";
 import { Speech } from "@/lib/types";
 import { SeatingChart, Table } from "@/components/SeatingChart";
@@ -41,6 +44,7 @@ type VendorOffer = {
 export default function VendorFotografScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const navigation = useNavigation<Navigation>();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -48,7 +52,12 @@ export default function VendorFotografScreen() {
   const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [seatingData, setSeatingData] = useState<{ tables: Table[]; guests?: any[] }>({ tables: [], guests: [] });
   const [selectedCoupleId, setSelectedCoupleId] = useState<string | null>(null);
-  const vendorConfig = getVendorConfig(null, "Fotograf");
+  const vendorProfileQuery = useVendorProfile(sessionToken);
+  const vendorConfig = getVendorConfig(
+    vendorProfileQuery.data?.category?.id ?? null,
+    vendorProfileQuery.data?.category?.name ?? "Fotograf",
+    vendorProfileQuery.data?.category?.dashboardKey ?? null
+  );
   // Fetch vendor's couples from conversations
   const { data: vendorCouples = [] } = useQuery<{ id: string; coupleId: string; coupleName: string }[]>({
     queryKey: ["/api/vendor/conversations-couples"],
@@ -311,7 +320,9 @@ export default function VendorFotografScreen() {
                 <Pressable onPress={goToOffers} style={[styles.listRow, { borderBottomColor: theme.border }]}>
                   <View style={{ flex: 1 }}>
                     <ThemedText style={{ color: theme.text, fontWeight: "600" }}>{o.title}</ThemedText>
-                    <ThemedText style={{ color: theme.textSecondary, fontSize: 13 }}>{o.totalAmount} {o.currency || 'NOK'}</ThemedText>
+                    <ThemedText style={{ color: theme.textSecondary, fontSize: 13 }}>
+                      {o.totalAmount} {o.currency || getCurrencyCode(getSetting)}
+                    </ThemedText>
                   </View>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{o.status}</ThemedText>

@@ -571,12 +571,16 @@ function resolveCategoryKey(normalized: string): string {
     caterer: "caterer",
     blomster: "florist",
     florist: "florist",
+    music: "musician",
     musikk: "musician",
     musician: "musician",
     venue: "venue",
     planner: "coordinator",
     planlegger: "coordinator",
     coordinator: "coordinator",
+    beauty: "hair-makeup",
+    hair: "hair-makeup",
+    makeup: "hair-makeup",
     "hair-makeup": "hair-makeup",
     "haar-makeup": "hair-makeup",
     "haar-og-makeup": "hair-makeup",
@@ -586,6 +590,8 @@ function resolveCategoryKey(normalized: string): string {
     "transport": "transport",
     "kake": "cake",
     "cake": "cake",
+    "photo-video": "photographer",
+    "videographer": "photographer",
     "videograf": "photographer", // fallback to photographer behavior
     "fotograf": "photographer",
   };
@@ -594,9 +600,10 @@ function resolveCategoryKey(normalized: string): string {
 
 export function getVendorConfig(
   categoryId: string | null,
-  categoryName: string | null
+  categoryName: string | null,
+  categoryKey?: string | null
 ): VendorCategoryConfig {
-  const normalized = slugifyCategory(categoryName);
+  const normalized = slugifyCategory(categoryKey || categoryName);
   const key = resolveCategoryKey(normalized);
   const categoryConfig = CATEGORY_CONFIGS[key] || {};
   

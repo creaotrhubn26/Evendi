@@ -27,6 +27,7 @@ import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import PersistentTextInput from "@/components/PersistentTextInput";
 import {
@@ -58,6 +59,7 @@ export default function ImportantPeopleScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const { config } = useEventType();
   const queryClient = useQueryClient();
 
@@ -206,8 +208,10 @@ export default function ImportantPeopleScreen() {
       const msg = config.shareLabel
         ? config.shareLabel.shareMessageNo.replace("{name}", personName).replace("{code}", code)
         : `Hei ${personName}! Du er invitert til bryllupet vårt på Evendi. Din invitasjonskode: ${code}. Last ned Evendi og skriv inn koden for å få tilgang.`;
+      const appStoreUrl = getSetting("app_store_url", "https://apps.apple.com/app/evendi");
+      const playStoreUrl = getSetting("play_store_url", "https://play.google.com/store/apps/details?id=no.norwedfilm.evendi");
       await Share.share({
-        message: `${msg}\n\n• App Store: https://apps.apple.com/app/evendi\n• Google Play: https://play.google.com/store/apps/details?id=com.evendi`,
+        message: `${msg}\n\n• App Store: ${appStoreUrl}\n• Google Play: ${playStoreUrl}`,
       });
     } catch {}
   };

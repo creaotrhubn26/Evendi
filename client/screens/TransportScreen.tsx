@@ -25,6 +25,8 @@ import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
 import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
@@ -61,6 +63,7 @@ const TIMELINE_STEPS = [
 export default function TransportScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const navigation = useNavigation<NavigationProp>();
   const queryClient = useQueryClient();
 
@@ -316,8 +319,8 @@ export default function TransportScreen() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("nb-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 }).format(amount);
+  const formatCurrencyValue = (amount: number) => {
+    return formatCurrency(amount, getSetting);
   };
 
   const getVehicleIcon = (type: string) => {
@@ -429,7 +432,7 @@ export default function TransportScreen() {
                   )}
                   {booking.price && (
                     <ThemedText style={[styles.bookingPrice, { color: theme.primary }]}>
-                      {formatCurrency(booking.price)}
+                      {formatCurrencyValue(booking.price)}
                     </ThemedText>
                   )}
                 </View>
@@ -471,7 +474,7 @@ export default function TransportScreen() {
           <EvendiIcon name="edit-2" size={16} color={theme.textSecondary} />
         </View>
         <ThemedText style={[styles.budgetAmount, { color: theme.primary }]}>
-          {formatCurrency(budget)}
+          {formatCurrencyValue(budget)}
         </ThemedText>
         {bookings.length > 0 && (
           <View style={styles.budgetComparison}>
@@ -480,7 +483,7 @@ export default function TransportScreen() {
                 Sum bookinger:
               </ThemedText>
               <ThemedText style={[styles.budgetComparisonValue, { color: theme.text }]}>
-                {formatCurrency(bookingsSum)}
+                {formatCurrencyValue(bookingsSum)}
               </ThemedText>
             </View>
             <View style={styles.budgetComparisonRow}>
@@ -488,7 +491,7 @@ export default function TransportScreen() {
                 {budgetDifference >= 0 ? 'Tilgjengelig:' : 'Over budsjett:'}
               </ThemedText>
               <ThemedText style={[styles.budgetComparisonValue, { color: budgetDifference >= 0 ? Colors.light.success : Colors.light.error }]}>
-                {budgetDifference >= 0 ? formatCurrency(budgetDifference) : formatCurrency(Math.abs(budgetDifference))}
+                {budgetDifference >= 0 ? formatCurrencyValue(budgetDifference) : formatCurrencyValue(Math.abs(budgetDifference))}
               </ThemedText>
             </View>
           </View>

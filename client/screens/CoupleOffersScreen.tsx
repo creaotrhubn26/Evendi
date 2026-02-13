@@ -21,6 +21,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { showConfirm } from "@/lib/dialogs";
@@ -158,7 +160,7 @@ export default function CoupleOffersScreen() {
   };
 
   const formatPrice = (priceInOre: number) => {
-    return (priceInOre / 100).toLocaleString("nb-NO", { minimumFractionDigits: 0 }) + " kr";
+    return formatCurrency(priceInOre / 100, getSetting);
   };
 
   const formatDate = (dateStr: string) => {

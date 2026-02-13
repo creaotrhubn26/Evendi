@@ -23,6 +23,11 @@ const DEFAULT_DESIGN_SETTINGS = {
   buttonRadius: "8",
   cardRadius: "12",
   borderWidth: "1",
+  colorSuccess: "",
+  colorWarning: "",
+  colorError: "",
+  colorInfo: "",
+  ratingStarColor: "",
 };
 
 export function useTheme() {
@@ -68,6 +73,12 @@ export function useTheme() {
     background: settings.backgroundColor,
     backgroundDefault: isDark ? settings.backgroundColor : "#FFFFFF",
     backgroundSecondary: isDark ? "#2A2A2A" : "#F5F5F5",
+    // Semantic color overrides (admin can change these)
+    success: settings.colorSuccess || theme.success,
+    warning: settings.colorWarning || theme.warning,
+    error: settings.colorError || theme.error,
+    info: settings.colorInfo || chosenAccent,
+    ratingStarColor: settings.ratingStarColor || "#F59E0B",
   };
 
   return {

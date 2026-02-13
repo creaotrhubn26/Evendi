@@ -19,6 +19,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getCoupleContracts, updateContract, CoupleContract } from "@/lib/api-couple-data";
 import { showConfirm } from "@/lib/dialogs";
@@ -102,9 +104,9 @@ export default function CoupleContractsScreen() {
     });
   };
 
-  const formatCurrency = (amount: number | null | undefined) => {
+  const formatCurrencyValue = (amount: number | null | undefined) => {
     if (!amount) return "Ikke oppgitt";
-    return amount.toLocaleString("nb-NO") + " kr";
+    return formatCurrency(amount, getSetting);
   };
 
   const renderContract = ({ item: contract, index }: { item: CoupleContract; index: number }) => {
@@ -149,7 +151,7 @@ export default function CoupleContractsScreen() {
               <View style={styles.summaryItem}>
                 <ThemedText style={[styles.summaryLabel, { color: theme.textMuted }]}>Total</ThemedText>
                 <ThemedText style={[styles.summaryValue, { color: Colors.dark.accent }]}>
-                  {formatCurrency(contract.offerTotalAmount)}
+                  {formatCurrencyValue(contract.offerTotalAmount)}
                 </ThemedText>
               </View>
               <View style={styles.summaryItem}>

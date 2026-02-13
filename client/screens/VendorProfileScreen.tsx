@@ -49,6 +49,9 @@ interface VendorProfile {
   businessName: string;
   organizationNumber: string | null;
   description: string | null;
+  whyStatement: string | null;
+  howStatement: string | null;
+  whatStatement: string | null;
   location: string | null;
   phone: string | null;
   website: string | null;
@@ -134,6 +137,7 @@ interface Props {
 export default function VendorProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const culturalTraditions = useMemo(() => {
     const palette = [theme.accent, theme.success, theme.warning, theme.error, theme.textSecondary];
     return CULTURAL_TRADITIONS.map((tradition, index) => ({
@@ -145,6 +149,9 @@ export default function VendorProfileScreen({ navigation }: Props) {
   const [businessName, setBusinessName] = useState("");
   const [organizationNumber, setOrganizationNumber] = useState("");
   const [description, setDescription] = useState("");
+  const [whyStatement, setWhyStatement] = useState("");
+  const [howStatement, setHowStatement] = useState("");
+  const [whatStatement, setWhatStatement] = useState("");
   const [location, setLocation] = useState("");
   const [phone, setPhone] = useState("");
   const [website, setWebsite] = useState("");
@@ -203,6 +210,9 @@ export default function VendorProfileScreen({ navigation }: Props) {
       setBusinessName(profile.businessName || "");
       setOrganizationNumber(profile.organizationNumber || "");
       setDescription(profile.description || "");
+      setWhyStatement(profile.whyStatement || "");
+      setHowStatement(profile.howStatement || "");
+      setWhatStatement(profile.whatStatement || "");
       setLocation(profile.location || "");
       setPhone(profile.phone || "");
       setWebsite(profile.website || "");
@@ -231,6 +241,9 @@ export default function VendorProfileScreen({ navigation }: Props) {
           businessName: businessName.trim(),
           organizationNumber: organizationNumber.trim() || null,
           description: description.trim() || null,
+          whyStatement: whyStatement.trim() || null,
+          howStatement: howStatement.trim() || null,
+          whatStatement: whatStatement.trim() || null,
           location: location.trim() || null,
           phone: phone.trim() || null,
           website: website.trim() || null,
@@ -952,6 +965,7 @@ export default function VendorProfileScreen({ navigation }: Props) {
       </View>
     </>
   );
+  const hasStatements = [whyStatement, howStatement, whatStatement].some((value) => value.trim().length > 0);
   const isValid = businessName.trim().length >= 2;
   if (isLoading || !profile) {
     return (
@@ -1087,6 +1101,85 @@ export default function VendorProfileScreen({ navigation }: Props) {
             />
           </View>
         </View>
+        {/* Positioning Statements */}
+        <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}> 
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}> 
+              <EvendiIcon name="message-square" size={16} color={theme.accent} />
+            </View>
+            <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Profil-uttalelser</ThemedText>
+          </View>
+          <View style={styles.inputGroup}>
+            <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Hvorfor (formål)</ThemedText>
+            <PersistentTextInput
+              draftKey="VendorProfileScreen-input-22"
+              style={[styles.textArea, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+              value={whyStatement}
+              onChangeText={setWhyStatement}
+              placeholder="Hvorfor finnes dere som bedrift?"
+              placeholderTextColor={theme.textMuted}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </View>
+          <View style={styles.inputGroup}>
+            <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Hvordan (prosess)</ThemedText>
+            <PersistentTextInput
+              draftKey="VendorProfileScreen-input-23"
+              style={[styles.textArea, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+              value={howStatement}
+              onChangeText={setHowStatement}
+              placeholder="Hvordan jobber dere for å levere?"
+              placeholderTextColor={theme.textMuted}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </View>
+          <View style={styles.inputGroup}>
+            <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Hva (produkt)</ThemedText>
+            <PersistentTextInput
+              draftKey="VendorProfileScreen-input-24"
+              style={[styles.textArea, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
+              value={whatStatement}
+              onChangeText={setWhatStatement}
+              placeholder="Hva leverer dere konkret?"
+              placeholderTextColor={theme.textMuted}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </View>
+        </View>
+        {hasStatements && (
+          <View style={[styles.previewCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}> 
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}> 
+                <EvendiIcon name="eye" size={16} color={theme.accent} />
+              </View>
+              <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Profilforhandsvisning</ThemedText>
+            </View>
+            {whyStatement.trim().length > 0 && (
+              <View style={styles.previewItem}>
+                <ThemedText style={[styles.previewLabel, { color: theme.textSecondary }]}>Hvorfor</ThemedText>
+                <ThemedText style={[styles.previewText, { color: theme.text }]}>{whyStatement.trim()}</ThemedText>
+              </View>
+            )}
+            {howStatement.trim().length > 0 && (
+              <View style={styles.previewItem}>
+                <ThemedText style={[styles.previewLabel, { color: theme.textSecondary }]}>Hvordan</ThemedText>
+                <ThemedText style={[styles.previewText, { color: theme.text }]}>{howStatement.trim()}</ThemedText>
+              </View>
+            )}
+            {whatStatement.trim().length > 0 && (
+              <View style={styles.previewItem}>
+                <ThemedText style={[styles.previewLabel, { color: theme.textSecondary }]}>Hva</ThemedText>
+                <ThemedText style={[styles.previewText, { color: theme.text }]}>{whatStatement.trim()}</ThemedText>
+              </View>
+            )}
+          </View>
+        )}
         {/* Contact Information */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}>
@@ -1147,7 +1240,7 @@ export default function VendorProfileScreen({ navigation }: Props) {
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
               value={priceRange}
               onChangeText={setPriceRange}
-              placeholder="F.eks. 15 000 - 50 000 kr"
+              placeholder={`F.eks. 15 000 - 50 000 ${getCurrencyCode(getSetting)}`}
               placeholderTextColor={theme.textMuted}
             />
           </View>
@@ -1433,6 +1526,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: Spacing.lg,
     marginBottom: Spacing.md,
+  },
+  previewCard: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  previewItem: {
+    marginBottom: Spacing.md,
+  },
+  previewLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: Spacing.xs,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  previewText: {
+    fontSize: 14,
+    lineHeight: 20,
   },
   sectionHeader: {
     flexDirection: "row",

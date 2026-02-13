@@ -12,7 +12,10 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency, getCurrencyCode } from "@/lib/format-currency";
 import { useEventType } from "@/hooks/useEventType";
+import { useVendorProfile } from "@/hooks/useVendorProfile";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
@@ -72,6 +75,7 @@ const PRIORITY_LABELS = {
 export default function VendorPlanleggerScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const priorityColors = {
     high: theme.error,
     medium: theme.warning,
@@ -102,7 +106,12 @@ export default function VendorPlanleggerScreen() {
   const [taskPriority, setTaskPriority] = useState<'high' | 'medium' | 'low'>('medium');
   const [taskCategory, setTaskCategory] = useState('');
   const [taskNotes, setTaskNotes] = useState('');
-  const vendorConfig = getVendorConfig(null, "Planlegger");
+  const vendorProfileQuery = useVendorProfile(sessionToken);
+  const vendorConfig = getVendorConfig(
+    vendorProfileQuery.data?.category?.id ?? null,
+    vendorProfileQuery.data?.category?.name ?? "Planlegger",
+    vendorProfileQuery.data?.category?.dashboardKey ?? null
+  );
   useEffect(() => {
     const loadSession = async () => {
       const data = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
@@ -491,7 +500,9 @@ export default function VendorPlanleggerScreen() {
                 <Pressable onPress={goToOffers} style={[styles.listRow, { borderBottomColor: theme.border }]}>
                   <View style={{ flex: 1 }}>
                     <ThemedText style={{ color: theme.text, fontWeight: "600" }}>{o.title}</ThemedText>
-                    <ThemedText style={{ color: theme.textSecondary, fontSize: 13 }}>{o.totalAmount} {o.currency || 'NOK'}</ThemedText>
+                    <ThemedText style={{ color: theme.textSecondary, fontSize: 13 }}>
+                      {formatCurrency(o.totalAmount, getSetting)}{o.currency && o.currency !== getCurrencyCode(getSetting) ? ` (${o.currency})` : ""}
+                    </ThemedText>
                   </View>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{o.status}</ThemedText>

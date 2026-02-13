@@ -155,7 +155,7 @@ const FEATURES: Feature[] = [
       "Bruk 'Hjelp & FAQ' for raske svar på vanlige spørsmål",
       "Se dokumentasjonen for detaljerte guider",
       "Sjekk videoguider for visuell opplæring",
-      "Send e-post til support@evendi.no for akutte saker"
+      "Send e-post til support for akutte saker"
     ]
   },
   {
@@ -245,7 +245,7 @@ const FEATURES: Feature[] = [
       "Velg mellom FAQ, direkte chat eller tilbakemelding",
       "Beskriv ditt problem eller spørsmål",
       "Vi svarer innen 24 timer",
-      "Send e-post til support@evendi.no for akutte saker"
+      "Send e-post til support for akutte saker"
     ]
   }
 ];

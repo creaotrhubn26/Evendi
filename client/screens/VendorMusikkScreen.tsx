@@ -12,9 +12,12 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { getCurrencyCode } from "@/lib/format-currency";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
+import { useVendorProfile } from "@/hooks/useVendorProfile";
 import { getSpeeches } from "@/lib/storage";
 import { Speech } from "@/lib/types";
 import { showToast } from "@/lib/toast";
@@ -141,6 +144,7 @@ const normalizeCultureKey = (key: string) => {
 export default function VendorMusikkScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const navigation = useNavigation<Navigation>();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [vendorId, setVendorId] = useState<string | null>(null);
@@ -150,7 +154,12 @@ export default function VendorMusikkScreen() {
   const [chatVendor, setChatVendor] = useState<CulturalVendor | null>(null);
   const [isChatPickerOpen, setIsChatPickerOpen] = useState(false);
   const [isStartingChat, setIsStartingChat] = useState(false);
-  const vendorConfig = getVendorConfig(null, "Musikk");
+  const vendorProfileQuery = useVendorProfile(sessionToken);
+  const vendorConfig = getVendorConfig(
+    vendorProfileQuery.data?.category?.id ?? null,
+    vendorProfileQuery.data?.category?.name ?? "Musikk",
+    vendorProfileQuery.data?.category?.dashboardKey ?? null
+  );
   // Load speeches for music coordination
   const speechesQuery = useQuery<Speech[]>({
     queryKey: ['speeches'],
@@ -466,7 +475,9 @@ export default function VendorMusikkScreen() {
                 <Pressable onPress={goToOffers} style={[styles.listRow, { borderBottomColor: theme.border }]}>
                   <View style={{ flex: 1 }}>
                     <ThemedText style={{ color: theme.text, fontWeight: "600" }}>{o.title}</ThemedText>
-                    <ThemedText style={{ color: theme.textSecondary, fontSize: 13 }}>{o.totalAmount} {o.currency || 'NOK'}</ThemedText>
+                    <ThemedText style={{ color: theme.textSecondary, fontSize: 13 }}>
+                      {o.totalAmount} {o.currency || getCurrencyCode(getSetting)}
+                    </ThemedText>
                   </View>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{o.status}</ThemedText>

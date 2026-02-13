@@ -11,22 +11,22 @@ import type { QaGameMode } from "@shared/event-types";
 
 // ─── Game card / selector images (400px wide) ───────────────────
 const GAME_IMAGES: Record<string, ImageSourcePropType> = {
-  shoe_game: require("@/../../assets/qa-games/qna-shoe-game.png"),
-  icebreaker: require("@/../../assets/qa-games/qna-icebreaker.png"),
-  quiz: require("@/../../assets/qa-games/qna-quiz.png"),
-  two_truths: require("@/../../assets/qa-games/qna-two-truths.png"),
-  qa_open: require("@/../../assets/qa-games/qna-qa-open.png"),
-  product_launch: require("@/../../assets/qa-games/qna-product-launch.png"),
+  shoe_game: require("@/assets/qa-games/qna-shoe-game.png"),
+  icebreaker: require("@/assets/qa-games/qna-icebreaker.png"),
+  quiz: require("@/assets/qa-games/qna-quiz.png"),
+  two_truths: require("@/assets/qa-games/qna-two-truths.png"),
+  qa_open: require("@/assets/qa-games/qna-qa-open.png"),
+  product_launch: require("@/assets/qa-games/qna-product-launch.png"),
 };
 
 // ─── Turn indicator images for shoe game (150px) ────────────────
 export const SHOE_TURN_IMAGES = {
-  bride: require("@/../../assets/qa-games/qna-bride-shoe.png") as ImageSourcePropType,
-  groom: require("@/../../assets/qa-games/qna-groom-shoe.png") as ImageSourcePropType,
+  bride: require("@/assets/qa-games/qna-bride-shoe.png") as ImageSourcePropType,
+  groom: require("@/assets/qa-games/qna-groom-shoe.png") as ImageSourcePropType,
 };
 
 // ─── Main Q&A Games logo ────────────────────────────────────────
-export const QA_GAMES_LOGO = require("@/../../assets/qa-games/qna-games-logo.png") as ImageSourcePropType;
+export const QA_GAMES_LOGO = require("@/assets/qa-games/qna-games-logo.png") as ImageSourcePropType;
 
 /**
  * Get the image source for a game mode.

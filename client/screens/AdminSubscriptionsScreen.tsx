@@ -15,9 +15,11 @@ import { EvendiIcon } from "@/components/EvendiIcon";
 import * as Haptics from "expo-haptics";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Spacing, BorderRadius } from "@/constants/theme";
+import { formatCurrency, getCurrencyCode } from "@/lib/format-currency";
 import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
@@ -58,6 +60,7 @@ interface TierForm {
 export default function AdminSubscriptionsScreen({ route }: Props) {
   const { adminKey } = route.params;
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const queryClient = useQueryClient();
 
   const [showModal, setShowModal] = useState(false);
@@ -325,7 +328,9 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
                       <ThemedText style={styles.tierName}>{tier.displayName}</ThemedText>
                       <ThemedText style={[styles.tierDesc, { color: theme.textSecondary }]}>{tier.description}</ThemedText>
                       <View style={{ flexDirection: "row", gap: Spacing.md, marginTop: Spacing.sm }}>
-                        <ThemedText style={[styles.tierPrice, { color: theme.accent }]}>{tier.priceNok} kr/mnd</ThemedText>
+                        <ThemedText style={[styles.tierPrice, { color: theme.accent }]}> 
+                          {formatCurrency(tier.priceNok, getSetting)} / mnd
+                        </ThemedText>
                         <View style={[styles.featureBadge, { backgroundColor: theme.accent + "20" }]}>
                           <ThemedText style={[styles.featureBadgeText, { color: theme.accent }]}>
                             {[
@@ -471,7 +476,7 @@ export default function AdminSubscriptionsScreen({ route }: Props) {
 
             <View style={{ flexDirection: "row", gap: Spacing.md }}>
               <View style={{ flex: 1 }}>
-                <ThemedText style={styles.label}>Pris (NOK/mnd)</ThemedText>
+                <ThemedText style={styles.label}>Pris ({getCurrencyCode(getSetting)}/mnd)</ThemedText>
                 <PersistentTextInput
                   draftKey="AdminSubscriptionsScreen-input-5"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}

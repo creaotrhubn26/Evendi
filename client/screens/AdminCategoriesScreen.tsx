@@ -32,6 +32,9 @@ interface Category {
   icon: string;
   sortOrder?: number;
   description?: string;
+  slug?: string | null;
+  dashboardKey?: string | null;
+  applicableEventTypes?: string[] | null;
 }
 
 const ICON_OPTIONS = getAllIconOptions();
@@ -50,6 +53,19 @@ export default function AdminCategoriesScreen() {
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("heart");
   const [description, setDescription] = useState("");
+  const [slug, setSlug] = useState("");
+  const [dashboardKey, setDashboardKey] = useState("");
+  const [sortOrder, setSortOrder] = useState("0");
+  const [applicableEventTypes, setApplicableEventTypes] = useState("");
+
+  const slugify = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/å/g, "a")
+      .replace(/æ/g, "ae")
+      .replace(/ø/g, "o")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
 
   const { data: inspirationCategories = [], isLoading: loadingInspiration } = useQuery<Category[]>({
     queryKey: ["/api/inspiration-categories"],
@@ -64,7 +80,7 @@ export default function AdminCategoriesScreen() {
   const apiPath = selectedTab === "inspiration" ? "inspiration-categories" : "vendor-categories";
 
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; icon: string; description?: string }) => {
+    mutationFn: async (data: Record<string, unknown>) => {
       const url = new URL(`/api/admin/${apiPath}`, getApiUrl());
       const response = await fetch(url.toString(), {
         method: "POST",
@@ -86,7 +102,7 @@ export default function AdminCategoriesScreen() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, ...data }: { id: string; name: string; icon: string; description?: string }) => {
+    mutationFn: async ({ id, ...data }: { id: string; [key: string]: unknown }) => {
       const url = new URL(`/api/admin/${apiPath}/${id}`, getApiUrl());
       const response = await fetch(url.toString(), {
         method: "PUT",
@@ -127,6 +143,10 @@ export default function AdminCategoriesScreen() {
     setName("");
     setIcon("heart");
     setDescription("");
+    setSlug("");
+    setDashboardKey("");
+    setSortOrder("0");
+    setApplicableEventTypes("");
     setEditingCategory(null);
   };
 
@@ -135,6 +155,10 @@ export default function AdminCategoriesScreen() {
     setName(category.name);
     setIcon(category.icon);
     setDescription(category.description || "");
+    setSlug(category.slug || "");
+    setDashboardKey(category.dashboardKey || "");
+    setSortOrder(category.sortOrder !== undefined && category.sortOrder !== null ? String(category.sortOrder) : "0");
+    setApplicableEventTypes(category.applicableEventTypes?.join(", ") || "");
     setShowModal(true);
   };
 
@@ -143,11 +167,29 @@ export default function AdminCategoriesScreen() {
       showToast("Navn er påkrevd");
       return;
     }
+    const payload: Record<string, unknown> = { name: name.trim(), icon };
+
+    if (selectedTab === "vendor") {
+      const resolvedSlug = slug.trim() ? slugify(slug) : slugify(name);
+      const resolvedDashboardKey = dashboardKey.trim() || resolvedSlug;
+      const resolvedSortOrder = Number.isFinite(Number(sortOrder)) ? Number(sortOrder) : 0;
+      const resolvedEventTypes = applicableEventTypes
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      payload.description = description.trim() || null;
+      payload.slug = resolvedSlug || null;
+      payload.dashboardKey = resolvedDashboardKey || null;
+      payload.sortOrder = resolvedSortOrder;
+      payload.applicableEventTypes = resolvedEventTypes.length > 0 ? resolvedEventTypes : null;
+    } else {
+      payload.description = description.trim() || null;
+    }
 
     if (editingCategory) {
-      updateMutation.mutate({ id: editingCategory.id, name, icon, description });
+      updateMutation.mutate({ id: editingCategory.id, ...payload });
     } else {
-      createMutation.mutate({ name, icon, description });
+      createMutation.mutate(payload);
     }
   };
 
@@ -305,10 +347,62 @@ export default function AdminCategoriesScreen() {
             {selectedTab === "vendor" ? (
               <>
                 <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>
-                  Beskrivelse
+                  Slug (unikt)
                 </ThemedText>
                 <PersistentTextInput
                   draftKey="AdminCategoriesScreen-input-2"
+                  style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+                  value={slug}
+                  onChangeText={setSlug}
+                  placeholder="photographer"
+                  placeholderTextColor={theme.textMuted}
+                  autoCapitalize="none"
+                />
+
+                <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>
+                  Dashboard key
+                </ThemedText>
+                <PersistentTextInput
+                  draftKey="AdminCategoriesScreen-input-2b"
+                  style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+                  value={dashboardKey}
+                  onChangeText={setDashboardKey}
+                  placeholder="photographer | caterer | musician"
+                  placeholderTextColor={theme.textMuted}
+                  autoCapitalize="none"
+                />
+
+                <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>
+                  Sortering
+                </ThemedText>
+                <PersistentTextInput
+                  draftKey="AdminCategoriesScreen-input-2c"
+                  style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+                  value={sortOrder}
+                  onChangeText={setSortOrder}
+                  placeholder="0"
+                  placeholderTextColor={theme.textMuted}
+                  keyboardType="numeric"
+                />
+
+                <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>
+                  Eventtyper (CSV)
+                </ThemedText>
+                <PersistentTextInput
+                  draftKey="AdminCategoriesScreen-input-2d"
+                  style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+                  value={applicableEventTypes}
+                  onChangeText={setApplicableEventTypes}
+                  placeholder="wedding, conference, kickoff"
+                  placeholderTextColor={theme.textMuted}
+                  autoCapitalize="none"
+                />
+
+                <ThemedText style={[styles.label, { color: theme.textSecondary, marginTop: Spacing.md }]}>
+                  Beskrivelse
+                </ThemedText>
+                <PersistentTextInput
+                  draftKey="AdminCategoriesScreen-input-2e"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   value={description}
                   onChangeText={setDescription}

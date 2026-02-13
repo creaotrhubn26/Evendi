@@ -34,6 +34,8 @@ import { getCakeSizingSuggestion } from '@/constants/tradition-data';
 import { getCoupleSession } from '@/lib/storage';
 import { useTheme } from '../hooks/useTheme';
 import { useEventType } from '../hooks/useEventType';
+import { useAppSettings } from '@/hooks/useAppSettings';
+import { formatCurrency, getCurrencyCode } from '@/lib/format-currency';
 import { useVendorSearch } from '@/hooks/useVendorSearch';
 import { Colors } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
@@ -800,8 +802,8 @@ export function KakeScreen() {
                       <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
                         Pris
                       </ThemedText>
-                      <ThemedText style={[styles.detailValue, { color: theme.primary }]}>
-                        {design.estimatedPrice.toLocaleString('nb-NO')} kr
+                      <ThemedText style={[styles.detailValue, { color: theme.primary }]}> 
+                        {formatCurrency(design.estimatedPrice, getSetting)}
                       </ThemedText>
                     </View>
                   )}
@@ -899,7 +901,7 @@ export function KakeScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <ThemedText style={[styles.summaryValue, { color: theme.primary }]}>
                 {cakeData?.timeline?.budget 
-                  ? `${cakeData.timeline.budget.toLocaleString('nb-NO')} kr`
+                  ? formatCurrency(cakeData.timeline.budget, getSetting)
                   : 'Sett budsjett'}
               </ThemedText>
               <EvendiIcon name="edit-2" size={12} color={theme.primary} />
@@ -1454,8 +1456,8 @@ export function KakeScreen() {
                 placeholderTextColor={theme.textSecondary}
               />
 
-              <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
-                Estimert pris (NOK)
+              <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}> 
+                Estimert pris ({getCurrencyCode(getSetting)})
               </ThemedText>
               <PersistentTextInput
                 draftKey="KakeScreen-input-14"
@@ -1562,8 +1564,8 @@ export function KakeScreen() {
               </TouchableOpacity>
             </View>
 
-            <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
-              Budsjett (NOK)
+            <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}> 
+              Budsjett ({getCurrencyCode(getSetting)})
             </ThemedText>
             <PersistentTextInput
               draftKey="KakeScreen-input-16"

@@ -21,6 +21,7 @@ import { useNavigation } from "@react-navigation/native";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getImportantPeople, type ImportantPerson } from "@/lib/api-couple-data";
@@ -49,6 +50,7 @@ export default function CoupleMessagesHubScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const navigation = useNavigation<NavigationProp>();
 
   const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
@@ -595,7 +597,8 @@ export default function CoupleMessagesHubScreen() {
           <Pressable
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              Linking.openURL("mailto:support@evendi.no");
+              const supportEmail = getSetting("support_email", "support@evendi.no");
+              Linking.openURL(`mailto:${supportEmail}`);
             }}
             style={[
               styles.quickAction,

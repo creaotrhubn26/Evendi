@@ -21,6 +21,12 @@ export interface DesignSettings {
   buttonRadius: string;
   cardRadius: string;
   borderWidth: string;
+  // Semantic colors (admin-overridable)
+  colorSuccess: string;
+  colorWarning: string;
+  colorError: string;
+  colorInfo: string;
+  ratingStarColor: string;
 }
 
 const DEFAULT_SETTINGS: DesignSettings = {
@@ -43,6 +49,11 @@ const DEFAULT_SETTINGS: DesignSettings = {
   buttonRadius: "8",
   cardRadius: "12",
   borderWidth: "1",
+  colorSuccess: "",
+  colorWarning: "",
+  colorError: "",
+  colorInfo: "",
+  ratingStarColor: "",
 };
 
 export function useDesignSettings() {
@@ -131,6 +142,21 @@ export function useDesignSettings() {
           break;
         case "design_border_width":
           settings.borderWidth = setting.value;
+          break;
+        case "color_success":
+          settings.colorSuccess = setting.value;
+          break;
+        case "color_warning":
+          settings.colorWarning = setting.value;
+          break;
+        case "color_error":
+          settings.colorError = setting.value;
+          break;
+        case "color_info":
+          settings.colorInfo = setting.value;
+          break;
+        case "rating_star_color":
+          settings.ratingStarColor = setting.value;
           break;
       }
     });

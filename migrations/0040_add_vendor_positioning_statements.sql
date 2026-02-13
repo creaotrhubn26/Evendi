@@ -1,0 +1,3 @@
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS why_statement TEXT;
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS how_statement TEXT;
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS what_statement TEXT;

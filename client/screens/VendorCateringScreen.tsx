@@ -15,6 +15,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
+import { useVendorProfile } from "@/hooks/useVendorProfile";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
@@ -42,7 +43,12 @@ export default function VendorCateringScreen() {
   const queryClient = useQueryClient();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const vendorConfig = getVendorConfig(null, "Catering");
+  const vendorProfileQuery = useVendorProfile(sessionToken);
+  const vendorConfig = getVendorConfig(
+    vendorProfileQuery.data?.category?.id ?? null,
+    vendorProfileQuery.data?.category?.name ?? "Catering",
+    vendorProfileQuery.data?.category?.dashboardKey ?? null
+  );
   useEffect(() => {
     const loadSession = async () => {
       const data = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);

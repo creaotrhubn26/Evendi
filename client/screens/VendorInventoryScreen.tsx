@@ -17,6 +17,8 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
@@ -47,6 +49,7 @@ export default function VendorInventoryScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { data: products = [], isLoading, refetch } = useQuery<VendorProduct[]>({
@@ -117,8 +120,8 @@ export default function VendorInventoryScreen({ navigation }: Props) {
               <ThemedText style={[styles.productTitle, { color: theme.text }]}>
                 {item.title}
               </ThemedText>
-              <ThemedText style={[styles.productType, { color: theme.textMuted }]}>
-                {(item.unitPrice / 100).toLocaleString("nb-NO")} kr / {item.unitType}
+              <ThemedText style={[styles.productType, { color: theme.textMuted }]}> 
+                {formatCurrency(item.unitPrice / 100, getSetting)} / {item.unitType}
               </ThemedText>
             </View>
             <EvendiIcon name="chevron-right" size={20} color={theme.textMuted} />

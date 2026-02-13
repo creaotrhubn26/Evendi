@@ -22,6 +22,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency, getCurrencyCode } from "@/lib/format-currency";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import {
   getBudgetSettings,
@@ -108,6 +110,7 @@ export default function BudgetScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const { touched, errors, handleBlur, getFieldStyle, resetValidation } = useFieldValidation();
   const queryClient = useQueryClient();
 
@@ -296,8 +299,8 @@ export default function BudgetScreen() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString("nb-NO") + " kr";
+  const formatCurrencyValue = (amount: number) => {
+    return formatCurrency(amount, getSetting);
   };
 
   const getCategoryInfo = (categoryId: string) => {
@@ -434,7 +437,7 @@ export default function BudgetScreen() {
             ) : (
               <Pressable onPress={() => setEditingBudget(true)} style={styles.budgetValueRow}>
                 <ThemedText style={[styles.budgetValue, { color: Colors.dark.accent }]}>
-                  {formatCurrency(totalBudget)}
+                  {formatCurrencyValue(totalBudget)}
                 </ThemedText>
                 <EvendiIcon name="edit-2" size={14} color={theme.textMuted} />
               </Pressable>
@@ -456,7 +459,7 @@ export default function BudgetScreen() {
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <ThemedText style={[styles.statValue, { color: theme.text }]}>
-                {formatCurrency(totalEstimated)}
+                {formatCurrencyValue(totalEstimated)}
               </ThemedText>
               <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
                 Estimert
@@ -464,7 +467,7 @@ export default function BudgetScreen() {
             </View>
             <View style={styles.statItem}>
               <ThemedText style={[styles.statValue, { color: totalActual > 0 ? Colors.dark.accent : theme.textMuted }]}>
-                {formatCurrency(totalActual)}
+                {formatCurrencyValue(totalActual)}
               </ThemedText>
               <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
                 Faktisk
@@ -472,7 +475,7 @@ export default function BudgetScreen() {
             </View>
             <View style={styles.statItem}>
               <ThemedText style={[styles.statValue, { color: remaining >= 0 ? theme.success : theme.error }]}>
-                {formatCurrency(Math.abs(remaining))}
+                {formatCurrencyValue(Math.abs(remaining))}
               </ThemedText>
               <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
                 {remaining >= 0 ? "Gjenstår" : "Over"}
@@ -480,7 +483,7 @@ export default function BudgetScreen() {
             </View>
             <View style={styles.statItem}>
               <ThemedText style={[styles.statValue, { color: theme.success }]}>
-                {formatCurrency(totalPaid)}
+                {formatCurrencyValue(totalPaid)}
               </ThemedText>
               <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
                 Betalt
@@ -502,7 +505,7 @@ export default function BudgetScreen() {
                 </ThemedText>
               </View>
               <ThemedText style={{ color: theme.textSecondary, fontSize: 13 }}>
-                ca. {perPerson.toLocaleString('nb-NO')} kr per person
+                ca. {formatCurrencyValue(perPerson)} per person
               </ThemedText>
             </View>
           </View>
@@ -563,7 +566,7 @@ export default function BudgetScreen() {
               </View>
               <ThemedText type="h4" style={styles.categoryName}>{category.name}</ThemedText>
               <ThemedText style={[styles.categoryTotal, { color: theme.textSecondary }]}>
-                {formatCurrency(category.total)}
+                {formatCurrencyValue(category.total)}
               </ThemedText>
             </View>
 
@@ -595,12 +598,12 @@ export default function BudgetScreen() {
                       </ThemedText>
                       {(item.actualCost ?? 0) > 0 && item.actualCost !== item.estimatedCost && (
                         <ThemedText style={[styles.itemActualLabel, { color: theme.textMuted }]}>
-                          Est: {formatCurrency(item.estimatedCost)}
+                          Est: {formatCurrencyValue(item.estimatedCost)}
                         </ThemedText>
                       )}
                     </View>
                     <ThemedText style={[styles.itemCost, { color: Colors.dark.accent }]}>
-                      {formatCurrency((item.actualCost ?? 0) > 0 ? (item.actualCost ?? 0) : item.estimatedCost)}
+                      {formatCurrencyValue((item.actualCost ?? 0) > 0 ? (item.actualCost ?? 0) : item.estimatedCost)}
                     </ThemedText>
                   </Pressable>
                 </SwipeableRow>
@@ -636,7 +639,7 @@ export default function BudgetScreen() {
             <PersistentTextInput
               draftKey="BudgetScreen-input-3"
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("newCost")]}
-              placeholder="Estimert beløp (kr)"
+              placeholder={`Estimert beløp (${getCurrencyCode(getSetting)})`}
               placeholderTextColor={theme.textMuted}
               value={newCost}
               onChangeText={setNewCost}
@@ -655,7 +658,7 @@ export default function BudgetScreen() {
                 <PersistentTextInput
                   draftKey="BudgetScreen-input-4"
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
-                  placeholder="Faktisk beløp (kr)"
+                  placeholder={`Faktisk beløp (${getCurrencyCode(getSetting)})`}
                   placeholderTextColor={theme.textMuted}
                   value={newActualCost}
                   onChangeText={setNewActualCost}

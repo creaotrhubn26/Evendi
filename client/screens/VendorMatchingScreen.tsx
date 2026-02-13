@@ -18,6 +18,8 @@ import { useQuery } from "@tanstack/react-query";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { useEventType } from "@/hooks/useEventType";
 import { isVendorCategoryApplicable, type EventType, type EventTypeConfig, VENDOR_CATEGORIES as SHARED_VENDOR_CATEGORIES } from "@shared/event-types";
 import { Spacing, BorderRadius } from "@/constants/theme";
@@ -126,6 +128,7 @@ const CUISINE_TYPES_MAP: Record<string, string[]> = {
 export default function VendorMatchingScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const { eventType, isWedding, config } = useEventType();
   const navigation = useNavigation<NativeStackNavigationProp<PlanningStackParamList>>();
   const route = useRoute<RouteProp<RouteParams, "VendorMatching">>();
@@ -778,7 +781,7 @@ export default function VendorMatchingScreen() {
               {item.products.slice(0, 3).map((product) => {
                 const metadata = product.metadata || {};
                 const formatPrice = (priceInOre: number) => {
-                  return (priceInOre / 100).toLocaleString("nb-NO", { minimumFractionDigits: 0 }) + " kr";
+                  return formatCurrency(priceInOre / 100, getSetting);
                 };
                 
                 return (

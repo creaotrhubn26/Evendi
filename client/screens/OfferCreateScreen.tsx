@@ -21,6 +21,8 @@ import { Button } from "@/components/Button";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
@@ -76,6 +78,7 @@ export default function OfferCreateScreen() {
   
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const { isWedding } = useEventType();
   const queryClient = useQueryClient();
 
@@ -353,7 +356,7 @@ export default function OfferCreateScreen() {
   const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 
   const formatPrice = (priceInOre: number) => {
-    return (priceInOre / 100).toLocaleString("nb-NO", { minimumFractionDigits: 0 }) + " kr";
+    return formatCurrency(priceInOre / 100, getSetting);
   };
 
   const formatDate = (date: Date) => {

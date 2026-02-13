@@ -16,6 +16,8 @@ import { ThemedText } from "../components/ThemedText";
 import { ThemedView } from "../components/ThemedView";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency, getCurrencyCode } from "@/lib/format-currency";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 
@@ -50,6 +52,7 @@ export default function VendorPaymentScreen() {
   const queryClient = useQueryClient();
   const [isProcessing, setIsProcessing] = useState(false);
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
 
   // Fetch subscription status
   const { data: subscriptionStatus, isLoading } = useQuery<SubscriptionStatus>({
@@ -127,9 +130,13 @@ export default function VendorPaymentScreen() {
    * 7. Refresh status on return
    */
   const handleVippsPayment = async () => {
+    const currencyCode = getCurrencyCode(getSetting);
+    const formattedPrice = subscriptionStatus?.tier?.priceNok
+      ? formatCurrency(subscriptionStatus.tier.priceNok, getSetting)
+      : "";
     const confirmed = await showConfirm({
       title: "Start abonnement med Vipps",
-      message: `Du starter et abonnement på ${subscriptionStatus?.tier.displayName} for ${subscriptionStatus?.tier.priceNok} NOK/måned.\n\nDu kan administrere eller kansellere abonnementet når som helst i Vipps-appen.`,
+      message: `Du starter et abonnement på ${subscriptionStatus?.tier.displayName} for ${formattedPrice} ${currencyCode}/måned.\n\nDu kan administrere eller kansellere abonnementet når som helst i Vipps-appen.`,
       confirmLabel: "Bekreft betaling",
       cancelLabel: "Avbryt",
     });
@@ -203,8 +210,8 @@ export default function VendorPaymentScreen() {
           <View style={styles.tierHeader}>
             <ThemedText style={styles.tierName}>{tier.displayName}</ThemedText>
             <View style={styles.priceContainer}>
-              <ThemedText style={[styles.price, { color: theme.accent }]}>{tier.priceNok}</ThemedText>
-              <ThemedText style={styles.priceCurrency}>NOK/mnd</ThemedText>
+              <ThemedText style={[styles.price, { color: theme.accent }]}>{formatCurrency(tier.priceNok, getSetting)}</ThemedText>
+              <ThemedText style={styles.priceCurrency}>{getCurrencyCode(getSetting)}/mnd</ThemedText>
             </View>
           </View>
 
@@ -380,7 +387,7 @@ export default function VendorPaymentScreen() {
             <ThemedText 
               style={[styles.termsLink, { color: theme.accent }]}
               onPress={() => {
-                const url = "https://evendi.no/terms-of-sale";
+                const url = getSetting("terms_url", "https://evendi.no/terms-of-sale");
                 Linking.openURL(url).catch(() => {
                   showToast("Kunne ikke åpne vilkårene");
                 });

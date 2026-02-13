@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import PersistentTextInput from "@/components/PersistentTextInput";
 import {
@@ -34,6 +35,7 @@ export default function SharePartnerScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const navigation = useNavigation<any>();
   const queryClient = useQueryClient();
   const { config } = useEventType();
@@ -106,8 +108,10 @@ export default function SharePartnerScreen() {
       const msg = config.shareLabel
         ? config.shareLabel.shareMessageNo.replace("{name}", name).replace("{code}", code)
         : `Hei ${name}! Du er invitert til bryllupet vårt på Evendi. Din invitasjonskode: ${code}. Last ned Evendi og skriv inn koden for å få tilgang.`;
+      const appStoreUrl = getSetting("app_store_url", "https://apps.apple.com/app/evendi");
+      const playStoreUrl = getSetting("play_store_url", "https://play.google.com/store/apps/details?id=no.norwedfilm.evendi");
       await Share.share({
-        message: `${msg}\n\n• App Store: https://apps.apple.com/app/evendi\n• Google Play: https://play.google.com/store/apps/details?id=no.norwedfilm.evendi`,
+        message: `${msg}\n\n• App Store: ${appStoreUrl}\n• Google Play: ${playStoreUrl}`,
       });
     } catch {}
   };

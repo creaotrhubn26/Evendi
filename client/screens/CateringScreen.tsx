@@ -32,6 +32,8 @@ import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
 import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
@@ -99,6 +101,7 @@ export default function CateringScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const navigation = useNavigation<NavigationProp>();
   const queryClient = useQueryClient();
 
@@ -655,8 +658,8 @@ export default function CateringScreen() {
   const isValidDateString = (value: string) => /^\d{2}\.\d{2}\.\d{4}$/.test(value.trim());
   const isValidTimeString = (value: string) => value.trim() === "" || /^([01]\d|2[0-3]):[0-5]\d$/.test(value.trim());
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("nb-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 }).format(amount);
+  const formatCurrencyValue = (amount: number) => {
+    return formatCurrency(amount, getSetting);
   };
 
   const getCourseLabel = (type: string) => {
@@ -800,13 +803,13 @@ export default function CateringScreen() {
           <View style={styles.costRow}>
             <ThemedText style={styles.costLabel}>Per person:</ThemedText>
             <ThemedText style={[styles.costAmount, { color: theme.primary }]}>
-              {formatCurrency(menuCostPerPerson)}
+              {formatCurrencyValue(menuCostPerPerson)}
             </ThemedText>
           </View>
           <View style={styles.costRow}>
             <ThemedText style={styles.costLabel}>Total ({guestCount} gjester):</ThemedText>
             <ThemedText style={[styles.costAmount, { color: theme.primary }]}>
-              {formatCurrency(totalMenuCost)}
+              {formatCurrencyValue(totalMenuCost)}
             </ThemedText>
           </View>
         </View>
@@ -889,7 +892,7 @@ export default function CateringScreen() {
                       <View style={styles.menuRight}>
                         {menuItem.pricePerPerson && (
                           <ThemedText style={[styles.menuPrice, { color: theme.primary }]}>
-                            {formatCurrency(menuItem.pricePerPerson)}
+                            {formatCurrencyValue(menuItem.pricePerPerson)}
                           </ThemedText>
                         )}
                         <Pressable
@@ -1028,7 +1031,7 @@ export default function CateringScreen() {
         <View style={styles.budgetRow}>
           <View style={styles.budgetItem}>
             <ThemedText style={[styles.budgetAmount, { color: theme.primary }]}>
-              {formatCurrency(budget)}
+              {formatCurrencyValue(budget)}
             </ThemedText>
             <ThemedText style={[styles.budgetSubLabel, { color: theme.textSecondary }]}>Budsjett</ThemedText>
           </View>
@@ -1043,11 +1046,11 @@ export default function CateringScreen() {
         {budget > 0 && totalMenuCost > 0 && (
           <View style={{ gap: 4 }}>
             <ThemedText style={[styles.budgetUsed, { color: totalMenuCost > budget ? Colors.light.error : theme.textSecondary }]}>
-              Estimert menykost: {formatCurrency(totalMenuCost)} ({Math.round((totalMenuCost / budget) * 100)}%)
+              Estimert menykost: {formatCurrencyValue(totalMenuCost)} ({Math.round((totalMenuCost / budget) * 100)}%)
             </ThemedText>
             {budgetDiff !== null && (
               <ThemedText style={[styles.budgetUsed, { color: budgetDiff >= 0 ? theme.success : Colors.light.error }]}>
-                {budgetDiff >= 0 ? "Innenfor budsjett" : "Over budsjett"}: {budgetDiff >= 0 ? "+" : "-"}{formatCurrency(Math.abs(budgetDiff))}
+                {budgetDiff >= 0 ? "Innenfor budsjett" : "Over budsjett"}: {budgetDiff >= 0 ? "+" : "-"}{formatCurrencyValue(Math.abs(budgetDiff))}
               </ThemedText>
             )}
           </View>

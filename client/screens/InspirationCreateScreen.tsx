@@ -23,6 +23,8 @@ import * as ImagePicker from "expo-image-picker";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { getCurrencyCode } from "@/lib/format-currency";
 import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
@@ -59,6 +61,7 @@ export default function InspirationCreateScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const { isWedding } = useEventType();
   const navigation = useNavigation();
   const route = useRoute<RouteProp<RouteParams, "params">>();
@@ -584,13 +587,13 @@ export default function InspirationCreateScreen() {
             style={[styles.input, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
             value={priceSummary}
             onChangeText={setPriceSummary}
-            placeholder="F.eks. Fra 15 000 kr"
+            placeholder={`F.eks. Fra 15 000 ${getCurrencyCode(getSetting)}`}
             placeholderTextColor={theme.textMuted}
           />
 
           <View style={styles.priceRow}>
             <View style={styles.priceField}>
-              <ThemedText style={styles.fieldLabel}>Min. pris (kr)</ThemedText>
+              <ThemedText style={styles.fieldLabel}>Min. pris ({getCurrencyCode(getSetting)})</ThemedText>
               <PersistentTextInput
                 draftKey="InspirationCreateScreen-input-6"
                 style={[styles.input, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}
@@ -602,7 +605,7 @@ export default function InspirationCreateScreen() {
               />
             </View>
             <View style={styles.priceField}>
-              <ThemedText style={styles.fieldLabel}>Maks. pris (kr)</ThemedText>
+              <ThemedText style={styles.fieldLabel}>Maks. pris ({getCurrencyCode(getSetting)})</ThemedText>
               <PersistentTextInput
                 draftKey="InspirationCreateScreen-input-7"
                 style={[styles.input, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, color: theme.text }]}

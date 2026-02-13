@@ -8,6 +8,7 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { ThemedText } from "@/components/ThemedText";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
@@ -17,23 +18,19 @@ import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { showToast } from "@/lib/toast";
 import PersistentTextInput from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
-const WELCOME_MESSAGE = "Velkommen til Evendi Support!\n\nHer kan du kontakte oss direkte med spørsmål, problemer eller tilbakemeldinger. Vi svarer vanligvis innen 24 timer.\n\nFør du sender melding, sjekk våre ressurser:";
-const HELP_LINKS = [
-  { label: "Fullstendig Dokumentasjon", icon: "book-open" as const, screen: "Documentation" as const, url: null },
-  { label: "Hjelp & FAQ", icon: "help-circle" as const, screen: null, url: null },
-  { label: "Videoguider", icon: "video" as const, screen: null, url: "https://github.com/creaotrhubn26/evendi/blob/main/VENDOR_DOCUMENTATION.md#videoguider" },
-  { label: "Hva er nytt", icon: "star" as const, screen: "WhatsNew" as const, screenParams: { category: "vendor" }, url: null },
-  { label: "Systemstatus", icon: "activity" as const, screen: "Status" as const, url: null },
-  { label: "E-post Support", icon: "mail" as const, screen: null, url: "mailto:support@evendi.no" },
-  { label: "Norwedfilm.no", icon: "globe" as const, screen: null, url: "https://norwedfilm.no" },
-];
+const DEFAULT_WELCOME_MESSAGE = "Velkommen til Evendi Support!\n\nHer kan du kontakte oss direkte med spørsmål, problemer eller tilbakemeldinger. Vi svarer vanligvis innen 24 timer.\n\nFør du sender melding, sjekk våre ressurser:";
 interface VendorSession { sessionToken: string; vendorId: string; email: string; businessName: string; }
 interface AdminMessage { id: string; senderType: "vendor"|"admin"; body: string; createdAt: string; attachmentUrl?: string|null; attachmentType?: string|null; }
 type MessageStatus = "pending" | "sent" | "error";
 type ChatMessage = AdminMessage & { localId?: string; status?: MessageStatus };
 interface AdminConversation { id: string; vendorId: string; lastMessageAt: string; }
 export default function VendorAdminChatScreen() {
-  const { theme } = useTheme();
+  const { theme, designSettings } = useTheme();
+  const { getSetting } = useAppSettings();
+  const supportEmail = getSetting("support_email", "support@evendi.no");
+  const websiteUrl = getSetting("app_website", "https://norwedfilm.no");
+  const welcomeMessage = getSetting("vendor_support_welcome_message", DEFAULT_WELCOME_MESSAGE);
+  const supportTitle = `${designSettings.appName || "Evendi"} Support`;
   const headerHeight = useHeaderHeight();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [conv, setConv] = useState<AdminConversation | null>(null);
@@ -61,33 +58,45 @@ export default function VendorAdminChatScreen() {
     const statusMessage = appSettings.find((s) => s.key === "status_message")?.value;
     return maintenanceMode || !!statusMessage;
   }, [appSettings]);
+  const helpLinks = useMemo(
+    () => [
+      { key: "documentation", label: "Fullstendig Dokumentasjon", icon: "book-open" as const, screen: "Documentation" as const, url: null },
+      { key: "faq", label: "Hjelp & FAQ", icon: "help-circle" as const, screen: null, url: null },
+      { key: "videoguides", label: "Videoguider", icon: "video" as const, screen: null, url: "https://github.com/creaotrhubn26/evendi/blob/main/VENDOR_DOCUMENTATION.md#videoguider" },
+      { key: "whatsnew", label: "Hva er nytt", icon: "star" as const, screen: "WhatsNew" as const, screenParams: { category: "vendor" }, url: null },
+      { key: "status", label: "Systemstatus", icon: "activity" as const, screen: "Status" as const, url: null },
+      { key: "email", label: "E-post Support", icon: "mail" as const, screen: null, url: `mailto:${supportEmail}` },
+      { key: "website", label: websiteUrl.replace(/^https?:\/\//, ""), icon: "globe" as const, screen: null, url: websiteUrl },
+    ],
+    [supportEmail, websiteUrl]
+  );
   // Filter help links based on admin settings
   const visibleHelpLinks = useMemo(() => {
     const getSetting = (key: string, defaultValue: string = "true") => {
       return appSettings?.find((s) => s.key === key)?.value ?? defaultValue;
     };
-    return HELP_LINKS.filter((link) => {
+    return helpLinks.filter((link) => {
       // Check visibility settings for each link
-      switch (link.label) {
-        case "Fullstendig Dokumentasjon":
+      switch (link.key) {
+        case "documentation":
           return getSetting("help_show_documentation", "true") === "true";
-        case "Hjelp & FAQ":
+        case "faq":
           return getSetting("help_show_faq", "true") === "true";
-        case "Videoguider":
+        case "videoguides":
           return getSetting("help_show_videoguides", "false") === "true";
-        case "Hva er nytt":
+        case "whatsnew":
           return getSetting("help_show_whatsnew", "true") === "true";
-        case "Systemstatus":
+        case "status":
           return getSetting("help_show_status", "true") === "true";
-        case "E-post Support":
+        case "email":
           return getSetting("help_show_email_support", "false") === "true";
-        case "Norwedfilm.no":
+        case "website":
           return getSetting("help_show_norwedfilm", "true") === "true";
         default:
           return true;
       }
     });
-  }, [appSettings]);
+  }, [appSettings, helpLinks]);
   const loadSessionToken = async (): Promise<string|null> => {
     const raw = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
     if (!raw) return null;
@@ -325,9 +334,9 @@ export default function VendorAdminChatScreen() {
                   <View style={[styles.welcomeBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
                   <View style={styles.welcomeHeader}>
                     <EvendiIcon name="message-circle" size={32} color={theme.accent} />
-                    <ThemedText style={styles.welcomeTitle}>Evendi Support</ThemedText>
+                    <ThemedText style={styles.welcomeTitle}>{supportTitle}</ThemedText>
                   </View>
-                  <ThemedText style={styles.welcomeBody}>{WELCOME_MESSAGE}</ThemedText>
+                    <ThemedText style={styles.welcomeBody}>{welcomeMessage}</ThemedText>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.sm, marginBottom: Spacing.md }}>
                     <EvendiIcon name="book-open" size={16} color={theme.accent} />
                     <ThemedText style={{ fontWeight: "600", color: theme.text, fontSize: 13 }}>Ressurser</ThemedText>
@@ -335,7 +344,7 @@ export default function VendorAdminChatScreen() {
                   <View style={styles.quickLinks}>
                     {visibleHelpLinks.map((link) => (
                       <Pressable
-                        key={link.label}
+                        key={link.key}
                         style={[styles.quickLink, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
                         onPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

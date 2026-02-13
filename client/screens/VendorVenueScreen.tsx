@@ -16,6 +16,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
+import { useVendorProfile } from "@/hooks/useVendorProfile";
 import { showToast } from "@/lib/toast";
 import { showConfirm, showOptions } from "@/lib/dialogs";
 import PersistentTextInput from "@/components/PersistentTextInput";
@@ -104,7 +105,12 @@ export default function VendorVenueScreen() {
   const [availStatus, setAvailStatus] = useState<"available" | "blocked" | "limited">("available");
   const [availMaxBookings, setAvailMaxBookings] = useState("");
   const [availNotes, setAvailNotes] = useState("");
-  const vendorConfig = getVendorConfig(null, "Venue");
+  const vendorProfileQuery = useVendorProfile(sessionToken);
+  const vendorConfig = getVendorConfig(
+    vendorProfileQuery.data?.category?.id ?? null,
+    vendorProfileQuery.data?.category?.name ?? "Venue",
+    vendorProfileQuery.data?.category?.dashboardKey ?? null
+  );
   useEffect(() => {
     const loadSession = async () => {
       const data = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);

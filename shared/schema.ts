@@ -26,6 +26,9 @@ export const vendorCategories = pgTable("vendor_categories", {
   name: text("name").notNull(),
   icon: text("icon").notNull(),
   description: text("description"),
+  slug: text("slug"),
+  dashboardKey: text("dashboard_key"),
+  sortOrder: integer("sort_order").default(0),
   applicableEventTypes: text("applicable_event_types").array(),
 });
 
@@ -39,6 +42,9 @@ export const vendors = pgTable("vendors", {
   organizationNumber: text("organization_number"),
   categoryId: varchar("category_id").references(() => vendorCategories.id, { onDelete: "set null" }),
   description: text("description"),
+  whyStatement: text("why_statement"),
+  howStatement: text("how_statement"),
+  whatStatement: text("what_statement"),
   location: text("location"),
   phone: text("phone"),
   website: text("website"),
@@ -68,6 +74,10 @@ export const insertVendorCategorySchema = createInsertSchema(vendorCategories).p
   name: true,
   icon: true,
   description: true,
+  slug: true,
+  dashboardKey: true,
+  sortOrder: true,
+  applicableEventTypes: true,
 });
 
 export const insertVendorSchema = createInsertSchema(vendors).omit({

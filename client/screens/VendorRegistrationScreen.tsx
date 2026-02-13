@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -17,6 +17,8 @@ import { renderIcon } from "@/lib/custom-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency, getCurrencyCode } from "@/lib/format-currency";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
@@ -37,6 +39,7 @@ interface VendorCategory {
   name: string;
   icon: string;
   description: string | null;
+  sortOrder?: number | null;
 }
 interface SubscriptionTier {
   id: string;
@@ -54,6 +57,7 @@ export default function VendorRegistrationScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme, designSettings } = useTheme();
+  const { getSetting } = useAppSettings();
   const logoSource = designSettings.logoUrl
     ? { uri: designSettings.logoUrl }
     : require("../../assets/images/Evendi_logo_norsk_tagline.png");
@@ -198,6 +202,14 @@ export default function VendorRegistrationScreen() {
   const { data: categories = [], isLoading: categoriesLoading } = useQuery<VendorCategory[]>({
     queryKey: ["/api/vendor-categories"],
   });
+  const sortedCategories = useMemo(() => {
+    return [...categories].sort((a, b) => {
+      const aOrder = a.sortOrder ?? 9999;
+      const bOrder = b.sortOrder ?? 9999;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.name.localeCompare(b.name);
+    });
+  }, [categories]);
   const { data: subscriptionTiers = [], isLoading: tiersLoading } = useQuery<SubscriptionTier[]>({
     queryKey: ["/api/subscription/tiers"],
     queryFn: async () => {
@@ -399,7 +411,7 @@ export default function VendorRegistrationScreen() {
           <ActivityIndicator color={theme.accent} />
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesScroll}>
-            {categories.map((cat) => (
+            {sortedCategories.map((cat) => (
               <Pressable
                 key={cat.id}
                 onPress={() => {
@@ -471,7 +483,7 @@ export default function VendorRegistrationScreen() {
                     </ThemedText>
                   )}
                   <ThemedText style={[styles.tierPrice, { color: theme.accent }]}>
-                    {tier.priceNok} NOK/mnd
+                    {formatCurrency(tier.priceNok, getSetting)} {getCurrencyCode(getSetting)}/mnd
                   </ThemedText>
                   <View style={styles.tierFeatures}>
                     {tier.maxInspirationPhotos > 0 && (
@@ -551,7 +563,7 @@ export default function VendorRegistrationScreen() {
           <PersistentTextInput
             draftKey="VendorRegistrationScreen-input-8"
             style={[styles.input, { color: theme.text }]}
-            placeholder="Prisklasse (f.eks. 20 000 - 40 000 kr)"
+            placeholder={`Prisklasse (f.eks. 20 000 - 40 000 ${getCurrencyCode(getSetting)})`}
             placeholderTextColor={theme.textMuted}
             value={formData.priceRange}
             onChangeText={(v) => updateField("priceRange", v)}

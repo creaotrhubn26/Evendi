@@ -33,26 +33,26 @@ function verifyPassword(password: string, hash: string): boolean {
 }
 
 const DEFAULT_CATEGORIES = [
-  { name: "Fotograf", icon: "camera", description: "Profesjonelle fotografer" },
-  { name: "Videograf", icon: "film", description: "Profesjonell filmtjeneste" },
-  { name: "Blomster", icon: "flower", description: "Blomsterdekoratører" },
-  { name: "Catering", icon: "coffee", description: "Mat og drikke" },
-  { name: "Musikk", icon: "music", description: "Band, DJ og musikere" },
-  { name: "Venue", icon: "venue", description: "Festlokaler og arenaer" },
-  { name: "Kake", icon: "cake", description: "Festkaker og bestilling" },
-  { name: "Planlegger", icon: "clipboard", description: "Arrangementplanleggere" },
-  { name: "Hår & Makeup", icon: "scissors", description: "Styling og sminke" },
-  { name: "Transport", icon: "car", description: "Transport og kjøretøy" },
-  { name: "Invitasjoner", icon: "mail", description: "Invitasjoner og trykkeri" },
-  { name: "Underholdning", icon: "sparkles", description: "Artister og show" },
-  { name: "Dekorasjon", icon: "star", description: "Dekorasjon og pynt" },
-  { name: "Konfektyrer", icon: "gift", description: "Sjokolade og godteri" },
-  { name: "Bar & Drikke", icon: "cocktail", description: "Bartjenester og drikke" },
-  { name: "Fotoboks", icon: "aperture", description: "Fotoboks og moro" },
-  { name: "Ringer", icon: "diamond", description: "Ringer og smykker" },
-  { name: "Drakt & Dress", icon: "suit", description: "Antrekk og klær" },
-  { name: "Overnatting", icon: "bed", description: "Hotell og overnatting" },
-  { name: "Husdyr", icon: "heart", description: "Kjæledyr på arrangementet" },
+  { name: "Fotograf", icon: "camera", description: "Profesjonelle fotografer", slug: "photographer", dashboardKey: "photographer", sortOrder: 10 },
+  { name: "Videograf", icon: "film", description: "Profesjonell filmtjeneste", slug: "videographer", dashboardKey: "videographer", sortOrder: 20 },
+  { name: "Blomster", icon: "flower", description: "Blomsterdekoratører", slug: "florist", dashboardKey: "florist", sortOrder: 30 },
+  { name: "Catering", icon: "coffee", description: "Mat og drikke", slug: "catering", dashboardKey: "caterer", sortOrder: 40 },
+  { name: "Musikk", icon: "music", description: "Band, DJ og musikere", slug: "music", dashboardKey: "musician", sortOrder: 50 },
+  { name: "Venue", icon: "venue", description: "Festlokaler og arenaer", slug: "venue", dashboardKey: "venue", sortOrder: 60 },
+  { name: "Kake", icon: "cake", description: "Festkaker og bestilling", slug: "cake", dashboardKey: "cake", sortOrder: 70 },
+  { name: "Planlegger", icon: "clipboard", description: "Arrangementplanleggere", slug: "planner", dashboardKey: "coordinator", sortOrder: 80 },
+  { name: "Hår & Makeup", icon: "scissors", description: "Styling og sminke", slug: "beauty", dashboardKey: "hair-makeup", sortOrder: 90 },
+  { name: "Transport", icon: "car", description: "Transport og kjøretøy", slug: "transport", dashboardKey: "transport", sortOrder: 100 },
+  { name: "Invitasjoner", icon: "mail", description: "Invitasjoner og trykkeri", slug: "invitations", dashboardKey: "default", sortOrder: 110 },
+  { name: "Underholdning", icon: "sparkles", description: "Artister og show", slug: "entertainment", dashboardKey: "default", sortOrder: 120 },
+  { name: "Dekorasjon", icon: "star", description: "Dekorasjon og pynt", slug: "decoration", dashboardKey: "default", sortOrder: 130 },
+  { name: "Konfektyrer", icon: "gift", description: "Sjokolade og godteri", slug: "confectionery", dashboardKey: "default", sortOrder: 140 },
+  { name: "Bar & Drikke", icon: "cocktail", description: "Bartjenester og drikke", slug: "bar", dashboardKey: "default", sortOrder: 150 },
+  { name: "Fotoboks", icon: "aperture", description: "Fotoboks og moro", slug: "photobooth", dashboardKey: "default", sortOrder: 160 },
+  { name: "Ringer", icon: "diamond", description: "Ringer og smykker", slug: "rings", dashboardKey: "default", sortOrder: 170 },
+  { name: "Drakt & Dress", icon: "suit", description: "Antrekk og klær", slug: "dress", dashboardKey: "default", sortOrder: 180 },
+  { name: "Overnatting", icon: "bed", description: "Hotell og overnatting", slug: "accommodation", dashboardKey: "default", sortOrder: 190 },
+  { name: "Husdyr", icon: "heart", description: "Kjæledyr på arrangementet", slug: "pets", dashboardKey: "default", sortOrder: 200 },
 ];
 
 const DEFAULT_INSPIRATION_CATEGORIES = [
@@ -67,6 +67,16 @@ const DEFAULT_INSPIRATION_CATEGORIES = [
   { name: "Bryllupsbilder", icon: "camera", sortOrder: 9 },
   { name: "Invitasjoner", icon: "mail", sortOrder: 10 },
 ];
+
+const slugifyCategory = (value: string) => {
+  return value
+    .toLowerCase()
+    .replace(/å/g, "a")
+    .replace(/æ/g, "ae")
+    .replace(/ø/g, "o")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+};
 
 async function fetchYrWeather(lat: number, lon: number): Promise<any> {
   const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
@@ -478,7 +488,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/vendor-categories", async (req: Request, res: Response) => {
     try {
-      const categories = await db.select().from(vendorCategories);
+      const categories = await db
+        .select()
+        .from(vendorCategories)
+        .orderBy(sql`COALESCE(${vendorCategories.sortOrder}, 9999)`, vendorCategories.name);
       
       // Optionally filter by event type
       const eventType = req.query.eventType as string | undefined;
@@ -681,6 +694,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         website: profileData.website || null,
         priceRange: profileData.priceRange || null,
       }).returning();
+
+      try {
+        await db.execute(sql`
+          INSERT INTO invite_requests
+            (email, first_name, last_name, profession, company_name, status, user_journey_status, source, created_at, updated_at)
+          VALUES
+            (${email}, NULL, NULL, ${profileData.categoryId}, ${profileData.businessName}, 'pending', 'pending', 'evendi', NOW(), NOW())
+        `);
+      } catch (inviteError) {
+        console.warn("Invite request insert skipped:", inviteError);
+      }
 
       // Create trial subscription if tierId is provided
       if (tierId) {
@@ -1171,6 +1195,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "logo_use_auth",
     "logo_use_admin_header",
     "logo_use_docs",
+    // Currency & locale
+    "currency_code",
+    "currency_locale",
+    // Store URLs
+    "app_store_url",
+    "play_store_url",
+    // Legal
+    "terms_url",
+    "privacy_policy_url",
+    // Footer
+    "footer_brand_text",
+    "footer_tagline",
+    // Copyright
+    "copyright_text",
+    // Landing page content
+    "landing_hero_title",
+    "landing_hero_brand",
+    "landing_hero_title_en",
+    "landing_hero_description",
+    "landing_hero_description_en",
+    "landing_cta_title",
+    "landing_cta_title_en",
+    "landing_cta_description",
+    "landing_cta_description_en",
+    "landing_couple_features_json",
+    "landing_vendor_features_json",
+    "landing_stats_json",
+    "landing_testimonials_json",
+    "landing_steps_json",
+    // Vendor support
+    "vendor_support_welcome_message",
+    // Company story
+    "company_story_json",
+    // Semantic colors
+    "color_success",
+    "color_warning",
+    "color_error",
+    "color_info",
+    "rating_star_color",
+    // Notification templates
+    "notification_countdown_title_template",
+    "notification_countdown_body_template",
+    "notification_checklist_title",
+    "notification_checklist_body_template",
+    "notification_toast_checklist_failed",
+    "notification_toast_updated",
+    "notification_toast_permission_granted",
   ]);
 
   const ADMIN_SETTINGS_KEYS = new Set([
@@ -1179,8 +1250,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "require_inspiration_approval",
     "enable_messaging",
     "max_file_upload_mb",
-    "privacy_policy_url",
-    "terms_url",
   ]);
 
   const checkAdminAuth = async (req: Request, res: Response): Promise<boolean> => {
@@ -1356,6 +1425,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
     if (!publicSettingsOk) {
+      finalizeSmokeTest(job, "failed");
+      return;
+    }
+
+    const vendorCategoryOk = await startCheck("vendor-categories", async () => {
+      const categories = await db.select().from(vendorCategories);
+      if (!categories.length) {
+        throw new Error("No vendor categories found");
+      }
+      const missing = categories.filter((cat) => !cat.slug || !cat.dashboardKey);
+      if (missing.length > 0) {
+        throw new Error(`Missing slug/dashboardKey for ${missing.length} categories`);
+      }
+    });
+    if (!vendorCategoryOk) {
       finalizeSmokeTest(job, "failed");
       return;
     }
@@ -1714,6 +1798,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/admin/invite-requests", async (req: Request, res: Response) => {
+    if (!(await checkAdminAuth(req, res))) return;
+
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const source = typeof req.query.source === "string" ? req.query.source : undefined;
+
+      const result = await db.execute(sql`
+        SELECT id, email, first_name, last_name, profession, company_name, status, user_journey_status, source, created_at
+        FROM invite_requests
+        WHERE 1 = 1
+        ${status ? sql`AND status = ${status}` : sql``}
+        ${source ? sql`AND source = ${source}` : sql``}
+        ORDER BY created_at DESC
+      `);
+
+      res.json(result.rows);
+    } catch (error) {
+      console.error("Error fetching invite requests:", error);
+      res.status(500).json({ error: "Kunne ikke hente invitasjoner" });
+    }
+  });
+
   app.post("/api/admin/vendors/:id/approve", async (req: Request, res: Response) => {
     if (!(await checkAdminAuth(req, res))) return;
     
@@ -1895,7 +2002,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let category = null;
       if (vendor.categoryId) {
         const [cat] = await db.select().from(vendorCategories).where(eq(vendorCategories.id, vendor.categoryId));
-        category = cat ? { id: cat.id, name: cat.name } : null;
+        category = cat ? {
+          id: cat.id,
+          name: cat.name,
+          slug: cat.slug,
+          dashboardKey: cat.dashboardKey,
+          sortOrder: cat.sortOrder,
+          icon: cat.icon,
+          applicableEventTypes: cat.applicableEventTypes || [],
+        } : null;
       }
 
       res.json({
@@ -1904,6 +2019,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         businessName: vendor.businessName,
         organizationNumber: vendor.organizationNumber,
         description: vendor.description,
+        whyStatement: vendor.whyStatement,
+        howStatement: vendor.howStatement,
+        whatStatement: vendor.whatStatement,
         location: vendor.location,
         phone: vendor.phone,
         website: vendor.website,
@@ -1986,7 +2104,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
-      const { businessName, organizationNumber, description, location, phone, website, priceRange, googleReviewUrl, culturalExpertise } = req.body;
+      const { businessName, organizationNumber, description, whyStatement, howStatement, whatStatement, location, phone, website, priceRange, googleReviewUrl, culturalExpertise } = req.body;
 
       if (!businessName || businessName.trim().length < 2) {
         return res.status(400).json({ error: "Bedriftsnavn er påkrevd" });
@@ -1997,6 +2115,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           businessName: businessName.trim(),
           organizationNumber: organizationNumber || null,
           description: description || null,
+          whyStatement: whyStatement || null,
+          howStatement: howStatement || null,
+          whatStatement: whatStatement || null,
           location: location || null,
           phone: phone || null,
           website: website || null,
@@ -7066,11 +7187,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!(await checkAdminAuth(req, res))) return;
     
     try {
-      const { name, icon, description } = req.body;
+      const { name, icon, description, slug, dashboardKey, sortOrder, applicableEventTypes } = req.body;
+      const resolvedSlug = slug && String(slug).trim().length > 0 ? slugifyCategory(String(slug)) : slugifyCategory(String(name || ""));
+      const resolvedDashboardKey = dashboardKey && String(dashboardKey).trim().length > 0 ? String(dashboardKey) : resolvedSlug || null;
+      const resolvedSortOrder = Number.isFinite(Number(sortOrder)) ? Number(sortOrder) : 0;
+      const resolvedEventTypes = Array.isArray(applicableEventTypes) && applicableEventTypes.length > 0
+        ? applicableEventTypes
+        : null;
       const [newCategory] = await db.insert(vendorCategories).values({
         name,
         icon,
         description: description || null,
+        slug: resolvedSlug || null,
+        dashboardKey: resolvedDashboardKey || null,
+        sortOrder: resolvedSortOrder,
+        applicableEventTypes: resolvedEventTypes,
       }).returning();
       res.json(newCategory);
     } catch (error) {
@@ -7084,10 +7215,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       const { id } = req.params;
-      const { name, icon, description } = req.body;
+      const { name, icon, description, slug, dashboardKey, sortOrder, applicableEventTypes } = req.body;
+      const resolvedSlug = slug && String(slug).trim().length > 0 ? slugifyCategory(String(slug)) : slugifyCategory(String(name || ""));
+      const resolvedDashboardKey = dashboardKey && String(dashboardKey).trim().length > 0 ? String(dashboardKey) : resolvedSlug || null;
+      const resolvedSortOrder = Number.isFinite(Number(sortOrder)) ? Number(sortOrder) : 0;
+      const resolvedEventTypes = Array.isArray(applicableEventTypes) && applicableEventTypes.length > 0
+        ? applicableEventTypes
+        : null;
       
       await db.update(vendorCategories)
-        .set({ name, icon, description })
+        .set({
+          name,
+          icon,
+          description,
+          slug: resolvedSlug || null,
+          dashboardKey: resolvedDashboardKey || null,
+          sortOrder: resolvedSortOrder,
+          applicableEventTypes: resolvedEventTypes,
+        })
         .where(eq(vendorCategories.id, id));
       
       res.json({ message: "Kategori oppdatert" });

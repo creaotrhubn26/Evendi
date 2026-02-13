@@ -16,6 +16,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig } from "@/lib/vendor-adapter";
+import { useVendorProfile } from "@/hooks/useVendorProfile";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 type Navigation = NativeStackNavigationProp<any>;
 type VendorProduct = {
@@ -40,7 +41,12 @@ export default function VendorKakeScreen() {
   const navigation = useNavigation<Navigation>();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const vendorConfig = getVendorConfig(null, "Kake");
+  const vendorProfileQuery = useVendorProfile(sessionToken);
+  const vendorConfig = getVendorConfig(
+    vendorProfileQuery.data?.category?.id ?? null,
+    vendorProfileQuery.data?.category?.name ?? "Kake",
+    vendorProfileQuery.data?.category?.dashboardKey ?? null
+  );
   useEffect(() => {
     const loadSession = async () => {
       const data = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);

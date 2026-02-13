@@ -31,6 +31,8 @@ import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
 import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
@@ -79,6 +81,7 @@ export default function BlomsterScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const navigation = useNavigation<NavigationProp>();
   const queryClient = useQueryClient();
 
@@ -498,8 +501,8 @@ export default function BlomsterScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("nb-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 }).format(amount);
+  const formatCurrencyValue = (amount: number) => {
+    return formatCurrency(amount, getSetting);
   };
 
   const getItemTypeLabel = (type: string) => {
@@ -615,7 +618,7 @@ export default function BlomsterScreen() {
         <View style={[styles.costSummary, { backgroundColor: theme.backgroundDefault }]}>
           <ThemedText style={styles.costLabel}>Estimert total</ThemedText>
           <ThemedText style={[styles.costAmount, { color: theme.primary }]}>
-            {formatCurrency(totalEstimated)}
+            {formatCurrencyValue(totalEstimated)}
           </ThemedText>
         </View>
       )}
@@ -676,7 +679,7 @@ export default function BlomsterScreen() {
                   )}
                   {selection.estimatedPrice && (
                     <ThemedText style={[styles.selectionPrice, { color: theme.primary }]}>
-                      {formatCurrency(selection.estimatedPrice * (selection.quantity || 1))}
+                      {formatCurrencyValue(selection.estimatedPrice * (selection.quantity || 1))}
                     </ThemedText>
                   )}
                 </View>
@@ -715,11 +718,11 @@ export default function BlomsterScreen() {
           <EvendiIcon name="edit-2" size={16} color={theme.textSecondary} />
         </View>
         <ThemedText style={[styles.budgetAmount, { color: theme.primary }]}>
-          {formatCurrency(budget)}
+          {formatCurrencyValue(budget)}
         </ThemedText>
         {budget > 0 && totalEstimated > 0 && (
           <ThemedText style={[styles.budgetUsed, { color: totalEstimated > budget ? Colors.light.error : theme.textSecondary }]}>
-            Estimert brukt: {formatCurrency(totalEstimated)} ({Math.round((totalEstimated / budget) * 100)}%)
+            Estimert brukt: {formatCurrencyValue(totalEstimated)} ({Math.round((totalEstimated / budget) * 100)}%)
           </ThemedText>
         )}
       </Pressable>

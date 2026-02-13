@@ -31,6 +31,8 @@ import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
 import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { useEventType } from "@/hooks/useEventType";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
@@ -70,6 +72,7 @@ export default function HaarMakeupScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const navigation = useNavigation<NavigationProp>();
   const queryClient = useQueryClient();
 
@@ -519,8 +522,8 @@ export default function HaarMakeupScreen() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("nb-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 }).format(amount);
+  const formatCurrencyValue = (amount: number) => {
+    return formatCurrency(amount, getSetting);
   };
 
   const completedSteps = TIMELINE_STEPS.filter((step) => timeline[step.key as keyof HairMakeupTimeline]).length;
@@ -709,7 +712,7 @@ export default function HaarMakeupScreen() {
           <EvendiIcon name="edit-2" size={16} color={theme.textSecondary} />
         </View>
         <ThemedText style={[styles.budgetAmount, { color: theme.primary }]}>
-          {formatCurrency(budget)}
+          {formatCurrencyValue(budget)}
         </ThemedText>
       </Pressable>
 

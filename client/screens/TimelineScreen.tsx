@@ -12,6 +12,8 @@ import Animated, { FadeInDown, FadeInLeft } from "react-native-reanimated";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getCoupleSession, getTimelineCulture, saveTimelineCulture, getSpeeches } from "@/lib/storage";
 import { getScheduleEvents, updateScheduleEvent } from "@/lib/api-schedule-events";
@@ -58,6 +60,7 @@ export default function TimelineScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
 
   const [schedule, setSchedule] = useState<ScheduleEvent[]>([]);
   const [weddingDate, setWeddingDate] = useState("");
@@ -668,8 +671,8 @@ export default function TimelineScreen() {
                         </ThemedText>
                         <ThemedText style={[styles.travelCompactTime, { color: "#2196F3" }]}>{badge}</ThemedText>
                         {travel?.travel?.fuelCostNok ? (
-                          <ThemedText style={[styles.travelCompactDist, { color: theme.textSecondary }]}>
-                            ~{Math.round(travel.travel.fuelCostNok)} kr
+                          <ThemedText style={[styles.travelCompactDist, { color: theme.textSecondary }]}> 
+                            ~{formatCurrency(Math.round(travel.travel.fuelCostNok), getSetting)}
                           </ThemedText>
                         ) : null}
                         <EvendiIcon name="navigation" size={12} color="#2196F3" />

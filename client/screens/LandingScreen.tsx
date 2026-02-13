@@ -26,6 +26,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
@@ -61,6 +62,22 @@ function tierValue<T>(tier: number, map: Record<number, T>): T {
   return map[1];
 }
 
+function parseJsonSetting<T>(raw: string | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function splitByPlaceholder(text: string, placeholder: string): [string, string] {
+  const index = text.indexOf(placeholder);
+  if (index === -1) return [text, ""];
+  return [text.slice(0, index), text.slice(index + placeholder.length)];
+}
+
 /* ================================================================
    DATA (from DocumentationScreen features)
    ================================================================ */
@@ -69,6 +86,16 @@ interface FeatureItem {
   title: string;
   desc: string;
   color: string;
+}
+interface StatItem {
+  value: string;
+  label: string;
+}
+interface TestimonialItem {
+  initials: string;
+  name: string;
+  role: string;
+  quote: string;
 }
 
 const COUPLE_FEATURES: FeatureItem[] = [
@@ -115,9 +142,51 @@ const TESTIMONIALS = [
    ================================================================ */
 export default function LandingScreen() {
   const { theme, isDark, designSettings } = useTheme();
+  const { getSetting, settingsMap } = useAppSettings();
   const logoSource = designSettings.logoUrl
     ? { uri: designSettings.logoUrl }
     : LOGO;
+  const supportEmail = getSetting("support_email", "support@evendi.no");
+  const heroBrand = getSetting("landing_hero_brand", "Perfekt Match");
+  const heroTitleNo = getSetting("landing_hero_title", "Planlegg drømmearrangementet ditt med {brand}");
+  const heroTitleEn = getSetting("landing_hero_title_en", "Plan your dream event with {brand}");
+  const heroDescNo = getSetting(
+    "landing_hero_description",
+    "Evendi kobler par med de beste leverandørene. Planlegg arrangementet ditt — med sjekkliste, budsjett, gjesteliste, tidslinje og inspirasjon."
+  );
+  const heroDescEn = getSetting(
+    "landing_hero_description_en",
+    "Evendi connects couples with top vendors. Plan your event with checklists, budgets, guest lists, timelines, and inspiration."
+  );
+  const ctaTitleNo = getSetting("landing_cta_title", "Klar for å planlegge drømmearrangementet?");
+  const ctaTitleEn = getSetting("landing_cta_title_en", "Ready to plan your dream event?");
+  const ctaDescNo = getSetting(
+    "landing_cta_description",
+    "Last ned Evendi gratis og kom i gang med planleggingen i dag."
+  );
+  const ctaDescEn = getSetting("landing_cta_description_en", "");
+  const [heroNoBefore, heroNoAfter] = splitByPlaceholder(heroTitleNo, "{brand}");
+  const [heroEnBefore, heroEnAfter] = splitByPlaceholder(heroTitleEn, "{brand}");
+  const coupleFeatures = useMemo(
+    () => parseJsonSetting<FeatureItem[]>(getSetting("landing_couple_features_json", ""), COUPLE_FEATURES),
+    [getSetting, settingsMap]
+  );
+  const vendorFeatures = useMemo(
+    () => parseJsonSetting<FeatureItem[]>(getSetting("landing_vendor_features_json", ""), VENDOR_FEATURES),
+    [getSetting, settingsMap]
+  );
+  const steps = useMemo(
+    () => parseJsonSetting<typeof STEPS>(getSetting("landing_steps_json", ""), STEPS),
+    [getSetting, settingsMap]
+  );
+  const stats = useMemo(
+    () => parseJsonSetting<StatItem[]>(getSetting("landing_stats_json", ""), STATS),
+    [getSetting, settingsMap]
+  );
+  const testimonials = useMemo(
+    () => parseJsonSetting<TestimonialItem[]>(getSetting("landing_testimonials_json", ""), TESTIMONIALS),
+    [getSetting, settingsMap]
+  );
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const tier = useTier();
   const scrollY = useSharedValue(0);
@@ -146,7 +215,7 @@ export default function LandingScreen() {
   const testCols = tierValue(tier, { 1: 1, 3: 2, 5: 3 });
   const statCols = tierValue(tier, { 1: 2, 2: 4 });
 
-  const features = activeTab === "couple" ? COUPLE_FEATURES : VENDOR_FEATURES;
+  const features = activeTab === "couple" ? coupleFeatures : vendorFeatures;
 
   const handleGetStarted = useCallback(() => {
     navigation.navigate("Login");
@@ -203,24 +272,29 @@ export default function LandingScreen() {
             </Animated.View>
 
             <Animated.View entering={FadeInDown.duration(700).delay(300)}>
-              <ThemedText style={[styles.heroTitle, { fontSize: heroTitleSize, color: theme.text }]}>
-                Planlegg drømmearrangementet ditt med{" "}
-                <ThemedText style={[styles.heroTitle, { fontSize: heroTitleSize, color: "#1E6BFF" }]}>
-                  Perfekt Match
-                </ThemedText>
+              <ThemedText style={[styles.heroTitle, { fontSize: heroTitleSize, color: theme.text }]}> 
+                {heroNoBefore}
+                {heroTitleNo.includes("{brand}") && (
+                  <ThemedText style={[styles.heroTitle, { fontSize: heroTitleSize, color: theme.info }]}>
+                    {heroBrand}
+                  </ThemedText>
+                )}
+                {heroNoAfter}
                 {"\n"}
-                Plan your dream event with{" "}
-                <ThemedText style={[styles.heroTitle, { fontSize: heroTitleSize, color: "#1E6BFF" }]}>
-                  Perfekt Match
-                </ThemedText>
+                {heroEnBefore}
+                {heroTitleEn.includes("{brand}") && (
+                  <ThemedText style={[styles.heroTitle, { fontSize: heroTitleSize, color: theme.info }]}>
+                    {heroBrand}
+                  </ThemedText>
+                )}
+                {heroEnAfter}
               </ThemedText>
             </Animated.View>
 
             <Animated.View entering={FadeInDown.duration(700).delay(400)}>
-              <ThemedText style={[styles.heroDesc, { fontSize: heroDescSize, color: theme.textSecondary }]}>
-                Evendi kobler par med de beste leverandørene. Planlegg arrangementet ditt — med sjekkliste, budsjett, gjesteliste, tidslinje og inspirasjon.
-                {"\n"}
-                Evendi connects couples with top vendors. Plan your event with checklists, budgets, guest lists, timelines, and inspiration.
+              <ThemedText style={[styles.heroDesc, { fontSize: heroDescSize, color: theme.textSecondary }]}> 
+                {heroDescNo}
+                {heroDescEn ? `\n${heroDescEn}` : ""}
               </ThemedText>
             </Animated.View>
 
@@ -255,7 +329,7 @@ export default function LandingScreen() {
         {/* ====== STATS ====== */}
         <Animated.View entering={FadeInUp.duration(600).delay(600)} style={contentStyle}>
           <View style={[styles.statsGrid, { gap: tierValue(tier, { 1: 10, 3: 14, 5: 18 }) }]}>
-            {STATS.map((stat, i) => (
+            {stats.map((stat, i) => (
               <View
                 key={i}
                 style={[
@@ -366,7 +440,7 @@ export default function LandingScreen() {
           </Animated.View>
 
           <View style={[styles.grid, { gap: tierValue(tier, { 1: 16, 3: 18, 5: 24 }) }]}>
-            {STEPS.map((step, i) => (
+            {steps.map((step, i) => (
               <Animated.View
                 key={i}
                 entering={FadeInDown.duration(400).delay(i * 100)}
@@ -403,7 +477,7 @@ export default function LandingScreen() {
           </Animated.View>
 
           <View style={[styles.grid, { gap: tierValue(tier, { 1: 12, 3: 16, 5: 24 }) }]}>
-            {TESTIMONIALS.map((t, i) => (
+            {testimonials.map((t, i) => (
               <Animated.View
                 key={i}
                 entering={FadeInDown.duration(400).delay(i * 100)}
@@ -449,13 +523,14 @@ export default function LandingScreen() {
             }
             style={[styles.ctaBanner, { paddingHorizontal: pad, borderTopColor: "rgba(30,107,255,0.15)", borderBottomColor: "rgba(0,210,198,0.1)" }]}
           >
-            <ThemedText style={[styles.ctaTitle, { fontSize: sectionTitleSize, color: theme.text }]}>
-              Klar for å planlegge drømmearrangementet?
+            <ThemedText style={[styles.ctaTitle, { fontSize: sectionTitleSize, color: theme.text }]}> 
+              {ctaTitleNo}
               {"\n"}
-              Ready to plan your dream event?
+              {ctaTitleEn}
             </ThemedText>
-            <ThemedText style={[styles.ctaDesc, { color: theme.textSecondary }]}>
-              Last ned Evendi gratis og kom i gang med planleggingen i dag.
+            <ThemedText style={[styles.ctaDesc, { color: theme.textSecondary }]}> 
+              {ctaDescNo}
+              {ctaDescEn ? `\n${ctaDescEn}` : ""}
             </ThemedText>
             <Pressable
               onPress={handleGetStarted}
@@ -478,8 +553,8 @@ export default function LandingScreen() {
             resizeMode="contain"
           />
           <View style={styles.footerLinks}>
-            <Pressable onPress={() => Linking.openURL("mailto:support@evendi.no")}>
-              <ThemedText style={[styles.footerLink, { color: theme.textMuted }]}>support@evendi.no</ThemedText>
+            <Pressable onPress={() => Linking.openURL(`mailto:${supportEmail}`)}>
+              <ThemedText style={[styles.footerLink, { color: theme.textMuted }]}>{supportEmail}</ThemedText>
             </Pressable>
           </View>
           <ThemedText style={[styles.footerCopy, { color: theme.textMuted }]}>

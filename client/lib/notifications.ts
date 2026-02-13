@@ -2,6 +2,7 @@ import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { getWeddingDetails, getCoupleSession, getAppLanguage, type AppLanguage } from "./storage";
+import { getApiUrl } from "@/lib/query-client";
 import { getChecklistTasks } from "./api-checklist";
 import { showToast as showToastNative } from "@/lib/toast";
 
@@ -11,6 +12,57 @@ const NOTIFICATION_SETTINGS_KEY = "@evendi/notification_settings";
 const COUNTDOWN_NOTIFICATIONS_KEY = "@evendi/countdown_notifications";
 const CHECKLIST_NOTIFICATIONS_KEY = "@evendi/checklist_notifications";
 const CUSTOM_REMINDERS_KEY = "@evendi/custom_reminders";
+
+const NOTIFICATION_SETTINGS_CACHE_TTL = 5 * 60 * 1000;
+let cachedAppSettings: Record<string, string> | null = null;
+let cachedAppSettingsAt = 0;
+
+const applyTemplate = (template: string, params: Record<string, string | number>) =>
+  template.replace(/\{(\w+)\}/g, (match, key) => {
+    if (Object.prototype.hasOwnProperty.call(params, key)) {
+      return String(params[key]);
+    }
+    return match;
+  });
+
+const parseLocalizedSetting = (
+  raw: string | undefined,
+  language: AppLanguage,
+  fallback: string
+): string => {
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw) as Partial<Record<AppLanguage, string>>;
+    if (parsed && typeof parsed === "object" && parsed[language]) {
+      return parsed[language] as string;
+    }
+  } catch {
+    // Ignore JSON parsing errors and fall back to raw string
+  }
+  return raw;
+};
+
+const getAppSettingsMap = async (): Promise<Record<string, string>> => {
+  const now = Date.now();
+  if (cachedAppSettings && now - cachedAppSettingsAt < NOTIFICATION_SETTINGS_CACHE_TTL) {
+    return cachedAppSettings;
+  }
+  try {
+    const url = new URL("/api/app-settings", getApiUrl());
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error("Failed to fetch app settings");
+    const data = (await res.json()) as Array<{ key: string; value: string }>;
+    const map: Record<string, string> = {};
+    data.forEach((setting) => {
+      map[setting.key] = setting.value;
+    });
+    cachedAppSettings = map;
+    cachedAppSettingsAt = now;
+    return map;
+  } catch {
+    return cachedAppSettings ?? {};
+  }
+};
 
 type NotificationCopy = {
   toastChecklistFailed: string;
@@ -176,7 +228,8 @@ export async function scheduleAllNotifications(settings: NotificationSettings): 
     const { failed } = await scheduleChecklistRemindersFromTasks(settings, language);
     checklistFailed = failed;
     if (failed > 0) {
-      showToast(getNotificationCopy(language).toastChecklistFailed);
+      const copy = await getNotificationCopyAsync(language);
+      showToast(copy.toastChecklistFailed);
     }
   }
 
@@ -193,7 +246,8 @@ export async function rescheduleChecklistReminders(): Promise<void> {
   const language = await getAppLanguage();
   const { failed } = await scheduleChecklistRemindersFromTasks(settings, language);
   if (failed > 0) {
-    showToast(getNotificationCopy(language).toastChecklistFailed);
+    const copy = await getNotificationCopyAsync(language);
+    showToast(copy.toastChecklistFailed);
   }
 }
 
@@ -207,7 +261,8 @@ export async function rescheduleAllNotifications(showSuccess = false): Promise<v
   const language = await getAppLanguage();
   const result = await scheduleAllNotifications(settings);
   if (showSuccess && result?.checklistFailed === 0) {
-    showToast(getNotificationCopy(language).toastUpdated);
+    const copy = await getNotificationCopyAsync(language);
+    showToast(copy.toastUpdated);
   }
 }
 
@@ -268,7 +323,7 @@ async function scheduleCountdownNotifications(
   const weddingDate = new Date(wedding.weddingDate);
   const scheduledIds: string[] = [];
 
-  const copy = getNotificationCopy(language);
+  const copy = await getNotificationCopyAsync(language);
 
   for (const daysBefore of settings.daysBefore) {
     const notificationDate = new Date(weddingDate);
@@ -309,7 +364,7 @@ export async function scheduleChecklistReminder(
   const settings = await getNotificationSettings();
   if (!settings.enabled || !settings.checklistReminders) return { status: "skipped" };
 
-  const copy = getNotificationCopy(language || (await getAppLanguage()));
+  const copy = await getNotificationCopyAsync(language || (await getAppLanguage()));
 
   const reminderDate = new Date(dueDate);
   reminderDate.setDate(reminderDate.getDate() - 7);
@@ -466,7 +521,65 @@ export async function cancelAllCustomReminders(): Promise<void> {
 }
 
 export { CATEGORY_LABELS, CATEGORY_ICONS };
-export const getNotificationCopy = (language: AppLanguage) => NOTIFICATION_COPY[language] || NOTIFICATION_COPY.nb;
+export const getNotificationCopyAsync = async (language: AppLanguage): Promise<NotificationCopy> => {
+  const defaults = NOTIFICATION_COPY[language] || NOTIFICATION_COPY.nb;
+  const settings = await getAppSettingsMap();
+  const toastChecklistFailed = parseLocalizedSetting(
+    settings.notification_toast_checklist_failed,
+    language,
+    defaults.toastChecklistFailed
+  );
+  const toastUpdated = parseLocalizedSetting(
+    settings.notification_toast_updated,
+    language,
+    defaults.toastUpdated
+  );
+  const toastPermissionGranted = parseLocalizedSetting(
+    settings.notification_toast_permission_granted,
+    language,
+    defaults.toastPermissionGranted
+  );
+  const checklistTitle = parseLocalizedSetting(
+    settings.notification_checklist_title,
+    language,
+    defaults.checklistTitle
+  );
+  const checklistBodyTemplate = parseLocalizedSetting(
+    settings.notification_checklist_body_template,
+    language,
+    ""
+  );
+  const countdownTitleTemplate = parseLocalizedSetting(
+    settings.notification_countdown_title_template,
+    language,
+    ""
+  );
+  const countdownBodyTemplate = parseLocalizedSetting(
+    settings.notification_countdown_body_template,
+    language,
+    ""
+  );
+
+  return {
+    ...defaults,
+    toastChecklistFailed,
+    toastUpdated,
+    toastPermissionGranted,
+    checklistTitle,
+    checklistBody: (taskTitle) =>
+      checklistBodyTemplate
+        ? applyTemplate(checklistBodyTemplate, { task: taskTitle, taskTitle })
+        : defaults.checklistBody(taskTitle),
+    countdownTitle: (daysBefore) =>
+      countdownTitleTemplate
+        ? applyTemplate(countdownTitleTemplate, { days: daysBefore })
+        : defaults.countdownTitle(daysBefore),
+    countdownBody: (daysBefore) =>
+      countdownBodyTemplate
+        ? applyTemplate(countdownBodyTemplate, { days: daysBefore })
+        : defaults.countdownBody(daysBefore),
+  };
+};
 export const getCategoryLabel = (category: string, language: AppLanguage) => {
   if (language === "en") {
     return CATEGORY_LABELS_EN[category] || "General";

@@ -24,6 +24,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import {
@@ -38,6 +39,7 @@ import {
 import { rescheduleAllNotifications } from "@/lib/notifications";
 import { WeddingDetails, ScheduleEvent } from "@/lib/types";
 import { useEventType } from "@/hooks/useEventType";
+import { getCurrencyCode } from "@/lib/format-currency";
 import { getDateLabel } from "@shared/event-types";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || "";
@@ -157,6 +159,7 @@ export default function PlanningScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const { eventType, hasFeature, isWedding, config } = useEventType();
   const navigation = useNavigation<NavigationProp>();
 
@@ -182,7 +185,7 @@ export default function PlanningScreen() {
   const defaultWedding = appLanguage === "en" ? DEFAULT_WEDDING_EN : DEFAULT_WEDDING_NB;
   const defaultCoupleNames = [DEFAULT_WEDDING_NB.coupleNames, DEFAULT_WEDDING_EN.coupleNames];
   const defaultVenues = [DEFAULT_WEDDING_NB.venue, DEFAULT_WEDDING_EN.venue];
-  const currencyLabel = t("kr", "NOK");
+  const currencyLabel = getCurrencyCode(getSetting);
   const formatCurrency = useCallback(
     (value: number) => `${Math.abs(value).toLocaleString(locale)} ${currencyLabel}`,
     [currencyLabel, locale]

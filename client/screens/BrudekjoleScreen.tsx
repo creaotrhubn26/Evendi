@@ -32,6 +32,8 @@ import { TraditionHintBanner } from "@/components/TraditionHintBanner";
 import { getCoupleProfile } from "@/lib/api-couples";
 import { getCoupleSession } from "@/lib/storage";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency, getCurrencyCode } from "@/lib/format-currency";
 import { useEventType } from "@/hooks/useEventType";
 import { useVendorSearch } from "@/hooks/useVendorSearch";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
@@ -67,6 +69,7 @@ export default function BrudekjoleScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const { isWedding, config } = useEventType();
   const navigation = useNavigation<NavigationProp>();
   const queryClient = useQueryClient();
@@ -431,7 +434,7 @@ export default function BrudekjoleScreen() {
                 <View style={styles.budgetInfo}>
                   <ThemedText style={styles.budgetLabel}>{isWedding ? "Kjolebudsjett" : "Antrekksbudsjett"}</ThemedText>
                   <ThemedText style={[styles.budgetAmount, { color: Colors.dark.accent }]}>
-                    {dressBudget > 0 ? `${dressBudget.toLocaleString("nb-NO")} kr` : "Sett budsjett"}
+                    {dressBudget > 0 ? formatCurrency(dressBudget, getSetting) : "Sett budsjett"}
                   </ThemedText>
                 </View>
                 <EvendiIcon name="edit-2" size={16} color={theme.textMuted} />
@@ -451,12 +454,12 @@ export default function BrudekjoleScreen() {
                   </View>
                   <View style={styles.budgetStats}>
                     <ThemedText style={[styles.budgetStatText, { color: theme.textMuted }]}>
-                      Brukt: {totalSpent.toLocaleString("nb-NO")} kr
+                      Brukt: {formatCurrency(totalSpent, getSetting)}
                     </ThemedText>
                     <ThemedText
                       style={[styles.budgetStatText, { color: budgetRemaining >= 0 ? "#81C784" : "#E57373" }]}
                     >
-                      {budgetRemaining >= 0 ? "Gjenstår" : "Over"}: {Math.abs(budgetRemaining).toLocaleString("nb-NO")} kr
+                      {budgetRemaining >= 0 ? "Gjenstår" : "Over"}: {formatCurrency(Math.abs(budgetRemaining), getSetting)}
                     </ThemedText>
                   </View>
                 </View>
@@ -668,7 +671,7 @@ export default function BrudekjoleScreen() {
                           ) : null}
                           {dress.price > 0 && (
                             <ThemedText style={[styles.dressPrice, { color: Colors.dark.accent }]}>
-                              {dress.price.toLocaleString("nb-NO")} kr
+                              {formatCurrency(dress.price, getSetting)}
                             </ThemedText>
                           )}
                         </View>
@@ -927,7 +930,7 @@ export default function BrudekjoleScreen() {
             <PersistentTextInput
               draftKey="BrudekjoleScreen-input-10"
               style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }]}
-              placeholder="Budsjett i kroner"
+              placeholder={`Budsjett (${getCurrencyCode(getSetting)})`}
               placeholderTextColor={theme.textMuted}
               value={budgetInput}
               onChangeText={setBudgetInput}

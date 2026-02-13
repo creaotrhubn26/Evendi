@@ -10,6 +10,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getAppLanguage, type AppLanguage } from "@/lib/storage";
@@ -24,10 +25,111 @@ interface AppSetting {
   updatedAt: string;
 }
 
+interface CompanyStoryStat {
+  value: string;
+  labelNo: string;
+  labelEn: string;
+}
+
+interface CompanyStoryCard {
+  key: string;
+  icon: keyof typeof EvendiIconGlyphMap;
+  color: string;
+  titleNo: string;
+  titleEn: string;
+  bodyNo: string;
+  bodyEn: string;
+  backgroundColor?: string;
+  borderColor?: string;
+  stats?: CompanyStoryStat[];
+}
+
+interface CompanyStory {
+  titleNo: string;
+  titleEn: string;
+  introNo: string;
+  introEn: string;
+  ctaLabelNo: string;
+  ctaLabelEn: string;
+  ctaUrl: string;
+  cards: CompanyStoryCard[];
+}
+
+const DEFAULT_COMPANY_STORY: CompanyStory = {
+  titleNo: "Norwedfilm — Historien bak Evendi",
+  titleEn: "Norwedfilm — The story behind Evendi",
+  introNo: "\"Love stories elegantly told\" — Norwedfilm",
+  introEn: "\"Love stories elegantly told\" — Norwedfilm",
+  ctaLabelNo: "Besok norwedfilm.no",
+  ctaLabelEn: "Visit norwedfilm.no",
+  ctaUrl: "https://norwedfilm.no",
+  cards: [
+    {
+      key: "who",
+      icon: "video",
+      color: "#1E6BFF",
+      titleNo: "Hvem er Norwedfilm?",
+      titleEn: "Who is Norwedfilm?",
+      bodyNo: "Norwedfilm er et bryllupsfoto- og filmselskap basert i Oslo, med over 200 bryllup dokumentert gjennom 8+ ar. Vi spesialiserer oss pa tidlos bryllupsfotografi og cinematiske bryllupsfilmer — vi fanger ekte oyeblikk med et kunstnerisk blikk og forteller kjarlighetshistorier med folelse og eleganse.",
+      bodyEn: "Norwedfilm is a wedding photography & videography studio based in Oslo, with 200+ weddings documented over 8+ years. We specialize in timeless wedding photography and cinematic wedding films — capturing authentic moments with an artistic eye and telling love stories with emotion and elegance.",
+      stats: [
+        { value: "200+", labelNo: "Bryllup", labelEn: "Weddings" },
+        { value: "8+", labelNo: "Ar erfaring", labelEn: "Years exp." },
+      ],
+    },
+    {
+      key: "problem",
+      icon: "alert-circle",
+      color: "#FF6B6B",
+      titleNo: "Problemet vi sa fra innsiden",
+      titleEn: "The problem we saw from the inside",
+      bodyNo: "Etter a ha vaert til stede pa hundrevis av bryllup, sa vi det samme monsteret gang etter gang: stressede par som jonglerte mellom meldinger, Excel-ark og forskjellige apper for budsjett, gjester og tidslinje. Leverandorer slet med a na de riktige parene og administrere bestillinger effektivt. Det fantes rett og slett ikke en plattform som loste alt — spesielt ikke tilpasset det skandinaviske markedet.",
+      bodyEn: "After being present at hundreds of weddings, we saw the same pattern over and over: stressed couples juggling messages, spreadsheets and different apps for budget, guests and timeline. Vendors struggled to reach the right couples and manage bookings efficiently. There simply wasn't a single platform solving everything — especially not tailored for the Scandinavian market.",
+    },
+    {
+      key: "philosophy",
+      icon: "heart",
+      color: "#1E6BFF",
+      titleNo: "Var filosofi",
+      titleEn: "Our philosophy",
+      bodyNo: "Vi tror at de beste bryllupsopplevelsene oppstar fra ekte relasjoner. Vi tar oss tid til a forsta parets historie, stil og visjon — og var diskrete tilnaerming lar oss fange autentiske, uforberedte oyeblikk mens paret simpelthen nyter dagen sin. Den samme filosofien driver Evendi.",
+      bodyEn: "We believe the best wedding experiences come from genuine connections. We take the time to understand each couple's story, style, and vision — and our unobtrusive approach lets us capture authentic, candid moments while couples simply enjoy their day. The same philosophy drives Evendi.",
+    },
+    {
+      key: "solution",
+      icon: "zap",
+      color: "#51CF66",
+      titleNo: "Losningen: Evendi",
+      titleEn: "The solution: Evendi",
+      bodyNo: "Derfor bygget vi Evendi — appen vi selv onsket at fantes. En komplett bryllupsplattform der par planlegger bryllupet sitt med kraftige verktoy, og leverandorer nar de rette parene gjennom en markedsplass med direkte kommunikasjon. Alt i en app, designet med kjarlighet for skandinaviske bryllup.",
+      bodyEn: "That's why we built Evendi — the app we wished existed ourselves. A complete wedding platform where couples plan their wedding with powerful tools, and vendors reach the right couples through a marketplace with direct communication. All in one app, designed with love for Scandinavian weddings.",
+      backgroundColor: "#51CF6610",
+      borderColor: "#51CF66",
+    },
+  ],
+};
+
+function parseJsonSetting<T>(raw: string | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function StatusScreen() {
   const { theme } = useTheme();
+  const { getSetting, settingsMap } = useAppSettings();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
+  const supportEmail = getSetting("support_email", "support@evendi.no");
+  const websiteUrl = getSetting("app_website", "https://norwedfilm.no");
+  const companyStory = useMemo(
+    () => parseJsonSetting<CompanyStory>(getSetting("company_story_json", ""), DEFAULT_COMPANY_STORY),
+    [getSetting, settingsMap]
+  );
 
   useEffect(() => {
     async function loadLanguage() {
@@ -50,14 +152,15 @@ export default function StatusScreen() {
     },
   });
 
-  const getSetting = (key: string, fallback = "") => settings.find(s => s.key === key)?.value || fallback;
+  const getRemoteSetting = (key: string, fallback = "") =>
+    settings.find((setting) => setting.key === key)?.value || fallback;
 
-  const maintenanceMode = getSetting("maintenance_mode") === "true";
-  const maintenanceMessage = getSetting("maintenance_message");
-  const appVersion = getSetting("app_version");
-  const minAppVersion = getSetting("min_app_version");
-  const statusMessage = getSetting("status_message");
-  const statusType = getSetting("status_type") || "info"; // info, warning, error, success
+  const maintenanceMode = getRemoteSetting("maintenance_mode") === "true";
+  const maintenanceMessage = getRemoteSetting("maintenance_message");
+  const appVersion = getRemoteSetting("app_version");
+  const minAppVersion = getRemoteSetting("min_app_version");
+  const statusMessage = getRemoteSetting("status_message");
+  const statusType = getRemoteSetting("status_type") || "info"; // info, warning, error, success
   const lastUpdated = settings.find(s => s.key === "maintenance_mode")?.updatedAt;
 
   const getStatusColor = () => {
@@ -240,7 +343,7 @@ export default function StatusScreen() {
 
                 <Pressable
                   onPress={() => {
-                    handleOpenLink("mailto:support@evendi.no");
+                    handleOpenLink(`mailto:${supportEmail}`);
                   }}
                   style={[styles.link, { borderColor: theme.border }]}
                 >
@@ -253,14 +356,14 @@ export default function StatusScreen() {
 
                 <Pressable
                   onPress={() => {
-                    handleOpenLink("https://norwedfilm.no");
+                    handleOpenLink(websiteUrl);
                   }}
                   style={[styles.link, { borderColor: theme.border }]}
                 >
                   <View style={[styles.linkIcon, { backgroundColor: theme.accent + "15" }]}>
                     <EvendiIcon name="globe" size={18} color={theme.accent} />
                   </View>
-                  <ThemedText style={styles.linkText}>Norwedfilm.no</ThemedText>
+                  <ThemedText style={styles.linkText}>{websiteUrl.replace(/^https?:\/\//, "")}</ThemedText>
                   <EvendiIcon name="external-link" size={16} color={theme.textMuted} />
                 </Pressable>
               </View>
@@ -359,123 +462,67 @@ export default function StatusScreen() {
               </View>
             </Animated.View>
 
-            {/* Norwedfilm — Why we built Evendi */}
+            {/* Company story */}
             <Animated.View entering={FadeInDown.delay(600).duration(400)}>
-              <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+              <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}> 
                 <View style={styles.visionHeader}>
                   <EvendiIcon name="film" size={24} color={theme.accent} />
                   <ThemedText style={styles.sectionTitle}>
-                    {t("Norwedfilm — Historien bak Evendi", "Norwedfilm — The story behind Evendi")}
+                    {t(companyStory.titleNo, companyStory.titleEn)}
                   </ThemedText>
                 </View>
-                <ThemedText style={[styles.visionIntro, { color: theme.textSecondary }]}>
-                  {t(
-                    "\"Love stories elegantly told\" — Norwedfilm",
-                    "\"Love stories elegantly told\" — Norwedfilm"
-                  )}
+                <ThemedText style={[styles.visionIntro, { color: theme.textSecondary }]}> 
+                  {t(companyStory.introNo, companyStory.introEn)}
                 </ThemedText>
 
-                {/* Who is Norwedfilm */}
-                <View style={[styles.norwedStoryCard, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-                  <View style={styles.norwedStoryRow}>
-                    <View style={[styles.norwedIconCircle, { backgroundColor: theme.accent }]}>
-                      <EvendiIcon name="video" size={20} color="#FFFFFF" />
+                {companyStory.cards.map((card) => (
+                  <View
+                    key={card.key}
+                    style={[
+                      styles.norwedStoryCard,
+                      {
+                        backgroundColor: card.backgroundColor ?? theme.backgroundSecondary,
+                        borderColor: card.borderColor ?? theme.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.norwedStoryRow}>
+                      <View style={[styles.norwedIconCircle, { backgroundColor: card.color }]}> 
+                        <EvendiIcon name={card.icon} size={20} color="#FFFFFF" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText style={[styles.norwedLabel, { color: card.color }]}> 
+                          {t(card.titleNo, card.titleEn)}
+                        </ThemedText>
+                      </View>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={[styles.norwedLabel, { color: theme.accent }]}>
-                        {t("Hvem er Norwedfilm?", "Who is Norwedfilm?")}
-                      </ThemedText>
-                    </View>
-                  </View>
-                  <ThemedText style={[styles.circleText, { color: theme.text }]}>
-                    {t(
-                      "Norwedfilm er et bryllupsfoto- og filmselskap basert i Oslo, med over 200 bryllup dokumentert gjennom 8+ år. Vi spesialiserer oss på tidløs bryllupsfotografi og cinematiske bryllupsfilmer — vi fanger ekte øyeblikk med et kunstnerisk blikk og forteller kjærlighetshistorier med følelse og eleganse.",
-                      "Norwedfilm is a wedding photography & videography studio based in Oslo, with 200+ weddings documented over 8+ years. We specialize in timeless wedding photography and cinematic wedding films — capturing authentic moments with an artistic eye and telling love stories with emotion and elegance."
+                    <ThemedText style={[styles.circleText, { color: theme.text }]}> 
+                      {t(card.bodyNo, card.bodyEn)}
+                    </ThemedText>
+                    {card.stats && (
+                      <View style={styles.norwedStats}>
+                        {card.stats.map((stat) => (
+                          <View key={`${card.key}-${stat.value}`} style={styles.norwedStat}>
+                            <ThemedText style={[styles.norwedStatNumber, { color: card.color }]}> 
+                              {stat.value}
+                            </ThemedText>
+                            <ThemedText style={[styles.norwedStatLabel, { color: theme.textMuted }]}> 
+                              {t(stat.labelNo, stat.labelEn)}
+                            </ThemedText>
+                          </View>
+                        ))}
+                      </View>
                     )}
-                  </ThemedText>
-                  <View style={styles.norwedStats}>
-                    <View style={styles.norwedStat}>
-                      <ThemedText style={[styles.norwedStatNumber, { color: theme.accent }]}>200+</ThemedText>
-                      <ThemedText style={[styles.norwedStatLabel, { color: theme.textMuted }]}>
-                        {t("Bryllup", "Weddings")}
-                      </ThemedText>
-                    </View>
-                    <View style={styles.norwedStat}>
-                      <ThemedText style={[styles.norwedStatNumber, { color: theme.accent }]}>8+</ThemedText>
-                      <ThemedText style={[styles.norwedStatLabel, { color: theme.textMuted }]}>
-                        {t("År erfaring", "Years exp.")}
-                      </ThemedText>
-                    </View>
                   </View>
-                </View>
-
-                {/* The problem */}
-                <View style={[styles.norwedStoryCard, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-                  <View style={styles.norwedStoryRow}>
-                    <View style={[styles.norwedIconCircle, { backgroundColor: "#FF6B6B" }]}>
-                      <EvendiIcon name="alert-circle" size={20} color="#FFFFFF" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={[styles.norwedLabel, { color: "#FF6B6B" }]}>
-                        {t("Problemet vi så fra innsiden", "The problem we saw from the inside")}
-                      </ThemedText>
-                    </View>
-                  </View>
-                  <ThemedText style={[styles.circleText, { color: theme.text }]}>
-                    {t(
-                      "Etter å ha vært til stede på hundrevis av bryllup, så vi det samme mønsteret gang etter gang: stressede par som jonglerte mellom meldinger, Excel-ark og forskjellige apper for budsjett, gjester og tidslinje. Leverandører slet med å nå de riktige parene og administrere bestillinger effektivt. Det fantes rett og slett ikke én plattform som løste alt — spesielt ikke tilpasset det skandinaviske markedet.",
-                      "After being present at hundreds of weddings, we saw the same pattern over and over: stressed couples juggling messages, spreadsheets and different apps for budget, guests and timeline. Vendors struggled to reach the right couples and manage bookings efficiently. There simply wasn't a single platform solving everything — especially not tailored for the Scandinavian market."
-                    )}
-                  </ThemedText>
-                </View>
-
-                {/* Our philosophy */}
-                <View style={[styles.norwedStoryCard, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-                  <View style={styles.norwedStoryRow}>
-                    <View style={[styles.norwedIconCircle, { backgroundColor: theme.accent }]}>
-                      <EvendiIcon name="heart" size={20} color="#FFFFFF" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={[styles.norwedLabel, { color: theme.accent }]}>
-                        {t("Vår filosofi", "Our philosophy")}
-                      </ThemedText>
-                    </View>
-                  </View>
-                  <ThemedText style={[styles.circleText, { color: theme.text }]}>
-                    {t(
-                      "Vi tror at de beste bryllupsopplevelsene oppstår fra ekte relasjoner. Vi tar oss tid til å forstå parets historie, stil og visjon — og vår diskrete tilnærming lar oss fange autentiske, uforberedte øyeblikk mens paret simpelthen nyter dagen sin. Den samme filosofien driver Evendi.",
-                      "We believe the best wedding experiences come from genuine connections. We take the time to understand each couple's story, style, and vision — and our unobtrusive approach lets us capture authentic, candid moments while couples simply enjoy their day. The same philosophy drives Evendi."
-                    )}
-                  </ThemedText>
-                </View>
-
-                {/* The solution */}
-                <View style={[styles.norwedStoryCard, { backgroundColor: "#51CF6610", borderColor: "#51CF66" }]}>
-                  <View style={styles.norwedStoryRow}>
-                    <View style={[styles.norwedIconCircle, { backgroundColor: "#51CF66" }]}>
-                      <EvendiIcon name="zap" size={20} color="#FFFFFF" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={[styles.norwedLabel, { color: "#51CF66" }]}>
-                        {t("Løsningen: Evendi", "The solution: Evendi")}
-                      </ThemedText>
-                    </View>
-                  </View>
-                  <ThemedText style={[styles.circleText, { color: theme.text }]}>
-                    {t(
-                      "Derfor bygget vi Evendi — appen vi selv ønsket at fantes. En komplett bryllupsplattform der par planlegger bryllupet sitt med kraftige verktøy, og leverandører når de rette parene gjennom en markedsplass med direkte kommunikasjon. Alt i én app, designet med kjærlighet for skandinaviske bryllup.",
-                      "That's why we built Evendi — the app we wished existed ourselves. A complete wedding platform where couples plan their wedding with powerful tools, and vendors reach the right couples through a marketplace with direct communication. All in one app, designed with love for Scandinavian weddings."
-                    )}
-                  </ThemedText>
-                </View>
+                ))}
 
                 <Pressable
-                  onPress={() => handleOpenLink("https://norwedfilm.no")}
+                  onPress={() => handleOpenLink(companyStory.ctaUrl)}
                   style={[styles.norwedCta, { backgroundColor: theme.accent + "15", borderColor: theme.accent }]}
                 >
                   <EvendiIcon name="globe" size={18} color={theme.accent} />
-                  <ThemedText style={[styles.norwedCtaText, { color: theme.accent }]}>
-                    {t("Besøk norwedfilm.no", "Visit norwedfilm.no")}
+                  <ThemedText style={[styles.norwedCtaText, { color: theme.accent }]}> 
+                    {t(companyStory.ctaLabelNo, companyStory.ctaLabelEn)}
                   </ThemedText>
                   <EvendiIcon name="external-link" size={14} color={theme.accent} />
                 </Pressable>

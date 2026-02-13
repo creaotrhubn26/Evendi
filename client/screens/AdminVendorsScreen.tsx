@@ -23,6 +23,8 @@ import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency, getCurrencyCode } from "@/lib/format-currency";
 
 import { ThemedText } from "@/components/ThemedText";
 import { AdminHeader } from "@/components/AdminHeader";
@@ -59,6 +61,19 @@ interface SubscriptionTier {
   priceNok: number;
 }
 
+interface InviteRequest {
+  id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  profession: string | null;
+  company_name: string | null;
+  status: string | null;
+  user_journey_status: string | null;
+  source: string | null;
+  created_at: string | null;
+}
+
 export default function AdminVendorsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -70,6 +85,7 @@ export default function AdminVendorsScreen() {
   const [adminKey, setAdminKey] = useState("");
   const [storedKey, setStoredKey] = useState(passedAdminKey);
   const [loginError, setLoginError] = useState("");
+  const [viewMode, setViewMode] = useState<"vendors" | "invites">("vendors");
   const [selectedTab, setSelectedTab] = useState<"pending" | "approved" | "rejected">("pending");
   const [editingVendor, setEditingVendor] = useState<PendingVendor | null>(null);
   const [vendorFeatures, setVendorFeatures] = useState<Record<string, boolean>>({
@@ -88,7 +104,7 @@ export default function AdminVendorsScreen() {
   const [rejectTarget, setRejectTarget] = useState<PendingVendor | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const { data: vendors = [], isLoading, refetch } = useQuery<PendingVendor[]>({
+  const { data: vendors = [], isLoading: vendorsLoading, refetch: refetchVendors } = useQuery<PendingVendor[]>({
     queryKey: ["/api/admin/vendors", selectedTab, storedKey],
     queryFn: async () => {
       const url = new URL(`/api/admin/vendors?status=${selectedTab}`, getApiUrl());
@@ -106,6 +122,26 @@ export default function AdminVendorsScreen() {
       return response.json();
     },
     enabled: storedKey.length > 0,
+  });
+
+  const { data: inviteRequests = [], isLoading: invitesLoading, refetch: refetchInvites } = useQuery<InviteRequest[]>({
+    queryKey: ["/api/admin/invite-requests", selectedTab, storedKey],
+    queryFn: async () => {
+      const url = new URL(`/api/admin/invite-requests?status=${selectedTab}`, getApiUrl());
+      const response = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${storedKey}`,
+        },
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error("Ugyldig admin-nøkkel");
+        }
+        throw new Error("Kunne ikke hente invitasjoner");
+      }
+      return response.json();
+    },
+    enabled: storedKey.length > 0 && viewMode === "invites",
   });
 
   const { data: subscriptionTiers = [] } = useQuery<SubscriptionTier[]>({
@@ -410,16 +446,6 @@ export default function AdminVendorsScreen() {
             </ThemedText>
           </View>
         </View>
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={() => {
-                    setRefreshing(true);
-                    refetch().finally(() => setRefreshing(false));
-                  }}
-                  tintColor={theme.accent}
-                />
-              }
 
         {item.description ? (
           <ThemedText style={[styles.description, { color: theme.textMuted }]} numberOfLines={2}>
@@ -462,6 +488,55 @@ export default function AdminVendorsScreen() {
       </View>
     </Animated.View>
   );
+
+  const renderInviteItem = ({ item, index }: { item: InviteRequest; index: number }) => {
+    const sourceLabel = item.source === "creatorhub" ? "Creatorhub" : item.source === "evendi" ? "Evendi" : "Ukjent";
+    const sourceColor = item.source === "creatorhub" ? "#4FC3F7" : item.source === "evendi" ? "#A5D6A7" : "#B0BEC5";
+    const statusValue = item.status || "pending";
+
+    return (
+      <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
+        <View style={[styles.vendorCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <View style={styles.vendorHeader}>
+            <ThemedText style={styles.vendorName}>{item.company_name || item.email}</ThemedText>
+            <View style={[styles.statusBadge, { backgroundColor: "#FFA726" + "30" }]}> 
+              <ThemedText style={[styles.statusText, { color: "#FFA726" }]}>
+                {statusValue === "approved" ? "Godkjent" : statusValue === "rejected" ? "Avvist" : "Venter"}
+              </ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.vendorDetails}>
+            <View style={styles.detailRow}>
+              <EvendiIcon name="mail" size={14} color={theme.textSecondary} />
+              <ThemedText style={[styles.detailText, { color: theme.textSecondary }]}>{item.email}</ThemedText>
+            </View>
+            {item.profession ? (
+              <View style={styles.detailRow}>
+                <EvendiIcon name="briefcase" size={14} color={theme.textSecondary} />
+                <ThemedText style={[styles.detailText, { color: theme.textSecondary }]}>{item.profession}</ThemedText>
+              </View>
+            ) : null}
+            <View style={styles.detailRow}>
+              <EvendiIcon name="calendar" size={14} color={theme.textSecondary} />
+              <ThemedText style={[styles.detailText, { color: theme.textSecondary }]}>
+                Opprettet {item.created_at ? formatDate(item.created_at) : "ukjent"}
+              </ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.inviteMetaRow}>
+            <View style={[styles.sourceBadge, { backgroundColor: `${sourceColor}33`, borderColor: sourceColor }]}> 
+              <ThemedText style={[styles.sourceBadgeText, { color: sourceColor }]}>{sourceLabel}</ThemedText>
+            </View>
+            <ThemedText style={[styles.detailText, { color: theme.textMuted }]}>
+              {item.user_journey_status || ""}
+            </ThemedText>
+          </View>
+        </View>
+      </Animated.View>
+    );
+  };
 
   if (!isAuthenticated) {
     return (
@@ -508,12 +583,38 @@ export default function AdminVendorsScreen() {
     );
   }
 
+  const activeCount = viewMode === "vendors" ? vendors.length : inviteRequests.length;
+  const activeLoading = viewMode === "vendors" ? vendorsLoading : invitesLoading;
+  const activeRefetch = viewMode === "vendors" ? refetchVendors : refetchInvites;
+
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <AdminHeader 
-        title="Leverandører" 
-        subtitle={`${vendors.length} ${selectedTab === "pending" ? "venter" : selectedTab === "approved" ? "godkjent" : "avvist"}`}
+        title={viewMode === "vendors" ? "Leverandører" : "Invitasjoner"}
+        subtitle={`${activeCount} ${selectedTab === "pending" ? "venter" : selectedTab === "approved" ? "godkjent" : "avvist"}`}
       />
+      <View style={[styles.viewTabsContainer, { paddingTop: Spacing.lg }]}> 
+        {(["vendors", "invites"] as const).map((mode) => (
+          <Pressable
+            key={mode}
+            onPress={() => {
+              setViewMode(mode);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+            style={[
+              styles.viewTab,
+              {
+                backgroundColor: viewMode === mode ? Colors.dark.accent : theme.backgroundDefault,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <ThemedText style={[styles.tabText, { color: viewMode === mode ? "#1A1A1A" : theme.text }]}>
+              {mode === "vendors" ? "Leverandører" : "Invitasjoner"}
+            </ThemedText>
+          </Pressable>
+        ))}
+      </View>
       <View style={[styles.tabsContainer, { paddingTop: Spacing.lg }]}>
         {(["pending", "approved", "rejected"] as const).map((tab) => (
           <Pressable
@@ -542,14 +643,14 @@ export default function AdminVendorsScreen() {
         ))}
       </View>
 
-      {isLoading ? (
+      {activeLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.dark.accent} />
         </View>
       ) : (
         <FlatList
-          data={vendors}
-          renderItem={renderVendorItem}
+          data={viewMode === "vendors" ? vendors : inviteRequests}
+          renderItem={viewMode === "vendors" ? renderVendorItem : renderInviteItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{
             paddingHorizontal: Spacing.lg,
@@ -560,10 +661,20 @@ export default function AdminVendorsScreen() {
             <View style={styles.emptyContainer}>
               <EvendiIcon name="inbox" size={48} color={theme.textMuted} />
               <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
-                Ingen {selectedTab === "pending" ? "ventende" : selectedTab === "approved" ? "godkjente" : "avviste"} leverandører
+                Ingen {selectedTab === "pending" ? "ventende" : selectedTab === "approved" ? "godkjente" : "avviste"} {viewMode === "vendors" ? "leverandører" : "invitasjoner"}
               </ThemedText>
             </View>
           )}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                activeRefetch().finally(() => setRefreshing(false));
+              }}
+              tintColor={theme.accent}
+            />
+          }
         />
       )}
 
@@ -719,8 +830,8 @@ export default function AdminVendorsScreen() {
                         {tier.description}
                       </ThemedText>
                     )}
-                    <ThemedText style={[styles.tierPrice, { color: Colors.dark.accent }]}>
-                      {tier.priceNok} NOK/mnd
+                    <ThemedText style={[styles.tierPrice, { color: Colors.dark.accent }]}> 
+                      {formatCurrency(tier.priceNok, getSetting)} {getCurrencyCode(getSetting)}/mnd
                     </ThemedText>
                   </View>
                   {selectedTierId === tier.id && (
@@ -864,6 +975,18 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginBottom: Spacing.lg,
   },
+  viewTabsContainer: {
+    flexDirection: "row",
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  viewTab: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    alignItems: "center",
+  },
   tab: {
     flex: 1,
     paddingVertical: Spacing.sm,
@@ -928,6 +1051,21 @@ const styles = StyleSheet.create({
   description: {
     fontSize: 14,
     marginBottom: Spacing.md,
+  },
+  inviteMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sourceBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  sourceBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   actionButtons: {
     flexDirection: "row",

@@ -10,6 +10,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { AppSetting } from "../../shared/schema";
@@ -55,6 +56,12 @@ export default function VendorHelpScreen() {
       return res.json();
     },
   });
+  const getSettingValue = useMemo(() => {
+    return (key: string, defaultValue: string) =>
+      appSettings?.find((setting) => setting.key === key)?.value ?? defaultValue;
+  }, [appSettings]);
+  const supportEmail = getSettingValue("support_email", "support@evendi.no");
+  const websiteUrl = getSettingValue("app_website", "https://norwedfilm.no");
   const supportLinks = useMemo(
     () => [
       {
@@ -87,8 +94,8 @@ export default function VendorHelpScreen() {
       {
         label: "E-post Support",
         icon: "mail" as const,
-        description: "support@evendi.no",
-        url: "mailto:support@evendi.no",
+        description: supportEmail,
+        url: `mailto:${supportEmail}`,
         settingKey: "help_show_email_support",
         defaultVisible: "false",
       },
@@ -96,19 +103,16 @@ export default function VendorHelpScreen() {
         label: "Norwedfilm",
         icon: "globe" as const,
         description: "Vår hovedside",
-        url: "https://norwedfilm.no",
+        url: websiteUrl,
         settingKey: "help_show_norwedfilm",
         defaultVisible: "true",
       },
     ],
-    [navigation]
+    [navigation, supportEmail, websiteUrl]
   );
   const visibleSupportLinks = useMemo(() => {
-    const getSetting = (key: string, defaultValue: string) => {
-      return appSettings?.find((s) => s.key === key)?.value ?? defaultValue;
-    };
-    return supportLinks.filter((link) => getSetting(link.settingKey, link.defaultVisible) === "true");
-  }, [appSettings, supportLinks]);
+    return supportLinks.filter((link) => getSettingValue(link.settingKey, link.defaultVisible) === "true");
+  }, [getSettingValue, supportLinks]);
   // Fetch FAQ from API
   const { data: faqData = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["faq", activeCategory],

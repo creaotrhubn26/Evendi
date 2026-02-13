@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { ScrollView, StyleSheet, View, Pressable, Switch, Platform } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, Switch, Platform, Linking } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -9,6 +9,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { clearAllData, getAppLanguage, saveAppLanguage, type AppLanguage } from "@/lib/storage";
 import { showToast } from "@/lib/toast";
@@ -19,6 +20,9 @@ export default function SettingsScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
+  const privacyUrl = getSetting("privacy_policy_url", "");
+  const termsUrl = getSetting("terms_url", "");
   const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
   const hasShownWebToast = useRef(false);
 
@@ -36,6 +40,18 @@ export default function SettingsScreen() {
       hasShownWebToast.current = true;
     }
   }, []);
+
+  const openUrlOrToast = async (url: string, fallbackMessage: string) => {
+    if (!url) {
+      showToast(fallbackMessage);
+      return;
+    }
+    try {
+      await Linking.openURL(url);
+    } catch {
+      showToast(fallbackMessage);
+    }
+  };
 
   const handleClearData = async () => {
     const confirmed = await showConfirm({
@@ -162,13 +178,13 @@ export default function SettingsScreen() {
             icon="file-text"
             label="Personvern"
             theme={theme}
-            onPress={() => showToast("Personvernerklæring kommer snart")}
+            onPress={() => openUrlOrToast(privacyUrl, "Personvernerklæring kommer snart")}
           />
           <SettingRow
             icon="book"
             label="Vilkår"
             theme={theme}
-            onPress={() => showToast("Vilkår for bruk kommer snart")}
+            onPress={() => openUrlOrToast(termsUrl, "Vilkår for bruk kommer snart")}
           />
         </View>
       </Animated.View>
@@ -176,10 +192,10 @@ export default function SettingsScreen() {
       <Animated.View entering={FadeInDown.delay(400).duration(400)}>
         <View style={styles.footer}>
           <ThemedText style={[styles.footerText, { color: theme.textMuted }]}>
-            Evendi by Norwedfilm
+            {getSetting("footer_brand_text", "Evendi by Norwedfilm")}
           </ThemedText>
           <ThemedText style={[styles.footerText, { color: theme.textMuted }]}>
-            Laget med kjærlighet i Norge
+            {getSetting("footer_tagline", "Laget med kjærlighet i Norge")}
           </ThemedText>
         </View>
       </Animated.View>

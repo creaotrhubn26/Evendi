@@ -23,6 +23,8 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useAppSettings } from "@/hooks/useAppSettings";
+import { formatCurrency } from "@/lib/format-currency";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import { getVendorConfig, getEnabledTabs, type VendorTab } from "@/lib/vendor-adapter";
@@ -64,6 +66,7 @@ interface VendorProfile {
   category: {
     id: string;
     name: string;
+    dashboardKey?: string | null;
   } | null;
 }
 interface VendorCoupleAccess {
@@ -182,6 +185,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const queryClient = useQueryClient();
   const [session, setSession] = useState<VendorSession | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -342,7 +346,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
   });
   const { data: vendorProfile } = useQuery<{ 
     googleReviewUrl: string | null;
-    category: { id: string; name: string } | null;
+    category: { id: string; name: string; dashboardKey?: string | null } | null;
   }>({
     queryKey: ["/api/vendor/profile"],
     queryFn: async () => {
@@ -433,7 +437,8 @@ export default function VendorDashboardScreen({ navigation }: Props) {
   // Get vendor category configuration
   const vendorConfig = getVendorConfig(
     vendorProfile?.category?.id || null,
-    vendorProfile?.category?.name || null
+    vendorProfile?.category?.name || null,
+    vendorProfile?.category?.dashboardKey || null
   );
   const enabledTabs = getEnabledTabs(vendorConfig);
   useEffect(() => {
@@ -914,7 +919,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     activeTab === "reviews" ? reviewsLoading :
     conversationsLoading;
   const formatPrice = (priceInOre: number) => {
-    return (priceInOre / 100).toLocaleString("nb-NO", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " kr";
+    return formatCurrency(priceInOre / 100, getSetting);
   };
   const getOfferStatusColor = (status: string) => {
     switch (status) {
