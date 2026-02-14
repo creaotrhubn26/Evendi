@@ -150,8 +150,9 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: false,
+      staleTime: 5 * 60 * 1000, // 5 minutes — keeps data fresh without over-fetching
+      retry: (failureCount, error) =>
+        failureCount < 2 && (error as any)?.message?.startsWith("401") !== true,
     },
     mutations: {
       retry: false,

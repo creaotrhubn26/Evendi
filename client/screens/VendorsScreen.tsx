@@ -5,7 +5,6 @@ import {
   View,
   Pressable,
   Image,
-  Dimensions,
   Modal,
   ScrollView,
   ActivityIndicator,
@@ -32,7 +31,8 @@ import { type EventType, VENDOR_CATEGORIES, getVendorCategoryGradientByDbName } 
 
 const FALLBACK_LOGO = require("../../assets/images/Evendi_logo_norsk_tagline.png");
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
+// Stable separator component extracted outside render
+const VendorSeparator = () => <View style={{ height: Spacing.md }} />;
 // ─── Vendor Categories for dropdown (from shared registry) ─────
 const VENDOR_CATEGORY_DROPDOWN = [
   { id: "all", name: "Alle kategorier" },
@@ -321,7 +321,7 @@ export default function VendorsScreen() {
     const hasImage = !!(item as any).imageUrl;
 
     return (
-      <Animated.View entering={FadeInDown.delay(index * 80).duration(400)}>
+      <Animated.View entering={index < 10 ? FadeInDown.delay(index * 80).duration(400) : undefined}>
         <Pressable
           style={[styles.vendorCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
           onPress={() => handleVendorPress(item)}
@@ -599,7 +599,11 @@ export default function VendorsScreen() {
           EmptyState
         )
       }
-      ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
+      ItemSeparatorComponent={VendorSeparator}
+      initialNumToRender={8}
+      windowSize={5}
+      maxToRenderPerBatch={8}
+      removeClippedSubviews
     />
   );
 }

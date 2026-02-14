@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, StyleSheet, Image, Dimensions } from "react-native";
+import { View, StyleSheet, Image } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -16,8 +16,6 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useDesignSettings } from "@/hooks/useDesignSettings";
 import { getAppLanguage, type AppLanguage } from "@/lib/storage";
-
-const { width, height } = Dimensions.get("window");
 
 const FALLBACK_LOGO = require("../../assets/images/Evendi_logo_norsk_tagline.png");
 

@@ -11,6 +11,8 @@ import {
   Platform,
   ScrollView,
   Image,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -78,6 +80,9 @@ const buildMailtoUrl = (email: string, subject: string, body: string): string =>
   return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 };
 
+// Extracted outside component to avoid re-creation on every render
+const ItemSeparator = () => <View style={{ height: Spacing.sm }} />;
+
 export default function GuestsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -106,7 +111,7 @@ export default function GuestsScreen() {
   const [rsvpFilter, setRsvpFilter] = useState<"all" | "hasInvite" | "responded" | "declined">("all");
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [selectedInvite, setSelectedInvite] = useState<GuestInvitation & { inviteUrl: string } | null>(null);
-  const [contactSearchDebounceTimer, setContactSearchDebounceTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const contactSearchDebounceTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [contactsPermissionGranted, setContactsPermissionGranted] = useState(false);
   const [quickFilter, setQuickFilter] = useState<"all" | "confirmed" | "pending" | "dietary" | "plusOne" | "noContact">("all");
   const [statusMenuGuest, setStatusMenuGuest] = useState<WeddingGuest | null>(null);
@@ -128,6 +133,15 @@ export default function GuestsScreen() {
       setAppLanguage(language);
     }
     loadLanguage();
+  }, []);
+
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (contactSearchDebounceTimerRef.current) {
+        clearTimeout(contactSearchDebounceTimerRef.current);
+      }
+    };
   }, []);
 
   const resetForm = () => {
@@ -241,8 +255,8 @@ export default function GuestsScreen() {
     setSearchQuery(query);
     
     // Clear existing debounce timer
-    if (contactSearchDebounceTimer) {
-      clearTimeout(contactSearchDebounceTimer);
+    if (contactSearchDebounceTimerRef.current) {
+      clearTimeout(contactSearchDebounceTimerRef.current);
     }
 
     if (query.trim().length > 0) {
@@ -262,7 +276,7 @@ export default function GuestsScreen() {
         setContactResults(results);
       }, 300);
       
-      setContactSearchDebounceTimer(timer);
+      contactSearchDebounceTimerRef.current = timer;
     } else {
       setContactResults([]);
     }
@@ -528,6 +542,20 @@ export default function GuestsScreen() {
   };
 
   const normalize = (s?: string | null) => (s || "").replace(/\s+/g, "").toLowerCase();
+
+  // Pre-compute invitation lookup maps to avoid O(n×m) on every render
+  const invitationLookup = useMemo(() => {
+    const byEmail = new Map<string, (typeof invitations)[number]>();
+    const byPhone = new Map<string, (typeof invitations)[number]>();
+    for (const inv of invitations) {
+      const email = normalize(inv.email);
+      const phone = normalize(inv.phone);
+      if (email) byEmail.set(email, inv);
+      if (phone) byPhone.set(phone, inv);
+    }
+    return { byEmail, byPhone };
+  }, [invitations]);
+
   const getInviteForGuest = (guest: WeddingGuest) => {
     const gEmail = normalize(guest.email);
     const gPhone = normalize(guest.phone);
@@ -535,15 +563,9 @@ export default function GuestsScreen() {
     // Return null if both email and phone are empty - don't match on empty strings
     if (!gEmail && !gPhone) return null;
     
-    return invitations.find((inv) => {
-      const invEmail = normalize(inv.email);
-      const invPhone = normalize(inv.phone);
-      
-      // Don't match on empty strings
-      if (invEmail && gEmail && invEmail === gEmail) return true;
-      if (invPhone && gPhone && invPhone === gPhone) return true;
-      return false;
-    });
+    return (gEmail && invitationLookup.byEmail.get(gEmail)) || 
+           (gPhone && invitationLookup.byPhone.get(gPhone)) || 
+           null;
   };
 
   const renderRsvpBadge = (guest: WeddingGuest) => {
@@ -564,7 +586,7 @@ export default function GuestsScreen() {
   };
 
   const renderGuestItem = ({ item, index }: { item: WeddingGuest; index: number }) => (
-    <Animated.View entering={FadeInRight.delay(index * 50).duration(300)}>
+    <Animated.View entering={index < 12 ? FadeInRight.delay(index * 50).duration(300) : undefined}>
       <SwipeableRow
         onEdit={() => handleEditGuest(item)}
         onDelete={() => handleDeleteGuest(item.id)}
@@ -572,6 +594,8 @@ export default function GuestsScreen() {
       >
         <Pressable
           onPress={() => handleEditGuest(item)}
+          accessibilityRole="button"
+          accessibilityLabel={`${item.name}, ${t("trykk for å redigere", "tap to edit")}`}
           style={({ pressed }) => [
             styles.guestItem,
             { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
@@ -638,6 +662,8 @@ export default function GuestsScreen() {
           <Pressable
             onPress={() => handleToggleStatus(item)}
             disabled={isSaving}
+            accessibilityRole="button"
+            accessibilityLabel={`${t("Endre status for", "Change status for")} ${item.name}: ${getStatusLabel(item.status)}`}
             style={[
               styles.statusBadge,
               { backgroundColor: getStatusColor(item.status, false) + "20" },
@@ -1163,6 +1189,26 @@ export default function GuestsScreen() {
     </View>
   );
 
+  const SearchEmpty = () => (
+    <View style={styles.emptyState}>
+      <EvendiIcon name="search" size={40} color={theme.textMuted} />
+      <ThemedText style={[styles.emptyText, { color: theme.textSecondary, marginTop: Spacing.md }]}>
+        {t("Ingen gjester funnet", "No guests found")}
+      </ThemedText>
+      <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
+        {t("Prøv andre søkeord", "Try different search terms")}
+      </ThemedText>
+    </View>
+  );
+
+  // Pull-to-refresh
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }, [loadData]);
+
   if (loading) {
     return (
       <View
@@ -1172,7 +1218,7 @@ export default function GuestsScreen() {
           { backgroundColor: theme.backgroundRoot },
         ]}
       >
-        <ThemedText style={{ color: theme.textSecondary }}>Laster...</ThemedText>
+        <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
@@ -1190,9 +1236,12 @@ export default function GuestsScreen() {
           flexGrow: 1,
         }}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
+        }
         ListHeaderComponent={ListHeader}
-        ListEmptyComponent={searchQuery ? null : ListEmpty}
-        ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
+        ListEmptyComponent={searchQuery ? SearchEmpty : ListEmpty}
+        ItemSeparatorComponent={ItemSeparator}
         initialNumToRender={10}
         windowSize={5}
         removeClippedSubviews

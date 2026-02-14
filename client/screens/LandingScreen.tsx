@@ -32,13 +32,11 @@ import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 const LOGO = require("../../assets/images/Evendi_logo_norsk_tagline.png");
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
 /* ================================================================
    7-TIER BREAKPOINTS  (320 · 480 · 640 · 768 · 1024 · 1280 · 1536)
    ================================================================ */
 function useTier() {
-  const [w, setW] = useState(SCREEN_WIDTH);
+  const [w, setW] = useState(() => Dimensions.get("window").width);
   React.useEffect(() => {
     const sub = Dimensions.addEventListener("change", ({ window }) =>
       setW(window.width),

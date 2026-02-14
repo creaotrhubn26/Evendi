@@ -24,7 +24,7 @@ import {
   StyleSheet,
   Pressable,
   Image,
-  Dimensions,
+  useWindowDimensions,
   FlatList,
   ScrollView,
 } from "react-native";
@@ -41,8 +41,6 @@ import { useQuery } from "@tanstack/react-query";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import { getVendorCategoryGradient } from "@shared/event-types";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 // ── Gradient colors per category (backed by shared registry) ────
 export const CATEGORY_GRADIENTS: Record<string, [string, string]> = (() => {
@@ -97,6 +95,8 @@ export function VendorCategoryMarketplace({
 }: VendorCategoryMarketplaceProps) {
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const CARD_WIDTH = useMemo(() => SCREEN_WIDTH * 0.62, [SCREEN_WIDTH]);
   const colors = gradientColors ?? CATEGORY_GRADIENTS[category] ?? CATEGORY_GRADIENTS.default;
   const traditions = selectedTraditions ?? [];
 
@@ -217,6 +217,7 @@ export function VendorCategoryMarketplace({
                   style={[
                     styles.vendorCard,
                     {
+                      width: CARD_WIDTH,
                       backgroundColor: theme.backgroundDefault,
                       borderColor: theme.border,
                     },
@@ -296,7 +297,6 @@ export function VendorCategoryMarketplace({
 // ────────────────────────────────────────────────────────────────
 //  Styles
 // ────────────────────────────────────────────────────────────────
-const CARD_WIDTH = SCREEN_WIDTH * 0.62;
 
 const styles = StyleSheet.create({
   // ── Hero ──
@@ -387,7 +387,6 @@ const styles = StyleSheet.create({
 
   // ── Vendor card (horizontal scroll) ──
   vendorCard: {
-    width: CARD_WIDTH,
     borderRadius: 14,
     borderWidth: 1,
     overflow: "hidden",

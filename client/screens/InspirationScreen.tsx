@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   ScrollView,
   StyleSheet,
   View,
   Pressable,
-  Dimensions,
+  useWindowDimensions,
   ActivityIndicator,
   RefreshControl,
   Modal,
@@ -31,9 +31,7 @@ import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import { showToast } from "@/lib/toast";
 import PersistentTextInput from "@/components/PersistentTextInput";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const GRID_GAP = Spacing.sm;
-const CARD_WIDTH = (SCREEN_WIDTH - Spacing.lg * 2 - GRID_GAP) / 2;
 
 interface InspirationCategory {
   id: string;
@@ -82,6 +80,8 @@ export default function InspirationScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const { isWedding } = useEventType();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const CARD_WIDTH = useMemo(() => (SCREEN_WIDTH - Spacing.lg * 2 - GRID_GAP) / 2, [SCREEN_WIDTH]);
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [savedItems, setSavedItems] = useState<Set<string>>(new Set());

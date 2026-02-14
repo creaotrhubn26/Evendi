@@ -222,7 +222,24 @@ export default function ChecklistScreen() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, completed }: { id: string; completed: boolean }) =>
       updateChecklistTask(sessionToken!, id, { completed }),
-    onSuccess: async () => {
+    onMutate: async ({ id, completed }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["checklist"] });
+      // Snapshot previous value
+      const previousTasks = queryClient.getQueryData<typeof tasks>(["checklist"]);
+      // Optimistically update
+      queryClient.setQueryData<typeof tasks>(["checklist"], (old) =>
+        old?.map((t) => (t.id === id ? { ...t, completed } : t))
+      );
+      return { previousTasks };
+    },
+    onError: (_err, _vars, context) => {
+      // Roll back on error
+      if (context?.previousTasks) {
+        queryClient.setQueryData(["checklist"], context.previousTasks);
+      }
+    },
+    onSettled: async () => {
       queryClient.invalidateQueries({ queryKey: ["checklist"] });
       await rescheduleChecklistReminders();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -740,6 +757,9 @@ export default function ChecklistScreen() {
               <Pressable 
                 onPress={() => handleToggle(item.id, item.completed)}
                 onLongPress={() => handleEditTask(item)}
+                accessibilityRole="checkbox"
+                accessibilityLabel={`${item.title}, ${item.completed ? t("fullført", "completed") : t("ikke fullført", "not completed")}`}
+                accessibilityState={{ checked: item.completed }}
               >
                 <View
                   style={[

@@ -41,8 +41,8 @@ import { WeddingDetails, ScheduleEvent } from "@/lib/types";
 import { useEventType } from "@/hooks/useEventType";
 import { getCurrencyCode } from "@/lib/format-currency";
 import { getDateLabel } from "@shared/event-types";
+import { apiRequest } from "@/lib/query-client";
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || "";
 const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 type NavigationProp = NativeStackNavigationProp<PlanningStackParamList>;
@@ -214,9 +214,7 @@ export default function PlanningScreen() {
           const session = JSON.parse(sessionStr);
           const token = session.sessionToken || session.token;
           if (token) {
-            const res = await fetch(`${API_BASE}/api/couples/dashboard`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
+            const res = await apiRequest("GET", "/api/couples/dashboard");
             if (res.ok) {
               const dashboard = await res.json();
               // Use the first project's data if available

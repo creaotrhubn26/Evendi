@@ -5,6 +5,8 @@ import { WebSocketServer, type WebSocket } from "ws";
 import crypto from "node:crypto";
 import { db } from "./db";
 import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
+import { z } from "zod";
 import { registerSubscriptionRoutes } from "./subscription-routes";
 import { registerCreatorhubRoutes } from "./creatorhub-routes";
 import { TIMELINE_TEMPLATES, DEFAULT_TIMELINE, TimelineTemplate, resolveTraditionKey } from "./timeline-templates";
@@ -22,6 +24,78 @@ function generateSessionToken(): string {
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 const YR_CACHE: Map<string, { data: any; expires: Date }> = new Map();
+
+// Periodic cleanup of expired YR weather cache entries (every 30 minutes)
+setInterval(() => {
+  const now = new Date();
+  for (const [key, entry] of YR_CACHE) {
+    if (entry.expires < now) {
+      YR_CACHE.delete(key);
+    }
+  }
+}, 30 * 60 * 1000);
+
+// ── Rate limiters for auth endpoints ──
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "For mange forsøk. Prøv igjen om 15 minutter." },
+});
+
+const registerRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 registrations per hour per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "For mange registreringer. Prøv igjen senere." },
+});
+
+// ── Zod schemas for endpoints that lacked validation ──
+const vendorLoginSchema = z.object({
+  email: z.string().email("Ugyldig e-postadresse"),
+  password: z.string().min(1, "Passord er påkrevd"),
+});
+
+const vendorProfileUpdateSchema = z.object({
+  businessName: z.string().min(1).optional(),
+  description: z.string().optional(),
+  location: z.string().optional(),
+  phone: z.string().optional(),
+  website: z.string().optional(),
+  priceRange: z.string().optional(),
+  organizationNumber: z.string().optional(),
+  logoUrl: z.string().optional(),
+  coverImageUrl: z.string().optional(),
+  featured: z.boolean().optional(),
+}).passthrough();
+
+const statusUpdateSchema = z.object({
+  status: z.string().min(1),
+});
+
+const speechUpdateSchema = z.object({
+  speakerName: z.string().optional(),
+  role: z.string().optional(),
+  title: z.string().optional(),
+  content: z.string().optional(),
+  durationMinutes: z.number().optional(),
+  sortOrder: z.number().optional(),
+  status: z.string().optional(),
+  tableId: z.string().nullable().optional(),
+}).passthrough();
+
+const coupleProfileUpdateSchema = z.object({
+  displayName: z.string().optional(),
+  weddingDate: z.string().optional(),
+  venue: z.string().optional(),
+  guestCount: z.number().optional(),
+  eventType: z.string().optional(),
+  traditions: z.any().optional(),
+  culturalBackground: z.string().optional(),
+  partnerEmail: z.string().email().optional().nullable(),
+}).passthrough();
 
 function hashPassword(password: string): string {
   const salt = bcrypt.genSaltSync(10);
@@ -662,7 +736,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/vendors/register", async (req: Request, res: Response) => {
+  app.post("/api/vendors/register", registerRateLimiter, async (req: Request, res: Response) => {
     try {
       const { tierId, ...restData } = req.body;
       const validation = vendorRegistrationSchema.safeParse(restData);
@@ -734,13 +808,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/vendors/login", async (req: Request, res: Response) => {
+  app.post("/api/vendors/login", authRateLimiter, async (req: Request, res: Response) => {
     try {
-      const { email, password } = req.body;
-
-      if (!email || !password) {
-        return res.status(400).json({ error: "E-post og passord er påkrevd" });
+      const validation = vendorLoginSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ error: "E-post og passord er påkrevd", details: validation.error.errors });
       }
+      const { email, password } = validation.data;
 
       const [vendor] = await db.select().from(vendors).where(eq(vendors.email, email));
       if (!vendor) {
@@ -2104,7 +2178,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
-      const { businessName, organizationNumber, description, whyStatement, howStatement, whatStatement, location, phone, website, priceRange, googleReviewUrl, culturalExpertise } = req.body;
+      const validation = vendorProfileUpdateSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ error: "Ugyldig data", details: validation.error.errors });
+      }
+      const { businessName, organizationNumber, description, whyStatement, howStatement, whatStatement, location, phone, website, priceRange, googleReviewUrl, culturalExpertise } = validation.data as any;
 
       if (!businessName || businessName.trim().length < 2) {
         return res.status(400).json({ error: "Bedriftsnavn er påkrevd" });
@@ -3196,7 +3274,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { id } = req.params;
-      const { status } = req.body;
+      const validation = statusUpdateSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ error: "Ugyldig status", details: validation.error.errors });
+      }
+      const { status } = validation.data;
 
       const [inquiry] = await db.select().from(inspirationInquiries).where(eq(inspirationInquiries.id, id));
       if (!inquiry || inquiry.vendorId !== vendorId) {
@@ -3391,7 +3473,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!coupleId) return;
 
     try {
-      const { displayName, weddingDate, selectedTraditions, expectedGuests, eventType, eventCategory } = req.body;
+      const validation = coupleProfileUpdateSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ error: "Ugyldig data", details: validation.error.errors });
+      }
+      const { displayName, weddingDate, selectedTraditions, expectedGuests, eventType, eventCategory } = validation.data as any;
       
       const updateData: any = { updatedAt: new Date() };
       if (displayName !== undefined) updateData.displayName = displayName;
@@ -4667,7 +4753,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const coupleId = await checkCoupleAuth(req, res);
       if (!coupleId) return;
       const { id } = req.params;
-      const { speakerName, role, durationMinutes, sortOrder, notes, scheduledTime } = req.body;
+      const validation = speechUpdateSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ error: "Ugyldig data", details: validation.error.errors });
+      }
+      const { speakerName, role, durationMinutes, sortOrder, notes, scheduledTime } = validation.data as any;
 
       const updates: Record<string, any> = { updatedAt: new Date() };
       if (speakerName !== undefined) updates.speakerName = speakerName;

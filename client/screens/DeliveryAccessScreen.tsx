@@ -10,7 +10,7 @@ import {
   ScrollView,
   Share,
   Image,
-  Dimensions,
+  useWindowDimensions,
   FlatList,
   Animated,
   Modal,
@@ -31,10 +31,8 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import PersistentTextInput from "@/components/PersistentTextInput";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const GALLERY_COLUMNS = 3;
 const GALLERY_GAP = 2;
-const GALLERY_ITEM_SIZE = (SCREEN_WIDTH - GALLERY_GAP * (GALLERY_COLUMNS + 1)) / GALLERY_COLUMNS;
 
 type DeliveryAccessParams = {
   DeliveryAccess: {
@@ -98,6 +96,8 @@ export default function DeliveryAccessScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const GALLERY_ITEM_SIZE = (SCREEN_WIDTH - GALLERY_GAP * (GALLERY_COLUMNS + 1)) / GALLERY_COLUMNS;
   const route = useRoute<RouteProp<DeliveryAccessParams, 'DeliveryAccess'>>();
   const prefillCode = route.params?.prefillCode;
   const deliveryId = route.params?.deliveryId;
@@ -480,7 +480,7 @@ export default function DeliveryAccessScreen() {
                   {imageItems.map((item, index) => (
                     <Pressable
                       key={item.id}
-                      style={styles.galleryItem}
+                      style={[styles.galleryItem, { width: GALLERY_ITEM_SIZE, height: GALLERY_ITEM_SIZE }]}
                       onPress={() => setSelectedImageIndex(index)}
                       onLongPress={() => {
                         Alert.alert(item.label, undefined, [
@@ -864,8 +864,6 @@ const styles = StyleSheet.create({
     gap: GALLERY_GAP,
   },
   galleryItem: {
-    width: GALLERY_ITEM_SIZE,
-    height: GALLERY_ITEM_SIZE,
     borderRadius: 2,
     overflow: "hidden",
   },
@@ -981,7 +979,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   lightboxImage: {
-    width: SCREEN_WIDTH,
+    width: "100%",
     height: "100%",
   },
   lightboxTopBar: {

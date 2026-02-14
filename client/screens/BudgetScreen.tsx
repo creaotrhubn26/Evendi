@@ -133,12 +133,14 @@ export default function BudgetScreen() {
   const { data: budgetSettings, isLoading: loadingSettings, isError: isSettingsError, error: settingsError, refetch: refetchSettings } = useQuery({
     queryKey: ["budget-settings"],
     queryFn: getBudgetSettings,
+    enabled: !!sessionToken,
   });
 
   // Query for budget items
   const { data: budgetItemsData, isLoading: loadingItems, isError: isItemsError, error: itemsError, refetch: refetchItems } = useQuery({
     queryKey: ["budget-items"],
     queryFn: getBudgetItems,
+    enabled: !!sessionToken,
   });
 
   const items = budgetItemsData ?? [];
@@ -169,7 +171,22 @@ export default function BudgetScreen() {
 
   const updateItemMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<BudgetItem> }) => updateBudgetItem(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["budget-items"] }),
+    onMutate: async ({ id, data }) => {
+      await queryClient.cancelQueries({ queryKey: ["budget-items"] });
+      const previousItems = queryClient.getQueryData<BudgetItem[]>(["budget-items"]);
+      queryClient.setQueryData<BudgetItem[]>(["budget-items"], (old) =>
+        old?.map((item) => (item.id === id ? { ...item, ...data } : item))
+      );
+      return { previousItems };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousItems) {
+        queryClient.setQueryData(["budget-items"], context.previousItems);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["budget-items"] });
+    },
   });
 
   const deleteItemMutation = useMutation({
@@ -571,7 +588,7 @@ export default function BudgetScreen() {
             </View>
 
             {category.items.map((item, index) => (
-              <Animated.View key={item.id} entering={FadeInRight.delay(index * 50).duration(300)}>
+              <Animated.View key={item.id} entering={index < 12 ? FadeInRight.delay(index * 50).duration(300) : undefined}>
                 <SwipeableRow
                   onEdit={() => handleEditItem(item)}
                   onDelete={() => handleDeleteItem(item.id)}
@@ -579,6 +596,9 @@ export default function BudgetScreen() {
                 >
                   <Pressable
                     onPress={() => handleTogglePaid(item.id)}
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={`${item.label}, ${item.isPaid ? "betalt" : "ikke betalt"}`}
+                    accessibilityState={{ checked: item.isPaid || false }}
                     style={[styles.itemRow, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
                   >
                     <View

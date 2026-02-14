@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
+import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { initializeSubscriptionCrons } from "./cron-subscriptions";
 import * as fs from "fs";
@@ -28,11 +29,6 @@ function setupCors(app: express.Application) {
 
     // Allowlist production origins (including current domains and render host)
     const allowedProdOrigins = [
-      "https://evendi.no",
-      "https://www.evendi.no",
-      "https://api.evendi.no",
-      "https://evendi-api.onrender.com",
-      "https://evendi-evendi.vercel.app",
       "https://evendi.no",
       "https://www.evendi.no",
       "https://app.evendi.no",
@@ -73,8 +69,7 @@ function setupCors(app: express.Application) {
     const isProductionDomain = origin ? allAllowedOrigins.has(origin) : false;
 
     // Allow origin if it matches any known development domain, production domain, or in dev mode allow all
-    // Temp: allow any origin with an Origin header to prevent CORS blocks while rolling out domains
-    const allowAnyOrigin = true;
+    const allowAnyOrigin = false;
 
     const shouldAllowOrigin = allowAnyOrigin || isDev || isLocalhost || isGitHubCodespaces || isCloudflare || isReplit || isProductionDomain;
 
@@ -104,6 +99,7 @@ function setupCors(app: express.Application) {
 function setupBodyParsing(app: express.Application) {
   app.use(
     express.json({
+      limit: "2mb",
       verify: (req, _res, buf) => {
         req.rawBody = buf;
       },
@@ -266,7 +262,7 @@ function setupErrorHandler(app: express.Application) {
 
     res.status(status).json({ message });
 
-    throw err;
+    console.error("[ErrorHandler]", err);
   });
 }
 
@@ -274,6 +270,12 @@ function setupErrorHandler(app: express.Application) {
   setupCors(app);
   setupBodyParsing(app);
   setupRequestLogging(app);
+
+  // Security headers
+  app.use(helmet({
+    contentSecurityPolicy: false, // CSP can break Expo web — disable for now
+    crossOriginEmbedderPolicy: false,
+  }));
 
   const server = await registerRoutes(app);
 

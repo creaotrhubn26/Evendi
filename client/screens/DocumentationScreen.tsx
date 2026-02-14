@@ -4,7 +4,7 @@ import {
   StyleSheet,
   View,
   Pressable,
-  Dimensions,
+  useWindowDimensions,
   TextInput,
   Linking,
   Modal,
@@ -39,8 +39,6 @@ import { showToast } from "@/lib/toast";
 import type { AppSetting, VideoGuide } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import PersistentTextInput from "@/components/PersistentTextInput";
-
-const { width } = Dimensions.get("window");
 
 interface Feature {
   id: string;
@@ -318,6 +316,7 @@ export default function DocumentationScreen() {
   const { theme, designSettings } = useTheme();
   const { isWedding } = useEventType();
   const queryClient = useQueryClient();
+  const { width } = useWindowDimensions();
   const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
 
   useEffect(() => {
