@@ -4310,17 +4310,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get couples that the vendor has conversations with (for offer recipient selection)
   app.get("/api/vendor/contacts", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (!token) {
-        return res.status(401).json({ error: "Ikke autentisert" });
-      }
-
-      const session = VENDOR_SESSIONS.get(token);
-      if (!session || session.expiresAt < new Date()) {
-        return res.status(401).json({ error: "Ugyldig økt" });
-      }
-
       // Get all couples that have active conversations with this vendor
       const vendorConversations = await db.select({
         couple: {
@@ -4334,7 +4327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(conversations)
         .leftJoin(coupleProfiles, eq(conversations.coupleId, coupleProfiles.id))
         .where(and(
-          eq(conversations.vendorId, session.vendorId),
+          eq(conversations.vendorId, vendorId),
           eq(conversations.status, "active"),
           eq(conversations.deletedByVendor, false)
         ));
