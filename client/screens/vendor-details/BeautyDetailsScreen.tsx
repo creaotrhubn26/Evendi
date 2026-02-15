@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, View, TextInput, Pressable, ActivityIndicator, Switch } from "react-native";
+import { StyleSheet, View, TextInput, Pressable, ActivityIndicator, Alert, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { EvendiIcon } from "@/components/EvendiIcon";
+import { Feather } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
-import { useEventType } from "@/hooks/useEventType";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { showToast } from "@/lib/toast";
-import PersistentTextInput from "@/components/PersistentTextInput";
-const VENDOR_STORAGE_KEY = "evendi_vendor_session";
+
+const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
+
 interface BeautyDetails {
   // Tjenester
   offersBridalMakeup: boolean;
@@ -68,6 +67,7 @@ interface BeautyDetails {
   maxClientsPerDay: number | null;
   bookingLeadWeeks: number | null;
 }
+
 const defaultDetails: BeautyDetails = {
   offersBridalMakeup: true, offersBridalHair: true, offersBridesmaidMakeup: true, offersBridesmaidHair: true,
   offersGroomGrooming: false, offersMotherOfBride: true, offersFlowerGirlHair: false,
@@ -79,15 +79,18 @@ const defaultDetails: BeautyDetails = {
   setupTimeMinutes: null, bridalTimeMinutes: null, additionalPersonTime: null,
   maxClientsPerDay: null, bookingLeadWeeks: null,
 };
+
 const PRODUCT_BRANDS = ["MAC", "Charlotte Tilbury", "Bobbi Brown", "NARS", "Laura Mercier", "Dior", "Chanel", "Makeup Forever", "Hourglass", "Too Faced"];
+
 export default function BeautyDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
-  const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [details, setDetails] = useState<BeautyDetails>(defaultDetails);
+
   useEffect(() => { AsyncStorage.getItem(VENDOR_STORAGE_KEY).then((data) => { if (data) setSessionToken(JSON.parse(data).sessionToken); }); }, []);
+
   const { data: savedData, isLoading } = useQuery({
     queryKey: ["/api/vendor/beauty-details"],
     queryFn: async () => {
@@ -97,7 +100,9 @@ export default function BeautyDetailsScreen({ navigation }: { navigation: Native
     },
     enabled: !!sessionToken,
   });
+
   useEffect(() => { if (savedData) setDetails({ ...defaultDetails, ...savedData }); }, [savedData]);
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!sessionToken) throw new Error("Ikke innlogget");
@@ -108,18 +113,13 @@ export default function BeautyDetailsScreen({ navigation }: { navigation: Native
       if (!response.ok) throw new Error((await response.json()).message || "Kunne ikke lagre");
       return response.json();
     },
-    onSuccess: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      queryClient.invalidateQueries({ queryKey: ["/api/vendor/beauty-details"] });
-      showToast("Hår & Makeup-detaljene er oppdatert");
-    },
-    onError: (error: Error) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast(error.message);
-    },
+    onSuccess: () => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); queryClient.invalidateQueries({ queryKey: ["/api/vendor/beauty-details"] }); Alert.alert("Lagret", "Hår & Makeup-detaljene er oppdatert"); },
+    onError: (error: Error) => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); Alert.alert("Feil", error.message); },
   });
+
   const updateDetail = <K extends keyof BeautyDetails>(key: K, value: BeautyDetails[K]) => setDetails(prev => ({ ...prev, [key]: value }));
   const toggleBrand = (brand: string) => setDetails(prev => ({ ...prev, productBrands: prev.productBrands.includes(brand) ? prev.productBrands.filter(b => b !== brand) : [...prev.productBrands, brand] }));
+
   const renderSwitch = (label: string, value: boolean, onChange: (v: boolean) => void, description?: string) => (
     <View style={styles.switchContainer}>
       <View style={styles.switchRow}>
@@ -127,52 +127,57 @@ export default function BeautyDetailsScreen({ navigation }: { navigation: Native
           <ThemedText style={[styles.switchLabel, { color: theme.text }]}>{label}</ThemedText>
           {description && <ThemedText style={[styles.switchDescription, { color: theme.textSecondary }]}>{description}</ThemedText>}
         </View>
-        <Switch value={value} onValueChange={onChange} trackColor={{ false: theme.border, true: theme.accent + "60" }} thumbColor={value ? theme.accent : theme.backgroundSecondary} />
+        <Switch value={value} onValueChange={onChange} trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }} thumbColor={value ? Colors.dark.accent : theme.backgroundSecondary} />
       </View>
     </View>
   );
+
   const renderInput = (label: string, value: string | null, onChange: (v: string) => void, options?: { placeholder?: string; keyboardType?: "default" | "number-pad"; suffix?: string }) => (
     <View style={styles.inputGroup}>
       <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>{label}</ThemedText>
       <View style={styles.inputWrapper}>
-        <PersistentTextInput style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }, options?.suffix && { paddingRight: 50 }]} value={value || ""} onChangeText={onChange} placeholder={options?.placeholder} placeholderTextColor={theme.textMuted} keyboardType={options?.keyboardType || "default"} />
-          draftKey="BeautyDetailsScreen-input-1"
+        <TextInput style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }, options?.suffix && { paddingRight: 50 }]} value={value || ""} onChangeText={onChange} placeholder={options?.placeholder} placeholderTextColor={theme.textMuted} keyboardType={options?.keyboardType || "default"} />
         {options?.suffix && <ThemedText style={[styles.inputSuffix, { color: theme.textSecondary }]}>{options.suffix}</ThemedText>}
       </View>
     </View>
   );
+
   const renderSectionHeader = (icon: string, title: string) => (
     <View style={styles.sectionHeader}>
-      <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}><EvendiIcon name={icon as any} size={16} color={theme.accent} /></View>
+      <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}><Feather name={icon as any} size={16} color={theme.accent} /></View>
       <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>{title}</ThemedText>
     </View>
   );
+
   if (isLoading) return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <View style={styles.headerContent}><View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}><EvendiIcon name="scissors" size={20} color="#FFFFFF" /></View><ThemedText style={[styles.headerTitle, { color: theme.text }]}>Hår & Makeup</ThemedText></View>
-        <Pressable onPress={() => navigation.goBack()} style={styles.closeButton}><EvendiIcon name="x" size={20} color={theme.textSecondary} /></Pressable>
+        <View style={styles.headerContent}><View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}><Feather name="scissors" size={20} color="#FFFFFF" /></View><ThemedText style={[styles.headerTitle, { color: theme.text }]}>Hår & Makeup</ThemedText></View>
+        <Pressable onPress={() => navigation.goBack()} style={styles.closeButton}><Feather name="x" size={20} color={theme.textSecondary} /></Pressable>
       </View>
       <View style={styles.loadingContainer}><ActivityIndicator size="large" color={theme.accent} /></View>
     </View>
   );
+
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        <View style={styles.headerContent}><View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}><EvendiIcon name="scissors" size={20} color="#FFFFFF" /></View><View><ThemedText style={[styles.headerTitle, { color: theme.text }]}>Hår & Makeup</ThemedText><ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>Spesifiser dine tjenester</ThemedText></View></View>
-        <Pressable onPress={() => navigation.goBack()} style={styles.closeButton}><EvendiIcon name="x" size={20} color={theme.textSecondary} /></Pressable>
+        <View style={styles.headerContent}><View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}><Feather name="scissors" size={20} color="#FFFFFF" /></View><View><ThemedText style={[styles.headerTitle, { color: theme.text }]}>Hår & Makeup</ThemedText><ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>Spesifiser dine tjenester</ThemedText></View></View>
+        <Pressable onPress={() => navigation.goBack()} style={styles.closeButton}><Feather name="x" size={20} color={theme.textSecondary} /></Pressable>
       </View>
+
       <KeyboardAwareScrollViewCompat style={{ flex: 1 }} contentContainerStyle={[styles.content, { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }]}>
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("heart", "Tjenester")}
-          {renderSwitch(isWedding ? "Brudemakeup" : "Event-makeup", details.offersBridalMakeup, (v) => updateDetail("offersBridalMakeup", v))}
-          {renderSwitch(isWedding ? "Brudehår" : "Event-hår", details.offersBridalHair, (v) => updateDetail("offersBridalHair", v))}
-          {renderSwitch(isWedding ? "Brudepikemakeup" : "Gruppemedlem-makeup", details.offersBridesmaidMakeup, (v) => updateDetail("offersBridesmaidMakeup", v))}
-          {renderSwitch(isWedding ? "Brudepikehår" : "Gruppemedlem-hår", details.offersBridesmaidHair, (v) => updateDetail("offersBridesmaidHair", v))}
-          {renderSwitch(isWedding ? "Brudens mor" : "VIP-styling", details.offersMotherOfBride, (v) => updateDetail("offersMotherOfBride", v))}
-          {renderSwitch(isWedding ? "Brudgom-styling" : "Herrestyling", details.offersGroomGrooming, (v) => updateDetail("offersGroomGrooming", v))}
-          {renderSwitch(isWedding ? "Brudepikehår" : "Barnehår", details.offersFlowerGirlHair, (v) => updateDetail("offersFlowerGirlHair", v), isWedding ? "For små blomsterpiker" : "For yngre deltakere")}
+          {renderSwitch("Brudemakeup", details.offersBridalMakeup, (v) => updateDetail("offersBridalMakeup", v))}
+          {renderSwitch("Brudehår", details.offersBridalHair, (v) => updateDetail("offersBridalHair", v))}
+          {renderSwitch("Brudepikemakeup", details.offersBridesmaidMakeup, (v) => updateDetail("offersBridesmaidMakeup", v))}
+          {renderSwitch("Brudepikehår", details.offersBridesmaidHair, (v) => updateDetail("offersBridesmaidHair", v))}
+          {renderSwitch("Brudens mor", details.offersMotherOfBride, (v) => updateDetail("offersMotherOfBride", v))}
+          {renderSwitch("Brudgom-styling", details.offersGroomGrooming, (v) => updateDetail("offersGroomGrooming", v))}
+          {renderSwitch("Brudepikehår", details.offersFlowerGirlHair, (v) => updateDetail("offersFlowerGirlHair", v), "For små blomsterpiker")}
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("calendar", "Prøvetime")}
           {renderSwitch("Prøvetime inkludert", details.trialIncluded, (v) => updateDetail("trialIncluded", v))}
@@ -180,6 +185,7 @@ export default function BeautyDetailsScreen({ navigation }: { navigation: Native
           {renderSwitch("Prøve-makeup", details.trialMakeup, (v) => updateDetail("trialMakeup", v))}
           {renderSwitch("Prøve-hår", details.trialHair, (v) => updateDetail("trialHair", v))}
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("map-pin", "Lokasjon")}
           {renderSwitch("Kommer til lokalet", details.onLocationAvailable, (v) => updateDetail("onLocationAvailable", v))}
@@ -197,6 +203,7 @@ export default function BeautyDetailsScreen({ navigation }: { navigation: Native
           {renderSwitch("Salong tilgjengelig", details.salonAvailable, (v) => updateDetail("salonAvailable", v))}
           {details.salonAvailable && renderInput("Salong-adresse", details.salonAddress || "", (v) => updateDetail("salonAddress", v || null), { placeholder: "Gateadresse, by" })}
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("star", "Tilleggstjenester")}
           {renderSwitch("Løsvipper tilgjengelig", details.falseLashesAvailable, (v) => updateDetail("falseLashesAvailable", v))}
@@ -206,6 +213,7 @@ export default function BeautyDetailsScreen({ navigation }: { navigation: Native
           {renderSwitch("Hair extensions", details.hairExtensionsAvailable, (v) => updateDetail("hairExtensionsAvailable", v))}
           {renderSwitch("Slør-styling inkludert", details.veilStylingIncluded, (v) => updateDetail("veilStylingIncluded", v))}
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("package", "Produkter")}
           {renderSwitch("High-end produkter", details.usesHighEndProducts, (v) => updateDetail("usesHighEndProducts", v))}
@@ -220,6 +228,7 @@ export default function BeautyDetailsScreen({ navigation }: { navigation: Native
           {renderSwitch("Hypoallergene produkter", details.hypoallergenicAvailable, (v) => updateDetail("hypoallergenicAvailable", v))}
           {renderSwitch("Veganske produkter", details.veganProductsAvailable, (v) => updateDetail("veganProductsAvailable", v))}
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("refresh-cw", "Touch-up")}
           {renderSwitch("Touch-up service", details.touchUpServiceAvailable, (v) => updateDetail("touchUpServiceAvailable", v))}
@@ -231,24 +240,28 @@ export default function BeautyDetailsScreen({ navigation }: { navigation: Native
           )}
           {renderSwitch("Blir til seremonien", details.staysForCeremony, (v) => updateDetail("staysForCeremony", v))}
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("clock", "Tidsbruk")}
           {renderInput("Rigge-tid", details.setupTimeMinutes?.toString() || "", (v) => updateDetail("setupTimeMinutes", v ? parseInt(v) : null), { placeholder: "30", keyboardType: "number-pad", suffix: "min" })}
-          {renderInput(isWedding ? "Tid per brud" : "Tid per kunde", details.bridalTimeMinutes?.toString() || "", (v) => updateDetail("bridalTimeMinutes", v ? parseInt(v) : null), { placeholder: "90", keyboardType: "number-pad", suffix: "min" })}
+          {renderInput("Tid per brud", details.bridalTimeMinutes?.toString() || "", (v) => updateDetail("bridalTimeMinutes", v ? parseInt(v) : null), { placeholder: "90", keyboardType: "number-pad", suffix: "min" })}
           {renderInput("Tid per ekstra person", details.additionalPersonTime?.toString() || "", (v) => updateDetail("additionalPersonTime", v ? parseInt(v) : null), { placeholder: "45", keyboardType: "number-pad", suffix: "min" })}
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("users", "Kapasitet")}
           {renderInput("Maks kunder per dag", details.maxClientsPerDay?.toString() || "", (v) => updateDetail("maxClientsPerDay", v ? parseInt(v) : null), { placeholder: "6", keyboardType: "number-pad" })}
           {renderInput("Book i forveien", details.bookingLeadWeeks?.toString() || "", (v) => updateDetail("bookingLeadWeeks", v ? parseInt(v) : null), { placeholder: "8", keyboardType: "number-pad", suffix: "uker" })}
         </View>
+
         <Pressable onPress={() => saveMutation.mutate()} disabled={saveMutation.isPending} style={({ pressed }) => [styles.saveBtn, { backgroundColor: theme.accent }, pressed && { opacity: 0.9 }]}>
-          {saveMutation.isPending ? <ActivityIndicator color="#FFFFFF" /> : <><View style={styles.saveBtnIcon}><EvendiIcon name="save" size={16} color="#FFFFFF" /></View><ThemedText style={styles.saveBtnText}>Lagre hår & makeup-detaljer</ThemedText></>}
+          {saveMutation.isPending ? <ActivityIndicator color="#FFFFFF" /> : <><View style={styles.saveBtnIcon}><Feather name="save" size={16} color="#FFFFFF" /></View><ThemedText style={styles.saveBtnText}>Lagre hår & makeup-detaljer</ThemedText></>}
         </Pressable>
       </KeyboardAwareScrollViewCompat>
     </View>
   );
 }
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md, borderBottomWidth: 1 },

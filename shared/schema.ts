@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, date, doublePrecision, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -26,10 +26,6 @@ export const vendorCategories = pgTable("vendor_categories", {
   name: text("name").notNull(),
   icon: text("icon").notNull(),
   description: text("description"),
-  slug: text("slug"),
-  dashboardKey: text("dashboard_key"),
-  sortOrder: integer("sort_order").default(0),
-  applicableEventTypes: text("applicable_event_types").array(),
 });
 
 export const vendors = pgTable("vendors", {
@@ -40,18 +36,14 @@ export const vendors = pgTable("vendors", {
   password: text("password").notNull(),
   businessName: text("business_name").notNull(),
   organizationNumber: text("organization_number"),
-  categoryId: varchar("category_id").references(() => vendorCategories.id, { onDelete: "set null" }),
+  categoryId: varchar("category_id").references(() => vendorCategories.id),
   description: text("description"),
-  whyStatement: text("why_statement"),
-  howStatement: text("how_statement"),
-  whatStatement: text("what_statement"),
   location: text("location"),
   phone: text("phone"),
   website: text("website"),
   priceRange: text("price_range"),
   imageUrl: text("image_url"),
   googleReviewUrl: text("google_review_url"),
-  culturalExpertise: text("cultural_expertise").array(),
   status: text("status").notNull().default("pending"),
   rejectionReason: text("rejection_reason"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -65,8 +57,6 @@ export const vendorSessions = pgTable("vendor_sessions", {
   vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
-  isImpersonation: boolean("is_impersonation").notNull().default(false),
-  impersonatedBy: text("impersonated_by"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -74,10 +64,6 @@ export const insertVendorCategorySchema = createInsertSchema(vendorCategories).p
   name: true,
   icon: true,
   description: true,
-  slug: true,
-  dashboardKey: true,
-  sortOrder: true,
-  applicableEventTypes: true,
 });
 
 export const insertVendorSchema = createInsertSchema(vendors).omit({
@@ -160,14 +146,6 @@ export const deliveries = pgTable("deliveries", {
   description: text("description"),
   weddingDate: text("wedding_date"),
   status: text("status").notNull().default("active"),
-  projectId: varchar("project_id"),
-  timelineId: varchar("timeline_id"),
-  coupleId: varchar("couple_id"),
-  chatNotified: boolean("chat_notified").default(false),
-  openedAt: timestamp("opened_at"),
-  openCount: integer("open_count").default(0),
-  downloadCount: integer("download_count").default(0),
-  favoriteCount: integer("favorite_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -182,25 +160,6 @@ export const deliveryItems = pgTable("delivery_items", {
   url: text("url").notNull(),
   description: text("description"),
   sortOrder: integer("sort_order").default(0),
-  downloadCount: integer("download_count").default(0),
-  favoriteCount: integer("favorite_count").default(0),
-  favoritedAt: timestamp("favorited_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// Delivery tracking — logs every open/download/favorite action
-export const deliveryTracking = pgTable("delivery_tracking", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  deliveryId: varchar("delivery_id").references(() => deliveries.id, { onDelete: "cascade" }),
-  deliveryItemId: varchar("delivery_item_id").references(() => deliveryItems.id, { onDelete: "set null" }),
-  coupleId: varchar("couple_id"),
-  vendorId: varchar("vendor_id"),
-  action: text("action").notNull(), // 'opened', 'downloaded', 'favorited', 'unfavorited', 'shared', 'viewed_item'
-  actionDetail: text("action_detail"), // JSON extra data
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -223,9 +182,6 @@ export const createDeliverySchema = z.object({
   title: z.string().min(2, "Tittel må være minst 2 tegn"),
   description: z.string().optional(),
   weddingDate: z.string().optional(),
-  projectId: z.string().optional(),
-  timelineId: z.string().optional(),
-  coupleId: z.string().optional(),
   items: z.array(z.object({
     type: z.enum(["gallery", "video", "website", "download", "other"]),
     label: z.string().min(1, "Etikett er påkrevd"),
@@ -373,7 +329,7 @@ export const checklistTasks = pgTable("checklist_tasks", {
   completedBy: varchar("completed_by"), // coupleId who completed it
   assignedTo: varchar("assigned_to"), // Optional: assign to partner
   notes: text("notes"),
-  linkedReminderId: varchar("linked_reminder_id").references(() => reminders.id, { onDelete: "set null" }),
+  linkedReminderId: varchar("linked_reminder_id").references(() => reminders.id),
   isDefault: boolean("is_default").notNull().default(false), // True for system-generated tasks
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
@@ -400,7 +356,7 @@ export type ChecklistTask = typeof checklistTasks.$inferSelect;
 export type InsertChecklistTask = z.infer<typeof insertChecklistTaskSchema>;
 export type CreateChecklistTask = z.infer<typeof createChecklistTaskSchema>;
 
-// Couple / Organizer Profiles — supports multiple event types (wedding, confirmation, corporate, etc.)
+// Couple Profiles for messaging
 export const coupleProfiles = pgTable("couple_profiles", {
   id: varchar("id")
     .primaryKey()
@@ -410,9 +366,6 @@ export const coupleProfiles = pgTable("couple_profiles", {
   password: text("password").notNull(),
   partnerEmail: text("partner_email"),
   weddingDate: text("wedding_date"),
-  eventType: text("event_type").default("wedding"),
-  eventCategory: text("event_category").default("personal"),
-  selectedTraditions: text("selected_traditions").array(),
   lastActiveAt: timestamp("last_active_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -425,193 +378,8 @@ export const coupleSessions = pgTable("couple_sessions", {
   coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
-  isImpersonation: boolean("is_impersonation").notNull().default(false),
-  impersonatedBy: text("impersonated_by"),
   createdAt: timestamp("created_at").defaultNow(),
 });
-
-// Budget items for couples
-export const coupleBudgetItems = pgTable("couple_budget_items", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  category: text("category").notNull(),
-  label: text("label").notNull(),
-  estimatedCost: integer("estimated_cost").notNull().default(0),
-  actualCost: integer("actual_cost"),
-  isPaid: boolean("is_paid").notNull().default(false),
-  notes: text("notes"),
-  sortOrder: integer("sort_order").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleBudgetSettings = pgTable("couple_budget_settings", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  totalBudget: integer("total_budget").notNull().default(0),
-  currency: text("currency").notNull().default("NOK"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-// Dress tracking for couples
-export const coupleDressAppointments = pgTable("couple_dress_appointments", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  shopName: text("shop_name").notNull(),
-  date: text("date").notNull(),
-  time: text("time"),
-  notes: text("notes"),
-  completed: boolean("completed").notNull().default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleDressFavorites = pgTable("couple_dress_favorites", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  designer: text("designer"),
-  shop: text("shop"),
-  price: integer("price").default(0),
-  imageUrl: text("image_url"),
-  notes: text("notes"),
-  isFavorite: boolean("is_favorite").notNull().default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleDressTimeline = pgTable("couple_dress_timeline", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  ordered: boolean("ordered").notNull().default(false),
-  orderedDate: text("ordered_date"),
-  firstFitting: boolean("first_fitting").notNull().default(false),
-  firstFittingDate: text("first_fitting_date"),
-  alterations: boolean("alterations").notNull().default(false),
-  alterationsDate: text("alterations_date"),
-  finalFitting: boolean("final_fitting").notNull().default(false),
-  finalFittingDate: text("final_fitting_date"),
-  pickup: boolean("pickup").notNull().default(false),
-  pickupDate: text("pickup_date"),
-  budget: integer("budget").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-// Important people for the wedding
-export const coupleImportantPeople = pgTable("couple_important_people", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  role: text("role").notNull(), // 'bestman', 'maidofhonor', 'groomsman', 'bridesmaid', 'toastmaster', 'other'
-  phone: text("phone"),
-  email: text("email"),
-  notes: text("notes"),
-  sortOrder: integer("sort_order").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-// Photo shot list — with location scouting intelligence
-export const couplePhotoShots = pgTable("couple_photo_shots", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  description: text("description"),
-  category: text("category").notNull(), // 'ceremony', 'portraits', 'group', 'details', 'reception'
-  completed: boolean("completed").notNull().default(false),
-  sortOrder: integer("sort_order").default(0),
-  // Location scouting fields
-  locationName: text("location_name"),
-  locationLat: doublePrecision("location_lat"),
-  locationLng: doublePrecision("location_lng"),
-  locationNotes: text("location_notes"),
-  weatherTip: text("weather_tip"),
-  travelFromVenue: text("travel_from_venue"),
-  imageUri: text("image_uri"),
-  scouted: boolean("scouted").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-// Zod schemas for new tables
-export const createBudgetItemSchema = z.object({
-  category: z.string().min(1),
-  label: z.string().min(1),
-  estimatedCost: z.number().int().min(0),
-  actualCost: z.number().int().min(0).optional(),
-  isPaid: z.boolean().optional(),
-  notes: z.string().optional(),
-  sortOrder: z.number().int().optional(),
-});
-
-export const createDressAppointmentSchema = z.object({
-  shopName: z.string().min(1),
-  date: z.string().min(1),
-  time: z.string().optional(),
-  notes: z.string().optional(),
-  completed: z.boolean().optional(),
-});
-
-export const createDressFavoriteSchema = z.object({
-  name: z.string().min(1),
-  designer: z.string().optional(),
-  shop: z.string().optional(),
-  price: z.number().int().min(0).optional(),
-  imageUrl: z.string().optional(),
-  notes: z.string().optional(),
-  isFavorite: z.boolean().optional(),
-});
-
-export const createImportantPersonSchema = z.object({
-  name: z.string().min(1),
-  role: z.enum(['bestman', 'maidofhonor', 'groomsman', 'bridesmaid', 'toastmaster', 'other']),
-  phone: z.string().optional(),
-  email: z.string().email().optional().or(z.literal('')),
-  notes: z.string().optional(),
-  sortOrder: z.number().int().optional(),
-});
-
-export const createPhotoShotSchema = z.object({
-  title: z.string().min(1),
-  description: z.string().optional(),
-  category: z.enum(['ceremony', 'portraits', 'group', 'details', 'reception']),
-  completed: z.boolean().optional(),
-  sortOrder: z.number().int().optional(),
-  // Location scouting fields
-  locationName: z.string().optional(),
-  locationLat: z.number().optional(),
-  locationLng: z.number().optional(),
-  locationNotes: z.string().optional(),
-  weatherTip: z.string().optional(),
-  travelFromVenue: z.string().optional(),
-  imageUri: z.string().optional(),
-  scouted: z.boolean().optional(),
-});
-
-// Types for new tables
-export type CoupleBudgetItem = typeof coupleBudgetItems.$inferSelect;
-export type CoupleBudgetSettings = typeof coupleBudgetSettings.$inferSelect;
-export type CoupleDressAppointment = typeof coupleDressAppointments.$inferSelect;
-export type CoupleDressFavorite = typeof coupleDressFavorites.$inferSelect;
-export type CoupleDressTimeline = typeof coupleDressTimeline.$inferSelect;
-export type CoupleImportantPerson = typeof coupleImportantPeople.$inferSelect;
-export type CouplePhotoShot = typeof couplePhotoShots.$inferSelect;
 
 // Conversations between couples and vendors
 export const conversations = pgTable("conversations", {
@@ -635,27 +403,6 @@ export const conversations = pgTable("conversations", {
   vendorDeletedAt: timestamp("vendor_deleted_at"),
 });
 
-// Conversations between vendors (optional couple context)
-export const vendorVendorConversations = pgTable("vendor_vendor_conversations", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  vendorOneId: varchar("vendor_one_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
-  vendorTwoId: varchar("vendor_two_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
-  coupleId: varchar("couple_id").references(() => coupleProfiles.id, { onDelete: "set null" }),
-  status: text("status").notNull().default("active"),
-  lastMessageAt: timestamp("last_message_at").defaultNow(),
-  vendorOneUnreadCount: integer("vendor_one_unread_count").default(0),
-  vendorTwoUnreadCount: integer("vendor_two_unread_count").default(0),
-  vendorOneTypingAt: timestamp("vendor_one_typing_at"),
-  vendorTwoTypingAt: timestamp("vendor_two_typing_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-  deletedByVendorOne: boolean("deleted_by_vendor_one").default(false),
-  deletedByVendorTwo: boolean("deleted_by_vendor_two").default(false),
-  vendorOneDeletedAt: timestamp("vendor_one_deleted_at"),
-  vendorTwoDeletedAt: timestamp("vendor_two_deleted_at"),
-});
-
 export const messages = pgTable("messages", {
   id: varchar("id")
     .primaryKey()
@@ -673,24 +420,6 @@ export const messages = pgTable("messages", {
   deletedByVendor: boolean("deleted_by_vendor").default(false),
   coupleDeletedAt: timestamp("couple_deleted_at"),
   vendorDeletedAt: timestamp("vendor_deleted_at"),
-});
-
-export const vendorVendorMessages = pgTable("vendor_vendor_messages", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  conversationId: varchar("conversation_id").notNull().references(() => vendorVendorConversations.id, { onDelete: "cascade" }),
-  senderVendorId: varchar("sender_vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
-  body: text("body").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-  readAt: timestamp("read_at"),
-  editedAt: timestamp("edited_at"),
-  attachmentUrl: text("attachment_url"),
-  attachmentType: text("attachment_type"),
-  deletedByVendorOne: boolean("deleted_by_vendor_one").default(false),
-  deletedByVendorTwo: boolean("deleted_by_vendor_two").default(false),
-  vendorOneDeletedAt: timestamp("vendor_one_deleted_at"),
-  vendorTwoDeletedAt: timestamp("vendor_two_deleted_at"),
 });
 
 // Admin conversations with vendors
@@ -759,8 +488,6 @@ export type CoupleProfile = typeof coupleProfiles.$inferSelect;
 export type CoupleSession = typeof coupleSessions.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
-export type VendorVendorConversation = typeof vendorVendorConversations.$inferSelect;
-export type VendorVendorMessage = typeof vendorVendorMessages.$inferSelect;
 export type CoupleLogin = z.infer<typeof coupleLoginSchema>;
 export type SendMessage = z.infer<typeof sendMessageSchema>;
 
@@ -769,7 +496,6 @@ export const reminders = pgTable("reminders", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description"),
   reminderDate: timestamp("reminder_date").notNull(),
@@ -815,57 +541,13 @@ export const vendorProducts = pgTable("vendor_products", {
   imageUrl: text("image_url"),
   isArchived: boolean("is_archived").default(false),
   sortOrder: integer("sort_order").default(0),
-  // Inventory tracking fields
+  // Inventory tracking
   trackInventory: boolean("track_inventory").default(false),
   availableQuantity: integer("available_quantity"),
   reservedQuantity: integer("reserved_quantity").default(0),
   bookingBuffer: integer("booking_buffer").default(0),
-  // Category-specific metadata
-  metadata: text("metadata").$type<string>(),
-  // Venue-specific fields (for venue products)
-  venueAddress: text("venue_address"),
-  venueMaxGuests: integer("venue_max_guests"),
-  venueMinGuests: integer("venue_min_guests"),
-  venueCateringIncluded: boolean("venue_catering_included").default(false),
-  venueAccommodationAvailable: boolean("venue_accommodation_available").default(false),
-  venueCheckoutTime: text("venue_checkout_time"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const vendorAvailability = pgTable(
-  "vendor_availability",
-  {
-    id: varchar("id")
-      .primaryKey()
-      .default(sql`gen_random_uuid()`),
-    vendorId: varchar("vendor_id")
-      .notNull()
-      .references(() => vendors.id, { onDelete: "cascade" }),
-    date: date("date").notNull(),
-    name: text("name"), // optional label like "Summer vacation" or "Smith wedding"
-    status: text("status").notNull().default("available"), // 'available', 'blocked', 'limited'
-    maxBookings: integer("max_bookings"), // null means unlimited
-    notes: text("notes"),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow(),
-  },
-  (table) => ({
-    vendorDateIdx: uniqueIndex("idx_vendor_availability_vendor_date").on(
-      table.vendorId,
-      table.date
-    ),
-    vendorIdx: index("idx_vendor_availability_vendor").on(table.vendorId),
-    dateIdx: index("idx_vendor_availability_date").on(table.date),
-  })
-);
-
-export const insertVendorAvailabilitySchema = createInsertSchema(
-  vendorAvailability
-).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
 });
 
 export const insertVendorProductSchema = createInsertSchema(vendorProducts).omit({
@@ -886,215 +568,13 @@ export const createVendorProductSchema = z.object({
   imageUrl: z.string().url("Ugyldig URL").optional().or(z.literal("")),
   sortOrder: z.number().default(0),
   trackInventory: z.boolean().default(false),
-  availableQuantity: z.number().int().optional(),
-  reservedQuantity: z.number().int().min(0).default(0),
-  bookingBuffer: z.number().int().min(0).default(0),
+  availableQuantity: z.number().min(0).optional(),
+  bookingBuffer: z.number().min(0).default(0),
 });
-
-export const createVendorAvailabilitySchema = z.object({
-  vendorId: z.string().uuid("Ugyldig vendor ID"),
-  date: z.string().date("Ugyldig dato"),
-  name: z.string().max(100).optional(),
-  status: z.enum(["available", "blocked", "limited"]).default("available"),
-  maxBookings: z.number().int().positive().optional(),
-  notes: z.string().optional(),
-});
-
-// Venue planner storage (DB-backed)
-export const coupleVenueBookings = pgTable("couple_venue_bookings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  vendorId: varchar("vendor_id").references(() => vendors.id, { onDelete: "set null" }), // Link to vendor for site visits
-  venueName: text("venue_name").notNull(),
-  date: text("date").notNull(), // Stored as dd.MM.yyyy
-  time: text("time"),
-  location: text("location"),
-  capacity: integer("capacity"),
-  notes: text("notes"),
-  status: text("status").default("considering"), // 'considering', 'booked', 'confirmed'
-  isPrimary: boolean("is_primary").default(false), // Distinguish primary from secondary venues
-  venueType: text("venue_type"), // 'ceremony', 'reception', 'party', 'accommodation', 'other'
-  // Decision-making fields
-  address: text("address"),
-  maxGuests: integer("max_guests"),
-  invitedGuests: integer("invited_guests"),
-  cateringIncluded: boolean("catering_included").default(false),
-  accommodationAvailable: boolean("accommodation_available").default(false),
-  checkoutTime: text("checkout_time"), // When venue must be vacated
-  // Site visit / befaring fields
-  siteVisitDate: text("site_visit_date"), // Date of scheduled site visit
-  siteVisitTime: text("site_visit_time"), // Time of site visit
-  visitNotesLiked: text("visit_notes_liked"), // "Hva likte vi?"
-  visitNotesUnsure: text("visit_notes_unsure"), // "Hva var vi usikre på?"
-  // Vendor tracking fields
-  vendorVisitConfirmed: boolean("vendor_visit_confirmed").default(false), // Vendor confirmed the visit
-  vendorVisitNotes: text("vendor_visit_notes"), // Vendor's notes about the visit
-  vendorVisitCompleted: boolean("vendor_visit_completed").default(false), // Visit has been completed
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleVenueTimelines = pgTable("couple_venue_timelines", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  venueSelected: boolean("venue_selected").default(false),
-  venueVisited: boolean("venue_visited").default(false),
-  contractSigned: boolean("contract_signed").default(false),
-  depositPaid: boolean("deposit_paid").default(false),
-  capacity: integer("capacity"),
-  budget: integer("budget"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const vendorVenueBookings = pgTable("vendor_venue_bookings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
-  coupleName: text("couple_name").notNull(),
-  date: text("date").notNull(), // Stored as dd.MM.yyyy
-  time: text("time"),
-  location: text("location"),
-  capacity: integer("capacity"),
-  notes: text("notes"),
-  status: text("status").default("considering"), // 'considering', 'booked', 'confirmed'
-  // Decision-making fields
-  address: text("address"),
-  maxGuests: integer("max_guests"),
-  cateringIncluded: boolean("catering_included").default(false),
-  accommodationAvailable: boolean("accommodation_available").default(false),
-  checkoutTime: text("checkout_time"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const vendorVenueAvailability = pgTable(
-  "vendor_venue_availability",
-  {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-    vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
-    date: text("date").notNull(), // Stored as dd.MM.yyyy for UI compatibility
-    status: text("status").notNull().default("available"), // available | blocked | limited
-    maxBookings: integer("max_bookings"),
-    notes: text("notes"),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow(),
-  },
-  (table) => ({
-    vendorDateIdx: uniqueIndex("idx_vendor_venue_availability_vendor_date").on(table.vendorId, table.date),
-    vendorIdx: index("idx_vendor_venue_availability_vendor").on(table.vendorId),
-    dateIdx: index("idx_vendor_venue_availability_date").on(table.date),
-  })
-);
-
-export const vendorVenueTimelines = pgTable("vendor_venue_timelines", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }).unique(),
-  siteVisitDone: boolean("site_visit_done").default(false),
-  contractSigned: boolean("contract_signed").default(false),
-  depositReceived: boolean("deposit_received").default(false),
-  floorPlanFinalized: boolean("floor_plan_finalized").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertCoupleVenueBookingSchema = createInsertSchema(coupleVenueBookings).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertCoupleVenueTimelineSchema = createInsertSchema(coupleVenueTimelines).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertVendorVenueBookingSchema = createInsertSchema(vendorVenueBookings).omit({
-  id: true,
-  status: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertVendorVenueAvailabilitySchema = createInsertSchema(vendorVenueAvailability).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertVendorVenueTimelineSchema = createInsertSchema(vendorVenueTimelines).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-// Category-specific product metadata types
-export interface CateringMetadata {
-  offersTasteSample?: boolean;
-  cuisineType?: string; // norwegian, indian, pakistani, etc.
-  isVegetarian?: boolean;
-  isVegan?: boolean;
-  isGlutenFree?: boolean;
-  isDairyFree?: boolean;
-  courseType?: string; // appetizer, main, dessert, drink, other
-  servesCount?: number;
-}
-
-export interface CakeMetadata {
-  offersTasteSample?: boolean;
-  cakeStyle?: string; // traditional, naked, drip, fondant, buttercream, macaron, cheesecake, cupcakes
-  flavors?: string;
-  servings?: number;
-  tiers?: number;
-  frosting?: string;
-  filling?: string;
-}
-
-export interface FlowerMetadata {
-  itemType?: string; // bouquet, boutonniere, centerpiece, ceremony, arch, other
-  flowerTypes?: string;
-  seasonalAvailability?: string;
-  isSeasonalOnly?: boolean;
-  colors?: string;
-}
-
-export interface TransportMetadata {
-  vehicleType?: string; // limousine, vintage, bus, etc.
-  passengerCapacity?: number;
-  includesDriver?: boolean;
-  vehicleDescription?: string;
-  fuelType?: string;
-}
-
-export interface HairMakeupMetadata {
-  serviceType?: string; // hair, makeup, both
-  includesTrialSession?: boolean;
-  lookType?: string; // natural, glamorous, vintage, bohemian, etc.
-  durationHours?: number;
-  includesAirbrush?: boolean;
-}
-
-export type ProductMetadata = CateringMetadata | CakeMetadata | FlowerMetadata | TransportMetadata | HairMakeupMetadata;
 
 export type VendorProduct = typeof vendorProducts.$inferSelect;
 export type InsertVendorProduct = z.infer<typeof insertVendorProductSchema>;
 export type CreateVendorProduct = z.infer<typeof createVendorProductSchema>;
-
-export type VendorAvailability = typeof vendorAvailability.$inferSelect;
-export type InsertVendorAvailability = z.infer<typeof insertVendorAvailabilitySchema>;
-export type CreateVendorAvailability = z.infer<typeof createVendorAvailabilitySchema>;
-
-export type CoupleVenueBooking = typeof coupleVenueBookings.$inferSelect;
-export type CoupleVenueTimeline = typeof coupleVenueTimelines.$inferSelect;
-export type InsertCoupleVenueBooking = z.infer<typeof insertCoupleVenueBookingSchema>;
-export type InsertCoupleVenueTimeline = z.infer<typeof insertCoupleVenueTimelineSchema>;
-
-export type VendorVenueBooking = typeof vendorVenueBookings.$inferSelect;
-export type VendorVenueAvailability = typeof vendorVenueAvailability.$inferSelect;
-export type VendorVenueTimeline = typeof vendorVenueTimelines.$inferSelect;
-export type InsertVendorVenueBooking = z.infer<typeof insertVendorVenueBookingSchema>;
-export type InsertVendorVenueAvailability = z.infer<typeof insertVendorVenueAvailabilitySchema>;
-export type InsertVendorVenueTimeline = z.infer<typeof insertVendorVenueTimelineSchema>;
 
 // Vendor Offers to Couples
 export const vendorOffers = pgTable("vendor_offers", {
@@ -1165,6 +645,37 @@ export type VendorOfferItem = typeof vendorOfferItems.$inferSelect;
 export type InsertVendorOffer = z.infer<typeof insertVendorOfferSchema>;
 export type InsertVendorOfferItem = z.infer<typeof insertVendorOfferItemSchema>;
 export type CreateOffer = z.infer<typeof createOfferSchema>;
+
+// Vendor Availability Calendar
+export const vendorAvailability = pgTable("vendor_availability", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  date: text("date").notNull(), // YYYY-MM-DD format
+  status: text("status").notNull().default("available"), // available, blocked, limited
+  maxBookings: integer("max_bookings"), // null for unlimited or when blocked
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertVendorAvailabilitySchema = createInsertSchema(vendorAvailability).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const createVendorAvailabilitySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig datoformat (bruk YYYY-MM-DD)"),
+  status: z.enum(["available", "blocked", "limited"]),
+  maxBookings: z.number().min(0).optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
+export type VendorAvailability = typeof vendorAvailability.$inferSelect;
+export type InsertVendorAvailability = z.infer<typeof insertVendorAvailabilitySchema>;
+export type CreateVendorAvailability = z.infer<typeof createVendorAvailabilitySchema>;
 
 // Speeches for wedding day schedule
 export const speeches = pgTable("speeches", {
@@ -1351,57 +862,6 @@ export type CoordinatorInvitation = typeof coordinatorInvitations.$inferSelect;
 export type InsertCoordinatorInvitation = z.infer<typeof insertCoordinatorInvitationSchema>;
 export type CreateCoordinatorInvitation = z.infer<typeof createCoordinatorInvitationSchema>;
 
-// Wedding Role Invitations - Invite partner, toastmaster, best man etc. with granular access
-export const weddingRoleInvitations = pgTable("wedding_role_invitations", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  importantPersonId: varchar("important_person_id").references(() => coupleImportantPeople.id, { onDelete: "set null" }),
-  email: text("email"),
-  name: text("name").notNull(),
-  role: text("role").notNull().default("partner"), // partner, toastmaster, bestman, maidofhonor, bridesmaid, groomsman, coordinator, other
-  accessToken: text("access_token").notNull().unique(),
-  inviteCode: text("invite_code").notNull().unique(), // 6-char code like WED-XXXXX
-  // Access permissions
-  canViewTimeline: boolean("can_view_timeline").default(true),
-  canCommentTimeline: boolean("can_comment_timeline").default(false),
-  canViewSchedule: boolean("can_view_schedule").default(true),
-  canEditSchedule: boolean("can_edit_schedule").default(false),
-  canViewShotlist: boolean("can_view_shotlist").default(false),
-  canViewBudget: boolean("can_view_budget").default(false),
-  canViewGuestlist: boolean("can_view_guestlist").default(false),
-  canViewImportantPeople: boolean("can_view_important_people").default(false),
-  canEditPlanning: boolean("can_edit_planning").default(false), // Full planning access (partner)
-  // Status
-  status: text("status").notNull().default("pending"), // pending, accepted, revoked, expired
-  joinedAt: timestamp("joined_at"),
-  expiresAt: timestamp("expires_at"),
-  lastAccessedAt: timestamp("last_accessed_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const createWeddingRoleInvitationSchema = z.object({
-  name: z.string().min(1, "Navn er påkrevd"),
-  email: z.string().email().optional().or(z.literal("")),
-  role: z.enum(["partner", "toastmaster", "bestman", "maidofhonor", "bridesmaid", "groomsman", "coordinator", "other"]).default("partner"),
-  importantPersonId: z.string().optional(),
-  canViewTimeline: z.boolean().default(true),
-  canCommentTimeline: z.boolean().default(false),
-  canViewSchedule: z.boolean().default(true),
-  canEditSchedule: z.boolean().default(false),
-  canViewShotlist: z.boolean().default(false),
-  canViewBudget: z.boolean().default(false),
-  canViewGuestlist: z.boolean().default(false),
-  canViewImportantPeople: z.boolean().default(false),
-  canEditPlanning: z.boolean().default(false),
-  expiresAt: z.string().optional(),
-});
-
-export type WeddingRoleInvitation = typeof weddingRoleInvitations.$inferSelect;
-export type CreateWeddingRoleInvitation = z.infer<typeof createWeddingRoleInvitationSchema>;
-
 // Guest Invitations - Send invite links to guests with response fields
 export const guestInvitations = pgTable("guest_invitations", {
   id: varchar("id")
@@ -1469,10 +929,6 @@ export const coupleVendorContracts = pgTable("couple_vendor_contracts", {
   canViewSpeeches: boolean("can_view_speeches").default(false),
   canViewTableSeating: boolean("can_view_table_seating").default(false),
   notifyOnTableChanges: boolean("notify_on_table_changes").default(false),
-  canViewMusic: boolean("can_view_music").default(false),
-  notifyOnMusicChanges: boolean("notify_on_music_changes").default(false),
-  canViewCoordinators: boolean("can_view_coordinators").default(false),
-  canViewReviews: boolean("can_view_reviews").default(false),
   completedAt: timestamp("completed_at"),
   reviewReminderSentAt: timestamp("review_reminder_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1648,7 +1104,7 @@ export const insertTableSeatingInvitationSchema = createInsertSchema(tableSeatin
 export type TableSeatingInvitation = typeof tableSeatingInvitations.$inferSelect;
 export type InsertTableSeatingInvitation = z.infer<typeof insertTableSeatingInvitationSchema>;
 
-// App Feedback - Feedback to Evendi from couples and vendors
+// App Feedback - Feedback to Wedflow from couples and vendors
 export const appFeedback = pgTable("app_feedback", {
   id: varchar("id")
     .primaryKey()
@@ -1851,7 +1307,7 @@ export const vendorSubscriptions = pgTable("vendor_subscriptions", {
     .primaryKey()
     .default(sql`gen_random_uuid()`),
   vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
-  tierId: varchar("tier_id").notNull().references(() => subscriptionTiers.id, { onDelete: "restrict" }),
+  tierId: varchar("tier_id").notNull().references(() => subscriptionTiers.id),
   
   // Stripe subscription info
   stripeSubscriptionId: text("stripe_subscription_id"),
@@ -1897,7 +1353,7 @@ export const vendorPayments = pgTable("vendor_payments", {
     .primaryKey()
     .default(sql`gen_random_uuid()`),
   vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
-  subscriptionId: varchar("subscription_id").references(() => vendorSubscriptions.id, { onDelete: "set null" }),
+  subscriptionId: varchar("subscription_id").references(() => vendorSubscriptions.id),
   
   stripePaymentIntentId: text("stripe_payment_intent_id"),
   stripeInvoiceId: text("stripe_invoice_id"),
@@ -1976,688 +1432,3 @@ export type InsertVendorUsageMetrics = z.infer<typeof insertVendorUsageSchema>;
 
 export type VendorPayment = typeof vendorPayments.$inferSelect;
 export type InsertVendorPayment = z.infer<typeof insertVendorPaymentSchema>;
-
-// ===== HAIR & MAKEUP PLANNING =====
-
-export const coupleHairMakeupAppointments = pgTable("couple_hair_makeup_appointments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  stylistName: text("stylist_name").notNull(),
-  serviceType: text("service_type").notNull(), // "hair", "makeup", "both"
-  appointmentType: text("appointment_type").notNull(), // "consultation", "trial", "wedding_day"
-  date: text("date").notNull(),
-  time: text("time"),
-  location: text("location"),
-  notes: text("notes"),
-  completed: boolean("completed").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleHairMakeupLooks = pgTable("couple_hair_makeup_looks", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  lookType: text("look_type").notNull(), // "hair", "makeup", "full_look"
-  imageUrl: text("image_url"),
-  notes: text("notes"),
-  isFavorite: boolean("is_favorite").default(false),
-  isSelected: boolean("is_selected").default(false), // the chosen look
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleHairMakeupTimeline = pgTable("couple_hair_makeup_timeline", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  consultationBooked: boolean("consultation_booked").default(false),
-  consultationDate: text("consultation_date"),
-  trialBooked: boolean("trial_booked").default(false),
-  trialDate: text("trial_date"),
-  lookSelected: boolean("look_selected").default(false),
-  lookSelectedDate: text("look_selected_date"),
-  weddingDayBooked: boolean("wedding_day_booked").default(false),
-  budget: integer("budget").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type CoupleHairMakeupAppointment = typeof coupleHairMakeupAppointments.$inferSelect;
-export type CoupleHairMakeupLook = typeof coupleHairMakeupLooks.$inferSelect;
-export type CoupleHairMakeupTimeline = typeof coupleHairMakeupTimeline.$inferSelect;
-
-// ===== TRANSPORT PLANNING =====
-
-export const coupleTransportBookings = pgTable("couple_transport_bookings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  vehicleType: text("vehicle_type").notNull(), // "bride_car", "groom_car", "guest_shuttle", "getaway_car"
-  providerName: text("provider_name"),
-  vehicleDescription: text("vehicle_description"),
-  pickupTime: text("pickup_time"),
-  pickupLocation: text("pickup_location"),
-  dropoffTime: text("dropoff_time"),
-  dropoffLocation: text("dropoff_location"),
-  driverName: text("driver_name"),
-  driverPhone: text("driver_phone"),
-  price: integer("price").default(0),
-  notes: text("notes"),
-  confirmed: boolean("confirmed").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleTransportTimeline = pgTable("couple_transport_timeline", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  brideCarBooked: boolean("bride_car_booked").default(false),
-  groomCarBooked: boolean("groom_car_booked").default(false),
-  guestShuttleBooked: boolean("guest_shuttle_booked").default(false),
-  getawayCarBooked: boolean("getaway_car_booked").default(false),
-  allConfirmed: boolean("all_confirmed").default(false),
-  budget: integer("budget").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type CoupleTransportBooking = typeof coupleTransportBookings.$inferSelect;
-export type CoupleTransportTimeline = typeof coupleTransportTimeline.$inferSelect;
-
-// ===== FLOWERS/FLORIST PLANNING =====
-
-export const coupleFlowerAppointments = pgTable("couple_flower_appointments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  floristName: text("florist_name").notNull(),
-  appointmentType: text("appointment_type").notNull(), // "consultation", "mockup", "delivery_planning"
-  date: text("date").notNull(),
-  time: text("time"),
-  location: text("location"),
-  notes: text("notes"),
-  completed: boolean("completed").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleFlowerSelections = pgTable("couple_flower_selections", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  itemType: text("item_type").notNull(), // "bridal_bouquet", "bridesmaid_bouquet", "boutonniere", "centerpiece", "ceremony_flowers", "other"
-  name: text("name").notNull(),
-  description: text("description"),
-  imageUrl: text("image_url"),
-  quantity: integer("quantity").default(1),
-  estimatedPrice: integer("estimated_price").default(0),
-  isConfirmed: boolean("is_confirmed").default(false),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleFlowerTimeline = pgTable("couple_flower_timeline", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  floristSelected: boolean("florist_selected").default(false),
-  floristSelectedDate: text("florist_selected_date"),
-  consultationDone: boolean("consultation_done").default(false),
-  consultationDate: text("consultation_date"),
-  mockupApproved: boolean("mockup_approved").default(false),
-  mockupApprovedDate: text("mockup_approved_date"),
-  deliveryConfirmed: boolean("delivery_confirmed").default(false),
-  budget: integer("budget").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type CoupleFlowerAppointment = typeof coupleFlowerAppointments.$inferSelect;
-export type CoupleFlowerSelection = typeof coupleFlowerSelections.$inferSelect;
-export type CoupleFlowerTimeline = typeof coupleFlowerTimeline.$inferSelect;
-
-// ===== PHOTOGRAPHER PLANNING =====
-
-export const couplePhotographerSessions = pgTable("couple_photographer_sessions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  date: text("date").notNull(),
-  time: text("time"),
-  location: text("location"),
-  duration: text("duration"),
-  photographerName: text("photographer_name"),
-  notes: text("notes"),
-  completed: boolean("completed").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const couplePhotographerShots = pgTable("couple_photographer_shots", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  description: text("description"),
-  category: text("category"),
-  isSelected: boolean("is_selected").default(false),
-  priority: integer("priority"),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const couplePhotographerTimeline = pgTable("couple_photographer_timeline", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  photographerSelected: boolean("photographer_selected").default(false),
-  sessionBooked: boolean("session_booked").default(false),
-  contractSigned: boolean("contract_signed").default(false),
-  depositPaid: boolean("deposit_paid").default(false),
-  budget: integer("budget").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type CouplePhotographerSession = typeof couplePhotographerSessions.$inferSelect;
-export type CouplePhotographerShot = typeof couplePhotographerShots.$inferSelect;
-export type CouplePhotographerTimeline = typeof couplePhotographerTimeline.$inferSelect;
-
-// ===== VIDEOGRAPHER PLANNING =====
-
-export const coupleVideographerSessions = pgTable("couple_videographer_sessions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  date: text("date").notNull(),
-  time: text("time"),
-  location: text("location"),
-  duration: text("duration"),
-  videographerName: text("videographer_name"),
-  notes: text("notes"),
-  completed: boolean("completed").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleVideographerDeliverables = pgTable("couple_videographer_deliverables", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  description: text("description"),
-  format: text("format"),
-  duration: text("duration"),
-  isConfirmed: boolean("is_confirmed").default(false),
-  deliveryDate: text("delivery_date"),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleVideographerTimeline = pgTable("couple_videographer_timeline", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  videographerSelected: boolean("videographer_selected").default(false),
-  sessionBooked: boolean("session_booked").default(false),
-  contractSigned: boolean("contract_signed").default(false),
-  depositPaid: boolean("deposit_paid").default(false),
-  budget: integer("budget").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type CoupleVideographerSession = typeof coupleVideographerSessions.$inferSelect;
-export type CoupleVideographerDeliverable = typeof coupleVideographerDeliverables.$inferSelect;
-export type CoupleVideographerTimeline = typeof coupleVideographerTimeline.$inferSelect;
-
-// ===== MUSIC/DJ PLANNING =====
-
-export const coupleMusicPerformances = pgTable("couple_music_performances", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  date: text("date").notNull(),
-  time: text("time"),
-  duration: text("duration"),
-  musicianName: text("musician_name"),
-  performanceType: text("performance_type"),
-  notes: text("notes"),
-  completed: boolean("completed").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleMusicSetlists = pgTable("couple_music_setlists", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  songs: text("songs"),
-  genre: text("genre"),
-  duration: text("duration"),
-  mood: text("mood"),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleMusicTimeline = pgTable("couple_music_timeline", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  musicianSelected: boolean("musician_selected").default(false),
-  setlistDiscussed: boolean("setlist_discussed").default(false),
-  contractSigned: boolean("contract_signed").default(false),
-  depositPaid: boolean("deposit_paid").default(false),
-  budget: integer("budget").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleMusicPreferences = pgTable("couple_music_preferences", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  spotifyPlaylistUrl: text("spotify_playlist_url"),
-  youtubePlaylistUrl: text("youtube_playlist_url"),
-  entranceSong: text("entrance_song"),
-  firstDanceSong: text("first_dance_song"),
-  lastSong: text("last_song"),
-  doNotPlay: text("do_not_play"),
-  additionalNotes: text("additional_notes"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type CoupleMusicPerformance = typeof coupleMusicPerformances.$inferSelect;
-export type CoupleMusicSetlist = typeof coupleMusicSetlists.$inferSelect;
-export type CoupleMusicTimeline = typeof coupleMusicTimeline.$inferSelect;
-export type CoupleMusicPreferences = typeof coupleMusicPreferences.$inferSelect;
-
-// ===== CATERING PLANNING =====
-
-export const coupleCateringTastings = pgTable("couple_catering_tastings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  catererName: text("caterer_name").notNull(),
-  date: text("date").notNull(),
-  time: text("time"),
-  location: text("location"),
-  notes: text("notes"),
-  rating: integer("rating"), // 1-5 stars
-  completed: boolean("completed").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleCateringMenu = pgTable("couple_catering_menu", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  courseType: text("course_type").notNull(), // "appetizer", "main", "dessert", "drinks", "late_night"
-  dishName: text("dish_name").notNull(),
-  description: text("description"),
-  isVegetarian: boolean("is_vegetarian").default(false),
-  isVegan: boolean("is_vegan").default(false),
-  isGlutenFree: boolean("is_gluten_free").default(false),
-  isSelected: boolean("is_selected").default(false),
-  pricePerPerson: integer("price_per_person").default(0),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleCateringDietaryNeeds = pgTable("couple_catering_dietary_needs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  guestName: text("guest_name").notNull(),
-  dietaryType: text("dietary_type").notNull(), // "vegetarian", "vegan", "gluten_free", "nut_allergy", "lactose_intolerant", "halal", "kosher", "other"
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleCateringTimeline = pgTable("couple_catering_timeline", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  catererSelected: boolean("caterer_selected").default(false),
-  catererSelectedDate: text("caterer_selected_date"),
-  tastingCompleted: boolean("tasting_completed").default(false),
-  tastingDate: text("tasting_date"),
-  menuFinalized: boolean("menu_finalized").default(false),
-  menuFinalizedDate: text("menu_finalized_date"),
-  guestCountConfirmed: boolean("guest_count_confirmed").default(false),
-  guestCount: integer("guest_count").default(0),
-  budget: integer("budget").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type CoupleCateringTasting = typeof coupleCateringTastings.$inferSelect;
-export type CoupleCateringMenu = typeof coupleCateringMenu.$inferSelect;
-export type CoupleCateringDietaryNeed = typeof coupleCateringDietaryNeeds.$inferSelect;
-export type CoupleCateringTimeline = typeof coupleCateringTimeline.$inferSelect;
-
-// ===== WEDDING CAKE PLANNING =====
-
-export const coupleCakeTastings = pgTable("couple_cake_tastings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  bakeryName: text("bakery_name").notNull(),
-  date: text("date").notNull(),
-  time: text("time"),
-  location: text("location"),
-  flavorsToTry: text("flavors_to_try"), // comma-separated
-  notes: text("notes"),
-  rating: integer("rating"), // 1-5 stars
-  completed: boolean("completed").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleCakeDesigns = pgTable("couple_cake_designs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  imageUrl: text("image_url"),
-  tiers: integer("tiers").default(3),
-  flavor: text("flavor"),
-  filling: text("filling"),
-  frosting: text("frosting"), // "buttercream", "fondant", "naked", "ganache"
-  style: text("style"), // "classic", "modern", "rustic", "floral", "minimalist"
-  estimatedPrice: integer("estimated_price").default(0),
-  estimatedServings: integer("estimated_servings"),
-  isFavorite: boolean("is_favorite").default(false),
-  isSelected: boolean("is_selected").default(false),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const coupleCakeTimeline = pgTable("couple_cake_timeline", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  bakerySelected: boolean("bakery_selected").default(false),
-  bakerySelectedDate: text("bakery_selected_date"),
-  tastingCompleted: boolean("tasting_completed").default(false),
-  tastingDate: text("tasting_date"),
-  designFinalized: boolean("design_finalized").default(false),
-  designFinalizedDate: text("design_finalized_date"),
-  depositPaid: boolean("deposit_paid").default(false),
-  deliveryConfirmed: boolean("delivery_confirmed").default(false),
-  budget: integer("budget").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type CoupleCakeTasting = typeof coupleCakeTastings.$inferSelect;
-export type CoupleCakeDesign = typeof coupleCakeDesigns.$inferSelect;
-export type CoupleCakeTimeline = typeof coupleCakeTimeline.$inferSelect;
-
-// ===== COUPLE PLANNER TABLES =====
-
-export const couplePlannerMeetings = pgTable("couple_planner_meetings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  plannerName: text("planner_name").notNull(),
-  date: text("date").notNull(),
-  time: text("time"),
-  location: text("location"),
-  topic: text("topic"),
-  notes: text("notes"),
-  completed: boolean("completed").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const couplePlannerTasks = pgTable("couple_planner_tasks", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  dueDate: text("due_date").notNull(),
-  priority: text("priority").notNull().default("medium"), // "high", "medium", "low"
-  category: text("category"),
-  notes: text("notes"),
-  completed: boolean("completed").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const couplePlannerTimeline = pgTable("couple_planner_timeline", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
-  plannerSelected: boolean("planner_selected").default(false),
-  initialMeeting: boolean("initial_meeting").default(false),
-  contractSigned: boolean("contract_signed").default(false),
-  depositPaid: boolean("deposit_paid").default(false),
-  timelineCreated: boolean("timeline_created").default(false),
-  budget: integer("budget").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type CouplePlannerMeeting = typeof couplePlannerMeetings.$inferSelect;
-export type CouplePlannerTask = typeof couplePlannerTasks.$inferSelect;
-export type CouplePlannerTimeline = typeof couplePlannerTimeline.$inferSelect;
-
-// ==========================================
-// ===== CREATORHUB INTEGRATION TABLES =====
-// ==========================================
-
-// CreatorHub Projects - A project groups creators and links to Evendi vendor accounts
-export const creatorhubProjects = pgTable("creatorhub_projects", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(), // URL-friendly project identifier
-  description: text("description"),
-  logoUrl: text("logo_url"),
-  ownerId: varchar("owner_id").notNull(), // references creatorhubUsers.id (set after first user created)
-  status: text("status").notNull().default("active"), // active, archived, suspended
-  // API access
-  apiKey: text("api_key").notNull().unique(), // For external API calls
-  apiKeyPrefix: text("api_key_prefix").notNull(), // First 8 chars for display (ch_xxxx...)
-  webhookUrl: text("webhook_url"), // Callback URL for events
-  webhookSecret: text("webhook_secret"), // HMAC secret for webhook signing
-  // Settings
-  defaultTimezone: text("default_timezone").default("Europe/Oslo"),
-  defaultCurrency: text("default_currency").default("NOK"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-// CreatorHub Users - Users on the CreatorHub platform (linked to Evendi vendors)
-export const creatorhubUsers = pgTable("creatorhub_users", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
-  vendorId: varchar("vendor_id").references(() => vendors.id, { onDelete: "set null" }), // Link to Evendi vendor
-  email: text("email").notNull(),
-  displayName: text("display_name").notNull(),
-  avatarUrl: text("avatar_url"),
-  role: text("role").notNull().default("creator"), // owner, admin, creator, viewer
-  status: text("status").notNull().default("active"), // active, suspended, deactivated
-  lastLoginAt: timestamp("last_login_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => ({
-  projectEmailIdx: uniqueIndex("idx_creatorhub_users_project_email").on(table.projectId, table.email),
-}));
-
-// CreatorHub Invitations - Invite-based user onboarding
-export const creatorhubInvitations = pgTable("creatorhub_invitations", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
-  invitedBy: varchar("invited_by").notNull().references(() => creatorhubUsers.id, { onDelete: "cascade" }),
-  email: text("email").notNull(),
-  role: text("role").notNull().default("creator"), // admin, creator, viewer
-  token: text("token").notNull().unique(), // Unique invite token
-  message: text("message"), // Personal invite message
-  status: text("status").notNull().default("pending"), // pending, accepted, expired, revoked
-  acceptedAt: timestamp("accepted_at"),
-  acceptedUserId: varchar("accepted_user_id").references(() => creatorhubUsers.id, { onDelete: "set null" }),
-  expiresAt: timestamp("expires_at").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// CreatorHub Bookings - Shared calendar/bookings synced with Evendi vendors
-export const creatorhubBookings = pgTable("creatorhub_bookings", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
-  creatorUserId: varchar("creator_user_id").notNull().references(() => creatorhubUsers.id, { onDelete: "cascade" }),
-  // Link to Evendi entities
-  vendorId: varchar("vendor_id").references(() => vendors.id, { onDelete: "set null" }),
-  coupleId: varchar("couple_id").references(() => coupleProfiles.id, { onDelete: "set null" }),
-  conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
-  offerId: varchar("offer_id").references(() => vendorOffers.id, { onDelete: "set null" }),
-  // Booking details
-  title: text("title").notNull(),
-  description: text("description"),
-  clientName: text("client_name").notNull(),
-  clientEmail: text("client_email"),
-  clientPhone: text("client_phone"),
-  eventDate: date("event_date").notNull(),
-  eventTime: text("event_time"), // HH:mm
-  eventEndTime: text("event_end_time"), // HH:mm
-  location: text("location"),
-  // Financial
-  totalAmount: integer("total_amount"), // In øre (cents)
-  depositAmount: integer("deposit_amount"),
-  depositPaid: boolean("deposit_paid").default(false),
-  fullPaid: boolean("full_paid").default(false),
-  currency: text("currency").default("NOK"),
-  // Status
-  status: text("status").notNull().default("confirmed"), // inquiry, confirmed, completed, cancelled
-  notes: text("notes"),
-  internalNotes: text("internal_notes"), // Not shared with client
-  // Metadata
-  tags: text("tags").array(), // free-form tags for filtering
-  externalRef: text("external_ref"), // Reference from external system
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => ({
-  projectDateIdx: index("idx_creatorhub_bookings_project_date").on(table.projectId, table.eventDate),
-  creatorIdx: index("idx_creatorhub_bookings_creator").on(table.creatorUserId),
-}));
-
-// CreatorHub Messages / CRM Notes - Shared messaging/CRM linked to Evendi conversations
-export const creatorhubCrmNotes = pgTable("creatorhub_crm_notes", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
-  bookingId: varchar("booking_id").references(() => creatorhubBookings.id, { onDelete: "cascade" }),
-  creatorUserId: varchar("creator_user_id").notNull().references(() => creatorhubUsers.id, { onDelete: "cascade" }),
-  // Link to Evendi conversation for shared messaging
-  conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
-  // CRM note
-  noteType: text("note_type").notNull().default("note"), // note, call_log, email_log, task, follow_up
-  subject: text("subject"),
-  body: text("body").notNull(),
-  dueDate: timestamp("due_date"), // For tasks/follow-ups
-  isCompleted: boolean("is_completed").default(false),
-  completedAt: timestamp("completed_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-// CreatorHub Analytics Events - Track events for reporting
-export const creatorhubAnalyticsEvents = pgTable("creatorhub_analytics_events", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
-  creatorUserId: varchar("creator_user_id").references(() => creatorhubUsers.id, { onDelete: "set null" }),
-  bookingId: varchar("booking_id").references(() => creatorhubBookings.id, { onDelete: "set null" }),
-  // Event data
-  eventType: text("event_type").notNull(), // booking_created, booking_completed, payment_received, message_sent, etc.
-  eventData: text("event_data"), // JSON payload with event-specific data
-  // Attribution
-  source: text("source").default("creatorhub"), // creatorhub, evendi, api, webhook
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => ({
-  projectTypeIdx: index("idx_creatorhub_analytics_project_type").on(table.projectId, table.eventType),
-  createdAtIdx: index("idx_creatorhub_analytics_created_at").on(table.createdAt),
-}));
-
-// CreatorHub API Audit Log - Track all API calls for security
-export const creatorhubApiAuditLog = pgTable("creatorhub_api_audit_log", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").references(() => creatorhubUsers.id, { onDelete: "set null" }),
-  method: text("method").notNull(), // GET, POST, PUT, DELETE
-  path: text("path").notNull(),
-  statusCode: integer("status_code"),
-  requestBody: text("request_body"), // Truncated request body
-  responseTime: integer("response_time"), // ms
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// ===== CreatorHub Zod Schemas =====
-
-export const createCreatorhubProjectSchema = z.object({
-  name: z.string().min(2, "Project name must be at least 2 characters"),
-  slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
-  description: z.string().optional(),
-  logoUrl: z.string().url().optional().or(z.literal("")),
-  defaultTimezone: z.string().default("Europe/Oslo"),
-  defaultCurrency: z.string().default("NOK"),
-});
-
-export const createCreatorhubInvitationSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  role: z.enum(["admin", "creator", "viewer"]).default("creator"),
-  message: z.string().max(500).optional(),
-});
-
-export const createCreatorhubBookingSchema = z.object({
-  title: z.string().min(1, "Title is required"),
-  description: z.string().optional(),
-  clientName: z.string().min(1, "Client name is required"),
-  clientEmail: z.string().email().optional().or(z.literal("")),
-  clientPhone: z.string().optional(),
-  eventDate: z.string().min(1, "Event date is required"),
-  eventTime: z.string().optional(),
-  eventEndTime: z.string().optional(),
-  location: z.string().optional(),
-  totalAmount: z.number().int().min(0).optional(),
-  depositAmount: z.number().int().min(0).optional(),
-  status: z.enum(["inquiry", "confirmed", "completed", "cancelled"]).default("confirmed"),
-  notes: z.string().optional(),
-  internalNotes: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  externalRef: z.string().optional(),
-  // Optional Evendi links
-  vendorId: z.string().optional(),
-  coupleId: z.string().optional(),
-  conversationId: z.string().optional(),
-  offerId: z.string().optional(),
-});
-
-export const createCreatorhubCrmNoteSchema = z.object({
-  bookingId: z.string().optional(),
-  conversationId: z.string().optional(),
-  noteType: z.enum(["note", "call_log", "email_log", "task", "follow_up"]).default("note"),
-  subject: z.string().optional(),
-  body: z.string().min(1, "Note body is required"),
-  dueDate: z.string().optional(),
-});
-
-// ===== CreatorHub Types =====
-
-export type CreatorhubProject = typeof creatorhubProjects.$inferSelect;
-export type CreatorhubUser = typeof creatorhubUsers.$inferSelect;
-export type CreatorhubInvitation = typeof creatorhubInvitations.$inferSelect;
-export type CreatorhubBooking = typeof creatorhubBookings.$inferSelect;
-export type CreatorhubCrmNote = typeof creatorhubCrmNotes.$inferSelect;
-export type CreatorhubAnalyticsEvent = typeof creatorhubAnalyticsEvents.$inferSelect;
-export type CreatorhubApiAuditLog = typeof creatorhubApiAuditLog.$inferSelect;
-
-export type CreateCreatorhubProject = z.infer<typeof createCreatorhubProjectSchema>;
-export type CreateCreatorhubInvitation = z.infer<typeof createCreatorhubInvitationSchema>;
-export type CreateCreatorhubBooking = z.infer<typeof createCreatorhubBookingSchema>;
-export type CreateCreatorhubCrmNote = z.infer<typeof createCreatorhubCrmNoteSchema>;

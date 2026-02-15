@@ -1,18 +1,14 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   FlatList,
   StyleSheet,
   View,
   TextInput,
   Pressable,
+  Alert,
   Share,
   Modal,
   Linking,
-  Platform,
-  ScrollView,
-  Image,
-  ActivityIndicator,
-  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -20,80 +16,45 @@ import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { EvendiIcon } from "@/components/EvendiIcon";
+import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
 import * as Clipboard from "expo-clipboard";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
-import { useToast } from "@/components/ToastProvider";
 import { useTheme } from "@/hooks/useTheme";
-import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { GuestsStackParamList } from "@/navigation/GuestsStackNavigator";
-import { getCoupleSession, getAppLanguage, type AppLanguage } from "@/lib/storage";
-import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
+import { getCoupleSession } from "@/lib/storage";
 import { getGuests, createGuest, updateGuest, deleteGuest } from "@/lib/api-guests";
 import { GUEST_CATEGORIES } from "@/lib/types";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { searchContacts, requestContactsPermission, ContactResult } from "@/lib/contacts";
 import { createGuestInvitation, getGuestInvitations } from "@/lib/api-guest-invitations";
 import type { GuestInvitation, WeddingGuest } from "@shared/schema";
-import PersistentTextInput from "@/components/PersistentTextInput";
 
 type NavigationProp = NativeStackNavigationProp<GuestsStackParamList>;
 
-const GUESTS_RSVP_FILTER_KEY = "evendi_guests_rsvp_filter";
-const GUESTS_QUICK_FILTER_KEY = "evendi_guests_quick_filter";
-const GUESTS_SEARCH_QUERY_KEY = "evendi_guests_search_query";
-
-// Use theme tokens for status colors instead of hardcoded values
-const getStatusColor = (status: string, isDark: boolean): string => {
-  if (status === "confirmed") return "#4CAF50";
-  if (status === "declined") return "#EF5350";
-  return isDark ? Colors.dark.accent : Colors.light.accent;
+const STATUS_COLORS: { [key: string]: string } = {
+  confirmed: "#4CAF50",
+  pending: Colors.dark.accent,
+  declined: "#EF5350",
 };
 
-const GUEST_CATEGORY_LABELS_EN: Record<string, string> = {
-  bride_family: "Bride's family",
-  groom_family: "Groom's family",
-  friends: "Friends",
-  colleagues: "Colleagues",
-  reserved: "Reserved",
-  other: "Other",
+const STATUS_LABELS: { [key: string]: string } = {
+  confirmed: "Bekreftet",
+  pending: "Venter",
+  declined: "Avslått",
 };
-
-// Platform-safe URL builders for SMS and Email
-const buildSmsUrl = (phone: string, message: string): string => {
-  const encodedMessage = encodeURIComponent(message);
-  if (Platform.OS === "ios") {
-    return `sms:${phone}&body=${encodedMessage}`;
-  } else {
-    // Android uses ?body=
-    return `sms:${phone}?body=${encodedMessage}`;
-  }
-};
-
-const buildMailtoUrl = (email: string, subject: string, body: string): string => {
-  return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-};
-
-// Extracted outside component to avoid re-creation on every render
-const ItemSeparator = () => <View style={{ height: Spacing.sm }} />;
 
 export default function GuestsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
-  const { isWedding } = useEventType();
   const navigation = useNavigation<NavigationProp>();
-  const { showToast } = useToast();
-
-  const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
-  const t = useCallback((nb: string, en: string) => (appLanguage === "en" ? en : nb), [appLanguage]);
 
   const [guests, setGuests] = useState<WeddingGuest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,14 +69,9 @@ export default function GuestsScreen() {
   const [invitationMessage, setInvitationMessage] = useState("");
   const [invitations, setInvitations] = useState<Array<GuestInvitation & { inviteUrl: string }>>([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
-  const [rsvpFilter, setRsvpFilter] = useState<"all" | "hasInvite" | "responded" | "declined">("all");
+  const [rsvpFilter, setRsvpFilter] = useState<"all" | "hasInvite" | "responded" | "declined" | "sent">("all");
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [selectedInvite, setSelectedInvite] = useState<GuestInvitation & { inviteUrl: string } | null>(null);
-  const contactSearchDebounceTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [contactsPermissionGranted, setContactsPermissionGranted] = useState(false);
-  const [quickFilter, setQuickFilter] = useState<"all" | "confirmed" | "pending" | "dietary" | "plusOne" | "noContact">("all");
-  const [statusMenuGuest, setStatusMenuGuest] = useState<WeddingGuest | null>(null);
-  const [deleteGuestConfirm, setDeleteGuestConfirm] = useState<WeddingGuest | null>(null);
   
   const [formName, setFormName] = useState("");
   const [formCategory, setFormCategory] = useState<string>("other");
@@ -126,23 +82,6 @@ export default function GuestsScreen() {
   const [formPlusOne, setFormPlusOne] = useState(false);
   const [formPlusOneName, setFormPlusOneName] = useState("");
   const [formNotes, setFormNotes] = useState("");
-
-  useEffect(() => {
-    async function loadLanguage() {
-      const language = await getAppLanguage();
-      setAppLanguage(language);
-    }
-    loadLanguage();
-  }, []);
-
-  // Clean up debounce timer on unmount
-  useEffect(() => {
-    return () => {
-      if (contactSearchDebounceTimerRef.current) {
-        clearTimeout(contactSearchDebounceTimerRef.current);
-      }
-    };
-  }, []);
 
   const resetForm = () => {
     setFormName("");
@@ -164,11 +103,11 @@ export default function GuestsScreen() {
       setGuests(data);
     } catch (err) {
       console.warn("Kunne ikke hente gjester", err);
-      showToast(t("Kunne ikke laste gjester fra server", "Could not load guests from server"));
+      Alert.alert("Feil", "Kunne ikke laste gjester fra server");
     } finally {
       setLoading(false);
     }
-  }, [sessionToken, showToast, t]);
+  }, [sessionToken]);
 
   useEffect(() => {
     const initSession = async () => {
@@ -205,78 +144,15 @@ export default function GuestsScreen() {
     refreshInvitations();
   }, [refreshInvitations]);
 
-  useEffect(() => {
-    const loadFilters = async () => {
-      try {
-        const [savedRsvp, savedQuick, savedSearch] = await Promise.all([
-          AsyncStorage.getItem(GUESTS_RSVP_FILTER_KEY),
-          AsyncStorage.getItem(GUESTS_QUICK_FILTER_KEY),
-          AsyncStorage.getItem(GUESTS_SEARCH_QUERY_KEY),
-        ]);
-
-        if (savedRsvp === "all" || savedRsvp === "hasInvite" || savedRsvp === "responded" || savedRsvp === "declined") {
-          setRsvpFilter(savedRsvp);
-        }
-
-        if (savedQuick === "all" || savedQuick === "confirmed" || savedQuick === "pending" || savedQuick === "dietary" || savedQuick === "plusOne" || savedQuick === "noContact") {
-          setQuickFilter(savedQuick);
-        }
-
-        if (savedSearch) {
-          setSearchQuery(savedSearch);
-        }
-      } catch (error) {
-        console.warn("Failed to load guest filters", error);
-      }
-    };
-
-    loadFilters();
-  }, []);
-
-  useEffect(() => {
-    AsyncStorage.setItem(GUESTS_RSVP_FILTER_KEY, rsvpFilter).catch((error) => {
-      console.warn("Failed to store RSVP filter", error);
-    });
-  }, [rsvpFilter]);
-
-  useEffect(() => {
-    AsyncStorage.setItem(GUESTS_QUICK_FILTER_KEY, quickFilter).catch((error) => {
-      console.warn("Failed to store quick filter", error);
-    });
-  }, [quickFilter]);
-
-  useEffect(() => {
-    AsyncStorage.setItem(GUESTS_SEARCH_QUERY_KEY, searchQuery).catch((error) => {
-      console.warn("Failed to store search query", error);
-    });
-  }, [searchQuery]);
-
   const handleSearchChange = async (query: string) => {
     setSearchQuery(query);
     
-    // Clear existing debounce timer
-    if (contactSearchDebounceTimerRef.current) {
-      clearTimeout(contactSearchDebounceTimerRef.current);
-    }
-
     if (query.trim().length > 0) {
-      // Debounce contact search by 300ms
-      const timer = setTimeout(async () => {
-        // Only request permission if not already granted
-        if (!contactsPermissionGranted) {
-          const hasPermission = await requestContactsPermission();
-          setContactsPermissionGranted(hasPermission);
-          if (!hasPermission) {
-            setContactResults([]);
-            return;
-          }
-        }
-        
+      const hasPermission = await requestContactsPermission();
+      if (hasPermission) {
         const results = await searchContacts(query);
         setContactResults(results);
-      }, 300);
-      
-      contactSearchDebounceTimerRef.current = timer;
+      }
     } else {
       setContactResults([]);
     }
@@ -292,11 +168,11 @@ export default function GuestsScreen() {
 
   const handleSendInvitation = async () => {
     if (!formName.trim()) {
-      showToast(t("Legg inn et navn før du sender invitasjon", "Add a name before sending an invitation"));
+      Alert.alert("Feil", "Legg inn et navn før du sender invitasjon");
       return;
     }
     if (!sessionToken) {
-      showToast(t("Logg inn som par for å sende invitasjoner.", "Log in as a couple to send invitations."));
+      Alert.alert("Ikke innlogget", "Logg inn som par for å sende invitasjoner.");
       return;
     }
 
@@ -308,22 +184,18 @@ export default function GuestsScreen() {
         phone: formPhone.trim() || undefined,
         template: selectedTemplate,
         message: invitationMessage.trim() || undefined,
-        // Note: Link invitation to guest via email/phone matching on backend
       });
 
       await refreshInvitations();
 
       await Share.share({
-        message: t(
-          `Invitasjon til ${formName.trim()}: ${invitation.inviteUrl}`,
-          `Invitation for ${formName.trim()}: ${invitation.inviteUrl}`
-        ),
+        message: `Invitasjon til ${formName.trim()}: ${invitation.inviteUrl}`,
       });
 
-      showToast(t("Lenken er klar til deling. Du kan dele den senere også.", "The link is ready to share. You can share it later as well."));
+      Alert.alert("Sendt", "Lenken er klar til deling. Du kan dele den senere også.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : t("Kunne ikke sende invitasjon", "Could not send invitation");
-      showToast(message);
+      const message = error instanceof Error ? error.message : "Kunne ikke sende invitasjon";
+      Alert.alert("Feil", message);
     } finally {
       setSendingInvite(false);
     }
@@ -332,43 +204,23 @@ export default function GuestsScreen() {
   const handleShareExisting = async (invite: GuestInvitation & { inviteUrl: string }) => {
     try {
       await Share.share({
-        message: t(
-          `Invitasjon til ${invite.name}: ${invite.inviteUrl}`,
-          `Invitation for ${invite.name}: ${invite.inviteUrl}`
-        ),
+        message: `Invitasjon til ${invite.name}: ${invite.inviteUrl}`,
       });
     } catch (error) {
       console.warn("Share error", error);
     }
   };
 
-  const openInviteModal = useCallback((invite: GuestInvitation & { inviteUrl: string }) => {
-    setSelectedInvite(invite);
-    setInviteModalVisible(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, []);
-
   const invitationStatusLabel = (status?: string) => {
     switch (status) {
       case "responded":
-        return t("Svar mottatt", "Response received");
+        return "Svar mottatt";
       case "declined":
-        return t("Kan ikke komme", "Cannot attend");
+        return "Kan ikke komme";
       case "sent":
-        return t("Sendt", "Sent");
+        return "Sendt";
       default:
-        return t("Venter", "Pending");
-    }
-  };
-
-  const getStatusLabel = (status: WeddingGuest["status"]) => {
-    switch (status) {
-      case "confirmed":
-        return t("Bekreftet", "Confirmed");
-      case "declined":
-        return t("Avslått", "Declined");
-      default:
-        return t("Venter", "Pending");
+        return "Venter";
     }
   };
 
@@ -377,50 +229,24 @@ export default function GuestsScreen() {
     if (rsvpFilter === "all") return true;
     const inv = getInviteForGuest(g);
     if (rsvpFilter === "hasInvite") return !!inv;
-    // Only match "responded" or "declined", not "sent"
-    return inv?.status === "responded" || inv?.status === "declined";
+    return inv?.status === rsvpFilter;
   };
-  
-  const quickFilterMatches = (g: WeddingGuest) => {
-    switch (quickFilter) {
-      case "confirmed":
-        return g.status === "confirmed";
-      case "pending":
-        return g.status === "pending";
-      case "dietary":
-        return !!(g.dietaryRequirements || g.allergies);
-      case "plusOne":
-        return g.plusOne === true;
-      case "noContact":
-        return !g.phone && !g.email;
-      default:
-        return true;
-    }
-  };
-  
-  // Memoize filtered guests to prevent unnecessary recalculations
-  const filteredGuests = useMemo(() => {
-    return guests.filter((g) => nameMatches(g)).filter((g) => rsvpMatches(g)).filter((g) => quickFilterMatches(g));
-  }, [guests, searchQuery, rsvpFilter, invitations, quickFilter]);
+  const filteredGuests = guests.filter((g) => nameMatches(g)).filter((g) => rsvpMatches(g));
 
-  // Memoize counts to prevent unnecessary recalculations
-  const { confirmedCount, pendingCount, respondedCount, declinedCount } = useMemo(() => {
-    return {
-      confirmedCount: guests.filter((g) => g.status === "confirmed").length,
-      pendingCount: guests.filter((g) => g.status === "pending").length,
-      respondedCount: invitations.filter((inv) => inv.status === "responded").length,
-      declinedCount: invitations.filter((inv) => inv.status === "declined").length,
-    };
-  }, [guests, invitations]);
+  const confirmedCount = guests.filter((g) => g.status === "confirmed").length;
+  const pendingCount = guests.filter((g) => g.status === "pending").length;
+  const respondedCount = invitations.filter((inv) => inv.status === "responded").length;
+  const declinedCountInv = invitations.filter((inv) => inv.status === "declined").length;
+  const sentCountInv = invitations.filter((inv) => inv.status === "sent").length;
 
   const handleAddGuest = async () => {
     if (!formName.trim()) {
-      showToast(t("Vennligst skriv inn et navn", "Please enter a name"));
+      Alert.alert("Feil", "Vennligst skriv inn et navn");
       return;
     }
 
     if (!sessionToken) {
-      showToast(t("Logg inn som par for å legge til gjester.", "Log in as a couple to add guests."));
+      Alert.alert("Ikke innlogget", "Logg inn som par for å legge til gjester.");
       return;
     }
 
@@ -460,8 +286,8 @@ export default function GuestsScreen() {
       setShowAddForm(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      const message = error instanceof Error ? error.message : t("Kunne ikke lagre gjest", "Could not save guest");
-      showToast(message);
+      const message = error instanceof Error ? error.message : "Kunne ikke lagre gjest";
+      Alert.alert("Feil", message);
     } finally {
       setIsSaving(false);
     }
@@ -481,91 +307,61 @@ export default function GuestsScreen() {
     setShowAddForm(true);
   };
 
-  const handleToggleStatus = (guest: WeddingGuest) => {
-    setStatusMenuGuest(guest);
-  };
+  const handleToggleStatus = async (guest: WeddingGuest) => {
+    if (!sessionToken) return;
 
-  const applyStatusChange = async (guest: WeddingGuest, value: WeddingGuest["status"]) => {
-    if (value === guest.status) {
-      setStatusMenuGuest(null);
-      return;
-    }
-    if (!sessionToken) {
-      showToast(t("Logg inn som par for å endre status.", "Log in as a couple to change status."));
-      setStatusMenuGuest(null);
-      return;
-    }
+    const statusOrder: WeddingGuest["status"][] = ["pending", "confirmed", "declined"];
+    const currentIndex = statusOrder.indexOf(guest.status);
+    const nextStatus = statusOrder[(currentIndex + 1) % statusOrder.length];
 
     setIsSaving(true);
     try {
-      await updateGuest(sessionToken, guest.id, { status: value });
+      await updateGuest(sessionToken, guest.id, { status: nextStatus });
       await loadData();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      showToast(t("Kunne ikke oppdatere status", "Could not update status"));
+      Alert.alert("Feil", "Kunne ikke oppdatere status");
     } finally {
       setIsSaving(false);
-      setStatusMenuGuest(null);
     }
   };
 
   const handleDeleteGuest = async (id: string) => {
     if (!sessionToken) return;
 
-    const guest = guests.find((g) => g.id === id) || null;
-    setDeleteGuestConfirm(guest);
-  };
-
-  const confirmDeleteGuest = async () => {
-    if (!sessionToken || !deleteGuestConfirm) {
-      setDeleteGuestConfirm(null);
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      await deleteGuest(sessionToken, deleteGuestConfirm.id);
-      await loadData();
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch (error) {
-      showToast(t("Kunne ikke slette gjest", "Could not delete guest"));
-    } finally {
-      setIsSaving(false);
-      setDeleteGuestConfirm(null);
-    }
+    Alert.alert("Slett gjest", "Er du sikker på at du vil slette denne gjesten?", [
+      { text: "Avbryt", style: "cancel" },
+      {
+        text: "Slett",
+        style: "destructive",
+        onPress: async () => {
+          setIsSaving(true);
+          try {
+            await deleteGuest(sessionToken, id);
+            await loadData();
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          } catch (error) {
+            Alert.alert("Feil", "Kunne ikke slette gjest");
+          } finally {
+            setIsSaving(false);
+          }
+        },
+      },
+    ]);
   };
 
   const getCategoryLabel = (category?: string | null) => {
     const cat = GUEST_CATEGORIES.find((c) => c.value === category);
-    if (!cat) return "";
-    return appLanguage === "en" ? (GUEST_CATEGORY_LABELS_EN[cat.value] || cat.label) : cat.label;
+    return cat?.label || "";
   };
 
   const normalize = (s?: string | null) => (s || "").replace(/\s+/g, "").toLowerCase();
-
-  // Pre-compute invitation lookup maps to avoid O(n×m) on every render
-  const invitationLookup = useMemo(() => {
-    const byEmail = new Map<string, (typeof invitations)[number]>();
-    const byPhone = new Map<string, (typeof invitations)[number]>();
-    for (const inv of invitations) {
-      const email = normalize(inv.email);
-      const phone = normalize(inv.phone);
-      if (email) byEmail.set(email, inv);
-      if (phone) byPhone.set(phone, inv);
-    }
-    return { byEmail, byPhone };
-  }, [invitations]);
-
   const getInviteForGuest = (guest: WeddingGuest) => {
     const gEmail = normalize(guest.email);
     const gPhone = normalize(guest.phone);
-    
-    // Return null if both email and phone are empty - don't match on empty strings
-    if (!gEmail && !gPhone) return null;
-    
-    return (gEmail && invitationLookup.byEmail.get(gEmail)) || 
-           (gPhone && invitationLookup.byPhone.get(gPhone)) || 
-           null;
+    return invitations.find(
+      (inv) => normalize(inv.email) === gEmail || normalize(inv.phone) === gPhone
+    );
   };
 
   const renderRsvpBadge = (guest: WeddingGuest) => {
@@ -576,7 +372,7 @@ export default function GuestsScreen() {
     const label = invitationStatusLabel(status);
     return (
       <Pressable
-        onPress={() => openInviteModal(inv)}
+        onPress={() => handleShareExisting(inv)}
         style={[styles.rsvpBadge, { backgroundColor: color + "20" }]}
       >
         <View style={[styles.rsvpDot, { backgroundColor: color }]} />
@@ -586,16 +382,14 @@ export default function GuestsScreen() {
   };
 
   const renderGuestItem = ({ item, index }: { item: WeddingGuest; index: number }) => (
-    <Animated.View entering={index < 12 ? FadeInRight.delay(index * 50).duration(300) : undefined}>
+    <Animated.View entering={FadeInRight.delay(index * 50).duration(300)}>
       <SwipeableRow
         onEdit={() => handleEditGuest(item)}
         onDelete={() => handleDeleteGuest(item.id)}
         backgroundColor={theme.backgroundDefault}
       >
         <Pressable
-          onPress={() => handleEditGuest(item)}
-          accessibilityRole="button"
-          accessibilityLabel={`${item.name}, ${t("trykk for å redigere", "tap to edit")}`}
+          onPress={() => handleToggleStatus(item)}
           style={({ pressed }) => [
             styles.guestItem,
             { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
@@ -610,7 +404,7 @@ export default function GuestsScreen() {
               },
             ]}
           >
-            <EvendiIcon
+            <Feather
               name={item.category === "reserved" ? "star" : "user"}
               size={18}
               color={item.category === "reserved" ? Colors.dark.accent : theme.textSecondary}
@@ -642,7 +436,7 @@ export default function GuestsScreen() {
               <View style={styles.dietaryRow}>
                 {item.dietaryRequirements ? (
                   <View style={[styles.dietaryBadge, { backgroundColor: "#4CAF5020" }]}>
-                    <EvendiIcon name="coffee" size={10} color="#4CAF50" />
+                    <Feather name="coffee" size={10} color="#4CAF50" />
                     <ThemedText style={[styles.dietaryText, { color: "#4CAF50" }]}>
                       {item.dietaryRequirements}
                     </ThemedText>
@@ -650,7 +444,7 @@ export default function GuestsScreen() {
                 ) : null}
                 {item.allergies ? (
                   <View style={[styles.dietaryBadge, { backgroundColor: "#EF535020" }]}>
-                    <EvendiIcon name="alert-circle" size={10} color="#EF5350" />
+                    <Feather name="alert-circle" size={10} color="#EF5350" />
                     <ThemedText style={[styles.dietaryText, { color: "#EF5350" }]}>
                       {item.allergies}
                     </ThemedText>
@@ -659,28 +453,24 @@ export default function GuestsScreen() {
               </View>
             ) : null}
           </View>
-          <Pressable
-            onPress={() => handleToggleStatus(item)}
-            disabled={isSaving}
-            accessibilityRole="button"
-            accessibilityLabel={`${t("Endre status for", "Change status for")} ${item.name}: ${getStatusLabel(item.status)}`}
+          <View
             style={[
               styles.statusBadge,
-              { backgroundColor: getStatusColor(item.status, false) + "20" },
+              { backgroundColor: STATUS_COLORS[item.status] + "20" },
             ]}
           >
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: getStatusColor(item.status, false) },
+                { backgroundColor: STATUS_COLORS[item.status] },
               ]}
             />
             <ThemedText
-              style={[styles.statusText, { color: getStatusColor(item.status, false) }]}
+              style={[styles.statusText, { color: STATUS_COLORS[item.status] }]}
             >
-              {getStatusLabel(item.status)}
+              {STATUS_LABELS[item.status]}
             </ThemedText>
-          </Pressable>
+          </View>
         </Pressable>
       </SwipeableRow>
     </Animated.View>
@@ -715,12 +505,6 @@ export default function GuestsScreen() {
         </View>
       </View>
 
-      {isSaving && (
-        <ThemedText style={[styles.savingText, { color: theme.textMuted }]}>
-          Oppdaterer gjesteliste...
-        </ThemedText>
-      )}
-
       {/* Smart matching CTA - show when there are guests */}
       {guests.length > 0 && (
         <Animated.View entering={FadeInDown.delay(100).duration(300)}>
@@ -739,7 +523,7 @@ export default function GuestsScreen() {
             style={[styles.matchingCard, { backgroundColor: theme.backgroundDefault, borderColor: Colors.dark.accent + "30" }]}
           >
             <View style={[styles.matchingIconCircle, { backgroundColor: Colors.dark.accent + "15" }]}>
-              <EvendiIcon name="zap" size={18} color={Colors.dark.accent} />
+              <Feather name="zap" size={18} color={Colors.dark.accent} />
             </View>
             <View style={styles.matchingContent}>
               <ThemedText style={[styles.matchingTitle, { color: theme.text }]}>
@@ -749,54 +533,10 @@ export default function GuestsScreen() {
                 Lokale, catering, fotograf, kake og mer
               </ThemedText>
             </View>
-            <EvendiIcon name="chevron-right" size={18} color={Colors.dark.accent} />
+            <Feather name="chevron-right" size={18} color={Colors.dark.accent} />
           </Pressable>
         </Animated.View>
       )}
-
-      {/* Quick Filter Presets */}
-      <View style={styles.quickFiltersSection}>
-        <ThemedText style={[styles.quickFiltersLabel, { color: theme.textMuted }]}>Hurtigfilter</ThemedText>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFiltersScroll}>
-          {[
-            { value: "all" as const, label: "Alle", icon: "users" as const },
-            { value: "confirmed" as const, label: "Bekreftet", icon: "check-circle" as const },
-            { value: "pending" as const, label: "Venter svar", icon: "clock" as const },
-            { value: "dietary" as const, label: "Matbehov", icon: "alert-circle" as const },
-            { value: "plusOne" as const, label: "Med følge", icon: "plus-circle" as const },
-            { value: "noContact" as const, label: "Mangler info", icon: "alert-triangle" as const },
-          ].map((filter) => (
-            <Pressable
-              key={filter.value}
-              onPress={() => {
-                setQuickFilter(filter.value);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              style={[
-                styles.quickFilterChip,
-                {
-                  backgroundColor: quickFilter === filter.value ? Colors.dark.accent : theme.backgroundSecondary,
-                  borderColor: quickFilter === filter.value ? Colors.dark.accent : theme.border,
-                },
-              ]}
-            >
-              <EvendiIcon
-                name={filter.icon}
-                size={14}
-                color={quickFilter === filter.value ? "#1A1A1A" : theme.textMuted}
-              />
-              <ThemedText
-                style={[
-                  styles.quickFilterText,
-                  { color: quickFilter === filter.value ? "#1A1A1A" : theme.textSecondary },
-                ]}
-              >
-                {filter.label}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
 
       <View style={styles.filterRow}>
         {[
@@ -804,6 +544,7 @@ export default function GuestsScreen() {
           { value: "hasInvite", label: "Har invitasjon" },
           { value: "responded", label: "Svar" },
           { value: "declined", label: "Avslått" },
+          { value: "sent", label: "Sendt" },
         ].map((f) => (
           <Pressable
             key={f.value}
@@ -828,21 +569,21 @@ export default function GuestsScreen() {
           onPress={() => navigation.navigate("TableSeating")}
           style={[styles.actionButton, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
-          <EvendiIcon name="grid" size={18} color={Colors.dark.accent} />
+          <Feather name="grid" size={18} color={Colors.dark.accent} />
           <ThemedText style={styles.actionButtonText}>Bordplassering</ThemedText>
         </Pressable>
         <Pressable
           onPress={() => navigation.navigate("SpeechList")}
           style={[styles.actionButton, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
-          <EvendiIcon name="mic" size={18} color={Colors.dark.accent} />
+          <Feather name="mic" size={18} color={Colors.dark.accent} />
           <ThemedText style={styles.actionButtonText}>Taleliste</ThemedText>
         </Pressable>
         <Pressable
           onPress={() => navigation.navigate("GuestInvitations")}
           style={[styles.actionButton, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
-          <EvendiIcon name="mail" size={18} color={Colors.dark.accent} />
+          <Feather name="mail" size={18} color={Colors.dark.accent} />
           <ThemedText style={styles.actionButtonText}>Invitasjoner</ThemedText>
         </Pressable>
       </View>
@@ -853,9 +594,8 @@ export default function GuestsScreen() {
           { backgroundColor: theme.backgroundSecondary, borderColor: theme.border },
         ]}
       >
-        <EvendiIcon name="search" size={18} color={theme.textMuted} />
-        <PersistentTextInput
-          draftKey="GuestsScreen-input-1"
+        <Feather name="search" size={18} color={theme.textMuted} />
+        <TextInput
           style={[styles.searchInput, { color: theme.text }]}
           placeholder="Søk etter gjest eller kontakt..."
           placeholderTextColor={theme.textMuted}
@@ -885,7 +625,7 @@ export default function GuestsScreen() {
               ]}
             >
               <View style={[styles.contactAvatar, { backgroundColor: Colors.dark.accent + "20" }]}>
-                <EvendiIcon name="phone" size={14} color={Colors.dark.accent} />
+                <Feather name="phone" size={14} color={Colors.dark.accent} />
               </View>
               <View style={styles.contactInfo}>
                 <ThemedText style={styles.contactName}>{contact.name}</ThemedText>
@@ -900,7 +640,7 @@ export default function GuestsScreen() {
                   </ThemedText>
                 )}
               </View>
-              <EvendiIcon name="arrow-right" size={16} color={theme.textMuted} />
+              <Feather name="arrow-right" size={16} color={theme.textMuted} />
             </Pressable>
           ))}
         </Animated.View>
@@ -921,9 +661,8 @@ export default function GuestsScreen() {
           <ThemedText style={{ color: theme.textSecondary }}>Ingen invitasjoner enda</ThemedText>
         ) : (
           invitations.slice(0, 5).map((inv) => (
-            <Pressable
+            <View
               key={inv.id}
-              onPress={() => openInviteModal(inv)}
               style={[styles.inviteRow, { borderColor: theme.border }]}
             >
               <View style={{ flex: 1 }}>
@@ -939,9 +678,9 @@ export default function GuestsScreen() {
                 onPress={() => handleShareExisting(inv)}
                 style={[styles.inviteShareBtn, { borderColor: theme.border }]}
               >
-                <EvendiIcon name="share-2" size={16} color={theme.text} />
+                <Feather name="share-2" size={16} color={theme.text} />
               </Pressable>
-            </Pressable>
+            </View>
           ))
         )}
       </View>
@@ -958,8 +697,7 @@ export default function GuestsScreen() {
             {editingGuest ? "Endre gjest" : "Legg til gjest"}
           </ThemedText>
           
-          <PersistentTextInput
-            draftKey="GuestsScreen-input-2"
+          <TextInput
             style={[
               styles.addInput,
               { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
@@ -997,8 +735,7 @@ export default function GuestsScreen() {
           </View>
 
           <View style={styles.inputRow}>
-            <PersistentTextInput
-              draftKey="GuestsScreen-input-3"
+            <TextInput
               style={[
                 styles.addInput,
                 styles.halfInput,
@@ -1010,8 +747,7 @@ export default function GuestsScreen() {
               onChangeText={setFormPhone}
               keyboardType="phone-pad"
             />
-            <PersistentTextInput
-              draftKey="GuestsScreen-input-4"
+            <TextInput
               style={[
                 styles.addInput,
                 styles.halfInput,
@@ -1026,8 +762,7 @@ export default function GuestsScreen() {
             />
           </View>
 
-          <PersistentTextInput
-            draftKey="GuestsScreen-input-5"
+          <TextInput
             style={[
               styles.addInput,
               { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
@@ -1038,8 +773,7 @@ export default function GuestsScreen() {
             onChangeText={setFormDietary}
           />
 
-          <PersistentTextInput
-            draftKey="GuestsScreen-input-6"
+          <TextInput
             style={[
               styles.addInput,
               { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
@@ -1080,8 +814,7 @@ export default function GuestsScreen() {
             ))}
           </View>
 
-          <PersistentTextInput
-            draftKey="GuestsScreen-input-7"
+          <TextInput
             style={[
               styles.addInput,
               styles.notesInput,
@@ -1108,14 +841,13 @@ export default function GuestsScreen() {
                 },
               ]}
             >
-              {formPlusOne ? <EvendiIcon name="check" size={14} color="#1A1A1A" /> : null}
+              {formPlusOne ? <Feather name="check" size={14} color="#1A1A1A" /> : null}
             </View>
             <ThemedText style={{ color: theme.text }}>+1 (Følge)</ThemedText>
           </Pressable>
 
           {formPlusOne ? (
-            <PersistentTextInput
-              draftKey="GuestsScreen-input-8"
+            <TextInput
               style={[
                 styles.addInput,
                 { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border },
@@ -1127,8 +859,7 @@ export default function GuestsScreen() {
             />
           ) : null}
 
-          <PersistentTextInput
-            draftKey="GuestsScreen-input-9"
+          <TextInput
             style={[
               styles.addInput,
               styles.notesInput,
@@ -1154,13 +885,12 @@ export default function GuestsScreen() {
                 setShowAddForm(false);
                 resetForm();
               }}
-              disabled={isSaving}
-              style={[styles.cancelButton, { borderColor: theme.border, opacity: isSaving ? 0.6 : 1 }]}
+              style={[styles.cancelButton, { borderColor: theme.border }]}
             >
               <ThemedText style={{ color: theme.textSecondary }}>Avbryt</ThemedText>
             </Pressable>
-            <Button onPress={handleAddGuest} style={styles.saveButton} disabled={isSaving}>
-              {isSaving ? "Lagrer..." : editingGuest ? "Oppdater" : "Legg til"}
+            <Button onPress={handleAddGuest} style={styles.saveButton}>
+              {editingGuest ? "Oppdater" : "Legg til"}
             </Button>
           </View>
         </Animated.View>
@@ -1170,44 +900,17 @@ export default function GuestsScreen() {
 
   const ListEmpty = () => (
     <View style={styles.emptyState}>
-      <EmptyStateIllustration stateKey="guests" size={150} />
+      <View style={[styles.emptyIcon, { backgroundColor: theme.backgroundSecondary }]}>
+        <Feather name="users" size={48} color={theme.textMuted} />
+      </View>
       <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
         Ingen gjester lagt til
       </ThemedText>
       <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
         Legg til din første gjest
       </ThemedText>
-      <Button 
-        onPress={() => {
-          setShowAddForm(true);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }}
-        style={{ marginTop: Spacing.lg, maxWidth: 200, alignSelf: "center" }}
-      >
-        Legg til gjest
-      </Button>
     </View>
   );
-
-  const SearchEmpty = () => (
-    <View style={styles.emptyState}>
-      <EvendiIcon name="search" size={40} color={theme.textMuted} />
-      <ThemedText style={[styles.emptyText, { color: theme.textSecondary, marginTop: Spacing.md }]}>
-        {t("Ingen gjester funnet", "No guests found")}
-      </ThemedText>
-      <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
-        {t("Prøv andre søkeord", "Try different search terms")}
-      </ThemedText>
-    </View>
-  );
-
-  // Pull-to-refresh
-  const [refreshing, setRefreshing] = useState(false);
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  }, [loadData]);
 
   if (loading) {
     return (
@@ -1218,7 +921,7 @@ export default function GuestsScreen() {
           { backgroundColor: theme.backgroundRoot },
         ]}
       >
-        <ActivityIndicator size="large" color={theme.accent} />
+        <ThemedText style={{ color: theme.textSecondary }}>Laster...</ThemedText>
       </View>
     );
   }
@@ -1236,90 +939,10 @@ export default function GuestsScreen() {
           flexGrow: 1,
         }}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
-        }
         ListHeaderComponent={ListHeader}
-        ListEmptyComponent={searchQuery ? SearchEmpty : ListEmpty}
-        ItemSeparatorComponent={ItemSeparator}
-        initialNumToRender={10}
-        windowSize={5}
-        removeClippedSubviews
-        maxToRenderPerBatch={10}
+        ListEmptyComponent={searchQuery ? null : ListEmpty}
+        ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
       />
-
-      <Modal
-        animationType="fade"
-        transparent
-        visible={!!statusMenuGuest}
-        onRequestClose={() => setStatusMenuGuest(null)}
-      >
-        <View style={styles.dialogOverlay}>
-          <View style={[styles.dialogCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
-          >
-            <ThemedText style={[styles.dialogTitle, { color: theme.text }]}> 
-              {t("Endre status", "Change status")}
-            </ThemedText>
-            {statusMenuGuest ? (
-              <ThemedText style={[styles.dialogSubtitle, { color: theme.textSecondary }]}> 
-                {t(`Hva er status for ${statusMenuGuest.name}?`, `What is the status for ${statusMenuGuest.name}?`)}
-              </ThemedText>
-            ) : null}
-            {[
-              { label: t("Venter", "Pending"), value: "pending" as const },
-              { label: t("Bekreftet", "Confirmed"), value: "confirmed" as const },
-              { label: t("Avslått", "Declined"), value: "declined" as const },
-            ].map((option) => (
-              <Pressable
-                key={option.value}
-                onPress={() => statusMenuGuest && applyStatusChange(statusMenuGuest, option.value)}
-                style={[styles.dialogOption, { borderColor: theme.border }]}
-              >
-                <ThemedText style={{ color: theme.text }}>{option.label}</ThemedText>
-              </Pressable>
-            ))}
-            <Pressable
-              onPress={() => setStatusMenuGuest(null)}
-              style={[styles.dialogCancel, { borderColor: theme.border }]}
-            >
-              <ThemedText style={{ color: theme.textSecondary }}>{t("Avbryt", "Cancel")}</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        animationType="fade"
-        transparent
-        visible={!!deleteGuestConfirm}
-        onRequestClose={() => setDeleteGuestConfirm(null)}
-      >
-        <View style={styles.dialogOverlay}>
-          <View style={[styles.dialogCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
-          >
-            <ThemedText style={[styles.dialogTitle, { color: theme.text }]}> 
-              {t("Slett gjest", "Delete guest")}
-            </ThemedText>
-            <ThemedText style={[styles.dialogSubtitle, { color: theme.textSecondary }]}> 
-              {t("Er du sikker på at du vil slette denne gjesten?", "Are you sure you want to delete this guest?")}
-            </ThemedText>
-            <View style={styles.dialogButtons}>
-              <Pressable
-                onPress={() => setDeleteGuestConfirm(null)}
-                style={[styles.dialogCancelButton, { borderColor: theme.border }]}
-              >
-                <ThemedText style={{ color: theme.textSecondary }}>{t("Avbryt", "Cancel")}</ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={confirmDeleteGuest}
-                style={[styles.dialogDeleteButton, { backgroundColor: theme.error }]}
-              >
-                <ThemedText style={{ color: "#FFFFFF" }}>{t("Slett", "Delete")}</ThemedText>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       <Modal
         animationType="slide"
@@ -1364,7 +987,7 @@ export default function GuestsScreen() {
                       if (selectedInvite?.inviteUrl) {
                         await Clipboard.setStringAsync(selectedInvite.inviteUrl);
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        showToast(t("Lenken er kopiert til utklippstavlen.", "Link copied to clipboard."));
+                        Alert.alert("Kopiert", "Lenken er kopiert til utklippstavlen.");
                       }
                     }}
                     style={styles.saveButton}
@@ -1390,10 +1013,10 @@ export default function GuestsScreen() {
                   <Button
                     onPress={() => {
                       if (selectedInvite?.phone && selectedInvite?.inviteUrl) {
-                        const smsUrl = buildSmsUrl(selectedInvite.phone, selectedInvite.inviteUrl);
+                        const smsUrl = `sms:${selectedInvite.phone}?body=${encodeURIComponent(selectedInvite.inviteUrl)}`;
                         Linking.openURL(smsUrl);
                       } else {
-                        showToast(t("Legg til telefonnummer for å sende SMS.", "Add a phone number to send SMS."));
+                        Alert.alert("Mangler telefon", "Legg til telefonnummer for å sende SMS.");
                       }
                     }}
                     style={styles.saveButton}
@@ -1405,15 +1028,12 @@ export default function GuestsScreen() {
                   <Button
                     onPress={() => {
                       if (selectedInvite?.email && selectedInvite?.inviteUrl) {
-                        const subject = t(isWedding ? "Bryllupsinvitasjon" : "Invitasjon", isWedding ? "Wedding invitation" : "Invitation");
-                        const body = t(
-                          `Hei ${selectedInvite.name},\n\nHer er din invitasjon: ${selectedInvite.inviteUrl}\n`,
-                          `Hi ${selectedInvite.name},\n\nHere is your invitation: ${selectedInvite.inviteUrl}\n`
-                        );
-                        const mailto = buildMailtoUrl(selectedInvite.email, subject, body);
+                        const subject = "Bryllupsinvitasjon";
+                        const body = `Hei ${selectedInvite.name},\n\nHer er din invitasjon: ${selectedInvite.inviteUrl}\n`;
+                        const mailto = `mailto:${selectedInvite.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
                         Linking.openURL(mailto);
                       } else {
-                        showToast(t("Legg til e-postadresse for å sende e-post.", "Add an email address to send email."));
+                        Alert.alert("Mangler e-post", "Legg til e-postadresse for å sende e-post.");
                       }
                     }}
                     style={styles.saveButton}
@@ -1444,7 +1064,7 @@ export default function GuestsScreen() {
             { backgroundColor: Colors.dark.accent, bottom: tabBarHeight + Spacing.xl },
           ]}
         >
-          <EvendiIcon name="plus" size={24} color="#1A1A1A" />
+          <Feather name="plus" size={24} color="#1A1A1A" />
         </Pressable>
       ) : null}
     </View>
@@ -1463,11 +1083,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: Spacing.md,
     marginBottom: Spacing.lg,
-  },
-  savingText: {
-    fontSize: 12,
-    marginBottom: Spacing.md,
-    textAlign: "center",
   },
   statCard: {
     flex: 1,
@@ -1687,33 +1302,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginLeft: Spacing.xs,
   },
-  quickFiltersSection: {
-    marginBottom: Spacing.md,
-  },
-  quickFiltersLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: Spacing.xs,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  quickFiltersScroll: {
-    gap: Spacing.sm,
-    paddingVertical: Spacing.xs,
-  },
-  quickFilterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-  },
-  quickFilterText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
   filterRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1789,11 +1377,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing["5xl"],
   },
-  emptyImage: {
-    width: 150,
-    height: 150,
+  emptyIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: Spacing.xl,
-    opacity: 0.8,
   },
   emptyText: {
     fontSize: 16,
@@ -1908,57 +1498,5 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     alignItems: "center",
     marginLeft: Spacing.sm,
-  },
-  dialogOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: Spacing.lg,
-  },
-  dialogCard: {
-    width: "100%",
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    padding: Spacing.lg,
-  },
-  dialogTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: Spacing.sm,
-  },
-  dialogSubtitle: {
-    fontSize: 14,
-    marginBottom: Spacing.md,
-  },
-  dialogOption: {
-    paddingVertical: Spacing.sm,
-    borderTopWidth: 1,
-  },
-  dialogCancel: {
-    marginTop: Spacing.md,
-    borderTopWidth: 1,
-    paddingTop: Spacing.md,
-    alignItems: "center",
-  },
-  dialogButtons: {
-    flexDirection: "row",
-    gap: Spacing.md,
-    marginTop: Spacing.sm,
-  },
-  dialogCancelButton: {
-    flex: 1,
-    height: Spacing.buttonHeight,
-    borderRadius: BorderRadius.full,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-  },
-  dialogDeleteButton: {
-    flex: 1,
-    height: Spacing.buttonHeight,
-    borderRadius: BorderRadius.full,
-    justifyContent: "center",
-    alignItems: "center",
   },
 });

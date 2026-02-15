@@ -9,7 +9,7 @@ A complete inventory tracking system for vendors to manage quantities of product
 ## Changes Made
 
 ### 1. Database Schema (Migration Required)
-**File:** `/workspaces/evendi/migrations/0010_add_inventory_tracking.sql`
+**File:** `/workspaces/wedflow/migrations/0010_add_inventory_tracking.sql`
 
 Added fields to `vendor_products` table:
 - `track_inventory` - Enable/disable tracking per product
@@ -17,12 +17,12 @@ Added fields to `vendor_products` table:
 - `reserved_quantity` - Currently reserved in pending offers
 - `booking_buffer` - Safety buffer (always kept available)
 
-**File:** `/workspaces/evendi/shared/schema.ts`
+**File:** `/workspaces/wedflow/shared/schema.ts`
 - Updated `vendorProducts` table schema
 - Updated `createVendorProductSchema` validation
 
 ### 2. Backend API Changes
-**File:** `/workspaces/evendi/server/routes.ts`
+**File:** `/workspaces/wedflow/server/routes.ts`
 
 #### Offer Creation (`POST /api/vendor/offers`)
 - ✅ Checks inventory availability before creating offer
@@ -44,7 +44,7 @@ Added fields to `vendor_products` table:
 - ✅ Couples can see if items are in stock or limited
 
 ### 3. Vendor Product Management UI
-**File:** `/workspaces/evendi/client/screens/ProductCreateScreen.tsx`
+**File:** `/workspaces/wedflow/client/screens/ProductCreateScreen.tsx`
 
 Added inventory section with:
 - ✅ Toggle to enable/disable inventory tracking
@@ -70,7 +70,7 @@ Added inventory section with:
 ```
 
 ### 4. Vendor Offer Creation UI
-**File:** `/workspaces/evendi/client/screens/OfferCreateScreen.tsx`
+**File:** `/workspaces/wedflow/client/screens/OfferCreateScreen.tsx`
 
 Enhanced with:
 - ✅ Availability badges next to each product
@@ -99,7 +99,7 @@ Produkter:
 ```
 
 ### 5. Couple Offer View UI
-**File:** `/workspaces/evendi/client/screens/CoupleOffersScreen.tsx`
+**File:** `/workspaces/wedflow/client/screens/CoupleOffersScreen.tsx`
 
 Added inventory indicators:
 - ✅ "På lager" badge (green) when sufficient quantity
@@ -122,7 +122,7 @@ Tilbudslinjer:
 ```
 
 ### 6. Vendor Inventory Dashboard
-**File:** `/workspaces/evendi/client/screens/VendorInventoryScreen.tsx`
+**File:** `/workspaces/wedflow/client/screens/VendorInventoryScreen.tsx`
 
 Brand new screen showing:
 - ✅ Overview of all products with inventory tracking

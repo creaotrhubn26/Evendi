@@ -4,14 +4,13 @@ import {
   View,
   Pressable,
   ActivityIndicator,
+  Alert,
   RefreshControl,
   FlatList,
-  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { EvendiIcon } from "@/components/EvendiIcon";
-import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
+import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -21,14 +20,10 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { useAppSettings } from "@/hooks/useAppSettings";
-import { formatCurrency } from "@/lib/format-currency";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
-import { showConfirm } from "@/lib/dialogs";
-import { showToast } from "@/lib/toast";
 
-const COUPLE_STORAGE_KEY = "evendi_couple_session";
+const COUPLE_STORAGE_KEY = "wedflow_couple_session";
 
 const getCountdown = (validUntil: string): { text: string; color: string; urgency: "urgent" | "warning" | "normal" | "expired" } => {
   const now = new Date();
@@ -96,8 +91,6 @@ export default function CoupleOffersScreen() {
   const queryClient = useQueryClient();
 
   const [expandedOffer, setExpandedOffer] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "accepted" | "declined" | "expired">("all");
-  const [sortBy, setSortBy] = useState<"date" | "price" | "expiring">("date");
 
   const { data: offers = [], isLoading, isRefetching, refetch } = useQuery<CoupleOffer[]>({
     queryKey: ["/api/couple/offers"],
@@ -140,27 +133,28 @@ export default function CoupleOffersScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/couple/offers"] });
     },
     onError: (error: Error) => {
-      showToast(error.message);
+      Alert.alert("Feil", error.message);
     },
   });
 
-  const handleRespond = async (offerId: string, response: "accept" | "decline") => {
+  const handleRespond = (offerId: string, response: "accept" | "decline") => {
     const actionText = response === "accept" ? "akseptere" : "avslå";
-    const confirmed = await showConfirm({
-      title: response === "accept" ? "Aksepter tilbud" : "Avslå tilbud",
-      message: `Er du sikker på at du vil ${actionText} dette tilbudet?`,
-      confirmLabel: response === "accept" ? "Aksepter" : "Avslå",
-      cancelLabel: "Avbryt",
-      destructive: response !== "accept",
-    });
-
-    if (confirmed) {
-      respondMutation.mutate({ offerId, response });
-    }
+    Alert.alert(
+      response === "accept" ? "Aksepter tilbud" : "Avslå tilbud",
+      `Er du sikker på at du vil ${actionText} dette tilbudet?`,
+      [
+        { text: "Avbryt", style: "cancel" },
+        {
+          text: response === "accept" ? "Aksepter" : "Avslå",
+          style: response === "accept" ? "default" : "destructive",
+          onPress: () => respondMutation.mutate({ offerId, response }),
+        },
+      ]
+    );
   };
 
   const formatPrice = (priceInOre: number) => {
-    return formatCurrency(priceInOre / 100, getSetting);
+    return (priceInOre / 100).toLocaleString("nb-NO", { minimumFractionDigits: 0 }) + " kr";
   };
 
   const formatDate = (dateStr: string) => {
@@ -184,28 +178,8 @@ export default function CoupleOffersScreen() {
     }
   };
 
-  // Filter offers by status
-  const filteredOffers = offers.filter((o) => {
-    if (statusFilter === "all") return true;
-    return o.status === statusFilter;
-  });
-
-  // Sort offers
-  const sortedOffers = [...filteredOffers].sort((a, b) => {
-    if (sortBy === "price") {
-      return b.totalAmount - a.totalAmount;
-    } else if (sortBy === "expiring") {
-      if (!a.validUntil) return 1;
-      if (!b.validUntil) return -1;
-      return new Date(a.validUntil).getTime() - new Date(b.validUntil).getTime();
-    } else {
-      // Sort by date (newest first)
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    }
-  });
-
-  const pendingOffers = sortedOffers.filter((o) => o.status === "pending");
-  const processedOffers = sortedOffers.filter((o) => o.status !== "pending");
+  const pendingOffers = offers.filter((o) => o.status === "pending");
+  const processedOffers = offers.filter((o) => o.status !== "pending");
 
   const renderOfferCard = (offer: CoupleOffer, index: number) => {
     const status = getStatusBadge(offer.status);
@@ -229,7 +203,7 @@ export default function CoupleOffersScreen() {
               <View style={styles.offerTitleRow}>
                 <ThemedText style={styles.offerTitle}>{offer.title}</ThemedText>
                 <View style={[styles.statusBadge, { backgroundColor: status.color + "20" }]}>
-                  <EvendiIcon name={status.icon} size={12} color={status.color} />
+                  <Feather name={status.icon} size={12} color={status.color} />
                   <ThemedText style={[styles.statusText, { color: status.color }]}>
                     {status.label}
                   </ThemedText>
@@ -249,7 +223,7 @@ export default function CoupleOffersScreen() {
                     const countdown = getCountdown(offer.validUntil);
                     return (
                       <View style={[styles.countdownBadge, { backgroundColor: countdown.color + "15", borderColor: countdown.color + "40" }]}>
-                        <EvendiIcon 
+                        <Feather 
                           name={countdown.urgency === "urgent" ? "alert-circle" : "clock"} 
                           size={12} 
                           color={countdown.color} 
@@ -263,7 +237,7 @@ export default function CoupleOffersScreen() {
                 ) : null}
               </View>
             </View>
-            <EvendiIcon
+            <Feather
               name={isExpanded ? "chevron-up" : "chevron-down"}
               size={20}
               color={theme.textMuted}
@@ -288,7 +262,6 @@ export default function CoupleOffersScreen() {
                 {offer.items.map((item) => {
                   // Check if inventory tracking is enabled and if quantity is available
                   const product = (item as any).product;
-                  const metadata = product?.metadata || {};
                   const hasInventory = product?.trackInventory;
                   const available = hasInventory 
                     ? (product.availableQuantity || 0) - (product.reservedQuantity || 0) - (product.bookingBuffer || 0)
@@ -304,7 +277,7 @@ export default function CoupleOffersScreen() {
                             <View style={[styles.inventoryBadge, {
                               backgroundColor: exceedsInventory ? "#F44336" + "20" : "#4CAF50" + "20"
                             }]}>
-                              <EvendiIcon 
+                              <Feather 
                                 name={exceedsInventory ? "alert-triangle" : "check"} 
                                 size={10} 
                                 color={exceedsInventory ? "#F44336" : "#4CAF50"}
@@ -320,212 +293,6 @@ export default function CoupleOffersScreen() {
                             </View>
                           )}
                         </View>
-                        
-                        {/* Display product metadata badges */}
-                        {product && Object.keys(metadata).length > 0 && (
-                          <View style={styles.metadataRow}>
-                            {metadata.offersTasteSample && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#4CAF5015" }]}>
-                                <EvendiIcon name="coffee" size={9} color="#4CAF50" />
-                                <ThemedText style={[styles.metadataText, { color: "#4CAF50" }]}>Smaksprøve inkludert</ThemedText>
-                              </View>
-                            )}
-                            {metadata.cuisineType && (
-                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
-                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
-                                  {metadata.cuisineType.charAt(0).toUpperCase() + metadata.cuisineType.slice(1)}
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.isVegetarian && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
-                                <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Vegetar</ThemedText>
-                              </View>
-                            )}
-                            {metadata.isVegan && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
-                                <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Vegan</ThemedText>
-                              </View>
-                            )}
-                            {metadata.cakeStyle && (
-                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
-                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
-                                  {metadata.cakeStyle.charAt(0).toUpperCase() + metadata.cakeStyle.slice(1)} stil
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.numberOfTiers && (
-                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
-                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
-                                  {metadata.numberOfTiers} etasjer
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.flowerItemType && (
-                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
-                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
-                                  {metadata.flowerItemType.charAt(0).toUpperCase() + metadata.flowerItemType.slice(1)}
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.vehicleType && (
-                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
-                                <EvendiIcon name="truck" size={9} color={Colors.dark.accent} />
-                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
-                                  {metadata.vehicleType.charAt(0).toUpperCase() + metadata.vehicleType.slice(1)}
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.passengerCapacity && (
-                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
-                                <EvendiIcon name="users" size={9} color={Colors.dark.accent} />
-                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
-                                  {metadata.passengerCapacity} plasser
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.serviceType && (
-                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
-                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
-                                  {metadata.serviceType.charAt(0).toUpperCase() + metadata.serviceType.slice(1)}
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.includesTrialSession && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#9C27B015" }]}>
-                                <EvendiIcon name="check" size={9} color="#9C27B0" />
-                                <ThemedText style={[styles.metadataText, { color: "#9C27B0" }]}>Prøveskyss inkludert</ThemedText>
-                              </View>
-                            )}
-                            
-                            {/* Fotograf metadata */}
-                            {metadata.packageType && metadata.hoursIncluded && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#2196F315" }]}>
-                                <EvendiIcon name="camera" size={9} color="#2196F3" />
-                                <ThemedText style={[styles.metadataText, { color: "#2196F3" }]}>
-                                  {metadata.packageType} - {metadata.hoursIncluded}t
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.photosDelivered && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#2196F315" }]}>
-                                <EvendiIcon name="image" size={9} color="#2196F3" />
-                                <ThemedText style={[styles.metadataText, { color: "#2196F3" }]}>
-                                  {metadata.photosDelivered} bilder
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.printRightsIncluded && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#00BCD415" }]}>
-                                <EvendiIcon name="printer" size={9} color="#00BCD4" />
-                                <ThemedText style={[styles.metadataText, { color: "#00BCD4" }]}>Trykkerett</ThemedText>
-                              </View>
-                            )}
-                            
-                            {/* Videograf metadata */}
-                            {metadata.filmDurationMinutes && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#9C27B015" }]}>
-                                <EvendiIcon name="film" size={9} color="#9C27B0" />
-                                <ThemedText style={[styles.metadataText, { color: "#9C27B0" }]}>
-                                  {metadata.filmDurationMinutes} min film
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.editingStyle && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#673AB715" }]}>
-                                <ThemedText style={[styles.metadataText, { color: "#673AB7" }]}>
-                                  {metadata.editingStyle.charAt(0).toUpperCase() + metadata.editingStyle.slice(1)}
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.droneFootageIncluded && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#FF980015" }]}>
-                                <EvendiIcon name="navigation" size={9} color="#FF9800" />
-                                <ThemedText style={[styles.metadataText, { color: "#FF9800" }]}>Drone inkludert</ThemedText>
-                              </View>
-                            )}
-                            
-                            {/* Musikk metadata */}
-                            {metadata.performanceType && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#E91E6315" }]}>
-                                <EvendiIcon name="music" size={9} color="#E91E63" />
-                                <ThemedText style={[styles.metadataText, { color: "#E91E63" }]}>
-                                  {metadata.performanceType.toUpperCase()}
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.genre && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#F4433615" }]}>
-                                <ThemedText style={[styles.metadataText, { color: "#F44336" }]}>
-                                  {metadata.genre.charAt(0).toUpperCase() + metadata.genre.slice(1)}
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.performanceDurationHours && (
-                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
-                                <EvendiIcon name="clock" size={9} color={Colors.dark.accent} />
-                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
-                                  {metadata.performanceDurationHours}t opptreden
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.equipmentIncluded && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#FF572215" }]}>
-                                <EvendiIcon name="headphones" size={9} color="#FF5722" />
-                                <ThemedText style={[styles.metadataText, { color: "#FF5722" }]}>Utstyr inkludert</ThemedText>
-                              </View>
-                            )}
-                            
-                            {/* Venue metadata */}
-                            {metadata.capacityMax && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#79554815" }]}>
-                                <EvendiIcon name="users" size={9} color="#795548" />
-                                <ThemedText style={[styles.metadataText, { color: "#795548" }]}>
-                                  {metadata.capacityMin && `${metadata.capacityMin}-`}{metadata.capacityMax} gjester
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.indoorOutdoor && (
-                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
-                                <EvendiIcon name="home" size={9} color={Colors.dark.accent} />
-                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
-                                  {metadata.indoorOutdoor.charAt(0).toUpperCase() + metadata.indoorOutdoor.slice(1)}
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.cateringIncluded && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#8BC34A15" }]}>
-                                <EvendiIcon name="coffee" size={9} color="#8BC34A" />
-                                <ThemedText style={[styles.metadataText, { color: "#8BC34A" }]}>Catering inkludert</ThemedText>
-                              </View>
-                            )}
-                            
-                            {/* Planlegger metadata */}
-                            {metadata.serviceLevel && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#00BCD415" }]}>
-                                <EvendiIcon name="clipboard" size={9} color="#00BCD4" />
-                                <ThemedText style={[styles.metadataText, { color: "#00BCD4" }]}>
-                                  {metadata.serviceLevel.charAt(0).toUpperCase() + metadata.serviceLevel.slice(1)}
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.monthsOfService && (
-                              <View style={[styles.metadataBadge, { backgroundColor: Colors.dark.accent + "15" }]}>
-                                <EvendiIcon name="calendar" size={9} color={Colors.dark.accent} />
-                                <ThemedText style={[styles.metadataText, { color: Colors.dark.accent }]}>
-                                  {metadata.monthsOfService} måneder
-                                </ThemedText>
-                              </View>
-                            )}
-                            {metadata.vendorCoordinationIncluded && (
-                              <View style={[styles.metadataBadge, { backgroundColor: "#00968815" }]}>
-                                <EvendiIcon name="users" size={9} color="#009688" />
-                                <ThemedText style={[styles.metadataText, { color: "#009688" }]}>Koordinering inkludert</ThemedText>
-                              </View>
-                            )}
-                          </View>
-                        )}
-                        
                         <ThemedText style={[styles.itemDesc, { color: theme.textMuted }]}>
                           {formatPrice(item.unitPrice)} x {item.quantity}
                         </ThemedText>
@@ -540,14 +307,14 @@ export default function CoupleOffersScreen() {
 
               <View style={styles.metaSection}>
                 <View style={styles.metaRow}>
-                  <EvendiIcon name="calendar" size={14} color={theme.textMuted} />
+                  <Feather name="calendar" size={14} color={theme.textMuted} />
                   <ThemedText style={[styles.metaText, { color: theme.textMuted }]}>
                     Mottatt {formatDate(offer.createdAt)}
                   </ThemedText>
                 </View>
                 {offer.validUntil ? (
                   <View style={styles.metaRow}>
-                    <EvendiIcon
+                    <Feather
                       name="clock"
                       size={14}
                       color={isExpired ? "#F44336" : theme.textMuted}
@@ -600,7 +367,7 @@ export default function CoupleOffersScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>      
+    <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <FlatList
         data={[...pendingOffers, ...processedOffers]}
         keyExtractor={(item) => item.id}
@@ -619,7 +386,7 @@ export default function CoupleOffersScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <EmptyStateIllustration stateKey="offers" />
+            <Feather name="file-text" size={48} color={theme.textMuted} />
             <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>
               Ingen tilbud ennå
             </ThemedText>
@@ -629,101 +396,15 @@ export default function CoupleOffersScreen() {
           </View>
         }
         ListHeaderComponent={
-          <>
-            {/* Quick Filter Chips */}
-            <View style={styles.filtersSection}>
-              <ThemedText style={[styles.filtersLabel, { color: theme.textMuted }]}>Status</ThemedText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersScroll}>
-                {[
-                  { value: "all" as const, label: "Alle", icon: "list" as const },
-                  { value: "pending" as const, label: "Venter", icon: "clock" as const },
-                  { value: "accepted" as const, label: "Akseptert", icon: "check-circle" as const },
-                  { value: "declined" as const, label: "Avslått", icon: "x-circle" as const },
-                  { value: "expired" as const, label: "Utløpt", icon: "alert-circle" as const },
-                ].map((filter) => (
-                  <Pressable
-                    key={filter.value}
-                    onPress={() => {
-                      setStatusFilter(filter.value);
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    }}
-                    style={[
-                      styles.filterChip,
-                      {
-                        backgroundColor: statusFilter === filter.value ? Colors.dark.accent : theme.backgroundSecondary,
-                        borderColor: statusFilter === filter.value ? Colors.dark.accent : theme.border,
-                      },
-                    ]}
-                  >
-                    <EvendiIcon
-                      name={filter.icon}
-                      size={14}
-                      color={statusFilter === filter.value ? "#1A1A1A" : theme.textMuted}
-                    />
-                    <ThemedText
-                      style={[
-                        styles.filterText,
-                        { color: statusFilter === filter.value ? "#1A1A1A" : theme.textSecondary },
-                      ]}
-                    >
-                      {filter.label}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-
-            {/* Sort Options */}
-            <View style={styles.filtersSection}>
-              <ThemedText style={[styles.filtersLabel, { color: theme.textMuted }]}>Sorter</ThemedText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersScroll}>
-                {[
-                  { value: "date" as const, label: "Nyeste først", icon: "calendar" as const },
-                  { value: "price" as const, label: "Høyeste pris", icon: "dollar-sign" as const },
-                  { value: "expiring" as const, label: "Utløper snart", icon: "clock" as const },
-                ].map((sort) => (
-                  <Pressable
-                    key={sort.value}
-                    onPress={() => {
-                      setSortBy(sort.value);
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    }}
-                    style={[
-                      styles.filterChip,
-                      {
-                        backgroundColor: sortBy === sort.value ? Colors.dark.accent : theme.backgroundSecondary,
-                        borderColor: sortBy === sort.value ? Colors.dark.accent : theme.border,
-                      },
-                    ]}
-                  >
-                    <EvendiIcon
-                      name={sort.icon}
-                      size={14}
-                      color={sortBy === sort.value ? "#1A1A1A" : theme.textMuted}
-                    />
-                    <ThemedText
-                      style={[
-                        styles.filterText,
-                        { color: sortBy === sort.value ? "#1A1A1A" : theme.textSecondary },
-                      ]}
-                    >
-                      {sort.label}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-
-            {pendingOffers.length > 0 ? (
-              <View style={styles.sectionHeader}>
-                <View style={[styles.pendingBadge, { backgroundColor: Colors.dark.accent + "20" }]}>
-                  <ThemedText style={[styles.pendingBadgeText, { color: Colors.dark.accent }]}>
-                    {pendingOffers.length} venter på svar
-                  </ThemedText>
-                </View>
+          pendingOffers.length > 0 ? (
+            <View style={styles.sectionHeader}>
+              <View style={[styles.pendingBadge, { backgroundColor: Colors.dark.accent + "20" }]}>
+                <ThemedText style={[styles.pendingBadgeText, { color: Colors.dark.accent }]}>
+                  {pendingOffers.length} venter på svar
+                </ThemedText>
               </View>
-            ) : null}
-          </>
+            </View>
+          ) : null
         }
       />
     </View>
@@ -739,33 +420,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.lg,
     gap: Spacing.md,
-  },
-  filtersSection: {
-    marginBottom: Spacing.md,
-  },
-  filtersLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: Spacing.xs,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  filtersScroll: {
-    gap: Spacing.sm,
-    paddingVertical: Spacing.xs,
-  },
-  filterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-  },
-  filterText: {
-    fontSize: 13,
-    fontWeight: "500",
   },
   sectionHeader: {
     marginBottom: Spacing.sm,
@@ -873,7 +527,6 @@ const styles = StyleSheet.create({
   },
   itemInfo: {
     flex: 1,
-    gap: 4,
   },
   itemTitle: {
     fontSize: 14,
@@ -892,24 +545,6 @@ const styles = StyleSheet.create({
   },
   itemTotal: {
     fontSize: 14,
-    fontWeight: "600",
-  },
-  metadataRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 4,
-    marginTop: 4,
-  },
-  metadataBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: BorderRadius.sm,
-  },
-  metadataText: {
-    fontSize: 10,
     fontWeight: "600",
   },
   metaSection: {

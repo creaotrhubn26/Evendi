@@ -5,23 +5,24 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
+  Alert,
   Switch,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { EvendiIcon } from "@/components/EvendiIcon";
+import { Feather } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
-import { useEventType } from "@/hooks/useEventType";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { showToast } from "@/lib/toast";
-import PersistentTextInput from "@/components/PersistentTextInput";
-const VENDOR_STORAGE_KEY = "evendi_vendor_session";
+
+const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
+
 interface PhotographerDetails {
   // Leveranse
   deliveryDays: number | null;
@@ -73,6 +74,7 @@ interface PhotographerDetails {
   photoBoothAvailable: boolean;
   backupEquipment: boolean;
 }
+
 const defaultDetails: PhotographerDetails = {
   deliveryDays: null,
   minPhotosDelivered: null,
@@ -111,6 +113,7 @@ const defaultDetails: PhotographerDetails = {
   photoBoothAvailable: false,
   backupEquipment: true,
 };
+
 const PHOTOGRAPHY_STYLES = [
   "Dokumentarisk",
   "Klassisk/Tradisjonell",
@@ -123,14 +126,15 @@ const PHOTOGRAPHY_STYLES = [
   "Editorial/Fashion",
   "Vintage/Film",
 ];
+
 export default function PhotographerDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
-  const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [details, setDetails] = useState<PhotographerDetails>(defaultDetails);
+
   useEffect(() => {
     AsyncStorage.getItem(VENDOR_STORAGE_KEY).then((data) => {
       if (data) {
@@ -139,6 +143,7 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
       }
     });
   }, []);
+
   const { data: savedData, isLoading } = useQuery({
     queryKey: ["/api/vendor/photographer-details"],
     queryFn: async () => {
@@ -151,11 +156,13 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
     },
     enabled: !!sessionToken,
   });
+
   useEffect(() => {
     if (savedData) {
       setDetails({ ...defaultDetails, ...savedData });
     }
   }, [savedData]);
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!sessionToken) throw new Error("Ikke innlogget");
@@ -176,16 +183,18 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/photographer-details"] });
-      showToast("Foto-detaljene er oppdatert");
+      Alert.alert("Lagret", "Foto-detaljene er oppdatert");
     },
     onError: (error: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast(error.message);
+      Alert.alert("Feil", error.message);
     },
   });
+
   const updateDetail = <K extends keyof PhotographerDetails>(key: K, value: PhotographerDetails[K]) => {
     setDetails(prev => ({ ...prev, [key]: value }));
   };
+
   const toggleStyle = (style: string) => {
     setDetails(prev => ({
       ...prev,
@@ -194,14 +203,16 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
         : [...prev.photographyStyles, style],
     }));
   };
+
   const renderSectionHeader = (icon: string, title: string) => (
     <View style={styles.sectionHeader}>
       <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
-        <EvendiIcon name={icon as any} size={16} color={theme.accent} />
+        <Feather name={icon as any} size={16} color={theme.accent} />
       </View>
       <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>{title}</ThemedText>
     </View>
   );
+
   const renderSwitch = (label: string, value: boolean, onChange: (v: boolean) => void, description?: string) => (
     <View style={styles.switchContainer}>
       <View style={styles.switchRow}>
@@ -212,12 +223,13 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
         <Switch
           value={value}
           onValueChange={onChange}
-          trackColor={{ false: theme.border, true: theme.accent + "60" }}
-          thumbColor={value ? theme.accent : theme.backgroundSecondary}
+          trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }}
+          thumbColor={value ? Colors.dark.accent : theme.backgroundSecondary}
         />
       </View>
     </View>
   );
+
   const renderInput = (label: string, value: string | null, onChange: (v: string) => void, options?: {
     placeholder?: string;
     keyboardType?: "default" | "number-pad";
@@ -226,8 +238,7 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
     <View style={styles.inputGroup}>
       <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>{label}</ThemedText>
       <View style={styles.inputWrapper}>
-        <PersistentTextInput
-          draftKey="PhotographerDetailsScreen-input-1"
+        <TextInput
           style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }, options?.suffix && { paddingRight: 50 }]}
           value={value || ""}
           onChangeText={onChange}
@@ -239,13 +250,14 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
       </View>
     </View>
   );
+
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
         <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
           <View style={styles.headerContent}>
             <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}>
-              <EvendiIcon name="camera" size={20} color="#FFFFFF" />
+              <Feather name="camera" size={20} color="#FFFFFF" />
             </View>
             <View style={styles.headerTextContainer}>
               <ThemedText style={[styles.headerTitle, { color: theme.text }]}>Fotografdetaljer</ThemedText>
@@ -253,7 +265,7 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
             </View>
           </View>
           <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.closeButton, { backgroundColor: pressed ? theme.backgroundSecondary : theme.backgroundRoot }]}>
-            <EvendiIcon name="x" size={20} color={theme.textSecondary} />
+            <Feather name="x" size={20} color={theme.textSecondary} />
           </Pressable>
         </View>
         <View style={styles.loadingContainer}>
@@ -262,12 +274,13 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
       </View>
     );
   }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
         <View style={styles.headerContent}>
           <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}>
-            <EvendiIcon name="camera" size={20} color="#FFFFFF" />
+            <Feather name="camera" size={20} color="#FFFFFF" />
           </View>
           <View style={styles.headerTextContainer}>
             <ThemedText style={[styles.headerTitle, { color: theme.text }]}>Fotografdetaljer</ThemedText>
@@ -275,9 +288,10 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
           </View>
         </View>
         <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.closeButton, { backgroundColor: pressed ? theme.backgroundSecondary : theme.backgroundRoot }]}>
-          <EvendiIcon name="x" size={20} color={theme.textSecondary} />
+          <Feather name="x" size={20} color={theme.textSecondary} />
         </Pressable>
       </View>
+
       <KeyboardAwareScrollViewCompat
         style={{ flex: 1 }}
         contentContainerStyle={[styles.content, { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }]}
@@ -292,11 +306,13 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
             {renderInput("Min bilder", details.minPhotosDelivered?.toString() || "", (v) => updateDetail("minPhotosDelivered", v ? parseInt(v) : null), { placeholder: "300", keyboardType: "number-pad" })}
             {renderInput("Maks bilder", details.maxPhotosDelivered?.toString() || "", (v) => updateDetail("maxPhotosDelivered", v ? parseInt(v) : null), { placeholder: "600", keyboardType: "number-pad" })}
           </View>
+
           {renderSwitch("Høyoppløselige filer", details.includesHighRes, (v) => updateDetail("includesHighRes", v))}
           {renderSwitch("RAW-filer inkludert", details.includesRaw, (v) => updateDetail("includesRaw", v), "Uredigerte originaler")}
           {renderSwitch("Online bildegalleri", details.includesWebGallery, (v) => updateDetail("includesWebGallery", v))}
           {details.includesWebGallery && renderInput("Galleri tilgjengelig i", details.galleryDuration || "", (v) => updateDetail("galleryDuration", v || null), { placeholder: "F.eks. 1 år" })}
         </View>
+
         {/* Album & Print */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("book-open", "Album & Print")}
@@ -313,6 +329,7 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
           {renderSwitch("Prints inkludert", details.printsIncluded, (v) => updateDetail("printsIncluded", v))}
           {details.printsIncluded && renderInput("Print-beskrivelse", details.printsDescription || "", (v) => updateDetail("printsDescription", v || null), { placeholder: "F.eks. 10 stk 20x30cm" })}
         </View>
+
         {/* Team & Utstyr */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("users", "Team & Utstyr")}
@@ -334,8 +351,10 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
               {!details.droneIncluded && renderInput("Tilleggspris drone", details.dronePrice?.toString() || "", (v) => updateDetail("dronePrice", v ? parseInt(v) : null), { placeholder: "3000", keyboardType: "number-pad", suffix: "kr" })}
             </>
           )}
+
           {renderSwitch("Backup-utstyr", details.backupEquipment, (v) => updateDetail("backupEquipment", v), "Ekstra kamera/objektiv")}
         </View>
+
         {/* Dekning */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("clock", "Dekning")}
@@ -344,10 +363,12 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
             {renderInput("Min timer", details.coverageHoursMin?.toString() || "", (v) => updateDetail("coverageHoursMin", v ? parseInt(v) : null), { placeholder: "4", keyboardType: "number-pad" })}
             {renderInput("Maks timer", details.coverageHoursMax?.toString() || "", (v) => updateDetail("coverageHoursMax", v ? parseInt(v) : null), { placeholder: "12", keyboardType: "number-pad" })}
           </View>
+
           {renderSwitch("Forlovelsesshoot inkludert", details.engagementShootIncluded, (v) => updateDetail("engagementShootIncluded", v))}
           {renderSwitch("Prøvemiddag inkludert", details.rehearsalDinnerIncluded, (v) => updateDetail("rehearsalDinnerIncluded", v))}
           {renderSwitch("Getting ready-bilder", details.brideGettingReadyIncluded, (v) => updateDetail("brideGettingReadyIncluded", v), "Bilder fra forberedelsene")}
         </View>
+
         {/* Reise */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("map-pin", "Reise")}
@@ -359,8 +380,9 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
               {renderInput("Km-pris utover", details.travelFeePerKm?.toString() || "", (v) => updateDetail("travelFeePerKm", v ? parseInt(v) : null), { placeholder: "5", keyboardType: "number-pad", suffix: "kr/km" })}
             </>
           )}
-          {renderSwitch("Internasjonalt tilgjengelig", details.internationalAvailable, (v) => updateDetail("internationalAvailable", v), isWedding ? "Destination weddings" : "Internasjonale oppdrag")}
+          {renderSwitch("Internasjonalt tilgjengelig", details.internationalAvailable, (v) => updateDetail("internationalAvailable", v), "Destination weddings")}
         </View>
+
         {/* Stil */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("image", "Fotografistil")}
@@ -386,9 +408,11 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
               </Pressable>
             ))}
           </View>
+
           {renderInput("Redigeringsstil", details.editingStyle || "", (v) => updateDetail("editingStyle", v || null), { placeholder: "Beskriv din redigeringsstil..." })}
           {renderSwitch("Svart/hvitt bilder inkludert", details.blackAndWhiteIncluded, (v) => updateDetail("blackAndWhiteIncluded", v))}
         </View>
+
         {/* Ekstra */}
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("zap", "Ekstra tjenester")}
@@ -399,6 +423,7 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
           {renderSwitch("Same-day edit", details.sameDayEditAvailable, (v) => updateDetail("sameDayEditAvailable", v), "Slideshow på festen")}
           {renderSwitch("Photobooth tilgjengelig", details.photoBoothAvailable, (v) => updateDetail("photoBoothAvailable", v))}
         </View>
+
         {/* Save Button */}
         <Pressable
           onPress={() => saveMutation.mutate()}
@@ -414,7 +439,7 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
           ) : (
             <>
               <View style={styles.saveBtnIcon}>
-                <EvendiIcon name="save" size={16} color="#FFFFFF" />
+                <Feather name="save" size={16} color="#FFFFFF" />
               </View>
               <ThemedText style={styles.saveBtnText}>Lagre fotografdetaljer</ThemedText>
             </>
@@ -424,6 +449,7 @@ export default function PhotographerDetailsScreen({ navigation }: { navigation: 
     </View>
   );
 }
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {

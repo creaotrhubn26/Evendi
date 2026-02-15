@@ -1,17 +1,13 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
-import { spawn } from "node:child_process";
 import { WebSocketServer, type WebSocket } from "ws";
 import crypto from "node:crypto";
 import { db } from "./db";
 import bcrypt from "bcryptjs";
-import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { registerSubscriptionRoutes } from "./subscription-routes";
-import { registerCreatorhubRoutes } from "./creatorhub-routes";
-import { TIMELINE_TEMPLATES, DEFAULT_TIMELINE, TimelineTemplate, resolveTraditionKey } from "./timeline-templates";
-import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, deliveryTracking, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetItems, coupleBudgetSettings, createBudgetItemSchema, coupleDressAppointments, coupleDressFavorites, coupleDressTimeline, createDressAppointmentSchema, createDressFavoriteSchema, coupleImportantPeople, createImportantPersonSchema, couplePhotoShots, createPhotoShotSchema, coupleHairMakeupAppointments, coupleHairMakeupLooks, coupleHairMakeupTimeline, coupleTransportBookings, coupleTransportTimeline, coupleFlowerAppointments, coupleFlowerSelections, coupleFlowerTimeline, coupleCateringTastings, coupleCateringMenu, coupleCateringDietaryNeeds, coupleCateringTimeline, coupleCakeTastings, coupleCakeDesigns, coupleCakeTimeline, coupleVenueBookings, coupleVenueTimelines, vendorVenueBookings, vendorVenueAvailability, vendorVenueTimelines, creatorhubProjects, couplePhotographerSessions, couplePhotographerShots, couplePhotographerTimeline, coupleVideographerSessions, coupleVideographerDeliverables, coupleVideographerTimeline, coupleMusicPerformances, coupleMusicSetlists, coupleMusicTimeline, couplePlannerMeetings, couplePlannerTasks, couplePlannerTimeline, weddingRoleInvitations } from "@shared/schema";
-import { eq, and, desc, sql, inArray, or, gte, lte, isNotNull } from "drizzle-orm";
+import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema } from "@shared/schema";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
 function generateAccessCode(): string {
   return crypto.randomBytes(8).toString("hex").toUpperCase();
@@ -21,81 +17,33 @@ function generateSessionToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
+interface VendorSession {
+  vendorId: string;
+  createdAt: Date;
+  expiresAt: Date;
+}
+
+const VENDOR_SESSIONS: Map<string, VendorSession> = new Map();
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
-const YR_CACHE: Map<string, { data: any; expires: Date }> = new Map();
+interface CoupleSessionCache {
+  coupleId: string;
+  expiresAt: Date;
+}
+const COUPLE_SESSIONS: Map<string, CoupleSessionCache> = new Map();
 
-// Periodic cleanup of expired YR weather cache entries (every 30 minutes)
-setInterval(() => {
+function cleanExpiredSessions() {
   const now = new Date();
-  for (const [key, entry] of YR_CACHE) {
-    if (entry.expires < now) {
-      YR_CACHE.delete(key);
+  for (const [token, session] of VENDOR_SESSIONS.entries()) {
+    if (session.expiresAt < now) {
+      VENDOR_SESSIONS.delete(token);
     }
   }
-}, 30 * 60 * 1000);
+}
 
-// ── Rate limiters for auth endpoints ──
-const authRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 attempts per window
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "For mange forsøk. Prøv igjen om 15 minutter." },
-});
+setInterval(cleanExpiredSessions, 60 * 60 * 1000);
 
-const registerRateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // 5 registrations per hour per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "For mange registreringer. Prøv igjen senere." },
-});
-
-// ── Zod schemas for endpoints that lacked validation ──
-const vendorLoginSchema = z.object({
-  email: z.string().email("Ugyldig e-postadresse"),
-  password: z.string().min(1, "Passord er påkrevd"),
-});
-
-const vendorProfileUpdateSchema = z.object({
-  businessName: z.string().min(1).optional(),
-  description: z.string().optional(),
-  location: z.string().optional(),
-  phone: z.string().optional(),
-  website: z.string().optional(),
-  priceRange: z.string().optional(),
-  organizationNumber: z.string().optional(),
-  logoUrl: z.string().optional(),
-  coverImageUrl: z.string().optional(),
-  featured: z.boolean().optional(),
-}).passthrough();
-
-const statusUpdateSchema = z.object({
-  status: z.string().min(1),
-});
-
-const speechUpdateSchema = z.object({
-  speakerName: z.string().optional(),
-  role: z.string().optional(),
-  title: z.string().optional(),
-  content: z.string().optional(),
-  durationMinutes: z.number().optional(),
-  sortOrder: z.number().optional(),
-  status: z.string().optional(),
-  tableId: z.string().nullable().optional(),
-}).passthrough();
-
-const coupleProfileUpdateSchema = z.object({
-  displayName: z.string().optional(),
-  weddingDate: z.string().optional(),
-  venue: z.string().optional(),
-  guestCount: z.number().optional(),
-  eventType: z.string().optional(),
-  traditions: z.any().optional(),
-  culturalBackground: z.string().optional(),
-  partnerEmail: z.string().email().optional().nullable(),
-}).passthrough();
+const YR_CACHE: Map<string, { data: any; expires: Date }> = new Map();
 
 function hashPassword(password: string): string {
   const salt = bcrypt.genSaltSync(10);
@@ -107,26 +55,16 @@ function verifyPassword(password: string, hash: string): boolean {
 }
 
 const DEFAULT_CATEGORIES = [
-  { name: "Fotograf", icon: "camera", description: "Profesjonelle fotografer", slug: "photographer", dashboardKey: "photographer", sortOrder: 10 },
-  { name: "Videograf", icon: "film", description: "Profesjonell filmtjeneste", slug: "videographer", dashboardKey: "videographer", sortOrder: 20 },
-  { name: "Blomster", icon: "flower", description: "Blomsterdekoratører", slug: "florist", dashboardKey: "florist", sortOrder: 30 },
-  { name: "Catering", icon: "coffee", description: "Mat og drikke", slug: "catering", dashboardKey: "caterer", sortOrder: 40 },
-  { name: "Musikk", icon: "music", description: "Band, DJ og musikere", slug: "music", dashboardKey: "musician", sortOrder: 50 },
-  { name: "Venue", icon: "venue", description: "Festlokaler og arenaer", slug: "venue", dashboardKey: "venue", sortOrder: 60 },
-  { name: "Kake", icon: "cake", description: "Festkaker og bestilling", slug: "cake", dashboardKey: "cake", sortOrder: 70 },
-  { name: "Planlegger", icon: "clipboard", description: "Arrangementplanleggere", slug: "planner", dashboardKey: "coordinator", sortOrder: 80 },
-  { name: "Hår & Makeup", icon: "scissors", description: "Styling og sminke", slug: "beauty", dashboardKey: "hair-makeup", sortOrder: 90 },
-  { name: "Transport", icon: "car", description: "Transport og kjøretøy", slug: "transport", dashboardKey: "transport", sortOrder: 100 },
-  { name: "Invitasjoner", icon: "mail", description: "Invitasjoner og trykkeri", slug: "invitations", dashboardKey: "default", sortOrder: 110 },
-  { name: "Underholdning", icon: "sparkles", description: "Artister og show", slug: "entertainment", dashboardKey: "default", sortOrder: 120 },
-  { name: "Dekorasjon", icon: "star", description: "Dekorasjon og pynt", slug: "decoration", dashboardKey: "default", sortOrder: 130 },
-  { name: "Konfektyrer", icon: "gift", description: "Sjokolade og godteri", slug: "confectionery", dashboardKey: "default", sortOrder: 140 },
-  { name: "Bar & Drikke", icon: "cocktail", description: "Bartjenester og drikke", slug: "bar", dashboardKey: "default", sortOrder: 150 },
-  { name: "Fotoboks", icon: "aperture", description: "Fotoboks og moro", slug: "photobooth", dashboardKey: "default", sortOrder: 160 },
-  { name: "Ringer", icon: "diamond", description: "Ringer og smykker", slug: "rings", dashboardKey: "default", sortOrder: 170 },
-  { name: "Drakt & Dress", icon: "suit", description: "Antrekk og klær", slug: "dress", dashboardKey: "default", sortOrder: 180 },
-  { name: "Overnatting", icon: "bed", description: "Hotell og overnatting", slug: "accommodation", dashboardKey: "default", sortOrder: 190 },
-  { name: "Husdyr", icon: "heart", description: "Kjæledyr på arrangementet", slug: "pets", dashboardKey: "default", sortOrder: 200 },
+  { name: "Fotograf", icon: "camera", description: "Bryllupsfotografer" },
+  { name: "Videograf", icon: "video", description: "Bryllupsvideofilmer" },
+  { name: "Blomster", icon: "flower", description: "Blomsterdekoratører" },
+  { name: "Catering", icon: "utensils", description: "Mat og drikke" },
+  { name: "Musikk", icon: "music", description: "Band, DJ og musikere" },
+  { name: "Venue", icon: "home", description: "Bryllupslokaler" },
+  { name: "Kake", icon: "cake", description: "Bryllupskaker" },
+  { name: "Planlegger", icon: "clipboard", description: "Bryllupsplanleggere" },
+  { name: "Hår & Makeup", icon: "scissors", description: "Styling og sminke" },
+  { name: "Transport", icon: "car", description: "Bryllupstransport" },
 ];
 
 const DEFAULT_INSPIRATION_CATEGORIES = [
@@ -142,16 +80,6 @@ const DEFAULT_INSPIRATION_CATEGORIES = [
   { name: "Invitasjoner", icon: "mail", sortOrder: 10 },
 ];
 
-const slugifyCategory = (value: string) => {
-  return value
-    .toLowerCase()
-    .replace(/å/g, "a")
-    .replace(/æ/g, "ae")
-    .replace(/ø/g, "o")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-};
-
 async function fetchYrWeather(lat: number, lon: number): Promise<any> {
   const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
   const cached = YR_CACHE.get(cacheKey);
@@ -164,7 +92,7 @@ async function fetchYrWeather(lat: number, lon: number): Promise<any> {
   
   const response = await fetch(url, {
     headers: {
-      "User-Agent": "Evendi/1.0 https://replit.com",
+      "User-Agent": "Wedflow/1.0 https://replit.com",
     },
   });
 
@@ -286,7 +214,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   }
-
   app.get("/api/weather", async (req: Request, res: Response) => {
     try {
       const lat = parseFloat(req.query.lat as string);
@@ -332,170 +259,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Weather API error:", error);
       res.status(500).json({ error: "Failed to fetch weather data" });
-    }
-  });
-
-  // ── Weather/Location Bridge Proxy → CreatorHub backend ──────────────────────
-  // Proxies /api/evendi/weather-location/* to CreatorHub API for couples
-  const CREATORHUB_BRIDGE_URL = process.env.CREATORHUB_API_URL || 'http://localhost:3001';
-
-  app.all("/api/evendi/weather-location/*", async (req: Request, res: Response) => {
-    try {
-      const prefix = "/api/evendi/weather-location/";
-      const pathWithoutQuery = req.originalUrl.split("?")[0];
-      if (!pathWithoutQuery.startsWith(prefix)) {
-        return res.status(400).json({ error: "Ugyldig path" });
-      }
-
-      const relativePath = pathWithoutQuery.slice(prefix.length);
-      const method = req.method.toUpperCase();
-
-      const allowList = [
-        { method: "GET", regex: /^search$/ },
-        { method: "GET", regex: /^([^/]+)$/ },
-        { method: "POST", regex: /^([^/]+)\/venue$/ },
-        { method: "GET", regex: /^([^/]+)\/travel$/ },
-        { method: "GET", regex: /^([^/]+)\/event-weather$/ },
-        { method: "POST", regex: /^sync-from-project\/([^/]+)$/ , requiresAdmin: true },
-      ];
-
-      const matchEntry = allowList.find((entry) => entry.method === method && entry.regex.test(relativePath));
-      if (!matchEntry) {
-        return res.status(404).json({ error: "Not found" });
-      }
-
-      if (matchEntry.requiresAdmin) {
-        if (!(await checkAdminAuth(req, res))) return;
-      } else {
-        const coupleId = await checkCoupleAuth(req, res);
-        if (!coupleId) return;
-
-        const match = matchEntry.regex.exec(relativePath);
-        const pathCoupleId = match?.[1];
-        if (pathCoupleId && pathCoupleId !== coupleId) {
-          return res.status(403).json({ error: "Ingen tilgang til dette brudeparet" });
-        }
-      }
-
-      const targetUrl = `${CREATORHUB_BRIDGE_URL}${req.originalUrl}`;
-      const fetchOptions: RequestInit = {
-        method: req.method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          ...(req.headers.authorization ? { 'Authorization': req.headers.authorization as string } : {}),
-        },
-      };
-      if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
-        fetchOptions.body = JSON.stringify(req.body);
-      }
-      const response = await fetch(targetUrl, fetchOptions);
-      const data = await response.json();
-      res.status(response.status).json(data);
-    } catch (error) {
-      console.error('Weather-location bridge proxy error:', error);
-      res.status(502).json({ error: 'Bridge proxy feil — CreatorHub API ikke tilgjengelig' });
-    }
-  });
-
-  // ── Vendor Location Intelligence endpoint ──────────────────────────────────
-  // GET /api/vendors/:vendorId/travel-from-venue
-  // Calculates travel time from couple's wedding venue to a vendor location
-  app.get("/api/vendors/:vendorId/travel-from-venue", async (req: Request, res: Response) => {
-    try {
-      const { vendorId } = req.params;
-      const coupleId = await checkCoupleAuth(req, res);
-      if (!coupleId) return;
-
-      // Get vendor location from DB
-      const vendorResult = await db.execute(
-        sql`SELECT id, business_name, location FROM vendors WHERE id = ${vendorId}`
-      );
-      const vendor = (vendorResult as any).rows?.[0];
-      if (!vendor || !vendor.location) {
-        return res.status(404).json({ error: 'Leverandør ikke funnet eller mangler lokasjon' });
-      }
-
-      // Proxy the travel calculation through the CreatorHub bridge
-      // The bridge endpoint takes a city/location name and calculates travel from venue
-      const travelUrl = `${CREATORHUB_BRIDGE_URL}/api/evendi/weather-location/${coupleId}/travel?fromCity=${encodeURIComponent(vendor.location)}`;
-      const travelResponse = await fetch(travelUrl);
-      
-      if (!travelResponse.ok) {
-        const err = await travelResponse.json().catch(() => ({}));
-        return res.status(travelResponse.status).json(err);
-      }
-
-      const travelData = await travelResponse.json();
-      res.json({
-        vendorId,
-        vendorName: vendor.business_name,
-        vendorLocation: vendor.location,
-        ...travelData,
-      });
-    } catch (error) {
-      console.error('Vendor travel calculation error:', error);
-      res.status(500).json({ error: 'Feil ved beregning av reisetid til leverandør' });
-    }
-  });
-
-  // ── Enhanced weather endpoint with travel time calculation ──────────────────
-  // GET /api/weather/travel — Calculate travel time between two points  
-  app.get("/api/weather/travel", async (req: Request, res: Response) => {
-    try {
-      const fromLat = parseFloat(req.query.fromLat as string);
-      const fromLon = parseFloat(req.query.fromLon as string);
-      const toLat = parseFloat(req.query.toLat as string);
-      const toLon = parseFloat(req.query.toLon as string);
-
-      if (isNaN(fromLat) || isNaN(fromLon) || isNaN(toLat) || isNaN(toLon)) {
-        return res.status(400).json({ error: 'Oppgi fromLat, fromLon, toLat, toLon' });
-      }
-
-      // Great-circle distance + road factor
-      const R = 6371;
-      const dLat = (toLat - fromLat) * Math.PI / 180;
-      const dLon = (toLon - fromLon) * Math.PI / 180;
-      const a = Math.sin(dLat / 2) ** 2 +
-        Math.cos(fromLat * Math.PI / 180) * Math.cos(toLat * Math.PI / 180) *
-        Math.sin(dLon / 2) ** 2;
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      const straightLine = R * c;
-      const roadDistance = straightLine * 1.35;
-      const drivingMinutes = Math.round(roadDistance / 70 * 60);
-
-      // Fetch weather at both locations
-      const [fromWeather, toWeather] = await Promise.all([
-        fetchYrWeather(fromLat, fromLon).catch(() => null),
-        fetchYrWeather(toLat, toLon).catch(() => null),
-      ]);
-
-      const getWeatherSummary = (data: any) => {
-        const now = data?.properties?.timeseries?.[0];
-        return now ? {
-          temperature: now.data?.instant?.details?.air_temperature,
-          windSpeed: now.data?.instant?.details?.wind_speed,
-          symbol: now.data?.next_1_hours?.summary?.symbol_code || now.data?.next_6_hours?.summary?.symbol_code,
-          precipitation: now.data?.next_1_hours?.details?.precipitation_amount || 0,
-        } : null;
-      };
-
-      res.json({
-        travel: {
-          straightLineKm: Math.round(straightLine * 10) / 10,
-          roadDistanceKm: Math.round(roadDistance * 10) / 10,
-          drivingMinutes,
-          drivingFormatted: drivingMinutes >= 60
-            ? `${Math.floor(drivingMinutes / 60)}t ${drivingMinutes % 60}min`
-            : `${drivingMinutes} min`,
-          fuelCostNok: Math.round(roadDistance * 1.8 * 10) / 10,
-        },
-        from: { lat: fromLat, lon: fromLon, weather: getWeatherSummary(fromWeather) },
-        to: { lat: toLat, lon: toLon, weather: getWeatherSummary(toWeather) },
-      });
-    } catch (error) {
-      console.error('Travel calculation error:', error);
-      res.status(500).json({ error: 'Kunne ikke beregne reisetid' });
     }
   });
 
@@ -560,23 +323,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/vendor-categories", async (req: Request, res: Response) => {
+  app.get("/api/vendor-categories", async (_req: Request, res: Response) => {
     try {
-      const categories = await db
-        .select()
-        .from(vendorCategories)
-        .orderBy(sql`COALESCE(${vendorCategories.sortOrder}, 9999)`, vendorCategories.name);
-      
-      // Optionally filter by event type
-      const eventType = req.query.eventType as string | undefined;
-      if (eventType) {
-        const filtered = categories.filter(cat => {
-          if (!cat.applicableEventTypes || cat.applicableEventTypes.length === 0) return true;
-          return cat.applicableEventTypes.includes(eventType);
-        });
-        return res.json(filtered);
-      }
-      
+      const categories = await db.select().from(vendorCategories);
       res.json(categories);
     } catch (error) {
       console.error("Error fetching categories:", error);
@@ -601,7 +350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Endpoint to check and update expired trials (should be called by cron job)
   app.post("/api/admin/subscriptions/check-expired-trials", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { vendorSubscriptions } = await import("@shared/schema");
@@ -644,7 +393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             recipientId: sub.vendorId,
             type: "payment_required",
             title: "Betaling påkrevd",
-            body: "Din 30-dagers prøveperiode har utløpt. Betal for å fortsette å bruke Evendi og motta henvendelser fra brudepar.",
+            body: "Din 30-dagers prøveperiode har utløpt. Betal for å fortsette å bruke Wedflow og motta henvendelser fra brudepar.",
             sentVia: "in_app",
           });
 
@@ -665,7 +414,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Endpoint to send trial reminder emails (7, 3, 1 days before expiry)
   app.post("/api/admin/subscriptions/send-trial-reminders", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { vendorSubscriptions, subscriptionTiers } = await import("@shared/schema");
@@ -736,7 +485,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/vendors/register", registerRateLimiter, async (req: Request, res: Response) => {
+  app.post("/api/vendors/register", async (req: Request, res: Response) => {
     try {
       const { tierId, ...restData } = req.body;
       const validation = vendorRegistrationSchema.safeParse(restData);
@@ -769,17 +518,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         priceRange: profileData.priceRange || null,
       }).returning();
 
-      try {
-        await db.execute(sql`
-          INSERT INTO invite_requests
-            (email, first_name, last_name, profession, company_name, status, user_journey_status, source, created_at, updated_at)
-          VALUES
-            (${email}, NULL, NULL, ${profileData.categoryId}, ${profileData.businessName}, 'pending', 'pending', 'evendi', NOW(), NOW())
-        `);
-      } catch (inviteError) {
-        console.warn("Invite request insert skipped:", inviteError);
-      }
-
       // Create trial subscription if tierId is provided
       if (tierId) {
         const now = new Date();
@@ -808,13 +546,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/vendors/login", authRateLimiter, async (req: Request, res: Response) => {
+  app.post("/api/vendors/login", async (req: Request, res: Response) => {
     try {
-      const validation = vendorLoginSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ error: "E-post og passord er påkrevd", details: validation.error.errors });
+      const { email, password } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ error: "E-post og passord er påkrevd" });
       }
-      const { email, password } = validation.data;
 
       const [vendor] = await db.select().from(vendors).where(eq(vendors.email, email));
       if (!vendor) {
@@ -834,15 +572,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt,
       });
 
-      // Fetch vendor category
-      let vendorCategory = null;
-      if (vendor.categoryId) {
-        const [category] = await db.select().from(vendorCategories).where(eq(vendorCategories.id, vendor.categoryId));
-        vendorCategory = category?.name || null;
-      }
-
       const { password: _, ...vendorWithoutPassword } = vendor;
-      res.json({ vendor: vendorWithoutPassword, sessionToken, vendorCategory });
+      res.json({ vendor: vendorWithoutPassword, sessionToken });
     } catch (error) {
       console.error("Error logging in vendor:", error);
       res.status(500).json({ error: "Kunne ikke logge inn" });
@@ -970,72 +701,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const categoryId = req.query.categoryId as string | undefined;
       
-      // Fetch vendors with their subscription info for prioritization
-      const vendorsWithSubs = await db.select({
+      let query = db.select({
         id: vendors.id,
         businessName: vendors.businessName,
         categoryId: vendors.categoryId,
-        categoryName: vendorCategories.name,
         description: vendors.description,
         location: vendors.location,
         phone: vendors.phone,
         website: vendors.website,
         priceRange: vendors.priceRange,
         imageUrl: vendors.imageUrl,
-        subscriptionId: vendorSubscriptions.id,
-        tierId: vendorSubscriptions.tierId,
-        hasPrioritizedSearch: subscriptionTiers.hasPrioritizedSearch,
-        canHighlightProfile: subscriptionTiers.canHighlightProfile,
-        hasReviewBadge: subscriptionTiers.hasReviewBadge,
-      })
-        .from(vendors)
-        .leftJoin(vendorCategories, eq(vendorCategories.id, vendors.categoryId))
-        .leftJoin(vendorSubscriptions, 
-          and(
-            eq(vendorSubscriptions.vendorId, vendors.id),
-            eq(vendorSubscriptions.status, "active")
-          )
-        )
-        .leftJoin(subscriptionTiers, eq(subscriptionTiers.id, vendorSubscriptions.tierId))
-        .where(eq(vendors.status, "approved"));
+      }).from(vendors).where(eq(vendors.status, "approved"));
 
-      // Filter by category if specified
-      let filtered = categoryId 
-        ? vendorsWithSubs.filter(v => v.categoryId === categoryId)
-        : vendorsWithSubs;
+      const approvedVendors = await query;
+      
+      const filtered = categoryId 
+        ? approvedVendors.filter(v => v.categoryId === categoryId)
+        : approvedVendors;
 
-      // Sort: Featured first, then prioritized, then alphabetically
-      filtered.sort((a, b) => {
-        // 1. Featured profiles first
-        if (a.canHighlightProfile && !b.canHighlightProfile) return -1;
-        if (!a.canHighlightProfile && b.canHighlightProfile) return 1;
-        
-        // 2. Prioritized search second
-        if (a.hasPrioritizedSearch && !b.hasPrioritizedSearch) return -1;
-        if (!a.hasPrioritizedSearch && b.hasPrioritizedSearch) return 1;
-        
-        // 3. Alphabetically by business name
-        return (a.businessName || "").localeCompare(b.businessName || "");
-      });
-
-      // Map to clean response (remove subscription fields from public API)
-      const response = filtered.map(v => ({
-        id: v.id,
-        businessName: v.businessName,
-        categoryId: v.categoryId,
-        categoryName: v.categoryName,
-        description: v.description,
-        location: v.location,
-        phone: v.phone,
-        website: v.website,
-        priceRange: v.priceRange,
-        imageUrl: v.imageUrl,
-        isFeatured: v.canHighlightProfile || false,
-        isPrioritized: v.hasPrioritizedSearch || false,
-        hasReviewBadge: v.hasReviewBadge || false,
-      }));
-
-      res.json(response);
+      res.json(filtered);
     } catch (error) {
       console.error("Error fetching vendors:", error);
       res.status(500).json({ error: "Kunne ikke hente leverandører" });
@@ -1045,33 +729,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Smart vendor matching endpoint for couples
   app.get("/api/vendors/matching", async (req: Request, res: Response) => {
     try {
-      const { category, guestCount, location, cuisineTypes, search } = req.query;
+      const { category, guestCount, location } = req.query;
       const guestCountNum = guestCount ? parseInt(guestCount as string) : undefined;
-      const searchTerm = search && typeof search === "string" ? search.trim().toLowerCase() : undefined;
-      // Parse cuisine types from query (comma-separated)
-      const requestedCuisines = cuisineTypes && typeof cuisineTypes === "string" 
-        ? cuisineTypes.split(",").map(c => c.trim().toLowerCase())
-        : [];
 
-      // Map client-side category slugs to DB category names (from shared registry)
-      const { buildCategorySlugMap } = await import("../shared/event-types");
-      const CATEGORY_SLUG_MAP = buildCategorySlugMap();
-
-      // Resolve category slug to DB category ID
-      let resolvedCategoryId: string | null = null;
-      if (category && typeof category === "string") {
-        const categoryName = CATEGORY_SLUG_MAP[category];
-        if (categoryName) {
-          const [dbCat] = await db.select().from(vendorCategories).where(eq(vendorCategories.name, categoryName)).limit(1);
-          if (dbCat) resolvedCategoryId = dbCat.id;
-        } else {
-          // Assume it's already a DB ID (UUID)
-          resolvedCategoryId = category;
-        }
-      }
-
-      // Fetch approved vendors with their subscription details for prioritization
-      const vendorsWithSubs = await db.select({
+      // Fetch approved vendors with their category details
+      const approvedVendors = await db.select({
         id: vendors.id,
         businessName: vendors.businessName,
         categoryId: vendors.categoryId,
@@ -1081,34 +743,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         website: vendors.website,
         priceRange: vendors.priceRange,
         imageUrl: vendors.imageUrl,
-        culturalExpertise: vendors.culturalExpertise,
-        hasPrioritizedSearch: subscriptionTiers.hasPrioritizedSearch,
-        canHighlightProfile: subscriptionTiers.canHighlightProfile,
-        hasReviewBadge: subscriptionTiers.hasReviewBadge,
-      })
-        .from(vendors)
-        .leftJoin(vendorSubscriptions, 
-          and(
-            eq(vendorSubscriptions.vendorId, vendors.id),
-            eq(vendorSubscriptions.status, "active")
-          )
-        )
-        .leftJoin(subscriptionTiers, eq(subscriptionTiers.id, vendorSubscriptions.tierId))
-        .where(eq(vendors.status, "approved"));
+      }).from(vendors).where(eq(vendors.status, "approved"));
 
-      // Filter by category if specified (using resolved DB ID)
-      let filtered = resolvedCategoryId 
-        ? vendorsWithSubs.filter(v => v.categoryId === resolvedCategoryId)
-        : vendorsWithSubs;
-
-      // Filter by search term (business name match) if specified
-      if (searchTerm) {
-        filtered = filtered.filter(v => {
-          const name = (v.businessName || "").toLowerCase();
-          const desc = (v.description || "").toLowerCase();
-          return name.includes(searchTerm) || desc.includes(searchTerm);
-        });
-      }
+      // Filter by category if specified
+      let filtered = category 
+        ? approvedVendors.filter(v => v.categoryId === category)
+        : approvedVendors;
 
       // Fetch category details for capacity matching
       const vendorIds = filtered.map(v => v.id);
@@ -1162,179 +802,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
-      // Add cuisine match info for catering vendors
-      // We'll fetch catering details separately since they might be stored in extended vendor data
-      let cateringDetailsMap: Record<string, string[]> = {};
-      if (category === "catering" && requestedCuisines.length > 0) {
-        // Caterer cuisine types are typically stored in their vendor profile description
-        // or in extended vendor features. For now, we'll include all caterers and let
-        // client-side scoring handle the matching based on vendor descriptions
-      }
-
-      // Sort: Featured first, then prioritized, then alphabetically
-      result.sort((a, b) => {
-        // 1. Featured profiles first
-        if (a.canHighlightProfile && !b.canHighlightProfile) return -1;
-        if (!a.canHighlightProfile && b.canHighlightProfile) return 1;
-        
-        // 2. Prioritized search second
-        if (a.hasPrioritizedSearch && !b.hasPrioritizedSearch) return -1;
-        if (!a.hasPrioritizedSearch && b.hasPrioritizedSearch) return 1;
-        
-        // 3. Alphabetically by business name
-        return (a.businessName || "").localeCompare(b.businessName || "");
-      });
-
-      // Fetch vendor products for matched vendors (with metadata)
-      const vendorIdsForProducts = result.map(v => v.id);
-      let vendorProductsMap: Record<string, any[]> = {};
-      if (vendorIdsForProducts.length > 0) {
-        const allProducts = await db.select()
-          .from(vendorProducts)
-          .where(inArray(vendorProducts.vendorId, vendorIdsForProducts));
-        
-        // Parse metadata JSON and group by vendorId
-        allProducts.forEach(product => {
-          if (!vendorProductsMap[product.vendorId]) {
-            vendorProductsMap[product.vendorId] = [];
-          }
-          vendorProductsMap[product.vendorId].push({
-            ...product,
-            metadata: product.metadata ? JSON.parse(product.metadata) : null,
-          });
-        });
-      }
-
-      // Add featured/prioritized flags and products to response
-      const response = result.map(v => ({
-        ...v,
-        isFeatured: v.canHighlightProfile || false,
-        isPrioritized: v.hasPrioritizedSearch || false,
-        hasReviewBadge: v.hasReviewBadge || false,
-        products: vendorProductsMap[v.id] || [],
-      }));
-
-      res.json(response);
+      res.json(result);
     } catch (error) {
       console.error("Error fetching matching vendors:", error);
       res.status(500).json({ error: "Kunne ikke hente matchende leverandører" });
     }
   });
 
-  const PUBLIC_APP_SETTINGS_KEYS = new Set([
-    "maintenance_mode",
-    "maintenance_message",
-    "status_message",
-    "status_type",
-    "app_name",
-    "app_tagline",
-    "app_tagline_en",
-    "app_description",
-    "app_company_description",
-    "app_logo_url",
-    "support_email",
-    "support_phone",
-    "app_website",
-    "app_instagram_url",
-    "app_instagram_handle",
-    "app_version",
-    "min_app_version",
-    "help_show_documentation",
-    "help_show_faq",
-    "help_show_videoguides",
-    "help_show_whatsnew",
-    "help_show_status",
-    "help_show_email_support",
-    "help_show_norwedfilm",
-    "documentation_features",
-    "documentation_video_url",
-    "documentation_video_title",
-    "documentation_video_description",
-    "vendor_availability_highlight_ms",
-    "vendor_availability_highlight_intensity",
-    "wedding_date_min",
-    "wedding_date_max",
-    "design_primary_color",
-    "design_background_color",
-    "design_dark_mode",
-    "design_font_family",
-    "design_font_size",
-    "design_layout_density",
-    "design_button_radius",
-    "design_card_radius",
-    "design_border_width",
-    "logo_use_header",
-    "logo_use_splash",
-    "logo_use_about",
-    "logo_use_auth",
-    "logo_use_admin_header",
-    "logo_use_docs",
-    // Currency & locale
-    "currency_code",
-    "currency_locale",
-    // Store URLs
-    "app_store_url",
-    "play_store_url",
-    // Legal
-    "terms_url",
-    "privacy_policy_url",
-    // Footer
-    "footer_brand_text",
-    "footer_tagline",
-    // Copyright
-    "copyright_text",
-    // Landing page content
-    "landing_hero_title",
-    "landing_hero_brand",
-    "landing_hero_title_en",
-    "landing_hero_description",
-    "landing_hero_description_en",
-    "landing_cta_title",
-    "landing_cta_title_en",
-    "landing_cta_description",
-    "landing_cta_description_en",
-    "landing_couple_features_json",
-    "landing_vendor_features_json",
-    "landing_stats_json",
-    "landing_testimonials_json",
-    "landing_steps_json",
-    // Vendor support
-    "vendor_support_welcome_message",
-    // Company story
-    "company_story_json",
-    // Semantic colors
-    "color_success",
-    "color_warning",
-    "color_error",
-    "color_info",
-    "rating_star_color",
-    // Notification templates
-    "notification_countdown_title_template",
-    "notification_countdown_body_template",
-    "notification_checklist_title",
-    "notification_checklist_body_template",
-    "notification_toast_checklist_failed",
-    "notification_toast_updated",
-    "notification_toast_permission_granted",
-  ]);
-
-  const ADMIN_SETTINGS_KEYS = new Set([
-    ...PUBLIC_APP_SETTINGS_KEYS,
-    "enable_vendor_registration",
-    "require_inspiration_approval",
-    "enable_messaging",
-    "max_file_upload_mb",
-  ]);
-
-  const checkAdminAuth = async (req: Request, res: Response): Promise<boolean> => {
-    const authHeader = req.headers.authorization;
-
-    // Admin secret only
+  const checkAdminAuth = (req: Request, res: Response): boolean => {
     const adminSecret = process.env.ADMIN_SECRET;
     if (!adminSecret) {
       res.status(503).json({ error: "Admin-funksjonalitet er ikke konfigurert" });
       return false;
     }
+    const authHeader = req.headers.authorization;
+    console.log("Auth check - Header:", authHeader, "Expected:", `Bearer ${adminSecret}`);
     if (!authHeader || authHeader !== `Bearer ${adminSecret}`) {
       console.error("Auth failed - Header does not match expected value");
       res.status(401).json({ error: "Ikke autorisert" });
@@ -1343,510 +825,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return true;
   };
 
-  type SmokeTestMode = "light" | "full";
-  type SmokeTestStatus = "queued" | "running" | "passed" | "failed";
-  type SmokeTestCheckStatus = "passed" | "failed" | "skipped";
-
-  interface SmokeTestCheckResult {
-    name: string;
-    status: SmokeTestCheckStatus;
-    durationMs: number;
-    error?: string;
-  }
-
-  interface SmokeTestJob {
-    id: string;
-    mode: SmokeTestMode;
-    status: SmokeTestStatus;
-    startedAt?: string;
-    finishedAt?: string;
-    results: SmokeTestCheckResult[];
-    logs: string[];
-  }
-
-  const smokeTestJobs = new Map<string, SmokeTestJob>();
-  let smokeTestLatestId: string | null = null;
-  let smokeTestRunning = false;
-
-  const appendSmokeLog = (job: SmokeTestJob, message: string) => {
-    const ts = new Date().toISOString();
-    job.logs.push(`[${ts}] ${message}`);
-    if (job.logs.length > 2000) {
-      job.logs.splice(0, job.logs.length - 2000);
-    }
-  };
-
-  const finalizeSmokeTest = (job: SmokeTestJob, status: SmokeTestStatus) => {
-    job.status = status;
-    job.finishedAt = new Date().toISOString();
-    smokeTestRunning = false;
-  };
-
-  const runShellCheck = (job: SmokeTestJob, command: string, args: string[]) => {
-    return new Promise<void>((resolve, reject) => {
-      appendSmokeLog(job, `Running: ${[command, ...args].join(" ")}`);
-      const child = spawn(command, args, {
-        cwd: process.cwd(),
-        env: process.env,
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-
-      child.stdout.on("data", (chunk) => {
-        const output = String(chunk).trim();
-        if (output) appendSmokeLog(job, output);
-      });
-
-      child.stderr.on("data", (chunk) => {
-        const output = String(chunk).trim();
-        if (output) appendSmokeLog(job, output);
-      });
-
-      child.on("error", (error) => reject(error));
-
-      child.on("close", (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`Command exited with code ${code ?? "unknown"}`));
-        }
-      });
-    });
-  };
-
-  const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs = 5000) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      return await fetch(url, { ...init, signal: controller.signal });
-    } finally {
-      clearTimeout(timer);
-    }
-  };
-
-  const runSmokeTestJob = async (job: SmokeTestJob) => {
-    job.status = "running";
-    job.startedAt = new Date().toISOString();
-    appendSmokeLog(job, `Smoke test started (${job.mode})`);
-
-    const startCheck = async (name: string, fn: () => Promise<void>) => {
-      const started = Date.now();
-      try {
-        await fn();
-        job.results.push({ name, status: "passed", durationMs: Date.now() - started });
-        appendSmokeLog(job, `${name}: passed`);
-        return true;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        job.results.push({ name, status: "failed", durationMs: Date.now() - started, error: message });
-        appendSmokeLog(job, `${name}: failed - ${message}`);
-        return false;
-      }
-    };
-
-    const dbOk = await startCheck("db", async () => {
-      await db.execute(sql`select 1 as ok`);
-    });
-    if (!dbOk) {
-      finalizeSmokeTest(job, "failed");
-      return;
-    }
-
-    const envOk = await startCheck("env", async () => {
-      if (!process.env.ADMIN_SECRET) {
-        throw new Error("ADMIN_SECRET is not configured");
-      }
-    });
-    if (!envOk) {
-      finalizeSmokeTest(job, "failed");
-      return;
-    }
-
-    const statsOk = await startCheck("admin-stats", async () => {
-      await db.select({ count: sql<number>`count(*)` }).from(vendors);
-      await db.select({ count: sql<number>`count(*)` }).from(coupleProfiles);
-      await db.select({ count: sql<number>`count(*)` }).from(inspirations);
-      await db.select({ count: sql<number>`count(*)` }).from(conversations);
-      await db.select({ count: sql<number>`count(*)` }).from(messages);
-      await db.select({ count: sql<number>`count(*)` }).from(deliveries);
-      await db.select({ count: sql<number>`count(*)` }).from(vendorOffers);
-    });
-    if (!statsOk) {
-      finalizeSmokeTest(job, "failed");
-      return;
-    }
-
-    const settingsOk = await startCheck("app-settings", async () => {
-      const [row] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(appSettings)
-        .where(inArray(appSettings.key, Array.from(ADMIN_SETTINGS_KEYS)));
-      if (!row || Number(row.count) === 0) {
-        throw new Error("No admin app settings found");
-      }
-    });
-    if (!settingsOk) {
-      finalizeSmokeTest(job, "failed");
-      return;
-    }
-
-    const publicSettingsOk = await startCheck("public-app-settings", async () => {
-      const [row] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(appSettings)
-        .where(inArray(appSettings.key, Array.from(PUBLIC_APP_SETTINGS_KEYS)));
-      if (!row || Number(row.count) === 0) {
-        throw new Error("No public app settings found");
-      }
-    });
-    if (!publicSettingsOk) {
-      finalizeSmokeTest(job, "failed");
-      return;
-    }
-
-    const vendorCategoryOk = await startCheck("vendor-categories", async () => {
-      const categories = await db.select().from(vendorCategories);
-      if (!categories.length) {
-        throw new Error("No vendor categories found");
-      }
-      const missing = categories.filter((cat) => !cat.slug || !cat.dashboardKey);
-      if (missing.length > 0) {
-        throw new Error(`Missing slug/dashboardKey for ${missing.length} categories`);
-      }
-    });
-    if (!vendorCategoryOk) {
-      finalizeSmokeTest(job, "failed");
-      return;
-    }
-
-    const adminMessagingOk = await startCheck("admin-messaging", async () => {
-      await db.select({ count: sql<number>`count(*)` }).from(adminConversations);
-      await db.select({ count: sql<number>`count(*)` }).from(adminMessages);
-    });
-    if (!adminMessagingOk) {
-      finalizeSmokeTest(job, "failed");
-      return;
-    }
-
-    const vendorMessagingOk = await startCheck("vendor-messaging", async () => {
-      await db.select({ count: sql<number>`count(*)` }).from(conversations);
-      await db.select({ count: sql<number>`count(*)` }).from(messages);
-    });
-    if (!vendorMessagingOk) {
-      finalizeSmokeTest(job, "failed");
-      return;
-    }
-
-    const creatorhubOk = await startCheck("creatorhub-bridge", async () => {
-      await db.select({ count: sql<number>`count(*)` }).from(creatorhubProjects);
-      await db.select({ count: sql<number>`count(*)` }).from(creatorhubProjects).where(eq(creatorhubProjects.status, "active"));
-    });
-    if (!creatorhubOk) {
-      finalizeSmokeTest(job, "failed");
-      return;
-    }
-
-    const deliveryOk = await startCheck("delivery-tracking", async () => {
-      await db.select({ count: sql<number>`count(*)` }).from(deliveries);
-      await db.select({ count: sql<number>`count(*)` }).from(deliveryItems);
-      await db.select({ count: sql<number>`count(*)` }).from(deliveryTracking);
-    });
-    if (!deliveryOk) {
-      finalizeSmokeTest(job, "failed");
-      return;
-    }
-
-    const hasSupabaseEnv = !!(process.env.EXPO_PUBLIC_SUPABASE_URL && process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
-    if (hasSupabaseEnv) {
-      const storageEnvOk = await startCheck("storage-env", async () => {
-        if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
-          throw new Error("Supabase storage env is missing");
-        }
-      });
-      if (!storageEnvOk) {
-        finalizeSmokeTest(job, "failed");
-        return;
-      }
-
-      const supabaseHealthOk = await startCheck("supabase-health", async () => {
-        const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/auth/v1/health`;
-        const response = await fetchWithTimeout(url, {}, 5000);
-        if (!response.ok) {
-          throw new Error(`Supabase health check failed (${response.status})`);
-        }
-      });
-      if (!supabaseHealthOk) {
-        finalizeSmokeTest(job, "failed");
-        return;
-      }
-    } else {
-      job.results.push({ name: "storage-env", status: "skipped", durationMs: 0 });
-      job.results.push({ name: "supabase-health", status: "skipped", durationMs: 0 });
-    }
-
-    const creatorhubUrl = process.env.CREATORHUB_API_URL;
-    if (creatorhubUrl) {
-      const creatorhubHealthOk = await startCheck("creatorhub-health", async () => {
-        const response = await fetchWithTimeout(`${creatorhubUrl}/health`, {}, 5000);
-        if (!response.ok) {
-          throw new Error(`CreatorHub health check failed (${response.status})`);
-        }
-      });
-      if (!creatorhubHealthOk) {
-        finalizeSmokeTest(job, "failed");
-        return;
-      }
-    } else {
-      job.results.push({ name: "creatorhub-health", status: "skipped", durationMs: 0 });
-    }
-
-    const baseUrl = process.env.SMOKE_TEST_BASE_URL;
-    const weatherPath = process.env.SMOKE_TEST_WEATHER_PATH || "search?query=oslo";
-    if (baseUrl) {
-      const proxyOk = await startCheck("creatorhub-proxy", async () => {
-        const url = `${baseUrl}/api/evendi/weather-location/${weatherPath}`;
-        const response = await fetchWithTimeout(url, {}, 5000);
-        if (!response.ok) {
-          throw new Error(`CreatorHub proxy failed (${response.status})`);
-        }
-      });
-      if (!proxyOk) {
-        finalizeSmokeTest(job, "failed");
-        return;
-      }
-    } else {
-      job.results.push({ name: "creatorhub-proxy", status: "skipped", durationMs: 0 });
-    }
-
-    const timelineId = process.env.SMOKE_TEST_TIMELINE_ID;
-    const seedFixtures = process.env.SMOKE_TEST_SEED_FIXTURES === "true";
-    const vendorTokenEnv = process.env.SMOKE_TEST_VENDOR_TOKEN;
-    const coupleIdEnv = process.env.SMOKE_TEST_COUPLE_ID;
-    const coupleTokenEnv = process.env.SMOKE_TEST_COUPLE_TOKEN;
-
-    const creatorhubEndpointsOk = await startCheck("creatorhub-endpoints", async () => {
-      if (!baseUrl) {
-        throw new Error("SMOKE_TEST_BASE_URL not configured");
-      }
-
-      let vendorToken = vendorTokenEnv;
-      let coupleId = coupleIdEnv;
-      let seededVendorId: string | null = null;
-      let seededCoupleId: string | null = null;
-      let seededConversationId: string | null = null;
-      let seededCoupleToken: string | null = null;
-
-      if ((!vendorToken || !coupleId || !coupleTokenEnv) && seedFixtures) {
-        const emailSuffix = crypto.randomBytes(4).toString("hex");
-        const vendorEmail = `smoke-vendor-${emailSuffix}@example.com`;
-        const coupleEmail = `smoke-couple-${emailSuffix}@example.com`;
-
-        const [vendor] = await db
-          .insert(vendors)
-          .values({
-            email: vendorEmail,
-            password: hashPassword("SmokeTest123!"),
-            businessName: "Smoke Test Vendor",
-            status: "approved",
-          })
-          .returning({ id: vendors.id });
-        seededVendorId = vendor?.id || null;
-
-        const [couple] = await db
-          .insert(coupleProfiles)
-          .values({
-            email: coupleEmail,
-            displayName: "Smoke Test Couple",
-            password: hashPassword("SmokeTest123!"),
-          })
-          .returning({ id: coupleProfiles.id });
-        seededCoupleId = couple?.id || null;
-
-        if (!seededVendorId || !seededCoupleId) {
-          throw new Error("Failed to seed vendor or couple fixtures");
-        }
-
-        const [conv] = await db
-          .insert(conversations)
-          .values({
-            vendorId: seededVendorId,
-            coupleId: seededCoupleId,
-          })
-          .returning({ id: conversations.id });
-        seededConversationId = conv?.id || null;
-
-        vendorToken = generateSessionToken();
-        await db.insert(vendorSessions).values({
-          vendorId: seededVendorId,
-          token: vendorToken,
-          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-        });
-
-        seededCoupleToken = generateSessionToken();
-        await db.insert(coupleSessions).values({
-          coupleId: seededCoupleId,
-          token: seededCoupleToken,
-          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-        });
-
-        coupleId = seededCoupleId;
-      }
-
-      const coupleToken = coupleTokenEnv || seededCoupleToken;
-      if (!vendorToken || !coupleId || !coupleToken) {
-        throw new Error("Missing vendor token or coupleId for CreatorHub checks");
-      }
-
-      try {
-        const proxyUrl = `${baseUrl}/api/evendi/weather-location/${weatherPath}`;
-        const proxyRes = await fetchWithTimeout(
-          proxyUrl,
-          { headers: { Authorization: `Bearer ${coupleToken}` } },
-          5000
-        );
-        if (!proxyRes.ok) {
-          throw new Error(`creatorhub-proxy failed (${proxyRes.status})`);
-        }
-
-        const bridgeUrl = `${baseUrl}/api/vendor/creatorhub-bridge?coupleId=${coupleId}`;
-        const bridgeRes = await fetchWithTimeout(
-          bridgeUrl,
-          { headers: { Authorization: `Bearer ${vendorToken}` } },
-          5000
-        );
-        if (!bridgeRes.ok) {
-          throw new Error(`creatorhub-bridge failed (${bridgeRes.status})`);
-        }
-
-        if (timelineId) {
-          const timelineUrl = `${baseUrl}/api/vendor/timeline-comments/${timelineId}`;
-          const timelineRes = await fetchWithTimeout(
-            timelineUrl,
-            { headers: { Authorization: `Bearer ${vendorToken}` } },
-            5000
-          );
-          if (!timelineRes.ok) {
-            throw new Error(`timeline-comments failed (${timelineRes.status})`);
-          }
-        }
-      } finally {
-        if (seededConversationId) {
-          await db.delete(conversations).where(eq(conversations.id, seededConversationId));
-        }
-        if (seededVendorId) {
-          await db.delete(vendorSessions).where(eq(vendorSessions.vendorId, seededVendorId));
-          await db.delete(vendors).where(eq(vendors.id, seededVendorId));
-        }
-        if (seededCoupleId) {
-          await db.delete(coupleSessions).where(eq(coupleSessions.coupleId, seededCoupleId));
-          await db.delete(coupleProfiles).where(eq(coupleProfiles.id, seededCoupleId));
-        }
-      }
-    });
-
-    if (!creatorhubEndpointsOk) {
-      finalizeSmokeTest(job, "failed");
-      return;
-    }
-
-    if (job.mode === "full") {
-      const typecheckOk = await startCheck("typecheck", async () => {
-        await runShellCheck(job, "npm", ["run", "check:types", "--", "--pretty", "false", "--skipLibCheck"]);
-      });
-      if (!typecheckOk) {
-        finalizeSmokeTest(job, "failed");
-        return;
-      }
-    } else {
-      job.results.push({ name: "typecheck", status: "skipped", durationMs: 0 });
-    }
-
-    finalizeSmokeTest(job, "passed");
-  };
-
-  // Diagnostic endpoint to check server health and environment
-  app.get("/api/diagnostics", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
-    const diagnostics = {
-      timestamp: new Date().toISOString(),
-      environment: {
-        NODE_ENV: process.env.NODE_ENV,
-        HAS_DATABASE_URL: !!process.env.DATABASE_URL,
-        HAS_ADMIN_SECRET: !!process.env.ADMIN_SECRET,
-      },
-      node_version: process.version,
-      build_version: "ch-full-access",
-    };
-    res.json(diagnostics);
-  });
-
-  // Test endpoint to debug query issues
-  app.get("/api/test-query/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
-    const { id } = req.params;
-    try {
-      console.log("[TestQuery] Testing query with ID:", id);
-
-      const result = await db.select({
-        id: coupleProfiles.id,
-        email: coupleProfiles.email,
-        displayName: coupleProfiles.displayName,
-      }).from(coupleProfiles).where(eq(coupleProfiles.id, id));
-
-      console.log("[TestQuery] Success, found:", result.length);
-      res.json({ success: true, data: result });
-    } catch (error) {
-      console.error("[TestQuery] Error:", error);
-      res.status(500).json({ error: "Query failed", details: error instanceof Error ? error.message : String(error) });
-    }
-  });
-
-  app.get("/api/admin/smoke-test", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
-
-    const latest = smokeTestLatestId ? smokeTestJobs.get(smokeTestLatestId) : null;
-    res.json({ latest: latest || null });
-  });
-
-  app.get("/api/admin/smoke-test/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
-
-    const job = smokeTestJobs.get(req.params.id);
-    if (!job) return res.status(404).json({ error: "Smoke test not found" });
-    res.json({ job });
-  });
-
-  app.post("/api/admin/smoke-test", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
-
-    if (smokeTestRunning) {
-      return res.status(409).json({ error: "Smoke test already running", latestId: smokeTestLatestId });
-    }
-
-    const mode: SmokeTestMode = req.body?.mode === "light" ? "light" : "full";
-    const job: SmokeTestJob = {
-      id: crypto.randomUUID(),
-      mode,
-      status: "queued",
-      results: [],
-      logs: [],
-    };
-
-    smokeTestJobs.set(job.id, job);
-    smokeTestLatestId = job.id;
-    smokeTestRunning = true;
-
-    setImmediate(() => {
-      runSmokeTestJob(job).catch((error) => {
-        appendSmokeLog(job, `Smoke test crashed: ${error instanceof Error ? error.message : String(error)}`);
-        finalizeSmokeTest(job, "failed");
-      });
-    });
-
-    res.json({ jobId: job.id, mode });
-  });
-
   app.get("/api/admin/vendors", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const status = req.query.status as string || "pending";
@@ -1872,31 +852,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/admin/invite-requests", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
-
-    try {
-      const status = typeof req.query.status === "string" ? req.query.status : undefined;
-      const source = typeof req.query.source === "string" ? req.query.source : undefined;
-
-      const result = await db.execute(sql`
-        SELECT id, email, first_name, last_name, profession, company_name, status, user_journey_status, source, created_at
-        FROM invite_requests
-        WHERE 1 = 1
-        ${status ? sql`AND status = ${status}` : sql``}
-        ${source ? sql`AND source = ${source}` : sql``}
-        ORDER BY created_at DESC
-      `);
-
-      res.json(result.rows);
-    } catch (error) {
-      console.error("Error fetching invite requests:", error);
-      res.status(500).json({ error: "Kunne ikke hente invitasjoner" });
-    }
-  });
-
   app.post("/api/admin/vendors/:id/approve", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { id } = req.params;
@@ -1949,7 +906,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/admin/vendors/:id/reject", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { id } = req.params;
@@ -2021,7 +978,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (subscription.status === "paused") {
         res.status(403).json({ 
           error: "Abonnement satt på pause",
-          message: "Ditt abonnement er satt på pause. Betal for å fortsette å bruke Evendi og motta henvendelser.",
+          message: "Ditt abonnement er satt på pause. Betal for å fortsette å bruke Wedflow og motta henvendelser.",
           requiresPayment: true,
           isPaused: true
         });
@@ -2053,11 +1010,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return true;
     } catch (error) {
       console.error("Error checking subscription access:", error);
-      res.status(503).json({
-        error: "Kunne ikke verifisere abonnement",
-        message: "Prøv igjen om litt.",
-      });
-      return false;
+      return true; // Allow access on error to avoid breaking functionality
     }
   };
 
@@ -2076,15 +1029,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let category = null;
       if (vendor.categoryId) {
         const [cat] = await db.select().from(vendorCategories).where(eq(vendorCategories.id, vendor.categoryId));
-        category = cat ? {
-          id: cat.id,
-          name: cat.name,
-          slug: cat.slug,
-          dashboardKey: cat.dashboardKey,
-          sortOrder: cat.sortOrder,
-          icon: cat.icon,
-          applicableEventTypes: cat.applicableEventTypes || [],
-        } : null;
+        category = cat ? { id: cat.id, name: cat.name } : null;
       }
 
       res.json({
@@ -2093,9 +1038,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         businessName: vendor.businessName,
         organizationNumber: vendor.organizationNumber,
         description: vendor.description,
-        whyStatement: vendor.whyStatement,
-        howStatement: vendor.howStatement,
-        whatStatement: vendor.whatStatement,
         location: vendor.location,
         phone: vendor.phone,
         website: vendor.website,
@@ -2174,15 +1116,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
-      const validation = vendorProfileUpdateSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ error: "Ugyldig data", details: validation.error.errors });
-      }
-      const { businessName, organizationNumber, description, whyStatement, howStatement, whatStatement, location, phone, website, priceRange, googleReviewUrl, culturalExpertise } = validation.data as any;
+      const { businessName, organizationNumber, description, location, phone, website, priceRange, googleReviewUrl } = req.body;
 
       if (!businessName || businessName.trim().length < 2) {
         return res.status(400).json({ error: "Bedriftsnavn er påkrevd" });
@@ -2193,15 +1128,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           businessName: businessName.trim(),
           organizationNumber: organizationNumber || null,
           description: description || null,
-          whyStatement: whyStatement || null,
-          howStatement: howStatement || null,
-          whatStatement: whatStatement || null,
           location: location || null,
           phone: phone || null,
           website: website || null,
           priceRange: priceRange || null,
           googleReviewUrl: googleReviewUrl || null,
-          culturalExpertise: culturalExpertise || null,
           updatedAt: new Date(),
         })
         .where(eq(vendors.id, vendorId))
@@ -2249,9 +1180,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/vendor/category-details", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
-
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const updateData = { ...req.body, updatedAt: new Date() };
@@ -2325,66 +1253,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { items, ...deliveryData } = validation.data;
       const accessCode = generateAccessCode();
 
-      // Auto-link to project/timeline if coupleId provided but projectId missing
-      let projectId = deliveryData.projectId || null;
-      let timelineId = deliveryData.timelineId || null;
-      if (deliveryData.coupleId && !projectId) {
-        try {
-          const coupleRes = await db.execute(sql`SELECT email FROM couple_profiles WHERE id = ${deliveryData.coupleId}`);
-          const coupleEmail = (coupleRes.rows[0] as any)?.email;
-          if (coupleEmail) {
-            const projRes = await db.execute(sql`
-              SELECT p.id as project_id, wt.id as timeline_id
-              FROM creatorhub_projects p
-              LEFT JOIN wedding_timelines wt ON wt.project_id = p.id
-              WHERE LOWER(p.owner_id) IN (
-                SELECT id FROM users WHERE LOWER(email) = LOWER(${coupleEmail})
-              )
-              ORDER BY p.created_at DESC LIMIT 1
-            `);
-            const link = projRes.rows[0] as any;
-            if (link) {
-              projectId = link.project_id || projectId;
-              timelineId = link.timeline_id || timelineId;
-            }
-          }
-        } catch (e) { /* non-critical */ }
-      }
+      const [newDelivery] = await db.insert(deliveries).values({
+        vendorId,
+        coupleName: deliveryData.coupleName,
+        coupleEmail: deliveryData.coupleEmail || null,
+        title: deliveryData.title,
+        description: deliveryData.description || null,
+        weddingDate: deliveryData.weddingDate || null,
+        accessCode,
+      }).returning();
 
-      const result = await db.transaction(async (tx) => {
-        const [newDelivery] = await tx.insert(deliveries).values({
-          vendorId,
-          coupleName: deliveryData.coupleName,
-          coupleEmail: deliveryData.coupleEmail || null,
-          title: deliveryData.title,
-          description: deliveryData.description || null,
-          weddingDate: deliveryData.weddingDate || null,
-          projectId,
-          timelineId,
-          coupleId: deliveryData.coupleId || null,
-          accessCode,
-        }).returning();
+      await Promise.all(
+        items.map((item, index) =>
+          db.insert(deliveryItems).values({
+            deliveryId: newDelivery.id,
+            type: item.type,
+            label: item.label,
+            url: item.url,
+            description: item.description || null,
+            sortOrder: index,
+          })
+        )
+      );
 
-        await Promise.all(
-          items.map((item, index) =>
-            tx.insert(deliveryItems).values({
-              deliveryId: newDelivery.id,
-              type: item.type,
-              label: item.label,
-              url: item.url,
-              description: item.description || null,
-              sortOrder: index,
-            })
-          )
-        );
-
-        const createdItems = await tx.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, newDelivery.id));
-
-        return { newDelivery, createdItems };
-      });
+      const createdItems = await db.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, newDelivery.id));
 
       res.status(201).json({ 
-        delivery: { ...result.newDelivery, items: result.createdItems },
+        delivery: { ...newDelivery, items: createdItems },
         message: `Leveranse opprettet! Tilgangskode: ${accessCode}` 
       });
     } catch (error) {
@@ -2397,9 +1292,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/vendor/deliveries/:id", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
-
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const { id } = req.params;
@@ -2468,9 +1360,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
       const { id } = req.params;
 
@@ -2514,17 +1403,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const items = await db.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, delivery.id));
 
-      // Track open event
-      await db.insert(deliveryTracking).values({
-        deliveryId: delivery.id,
-        coupleId: delivery.coupleId,
-        vendorId: delivery.vendorId,
-        action: 'opened',
-        actionDetail: JSON.stringify({ source: 'evendi-app', accessCode }),
-      });
-      // Update open counter
-      await db.execute(sql`UPDATE deliveries SET open_count = COALESCE(open_count, 0) + 1, opened_at = COALESCE(opened_at, NOW()) WHERE id = ${delivery.id}`);
-
       res.json({ 
         delivery: { ...delivery, items },
         vendor 
@@ -2532,199 +1410,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching delivery:", error);
       res.status(500).json({ error: "Kunne ikke hente leveranse" });
-    }
-  });
-
-  // POST /api/delivery-track — Track open/download/favorite actions
-  app.post("/api/delivery-track", async (req: Request, res: Response) => {
-    try {
-      const { deliveryId, deliveryItemId, action, accessCode: ac, source } = req.body;
-      if (!deliveryId || !action) return res.status(400).json({ error: "deliveryId og action er påkrevd" });
-
-      if (!ac || typeof ac !== "string") {
-        return res.status(401).json({ error: "Tilgangskode er påkrevd" });
-      }
-
-      const validActions = ['opened', 'downloaded', 'favorited', 'unfavorited', 'shared', 'viewed_item'];
-      if (!validActions.includes(action)) return res.status(400).json({ error: "Ugyldig action" });
-
-      // Verify delivery exists and access code matches
-      const [delivery] = await db.select().from(deliveries).where(eq(deliveries.id, deliveryId));
-      if (!delivery) return res.status(404).json({ error: "Leveranse ikke funnet" });
-
-      if (delivery.status !== "active") {
-        return res.status(403).json({ error: "Leveransen er ikke aktiv" });
-      }
-
-      if ((delivery.accessCode || "").toUpperCase() !== ac.toUpperCase()) {
-        return res.status(403).json({ error: "Ugyldig tilgangskode" });
-      }
-
-      if (deliveryItemId) {
-        const [item] = await db.select()
-          .from(deliveryItems)
-          .where(and(eq(deliveryItems.id, deliveryItemId), eq(deliveryItems.deliveryId, deliveryId)));
-        if (!item) {
-          return res.status(404).json({ error: "Leveranseelement ikke funnet" });
-        }
-      }
-
-      // Insert tracking record
-      await db.insert(deliveryTracking).values({
-        deliveryId,
-        deliveryItemId: deliveryItemId || null,
-        coupleId: delivery.coupleId,
-        vendorId: delivery.vendorId,
-        action,
-        actionDetail: JSON.stringify({ accessCode: ac, source: source || 'evendi-app' }),
-      });
-
-      // Update counters
-      if (action === 'opened') {
-        await db.execute(sql`UPDATE deliveries SET open_count = COALESCE(open_count, 0) + 1, opened_at = COALESCE(opened_at, NOW()) WHERE id = ${deliveryId}`);
-      } else if (action === 'downloaded') {
-        await db.execute(sql`UPDATE deliveries SET download_count = COALESCE(download_count, 0) + 1 WHERE id = ${deliveryId}`);
-        if (deliveryItemId) {
-          await db.execute(sql`UPDATE delivery_items SET download_count = COALESCE(download_count, 0) + 1 WHERE id = ${deliveryItemId}`);
-        }
-      } else if (action === 'favorited') {
-        await db.execute(sql`UPDATE deliveries SET favorite_count = COALESCE(favorite_count, 0) + 1 WHERE id = ${deliveryId}`);
-        if (deliveryItemId) {
-          await db.execute(sql`UPDATE delivery_items SET favorite_count = COALESCE(favorite_count, 0) + 1, favorited_at = NOW() WHERE id = ${deliveryItemId}`);
-        }
-      } else if (action === 'unfavorited') {
-        await db.execute(sql`UPDATE deliveries SET favorite_count = GREATEST(COALESCE(favorite_count, 0) - 1, 0) WHERE id = ${deliveryId}`);
-        if (deliveryItemId) {
-          await db.execute(sql`UPDATE delivery_items SET favorite_count = GREATEST(COALESCE(favorite_count, 0) - 1, 0), favorited_at = NULL WHERE id = ${deliveryItemId}`);
-        }
-      }
-
-      res.json({ success: true, action });
-    } catch (error) {
-      console.error("Delivery track error:", error);
-      res.status(500).json({ error: "Kunne ikke registrere handling" });
-    }
-  });
-
-  // GET /api/vendor/delivery-tracking/:deliveryId — Vendor tracking dashboard
-  app.get("/api/vendor/delivery-tracking/:deliveryId", async (req: Request, res: Response) => {
-    try {
-      const vendorId = await checkVendorAuth(req, res);
-      if (!vendorId) return;
-
-      const { deliveryId } = req.params;
-
-      const [delivery] = await db.select().from(deliveries).where(
-        and(eq(deliveries.id, deliveryId), eq(deliveries.vendorId, vendorId))
-      );
-      if (!delivery) return res.status(404).json({ error: "Leveranse ikke funnet" });
-
-      const items = await db.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, deliveryId));
-
-      const history = await db.select().from(deliveryTracking)
-        .where(eq(deliveryTracking.deliveryId, deliveryId))
-        .orderBy(sql`created_at DESC`)
-        .limit(50);
-
-      res.json({
-        delivery: {
-          id: delivery.id,
-          title: delivery.title,
-          coupleName: delivery.coupleName,
-          accessCode: delivery.accessCode,
-          status: delivery.status,
-          openCount: delivery.openCount || 0,
-          downloadCount: delivery.downloadCount || 0,
-          favoriteCount: delivery.favoriteCount || 0,
-          openedAt: delivery.openedAt,
-          chatNotified: delivery.chatNotified,
-        },
-        items: items.map(item => ({
-          id: item.id,
-          type: item.type,
-          label: item.label,
-          downloadCount: item.downloadCount || 0,
-          favoriteCount: item.favoriteCount || 0,
-          favoritedAt: item.favoritedAt,
-        })),
-        history,
-      });
-    } catch (error) {
-      console.error("Vendor delivery tracking error:", error);
-      res.status(500).json({ error: "Kunne ikke hente sporingsdata" });
-    }
-  });
-
-  // POST /api/vendor/delivery-notify — Send chat notification to couple
-  app.post("/api/vendor/delivery-notify", async (req: Request, res: Response) => {
-    try {
-      const vendorId = await checkVendorAuth(req, res);
-      if (!vendorId) return;
-
-      const { deliveryId, customMessage } = req.body;
-      if (!deliveryId) return res.status(400).json({ error: "deliveryId er påkrevd" });
-
-      const [delivery] = await db.select().from(deliveries).where(
-        and(eq(deliveries.id, deliveryId), eq(deliveries.vendorId, vendorId))
-      );
-      if (!delivery) return res.status(404).json({ error: "Leveranse ikke funnet" });
-
-      const items = await db.select().from(deliveryItems).where(eq(deliveryItems.deliveryId, deliveryId));
-
-      // Find or create conversation
-      let conversationId: string | null = null;
-      let targetCoupleId = delivery.coupleId;
-
-      if (!targetCoupleId && delivery.coupleEmail) {
-        const [cp] = await db.select().from(coupleProfiles).where(sql`LOWER(email) = LOWER(${delivery.coupleEmail})`);
-        if (cp) targetCoupleId = cp.id;
-      }
-
-      if (targetCoupleId) {
-        const [existConv] = await db.select().from(conversations).where(
-          and(eq(conversations.vendorId, vendorId), eq(conversations.coupleId, targetCoupleId))
-        );
-        if (existConv) {
-          conversationId = existConv.id;
-        } else {
-          const [newConv] = await db.insert(conversations).values({
-            vendorId,
-            coupleId: targetCoupleId,
-            status: 'active',
-            lastMessageAt: new Date(),
-            coupleUnreadCount: 1,
-            vendorUnreadCount: 0,
-          }).returning();
-          conversationId = newConv.id;
-        }
-
-        const chatBody = customMessage ||
-          `📦 Leveransen din er klar!\n\n"${delivery.title}"\n${items.length} ${items.length === 1 ? 'element' : 'elementer'} venter på deg.\n\n🔑 Tilgangskode: ${delivery.accessCode}\n\nÅpne Evendi → "Hent leveranse" → Skriv inn koden. 💕`;
-
-        await db.insert(messages).values({
-          conversationId: conversationId!,
-          senderType: 'vendor',
-          senderId: vendorId,
-          body: chatBody,
-        });
-
-        await db.execute(sql`UPDATE conversations SET last_message_at = NOW(), couple_unread_count = COALESCE(couple_unread_count, 0) + 1 WHERE id = ${conversationId}`);
-      }
-
-      await db.execute(sql`UPDATE deliveries SET chat_notified = true WHERE id = ${deliveryId}`);
-
-      res.json({
-        success: true,
-        messageSent: !!conversationId,
-        conversationId,
-        accessCode: delivery.accessCode,
-        message: conversationId
-          ? `Melding sendt til ${delivery.coupleName} i chatten`
-          : "Leveransen er merket som varslet, men ingen samtale ble funnet",
-      });
-    } catch (error) {
-      console.error("Vendor delivery notify error:", error);
-      res.status(500).json({ error: "Kunne ikke sende varsel" });
     }
   });
 
@@ -2869,9 +1554,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
       const { id } = req.params;
       const { media, ...inspirationData } = req.body;
@@ -2948,9 +1630,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
       const { id } = req.params;
 
@@ -2979,7 +1658,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/admin/inspirations", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
 
     try {
       const status = req.query.status as string || "pending";
@@ -3006,7 +1685,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/admin/inspirations/:id/approve", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
 
     try {
       const { id } = req.params;
@@ -3023,7 +1702,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/admin/inspirations/:id/reject", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
 
     try {
       const { id } = req.params;
@@ -3045,7 +1724,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/admin/vendors/:id/features", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
 
     try {
       const { id } = req.params;
@@ -3060,7 +1739,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const VALID_FEATURE_KEYS = ["deliveries", "inspirations"];
 
   app.put("/api/admin/vendors/:id/features", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
 
     try {
       const { id } = req.params;
@@ -3101,7 +1780,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/admin/vendors/:id/inspiration-categories", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
 
     try {
       const { id } = req.params;
@@ -3114,7 +1793,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put("/api/admin/vendors/:id/inspiration-categories", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
 
     try {
       const { id } = req.params;
@@ -3269,16 +1948,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
       const { id } = req.params;
-      const validation = statusUpdateSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ error: "Ugyldig status", details: validation.error.errors });
-      }
-      const { status } = validation.data;
+      const { status } = req.body;
 
       const [inquiry] = await db.select().from(inspirationInquiries).where(eq(inspirationInquiries.id, id));
       if (!inquiry || inquiry.vendorId !== vendorId) {
@@ -3307,74 +1979,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const token = authHeader.substring(7);
     
+    // Check in-memory cache first
+    const cached = COUPLE_SESSIONS.get(token);
+    if (cached && cached.expiresAt > new Date()) {
+      return cached.coupleId;
+    }
+
     // Check database
     const [session] = await db.select().from(coupleSessions).where(eq(coupleSessions.token, token));
     if (!session || session.expiresAt < new Date()) {
       res.status(401).json({ error: "Sesjon utløpt" });
       return null;
     }
+
+    // Cache the session
+    COUPLE_SESSIONS.set(token, { coupleId: session.coupleId, expiresAt: session.expiresAt });
     return session.coupleId;
   }
 
   // Couple login/register (email + password)
   app.post("/api/couples/login", async (req: Request, res: Response) => {
     try {
-      console.log("[CoupleLogin] Login attempt for email:", req.body.email);
-      console.log("[CoupleLogin] Body keys:", Object.keys(req.body || {}));
-
-      // Accept login without displayName (use email prefix as fallback)
-      const bodyWithDefaults = {
-        ...req.body,
-        displayName: req.body.displayName || req.body.email?.split("@")[0] || "User",
-      };
-
-      const validation = coupleLoginSchema.safeParse(bodyWithDefaults);
+      const validation = coupleLoginSchema.safeParse(req.body);
       if (!validation.success) {
-        console.log("[CoupleLogin] Validation failed:", JSON.stringify(validation.error.errors));
         return res.status(400).json({ error: validation.error.errors[0].message });
       }
 
       const { email, displayName, password } = validation.data;
-      const { selectedTraditions, eventType, eventCategory } = req.body; // Optional fields
-
-      console.log("[CoupleLogin] Starting lookup for email:", email);
 
       // Find or create couple profile
-      const coupleResults = await db.select({
-        id: coupleProfiles.id,
-        email: coupleProfiles.email,
-        displayName: coupleProfiles.displayName,
-        password: coupleProfiles.password,
-        partnerEmail: coupleProfiles.partnerEmail,
-        weddingDate: coupleProfiles.weddingDate,
-        selectedTraditions: coupleProfiles.selectedTraditions,
-        lastActiveAt: coupleProfiles.lastActiveAt,
-        createdAt: coupleProfiles.createdAt,
-        updatedAt: coupleProfiles.updatedAt,
-      })
-        .from(coupleProfiles)
-        .where(eq(coupleProfiles.email, email));
-      
-      let couple = coupleResults[0] || null;
-      let isNewRegistration = false;
-
-      console.log("[CoupleLogin] Lookup result:", couple ? "Found" : "Not found");
+      let [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.email, email));
 
       if (!couple) {
         // New registration - hash password
         const hashedPassword = await bcrypt.hash(password, 10);
         const [newCouple] = await db.insert(coupleProfiles)
-          .values({ 
-            email, 
-            displayName, 
-            password: hashedPassword,
-            selectedTraditions: selectedTraditions || null,
-            eventType: eventType || 'wedding',
-            eventCategory: eventCategory || 'personal',
-          })
+          .values({ email, displayName, password: hashedPassword })
           .returning();
         couple = newCouple;
-        isNewRegistration = true;
       } else {
         // Existing couple - verify password
         if (!couple.password) {
@@ -3387,33 +2029,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ error: "Ugyldig e-post eller passord" });
         }
 
-        // Update display name only if an explicit displayName was provided in the request
-        // Don't overwrite with the email-prefix fallback
-        const explicitDisplayName = req.body.displayName;
-        if (explicitDisplayName && couple.displayName !== explicitDisplayName) {
+        // Update display name if changed
+        if (couple.displayName !== displayName) {
           await db.update(coupleProfiles)
-            .set({ displayName: explicitDisplayName, updatedAt: new Date() })
+            .set({ displayName, updatedAt: new Date() })
             .where(eq(coupleProfiles.id, couple.id));
-          couple.displayName = explicitDisplayName;
-        }
-      }
-
-      // Auto-populate timeline for new registrations with tradition selection
-      if (isNewRegistration && selectedTraditions && selectedTraditions.length > 0) {
-        // Use the first selected tradition as primary (resolve legacy keys → synced keys)
-        const primaryTradition = resolveTraditionKey(selectedTraditions[0]);
-        const template = TIMELINE_TEMPLATES[primaryTradition] || DEFAULT_TIMELINE;
-        
-        // Insert timeline events
-        const timelineValues = template.map(event => ({
-          coupleId: couple.id,
-          time: event.time,
-          title: event.title,
-          icon: event.icon,
-        }));
-
-        if (timelineValues.length > 0) {
-          await db.insert(scheduleEvents).values(timelineValues);
+          couple.displayName = displayName;
         }
       }
 
@@ -3427,15 +2048,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt,
       });
 
-      // Remove password hash from response
-      const { password: _pw, ...coupleWithoutPassword } = couple;
-      res.json({ couple: coupleWithoutPassword, sessionToken: token });
+      COUPLE_SESSIONS.set(token, { coupleId: couple.id, expiresAt });
+
+      res.json({ couple, sessionToken: token });
     } catch (error) {
-      console.error("[CoupleLogin] Error:", error);
-      if (error instanceof Error) {
-        console.error("[CoupleLogin] Error message:", error.message);
-        console.error("[CoupleLogin] Error stack:", error.stack);
-      }
+      console.error("Couple login error:", error);
       res.status(500).json({ error: "Kunne ikke logge inn" });
     }
   });
@@ -3444,6 +2061,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.substring(7);
+      COUPLE_SESSIONS.delete(token);
       await db.delete(coupleSessions).where(eq(coupleSessions.token, token));
     }
     res.json({ message: "Logget ut" });
@@ -3458,208 +2076,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!couple) {
         return res.status(404).json({ error: "Profil ikke funnet" });
       }
-      // Remove password hash from response
-      const { password: _pw, ...coupleWithoutPassword } = couple;
-      res.json(coupleWithoutPassword);
+      res.json(couple);
     } catch (error) {
       console.error("Error fetching couple profile:", error);
       res.status(500).json({ error: "Kunne ikke hente profil" });
-    }
-  });
-
-  // Update couple profile
-  app.put("/api/couples/me", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const validation = coupleProfileUpdateSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ error: "Ugyldig data", details: validation.error.errors });
-      }
-      const { displayName, weddingDate, selectedTraditions, expectedGuests, eventType, eventCategory } = validation.data as any;
-      
-      const updateData: any = { updatedAt: new Date() };
-      if (displayName !== undefined) updateData.displayName = displayName;
-      if (weddingDate !== undefined) updateData.weddingDate = weddingDate;
-      if (selectedTraditions !== undefined) updateData.selectedTraditions = selectedTraditions;
-      if (expectedGuests !== undefined) updateData.expectedGuests = expectedGuests;
-      if (eventType !== undefined) updateData.eventType = eventType;
-      if (eventCategory !== undefined) updateData.eventCategory = eventCategory;
-
-      const [updated] = await db.update(coupleProfiles)
-        .set(updateData)
-        .where(eq(coupleProfiles.id, coupleId))
-        .returning();
-
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating couple profile:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere profil" });
-    }
-  });
-
-  // ============ COUPLE PROJECTS (from legacy.projects) ============
-
-  // Get projects where couple is the client
-  app.get("/api/couples/projects", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      // Get the couple's email
-      const [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-      if (!couple) {
-        return res.status(404).json({ error: "Profil ikke funnet" });
-      }
-
-      // Query legacy.projects where this couple is the client
-      const projects = await db.execute(sql`
-        SELECT 
-          p.id, p.name, p.description, p.status, p.event_date,
-          p.category, p.location, p.client_email,
-          p.budget, p.created_at, p.updated_at,
-          u.email as vendor_email,
-          v.business_name as vendor_name, vc.name as vendor_category,
-          v.phone as vendor_phone, v.location as vendor_location
-        FROM legacy.projects p
-        LEFT JOIN users u ON u.id = p.user_id
-        LEFT JOIN vendors v ON v.email = u.email
-        LEFT JOIN vendor_categories vc ON vc.id = v.category_id
-        WHERE p.client_email = ${couple.email}
-        ORDER BY p.event_date DESC
-      `);
-
-      res.json({ projects: projects.rows || [] });
-    } catch (error) {
-      console.error("Error fetching couple projects:", error);
-      res.status(500).json({ error: "Kunne ikke hente prosjekter" });
-    }
-  });
-
-  // Get single project details
-  app.get("/api/couples/projects/:projectId", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-      if (!couple) {
-        return res.status(404).json({ error: "Profil ikke funnet" });
-      }
-
-      const result = await db.execute(sql`
-        SELECT 
-          p.id, p.name, p.description, p.status, p.event_date,
-          p.category, p.location, p.client_email,
-          p.budget, p.created_at, p.updated_at,
-          u.email as vendor_email,
-          v.business_name as vendor_name, vc.name as vendor_category,
-          v.phone as vendor_phone, v.location as vendor_location,
-          v.id as vendor_id
-        FROM legacy.projects p
-        LEFT JOIN users u ON u.id = p.user_id
-        LEFT JOIN vendors v ON v.email = u.email
-        LEFT JOIN vendor_categories vc ON vc.id = v.category_id
-        WHERE p.id = ${req.params.projectId}
-          AND p.client_email = ${couple.email}
-      `);
-
-      if (!result.rows || result.rows.length === 0) {
-        return res.status(404).json({ error: "Prosjekt ikke funnet" });
-      }
-
-      res.json({ project: result.rows[0] });
-    } catch (error) {
-      console.error("Error fetching project:", error);
-      res.status(500).json({ error: "Kunne ikke hente prosjekt" });
-    }
-  });
-
-  // Get couple dashboard (profile + projects + vendors + bookings)
-  app.get("/api/couples/dashboard", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-      if (!couple) {
-        return res.status(404).json({ error: "Profil ikke funnet" });
-      }
-      const { password: _pw, ...coupleData } = couple;
-
-      // Get projects
-      const projects = await db.execute(sql`
-        SELECT p.id, p.name, p.status, p.event_date, p.location, p.budget,
-               v.business_name as vendor_name, vc.name as vendor_category
-        FROM legacy.projects p
-        LEFT JOIN users u ON u.id = p.user_id
-        LEFT JOIN vendors v ON v.email = u.email
-        LEFT JOIN vendor_categories vc ON vc.id = v.category_id
-        WHERE p.client_email = ${couple.email}
-        ORDER BY p.event_date DESC
-      `);
-
-      // Get bookings
-      const bookings = await db.execute(sql`
-        SELECT id, client_name, date, event_type, location, status, created_at
-        FROM bookings
-        WHERE client_email = ${couple.email}
-        ORDER BY date DESC
-      `);
-
-      // Get vendors from projects
-      const vendorList = await db.execute(sql`
-        SELECT DISTINCT v.id, v.business_name, vc.name as category, v.email, v.phone, v.location
-        FROM legacy.projects p
-        JOIN users u ON u.id = p.user_id
-        JOIN vendors v ON v.email = u.email
-        LEFT JOIN vendor_categories vc ON vc.id = v.category_id
-        WHERE p.client_email = ${couple.email}
-      `);
-
-      res.json({
-        couple: coupleData,
-        projects: projects.rows || [],
-        bookings: bookings.rows || [],
-        vendors: vendorList.rows || [],
-        stats: {
-          totalProjects: (projects.rows || []).length,
-          totalVendors: (vendorList.rows || []).length,
-          totalBookings: (bookings.rows || []).length,
-        }
-      });
-    } catch (error) {
-      console.error("Error fetching couple dashboard:", error);
-      res.status(500).json({ error: "Kunne ikke hente dashboard" });
-    }
-  });
-
-  // Get vendors assigned to couple's projects
-  app.get("/api/couples/vendors", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-      if (!couple) {
-        return res.status(404).json({ error: "Profil ikke funnet" });
-      }
-
-      const vendorList = await db.execute(sql`
-        SELECT DISTINCT v.id, v.business_name, vc.name as category, v.email, v.phone, v.location,
-               p.name as project_name, p.event_date
-        FROM legacy.projects p
-        JOIN users u ON u.id = p.user_id
-        JOIN vendors v ON v.email = u.email
-        LEFT JOIN vendor_categories vc ON vc.id = v.category_id
-        WHERE p.client_email = ${couple.email}
-      `);
-
-      res.json({ vendors: vendorList.rows || [] });
-    } catch (error) {
-      console.error("Error fetching couple vendors:", error);
-      res.status(500).json({ error: "Kunne ikke hente leverandører" });
     }
   });
 
@@ -3976,9 +2396,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
       const { conversationId, body, attachmentUrl, attachmentType } = req.body;
 
@@ -4081,9 +2498,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access  
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
       const { body, attachmentUrl, attachmentType } = req.body as any;
       const parse = sendAdminMessageSchema.safeParse({ body, attachmentUrl, attachmentType });
@@ -4134,7 +2548,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin endpoints to read and reply
   app.get("/api/admin/vendor-admin-conversations", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     try {
       const rows = await db.select({
         conv: adminConversations,
@@ -4151,7 +2565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/admin/vendor-admin-conversations/:id/messages", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const msgs = await db.select().from(adminMessages)
@@ -4169,7 +2583,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/admin/vendor-admin-conversations/:id/messages", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const { body, attachmentUrl, attachmentType, videoGuideId } = req.body as any;
@@ -4212,7 +2626,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin typing indicator for vendor-admin chat
   app.post("/api/admin/vendor-admin-conversations/:id/typing", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       broadcastAdminConv(id, { type: "typing", payload: { sender: "admin", at: new Date().toISOString() } });
@@ -4224,7 +2638,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Update conversation status (resolve/reopen)
   app.patch("/api/admin/vendor-admin-conversations/:id/status", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -4297,9 +2711,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/vendor/conversations/:id/typing", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
-
-    // Check subscription access for messaging
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const { id } = req.params;
@@ -4424,9 +2835,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
       const { id } = req.params;
 
@@ -4455,9 +2863,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/vendor/messages/:id", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
-
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const { id } = req.params;
@@ -4500,9 +2905,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/vendor/conversations/:id", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
-
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const { id } = req.params;
@@ -4576,13 +2978,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reminders endpoints
   app.get("/api/reminders", async (req: Request, res: Response) => {
     try {
-      const coupleId = await checkCoupleAuth(req, res);
-      if (!coupleId) return;
-
-      const allReminders = await db.select()
-        .from(reminders)
-        .where(eq(reminders.coupleId, coupleId))
-        .orderBy(reminders.reminderDate);
+      const allReminders = await db.select().from(reminders).orderBy(reminders.reminderDate);
       res.json(allReminders);
     } catch (error) {
       console.error("Error fetching reminders:", error);
@@ -4592,13 +2988,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/reminders", async (req: Request, res: Response) => {
     try {
-      const coupleId = await checkCoupleAuth(req, res);
-      if (!coupleId) return;
-
       const validatedData = createReminderSchema.parse(req.body);
       const [newReminder] = await db.insert(reminders)
         .values({
-          coupleId,
           title: validatedData.title,
           description: validatedData.description,
           reminderDate: new Date(validatedData.reminderDate),
@@ -4614,9 +3006,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/reminders/:id", async (req: Request, res: Response) => {
     try {
-      const coupleId = await checkCoupleAuth(req, res);
-      if (!coupleId) return;
-
       const { id } = req.params;
       const { isCompleted, notificationId } = req.body;
 
@@ -4626,10 +3015,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [updated] = await db.update(reminders)
         .set(updates)
-        .where(and(
-          eq(reminders.id, id),
-          eq(reminders.coupleId, coupleId)
-        ))
+        .where(eq(reminders.id, id))
         .returning();
 
       if (!updated) {
@@ -4645,15 +3031,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/reminders/:id", async (req: Request, res: Response) => {
     try {
-      const coupleId = await checkCoupleAuth(req, res);
-      if (!coupleId) return;
-
       const { id } = req.params;
       const [deleted] = await db.delete(reminders)
-        .where(and(
-          eq(reminders.id, id),
-          eq(reminders.coupleId, coupleId)
-        ))
+        .where(eq(reminders.id, id))
         .returning();
 
       if (!deleted) {
@@ -4671,11 +3051,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/speeches", async (req: Request, res: Response) => {
     try {
       const coupleId = await checkCoupleAuth(req, res);
-      if (!coupleId) return;
-
       const allSpeeches = await db.select()
         .from(speeches)
-        .where(eq(speeches.coupleId, coupleId))
+        .where(coupleId ? eq(speeches.coupleId, coupleId) : sql`1=1`)
         .orderBy(speeches.sortOrder);
       res.json(allSpeeches);
     } catch (error) {
@@ -4687,19 +3065,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/speeches", async (req: Request, res: Response) => {
     try {
       const coupleId = await checkCoupleAuth(req, res);
-      if (!coupleId) return;
       const validatedData = createSpeechSchema.parse(req.body);
       
       // Get the max sort order
       const existingSpeeches = await db.select()
         .from(speeches)
-        .where(eq(speeches.coupleId, coupleId))
+        .where(coupleId ? eq(speeches.coupleId, coupleId) : sql`1=1`)
         .orderBy(desc(speeches.sortOrder));
       const maxOrder = existingSpeeches.length > 0 ? existingSpeeches[0].sortOrder : 0;
       
       const [newSpeech] = await db.insert(speeches)
         .values({
-          coupleId,
+          coupleId: coupleId || undefined,
           speakerName: validatedData.speakerName,
           role: validatedData.role,
           durationMinutes: validatedData.durationMinutes,
@@ -4751,13 +3128,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/speeches/:id", async (req: Request, res: Response) => {
     try {
       const coupleId = await checkCoupleAuth(req, res);
-      if (!coupleId) return;
       const { id } = req.params;
-      const validation = speechUpdateSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ error: "Ugyldig data", details: validation.error.errors });
-      }
-      const { speakerName, role, durationMinutes, sortOrder, notes, scheduledTime } = validation.data as any;
+      const { speakerName, role, durationMinutes, sortOrder, notes, scheduledTime } = req.body;
 
       const updates: Record<string, any> = { updatedAt: new Date() };
       if (speakerName !== undefined) updates.speakerName = speakerName;
@@ -4769,10 +3141,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [updated] = await db.update(speeches)
         .set(updates)
-        .where(and(
-          eq(speeches.id, id),
-          eq(speeches.coupleId, coupleId)
-        ))
+        .where(eq(speeches.id, id))
         .returning();
 
       if (!updated) {
@@ -4820,22 +3189,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/speeches/:id", async (req: Request, res: Response) => {
     try {
       const coupleId = await checkCoupleAuth(req, res);
-      if (!coupleId) return;
       const { id } = req.params;
       
       // Get speech info before deleting for notification
       const [speechToDelete] = await db.select()
         .from(speeches)
-        .where(and(
-          eq(speeches.id, id),
-          eq(speeches.coupleId, coupleId)
-        ));
+        .where(eq(speeches.id, id));
       
       const [deleted] = await db.delete(speeches)
-        .where(and(
-          eq(speeches.id, id),
-          eq(speeches.coupleId, coupleId)
-        ))
+        .where(eq(speeches.id, id))
         .returning();
 
       if (!deleted) {
@@ -4883,9 +3245,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reorder speeches
   app.post("/api/speeches/reorder", async (req: Request, res: Response) => {
     try {
-      const coupleId = await checkCoupleAuth(req, res);
-      if (!coupleId) return;
-
       const { orderedIds } = req.body;
       if (!Array.isArray(orderedIds)) {
         return res.status(400).json({ error: "orderedIds må være en liste" });
@@ -4894,10 +3253,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (let i = 0; i < orderedIds.length; i++) {
         await db.update(speeches)
           .set({ sortOrder: i, updatedAt: new Date() })
-          .where(and(
-            eq(speeches.id, orderedIds[i]),
-            eq(speeches.coupleId, coupleId)
-          ));
+          .where(eq(speeches.id, orderedIds[i]));
       }
 
       res.json({ success: true });
@@ -5011,9 +3367,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
       const { id } = req.params;
       const { reminderType, scheduledFor } = req.body;
@@ -5063,7 +3416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Background job: Process due message reminders
   app.post("/api/admin/jobs/process-message-reminders", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       // Find all pending reminders that are due
@@ -5120,9 +3473,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
       const { id } = req.params;
       
@@ -5159,13 +3509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ))
         .orderBy(vendorProducts.sortOrder);
 
-      // Parse metadata JSON
-      const productsWithMetadata = products.map(p => ({
-        ...p,
-        metadata: p.metadata ? JSON.parse(p.metadata) : null,
-      }));
-
-      res.json(productsWithMetadata);
+      res.json(products);
     } catch (error) {
       console.error("Error fetching vendor products:", error);
       res.status(500).json({ error: "Kunne ikke hente produkter" });
@@ -5194,17 +3538,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           categoryTag: validatedData.categoryTag,
           imageUrl: validatedData.imageUrl || null,
           sortOrder: validatedData.sortOrder,
-          trackInventory: validatedData.trackInventory,
-          availableQuantity: validatedData.availableQuantity,
-          bookingBuffer: validatedData.bookingBuffer,
-          metadata: req.body.metadata ? JSON.stringify(req.body.metadata) : null,
         })
         .returning();
 
-      res.status(201).json({
-        ...product,
-        metadata: product.metadata ? JSON.parse(product.metadata) : null,
-      });
+      res.status(201).json(product);
     } catch (error) {
       console.error("Error creating vendor product:", error);
       res.status(500).json({ error: "Kunne ikke opprette produkt" });
@@ -5214,9 +3551,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/vendor/products/:id", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
-
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const { id } = req.params;
@@ -5234,21 +3568,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Produkt ikke funnet" });
       }
 
-      // Serialize metadata if provided
-      const updateData: any = { ...updates, updatedAt: new Date() };
-      if (updates.metadata) {
-        updateData.metadata = JSON.stringify(updates.metadata);
-      }
-
       const [updated] = await db.update(vendorProducts)
-        .set(updateData)
+        .set({ ...updates, updatedAt: new Date() })
         .where(eq(vendorProducts.id, id))
         .returning();
 
-      res.json({
-        ...updated,
-        metadata: updated.metadata ? JSON.parse(updated.metadata) : null,
-      });
+      res.json(updated);
     } catch (error) {
       console.error("Error updating vendor product:", error);
       res.status(500).json({ error: "Kunne ikke oppdatere produkt" });
@@ -5258,9 +3583,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/vendor/products/:id", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
-
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const { id } = req.params;
@@ -5282,272 +3604,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting vendor product:", error);
       res.status(500).json({ error: "Kunne ikke slette produkt" });
-    }
-  });
-
-  // ============================================================
-  // Vendor Availability Calendar endpoints
-  // ============================================================
-  
-  // Get vendor availability for a date range
-  app.get("/api/vendor/availability", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const { startDate, endDate } = req.query;
-      
-      let query = db.select()
-        .from(vendorAvailability)
-        .where(eq(vendorAvailability.vendorId, vendorId));
-      
-      if (startDate && endDate) {
-        query = db.select()
-          .from(vendorAvailability)
-          .where(and(
-            eq(vendorAvailability.vendorId, vendorId),
-            gte(vendorAvailability.date, startDate as string),
-            lte(vendorAvailability.date, endDate as string)
-          ));
-      }
-      
-      const availability = await query.orderBy(vendorAvailability.date);
-      res.json(availability);
-    } catch (error) {
-      console.error("Error fetching vendor availability:", error);
-      res.status(500).json({ error: "Kunne ikke hente tilgjengelighet" });
-    }
-  });
-  
-  // Create or update vendor availability for a single date
-  app.post("/api/vendor/availability", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const validatedData = createVendorAvailabilitySchema.parse(req.body);
-      const normalizeDate = (value: string) => {
-        const parsed = new Date(value);
-        if (Number.isNaN(parsed.getTime())) return null;
-        return parsed.toISOString().slice(0, 10);
-      };
-      const normalizedDate = normalizeDate(validatedData.date);
-      if (!normalizedDate) {
-        return res.status(400).json({ error: "Ugyldig dato" });
-      }
-      
-      // Check if entry already exists for this date
-      const [existing] = await db.select()
-        .from(vendorAvailability)
-        .where(and(
-          eq(vendorAvailability.vendorId, vendorId),
-          eq(vendorAvailability.date, normalizedDate)
-        ));
-      
-      if (existing) {
-        // Update existing entry
-        const [updated] = await db.update(vendorAvailability)
-          .set({
-            name: validatedData.name,
-            status: validatedData.status,
-            maxBookings: validatedData.maxBookings,
-            notes: validatedData.notes,
-            date: normalizedDate,
-            updatedAt: new Date(),
-          })
-          .where(eq(vendorAvailability.id, existing.id))
-          .returning();
-        res.json(updated);
-      } else {
-        // Create new entry
-        const [created] = await db.insert(vendorAvailability)
-          .values({
-            vendorId,
-            date: normalizedDate,
-            name: validatedData.name,
-            status: validatedData.status || "available",
-            maxBookings: validatedData.maxBookings,
-            notes: validatedData.notes,
-          })
-          .returning();
-        res.status(201).json(created);
-      }
-    } catch (error) {
-      console.error("Error creating vendor availability:", error);
-      res.status(500).json({ error: "Kunne ikke opprette tilgjengelighet" });
-    }
-  });
-  
-  // Bulk update vendor availability (for multiple dates)
-  app.post("/api/vendor/availability/bulk", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const { dates, status, maxBookings, name, notes } = req.body;
-      const normalizeDate = (value: string) => {
-        const parsed = new Date(value);
-        if (Number.isNaN(parsed.getTime())) return null;
-        return parsed.toISOString().slice(0, 10);
-      };
-      
-      if (!Array.isArray(dates) || dates.length === 0) {
-        return res.status(400).json({ error: "Må oppgi minst én dato" });
-      }
-      
-      if (!["available", "blocked", "limited"].includes(status)) {
-        return res.status(400).json({ error: "Ugyldig status" });
-      }
-      
-      const normalizedDates = dates
-        .map((date: string) => normalizeDate(date))
-        .filter((date: string | null): date is string => !!date);
-
-      if (normalizedDates.length !== dates.length) {
-        return res.status(400).json({ error: "En eller flere datoer er ugyldige" });
-      }
-
-      const results = await Promise.all(
-        normalizedDates.map(async (date: string) => {
-          const [existing] = await db.select()
-            .from(vendorAvailability)
-            .where(and(
-              eq(vendorAvailability.vendorId, vendorId),
-              eq(vendorAvailability.date, date)
-            ));
-          
-          if (existing) {
-            const [updated] = await db.update(vendorAvailability)
-              .set({ status, maxBookings, name, notes, date, updatedAt: new Date() })
-              .where(eq(vendorAvailability.id, existing.id))
-              .returning();
-            return updated;
-          } else {
-            const [created] = await db.insert(vendorAvailability)
-              .values({ vendorId, date, status, maxBookings, name, notes })
-              .returning();
-            return created;
-          }
-        })
-      );
-      
-      res.json(results);
-    } catch (error) {
-      console.error("Error bulk updating vendor availability:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere tilgjengelighet" });
-    }
-  });
-  
-  // Delete vendor availability entry
-  app.delete("/api/vendor/availability/:id", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const { id } = req.params;
-      
-      // Verify ownership
-      const [existing] = await db.select()
-        .from(vendorAvailability)
-        .where(and(
-          eq(vendorAvailability.id, id),
-          eq(vendorAvailability.vendorId, vendorId)
-        ));
-      
-      if (!existing) {
-        return res.status(404).json({ error: "Tilgjengelighet ikke funnet" });
-      }
-      
-      await db.delete(vendorAvailability).where(eq(vendorAvailability.id, id));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting vendor availability:", error);
-      res.status(500).json({ error: "Kunne ikke slette tilgjengelighet" });
-    }
-  });
-  
-  // Delete vendor availability by date (for frontend compatibility)
-  app.delete("/api/vendor/availability/date/:date", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const { date } = req.params;
-      
-      await db.delete(vendorAvailability)
-        .where(and(
-          eq(vendorAvailability.vendorId, vendorId),
-          eq(vendorAvailability.date, date)
-        ));
-      
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting vendor availability by date:", error);
-      res.status(500).json({ error: "Kunne ikke slette tilgjengelighet" });
-    }
-  });
-  
-  // Get bookings count for a specific date (for availability calendar)
-  app.get("/api/vendor/availability/:date/bookings", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const { date } = req.params;
-      
-      // Count accepted offers for this date (based on couple's wedding date)
-      const acceptedOffers = await db.select({
-        offer: vendorOffers,
-        weddingDate: coupleProfiles.weddingDate,
-      })
-        .from(vendorOffers)
-        .leftJoin(coupleProfiles, eq(vendorOffers.coupleId, coupleProfiles.id))
-        .where(and(
-          eq(vendorOffers.vendorId, vendorId),
-          eq(vendorOffers.status, "accepted"),
-          eq(coupleProfiles.weddingDate, date)
-        ));
-      
-      res.json({
-        date,
-        acceptedBookings: acceptedOffers.length,
-      });
-    } catch (error) {
-      console.error("Error fetching bookings for date:", error);
-      res.status(500).json({ error: "Kunne ikke hente bookinger" });
-    }
-  });
-  
-  // Public endpoint to check vendor availability for couples
-  app.get("/api/vendors/:vendorId/availability", async (req: Request, res: Response) => {
-    try {
-      const { vendorId } = req.params;
-      const { date } = req.query;
-      
-      if (!date) {
-        return res.status(400).json({ error: "Må oppgi dato" });
-      }
-      
-      const [availability] = await db.select()
-        .from(vendorAvailability)
-        .where(and(
-          eq(vendorAvailability.vendorId, vendorId),
-          eq(vendorAvailability.date, date as string)
-        ));
-      
-      if (!availability) {
-        // No entry means vendor is available
-        res.json({ status: "available", isAvailable: true });
-      } else {
-        res.json({
-          status: availability.status,
-          isAvailable: availability.status !== "blocked",
-          maxBookings: availability.maxBookings,
-        });
-      }
-    } catch (error) {
-      console.error("Error checking vendor availability:", error);
-      res.status(500).json({ error: "Kunne ikke sjekke tilgjengelighet" });
     }
   });
 
@@ -5598,18 +3654,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = createOfferSchema.parse(req.body);
       
-      // Get couple's wedding date for date-aware inventory checking
+      // Get couple's wedding date for date-based availability checking
       const [couple] = await db.select()
         .from(coupleProfiles)
         .where(eq(coupleProfiles.id, validatedData.coupleId));
       
-      if (!couple) {
-        return res.status(404).json({ error: "Par ikke funnet" });
-      }
+      const targetWeddingDate = couple?.weddingDate;
       
-      const targetWeddingDate = couple.weddingDate; // This is a string like "2025-06-15"
-      
-      // Check vendor availability for the wedding date
+      // CHECK VENDOR AVAILABILITY FOR THE DATE
       if (targetWeddingDate) {
         const [availability] = await db.select()
           .from(vendorAvailability)
@@ -5618,16 +3670,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             eq(vendorAvailability.date, targetWeddingDate)
           ));
         
+        // If date is blocked, prevent offer creation
         if (availability?.status === "blocked") {
-          return res.status(400).json({ 
-            error: `Du er ikke tilgjengelig på ${new Date(targetWeddingDate).toLocaleDateString("nb-NO")}`,
-            code: "VENDOR_BLOCKED"
+          return res.status(400).json({
+            error: `Datoen ${new Date(targetWeddingDate).toLocaleDateString("nb-NO", { day: "numeric", month: "long", year: "numeric" })} er blokkert og kan ikke ta imot tilbud.`,
+            reason: availability.notes || "Dato ikke tilgjengelig",
+            blocked: true,
           });
         }
         
-        // Check max bookings limit
-        if (availability?.maxBookings !== null && availability?.maxBookings !== undefined) {
-          const [existingBookings] = await db.select({ count: sql<number>`count(*)` })
+        // If date has limited capacity, check booking count
+        if (availability?.status === "limited" && availability.maxBookings) {
+          const acceptedOffers = await db.select()
             .from(vendorOffers)
             .innerJoin(coupleProfiles, eq(vendorOffers.coupleId, coupleProfiles.id))
             .where(and(
@@ -5636,62 +3690,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
               eq(vendorOffers.status, "accepted")
             ));
           
-          if (existingBookings && existingBookings.count >= availability.maxBookings) {
-            return res.status(400).json({ 
-              error: `Maksimalt antall bookinger (${availability.maxBookings}) for ${new Date(targetWeddingDate).toLocaleDateString("nb-NO")} er nådd`,
-              code: "MAX_BOOKINGS_REACHED"
+          if (acceptedOffers.length >= availability.maxBookings) {
+            return res.status(400).json({
+              error: `Datoen ${new Date(targetWeddingDate).toLocaleDateString("nb-NO", { day: "numeric", month: "long", year: "numeric" })} har nådd maksimal kapasitet (${availability.maxBookings} bookinger).`,
+              reason: "Kapasitet nådd",
+              capacityReached: true,
             });
           }
         }
       }
       
-      // Check inventory availability for each item with tracking enabled
-      const inventoryErrors: string[] = [];
+      // Check inventory availability for products with tracking enabled (DATE-AWARE)
       for (const item of validatedData.items) {
-        if (!item.productId) continue;
-        
-        const [product] = await db.select()
-          .from(vendorProducts)
-          .where(eq(vendorProducts.id, item.productId));
-        
-        if (!product || !product.trackInventory) continue;
-        
-        // Calculate reserved quantity for this date
-        let reservedForDate = 0;
-        if (targetWeddingDate) {
-          const existingOffers = await db.select({
-            quantity: vendorOfferItems.quantity,
-          })
-            .from(vendorOfferItems)
-            .innerJoin(vendorOffers, eq(vendorOfferItems.offerId, vendorOffers.id))
-            .innerJoin(coupleProfiles, eq(vendorOffers.coupleId, coupleProfiles.id))
-            .where(and(
-              eq(vendorOfferItems.productId, item.productId),
-              eq(coupleProfiles.weddingDate, targetWeddingDate),
-              or(
-                eq(vendorOffers.status, "pending"),
-                eq(vendorOffers.status, "accepted")
-              )
-            ));
+        if (item.productId) {
+          const [product] = await db.select()
+            .from(vendorProducts)
+            .where(eq(vendorProducts.id, item.productId));
           
-          reservedForDate = existingOffers.reduce((sum, o) => sum + (o.quantity || 0), 0);
+          if (product && product.trackInventory) {
+            // Calculate reserved quantity for the SAME DATE only
+            let reservedForThisDate = 0;
+            
+            if (targetWeddingDate) {
+              // Get all pending/accepted offers for this product with the same wedding date
+              const offersForDate = await db.select({
+                offerId: vendorOfferItems.offerId,
+                quantity: vendorOfferItems.quantity,
+              })
+                .from(vendorOfferItems)
+                .innerJoin(vendorOffers, eq(vendorOfferItems.offerId, vendorOffers.id))
+                .innerJoin(coupleProfiles, eq(vendorOffers.coupleId, coupleProfiles.id))
+                .where(and(
+                  eq(vendorOfferItems.productId, item.productId),
+                  eq(coupleProfiles.weddingDate, targetWeddingDate),
+                  or(
+                    eq(vendorOffers.status, "pending"),
+                    eq(vendorOffers.status, "accepted")
+                  )
+                ));
+              
+              reservedForThisDate = offersForDate.reduce((sum, offer) => sum + offer.quantity, 0);
+            }
+            
+            const available = (product.availableQuantity || 0) - reservedForThisDate - (product.bookingBuffer || 0);
+            
+            if (item.quantity > available) {
+              const dateInfo = targetWeddingDate 
+                ? ` for ${new Date(targetWeddingDate).toLocaleDateString("nb-NO", { day: "numeric", month: "long", year: "numeric" })}`
+                : "";
+              
+              return res.status(400).json({
+                error: `Ikke nok tilgjengelig for "${product.title}"${dateInfo}. Tilgjengelig: ${available}, Forespurt: ${item.quantity}`,
+                productId: item.productId,
+                productTitle: product.title,
+                available,
+                requested: item.quantity,
+                reservedForDate: reservedForThisDate,
+                weddingDate: targetWeddingDate,
+              });
+            }
+          }
         }
-        
-        const availableQuantity = (product.availableQuantity || 0) - reservedForDate - (product.bookingBuffer || 0);
-        
-        if (item.quantity > availableQuantity) {
-          inventoryErrors.push(
-            `"${product.title}": Kun ${availableQuantity} tilgjengelig${targetWeddingDate ? ` for ${new Date(targetWeddingDate).toLocaleDateString("nb-NO")}` : ""}, forespurt ${item.quantity}`
-          );
-        }
-      }
-      
-      if (inventoryErrors.length > 0) {
-        return res.status(400).json({ 
-          error: "Ikke nok tilgjengelig lager",
-          details: inventoryErrors,
-          code: "INSUFFICIENT_INVENTORY"
-        });
       }
       
       // Calculate total
@@ -5700,57 +3759,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
         0
       );
 
-      const result = await db.transaction(async (tx) => {
-        const [offer] = await tx.insert(vendorOffers)
-          .values({
-            vendorId,
-            coupleId: validatedData.coupleId,
-            conversationId: validatedData.conversationId || null,
-            title: validatedData.title,
-            message: validatedData.message,
-            totalAmount,
-            validUntil: validatedData.validUntil ? new Date(validatedData.validUntil) : null,
-          })
-          .returning();
+      const [offer] = await db.insert(vendorOffers)
+        .values({
+          vendorId,
+          coupleId: validatedData.coupleId,
+          conversationId: validatedData.conversationId || null,
+          title: validatedData.title,
+          message: validatedData.message,
+          totalAmount,
+          validUntil: validatedData.validUntil ? new Date(validatedData.validUntil) : null,
+        })
+        .returning();
 
-        const items = await Promise.all(
-          validatedData.items.map(async (item, index) => {
-            const [offerItem] = await tx.insert(vendorOfferItems)
-              .values({
-                offerId: offer.id,
-                productId: item.productId || null,
-                title: item.title,
-                description: item.description,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                lineTotal: item.quantity * item.unitPrice,
-                sortOrder: index,
-              })
-              .returning();
-            return offerItem;
-          })
-        );
-
-        if (validatedData.conversationId) {
-          await tx.insert(messages).values({
-            conversationId: validatedData.conversationId,
-            senderType: "vendor",
-            senderId: vendorId,
-            body: `📋 Nytt tilbud: ${validatedData.title}\nTotalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`,
-          });
-
-          await tx.update(conversations)
-            .set({ 
-              lastMessageAt: new Date(),
-              coupleUnreadCount: 1,
+      // Insert offer items (no global reservation needed - we check by date)
+      const items = await Promise.all(
+        validatedData.items.map(async (item, index) => {
+          const [offerItem] = await db.insert(vendorOfferItems)
+            .values({
+              offerId: offer.id,
+              productId: item.productId || null,
+              title: item.title,
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              lineTotal: item.quantity * item.unitPrice,
+              sortOrder: index,
             })
-            .where(eq(conversations.id, validatedData.conversationId));
-        }
+            .returning();
+          
+          return offerItem;
+        })
+      );
 
-        return { offer, items };
-      });
+      // If there's a conversation, add a system message about the offer
+      if (validatedData.conversationId) {
+        await db.insert(messages).values({
+          conversationId: validatedData.conversationId,
+          senderType: "vendor",
+          senderId: vendorId,
+          body: `📋 Nytt tilbud: ${validatedData.title}\nTotalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`,
+        });
 
-      res.status(201).json({ ...result.offer, items: result.items });
+        // Update conversation
+        await db.update(conversations)
+          .set({ 
+            lastMessageAt: new Date(),
+            coupleUnreadCount: 1,
+          })
+          .where(eq(conversations.id, validatedData.conversationId));
+      }
+
+      res.status(201).json({ ...offer, items });
     } catch (error) {
       console.error("Error creating vendor offer:", error);
       res.status(500).json({ error: "Kunne ikke opprette tilbud" });
@@ -5760,9 +3819,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/vendor/offers/:id", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
-
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const { id } = req.params;
@@ -5797,9 +3853,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
       const { id } = req.params;
 
@@ -5815,6 +3868,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Tilbud ikke funnet" });
       }
 
+      // No need to release reservations - we check availability by date dynamically
+      
       // Delete offer items first
       await db.delete(vendorOfferItems).where(eq(vendorOfferItems.offerId, id));
       // Delete the offer
@@ -5827,832 +3882,247 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Vendor Planner (meetings/tasks/timeline) - lightweight persistence via App Settings
-  // Keys: vendor_planner_meetings_{vendorId}, vendor_planner_tasks_{vendorId}, vendor_planner_timeline_{vendorId}
-  const plannerKey = (kind: "meetings" | "tasks" | "timeline", vendorId: string) => `vendor_planner_${kind}_${vendorId}`;
-
-  app.get("/api/vendor/planner/:kind", async (req: Request, res: Response) => {
+  // ============= VENDOR AVAILABILITY CALENDAR =============
+  
+  // Get all availability entries for vendor
+  app.get("/api/vendor/availability", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
     try {
-      const { kind } = req.params as { kind: "meetings" | "tasks" | "timeline" };
-      if (!["meetings", "tasks", "timeline"].includes(kind)) {
-        return res.status(400).json({ error: "Ugyldig planner-type" });
+      const { startDate, endDate } = req.query;
+      
+      let query = db.select()
+        .from(vendorAvailability)
+        .where(eq(vendorAvailability.vendorId, vendorId));
+      
+      // Optional date range filtering
+      if (startDate && endDate) {
+        query = db.select()
+          .from(vendorAvailability)
+          .where(and(
+            eq(vendorAvailability.vendorId, vendorId),
+            sql`${vendorAvailability.date} >= ${startDate}`,
+            sql`${vendorAvailability.date} <= ${endDate}`
+          ));
       }
-      const key = plannerKey(kind, vendorId);
-      const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
-      const value = setting?.value ? JSON.parse(setting.value) : (kind === "timeline" ? [] : []);
-      res.json(value);
+      
+      const availability = await query.orderBy(vendorAvailability.date);
+      res.json(availability);
     } catch (error) {
-      console.error("Error fetching vendor planner items:", error);
-      res.status(500).json({ error: "Kunne ikke hente planner-data" });
+      console.error("Error fetching availability:", error);
+      res.status(500).json({ error: "Kunne ikke hente tilgjengelighet" });
     }
   });
 
-  app.post("/api/vendor/planner/:kind", async (req: Request, res: Response) => {
+  // Get availability for specific date
+  app.get("/api/vendor/availability/:date", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
     try {
-      const { kind } = req.params as { kind: "meetings" | "tasks" | "timeline" };
-      if (!["meetings", "tasks", "timeline"].includes(kind)) {
-        return res.status(400).json({ error: "Ugyldig planner-type" });
-      }
-      const key = plannerKey(kind, vendorId);
-      const payload = req.body;
-      const json = JSON.stringify(payload);
-      const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, key));
-      if (existing) {
-        await db.update(appSettings).set({ value: json, updatedAt: new Date() }).where(eq(appSettings.key, key));
-      } else {
-        await db.insert(appSettings).values({ key, value: json, category: "vendor_planner" });
-      }
-      res.status(201).json({ success: true });
-    } catch (error) {
-      console.error("Error saving vendor planner items:", error);
-      res.status(500).json({ error: "Kunne ikke lagre planner-data" });
-    }
-  });
-
-  app.patch("/api/vendor/planner/:kind", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const { kind } = req.params as { kind: "meetings" | "tasks" | "timeline" };
-      if (!["meetings", "tasks", "timeline"].includes(kind)) {
-        return res.status(400).json({ error: "Ugyldig planner-type" });
-      }
-      const key = plannerKey(kind, vendorId);
-      const payload = req.body;
-      const json = JSON.stringify(payload);
-      const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, key));
-      if (!existing) {
-        return res.status(404).json({ error: "Planner-data ikke funnet" });
-      }
-      const [updated] = await db.update(appSettings)
-        .set({ value: json, updatedAt: new Date() })
-        .where(eq(appSettings.key, key))
-        .returning();
-      res.json({ success: true, updated });
-    } catch (error) {
-      console.error("Error updating vendor planner items:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere planner-data" });
-    }
-  });
-
-  app.delete("/api/vendor/planner/:kind", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const { kind } = req.params as { kind: "meetings" | "tasks" | "timeline" };
-      if (!["meetings", "tasks", "timeline"].includes(kind)) {
-        return res.status(400).json({ error: "Ugyldig planner-type" });
-      }
-      const key = plannerKey(kind, vendorId);
-      await db.delete(appSettings).where(eq(appSettings.key, key));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting vendor planner items:", error);
-      res.status(500).json({ error: "Kunne ikke slette planner-data" });
-    }
-  });
-
-  // Couple Venue planner (DB-backed with appSettings backfill)
-  const coupleVenueKey = (kind: "bookings" | "timeline", coupleId: string) => `couple_venue_${kind}_${coupleId}`;
-
-  const getCoupleIdFromReq = async (req: Request, res: Response): Promise<string | null> => {
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    if (!token) {
-      res.status(401).json({ error: "Ikke autentisert" });
-      return null;
-    }
-
-    const [session] = await db.select()
-      .from(coupleSessions)
-      .where(eq(coupleSessions.token, token));
-
-    if (!session || session.expiresAt < new Date()) {
-      res.status(401).json({ error: "Ugyldig økt" });
-      return null;
-    }
-    const coupleId = session.coupleId;
-    return coupleId;
-  };
-
-  const backfillCoupleVenueFromSettings = async (kind: "bookings" | "timeline", coupleId: string) => {
-    const key = coupleVenueKey(kind, coupleId);
-    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
-    if (!setting?.value) return null;
-    const parsed = JSON.parse(setting.value);
-
-    try {
-      if (kind === "bookings" && Array.isArray(parsed)) {
-        await db.transaction(async (tx) => {
-          await tx.delete(coupleVenueBookings).where(eq(coupleVenueBookings.coupleId, coupleId));
-          if (parsed.length === 0) return;
-          await tx.insert(coupleVenueBookings).values(
-            parsed.map((b: any) => ({
-              id: b.id || crypto.randomUUID(),
-              coupleId,
-              venueName: b.venueName,
-              date: b.date,
-              time: b.time,
-              location: b.location,
-              capacity: b.capacity ?? null,
-              notes: b.notes,
-              completed: !!b.completed,
-            }))
-          );
-        });
-      }
-
-      if (kind === "timeline" && parsed && typeof parsed === "object") {
-        await db.insert(coupleVenueTimelines)
-          .values({
-            coupleId,
-            venueSelected: !!parsed.venueSelected,
-            venueVisited: !!parsed.venueVisited,
-            contractSigned: !!parsed.contractSigned,
-            depositPaid: !!parsed.depositPaid,
-            capacity: parsed.capacity ?? null,
-            budget: parsed.budget ?? null,
-          })
-          .onConflictDoUpdate({
-            target: coupleVenueTimelines.coupleId,
-            set: {
-              venueSelected: !!parsed.venueSelected,
-              venueVisited: !!parsed.venueVisited,
-              contractSigned: !!parsed.contractSigned,
-              depositPaid: !!parsed.depositPaid,
-              capacity: parsed.capacity ?? null,
-              budget: parsed.budget ?? null,
-              updatedAt: new Date(),
-            },
-          });
-      }
-    } catch (err) {
-      console.error("Backfill couple venue from appSettings failed", err);
-    }
-
-    return parsed;
-  };
-
-  app.get("/api/couple/venue/:kind", async (req: Request, res: Response) => {
-    const coupleId = await getCoupleIdFromReq(req, res);
-    if (!coupleId) return;
-    const { kind } = req.params as { kind: "bookings" | "timeline" };
-    if (!["bookings", "timeline"].includes(kind)) {
-      return res.status(400).json({ error: "Ugyldig type" });
-    }
-    try {
-      if (kind === "bookings") {
-        const rows = await db.select().from(coupleVenueBookings).where(eq(coupleVenueBookings.coupleId, coupleId)).orderBy(desc(coupleVenueBookings.createdAt));
-        if (rows.length > 0) {
-          return res.json(rows.map((r) => ({
-            id: r.id,
-            venueName: r.venueName,
-            date: r.date,
-            time: r.time ?? undefined,
-            location: r.location ?? undefined,
-            capacity: r.capacity ?? undefined,
-            notes: r.notes ?? undefined,
-            vendorVisitCompleted: !!r.vendorVisitCompleted,
-            createdAt: r.createdAt?.toISOString?.() ?? r.createdAt,
-            updatedAt: r.updatedAt?.toISOString?.() ?? r.updatedAt,
-          })));
-        }
-        const fallback = await backfillCoupleVenueFromSettings(kind, coupleId);
-        return res.json(Array.isArray(fallback) ? fallback : []);
-      }
-
-      const [timeline] = await db.select().from(coupleVenueTimelines).where(eq(coupleVenueTimelines.coupleId, coupleId));
-      if (timeline) {
-        return res.json({
-          venueSelected: !!timeline.venueSelected,
-          venueVisited: !!timeline.venueVisited,
-          contractSigned: !!timeline.contractSigned,
-          depositPaid: !!timeline.depositPaid,
-          capacity: timeline.capacity ?? undefined,
-          budget: timeline.budget ?? undefined,
-        });
-      }
-      const fallback = await backfillCoupleVenueFromSettings(kind, coupleId);
-      return res.json(fallback && typeof fallback === "object" ? fallback : {});
-    } catch (error) {
-      console.error("Error fetching couple venue data:", error);
-      res.status(500).json({ error: "Kunne ikke hente data" });
-    }
-  });
-
-  app.post("/api/couple/venue/:kind", async (req: Request, res: Response) => {
-    const coupleId = await getCoupleIdFromReq(req, res);
-    if (!coupleId) return;
-    const { kind } = req.params as { kind: "bookings" | "timeline" };
-    if (!["bookings", "timeline"].includes(kind)) {
-      return res.status(400).json({ error: "Ugyldig type" });
-    }
-    try {
-      if (kind === "bookings") {
-        const payload = Array.isArray(req.body) ? req.body : [];
-        await db.transaction(async (tx) => {
-          await tx.delete(coupleVenueBookings).where(eq(coupleVenueBookings.coupleId, coupleId));
-          if (payload.length === 0) return;
-          await tx.insert(coupleVenueBookings).values(
-            payload.map((b: any) => ({
-              id: b.id || crypto.randomUUID(),
-              coupleId,
-              venueName: b.venueName,
-              date: b.date,
-              time: b.time,
-              location: b.location,
-              capacity: b.capacity ?? null,
-              notes: b.notes,
-              completed: !!b.completed,
-            }))
-          );
-        });
-        return res.status(201).json({ success: true });
-      }
-
-      const payload = req.body || {};
-      await db.insert(coupleVenueTimelines)
-        .values({
-          coupleId,
-          venueSelected: !!payload.venueSelected,
-          venueVisited: !!payload.venueVisited,
-          contractSigned: !!payload.contractSigned,
-          depositPaid: !!payload.depositPaid,
-          capacity: payload.capacity ?? null,
-          budget: payload.budget ?? null,
-        })
-        .onConflictDoUpdate({
-          target: coupleVenueTimelines.coupleId,
-          set: {
-            venueSelected: !!payload.venueSelected,
-            venueVisited: !!payload.venueVisited,
-            contractSigned: !!payload.contractSigned,
-            depositPaid: !!payload.depositPaid,
-            capacity: payload.capacity ?? null,
-            budget: payload.budget ?? null,
-            updatedAt: new Date(),
-          },
-        });
-      return res.status(201).json({ success: true });
-    } catch (error) {
-      console.error("Error saving couple venue data:", error);
-      res.status(500).json({ error: "Kunne ikke lagre" });
-    }
-  });
-
-  app.patch("/api/couple/venue/:kind", async (req: Request, res: Response) => {
-    const coupleId = await getCoupleIdFromReq(req, res);
-    if (!coupleId) return;
-    const { kind } = req.params as { kind: "bookings" | "timeline" };
-    if (!["bookings", "timeline"].includes(kind)) {
-      return res.status(400).json({ error: "Ugyldig type" });
-    }
-    try {
-      if (kind === "bookings") {
-        const payload = Array.isArray(req.body) ? req.body : [];
-        await db.transaction(async (tx) => {
-          await tx.delete(coupleVenueBookings).where(eq(coupleVenueBookings.coupleId, coupleId));
-          if (payload.length === 0) return;
-          await tx.insert(coupleVenueBookings).values(
-            payload.map((b: any) => ({
-              id: b.id || crypto.randomUUID(),
-              coupleId,
-              venueName: b.venueName,
-              date: b.date,
-              time: b.time,
-              location: b.location,
-              capacity: b.capacity ?? null,
-              notes: b.notes,
-              completed: !!b.completed,
-            }))
-          );
-        });
-        return res.json({ success: true });
-      }
-
-      const payload = req.body || {};
-      await db.insert(coupleVenueTimelines)
-        .values({
-          coupleId,
-          venueSelected: !!payload.venueSelected,
-          venueVisited: !!payload.venueVisited,
-          contractSigned: !!payload.contractSigned,
-          depositPaid: !!payload.depositPaid,
-          capacity: payload.capacity ?? null,
-          budget: payload.budget ?? null,
-        })
-        .onConflictDoUpdate({
-          target: coupleVenueTimelines.coupleId,
-          set: {
-            venueSelected: !!payload.venueSelected,
-            venueVisited: !!payload.venueVisited,
-            contractSigned: !!payload.contractSigned,
-            depositPaid: !!payload.depositPaid,
-            capacity: payload.capacity ?? null,
-            budget: payload.budget ?? null,
-            updatedAt: new Date(),
-          },
-        });
-      return res.json({ success: true });
-    } catch (error) {
-      console.error("Error updating couple venue data:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere" });
-    }
-  });
-
-  app.delete("/api/couple/venue/:kind", async (req: Request, res: Response) => {
-    const coupleId = await getCoupleIdFromReq(req, res);
-    if (!coupleId) return;
-    const { kind } = req.params as { kind: "bookings" | "timeline" };
-    if (!["bookings", "timeline"].includes(kind)) {
-      return res.status(400).json({ error: "Ugyldig type" });
-    }
-    try {
-      if (kind === "bookings") {
-        await db.delete(coupleVenueBookings).where(eq(coupleVenueBookings.coupleId, coupleId));
-        return res.json({ success: true });
-      }
-      await db.delete(coupleVenueTimelines).where(eq(coupleVenueTimelines.coupleId, coupleId));
-      return res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting couple venue data:", error);
-      res.status(500).json({ error: "Kunne ikke slette" });
-    }
-  });
-
-  // Couple seating chart
-  const coupleSeatingKey = (coupleId: string) => `couple_venue_seating_${coupleId}`;
-
-  app.get("/api/couple/venue/seating", async (req: Request, res: Response) => {
-    const coupleId = await getCoupleIdFromReq(req, res);
-    if (!coupleId) return;
-    try {
-      const key = coupleSeatingKey(coupleId);
-      const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
-      const seating = setting?.value ? JSON.parse(setting.value) : { tables: [], guests: [] };
-      return res.json(seating);
-    } catch (error) {
-      console.error("Error fetching couple seating:", error);
-      res.status(500).json({ error: "Kunne ikke hente seating" });
-    }
-  });
-
-  app.post("/api/couple/venue/seating", async (req: Request, res: Response) => {
-    const coupleId = await getCoupleIdFromReq(req, res);
-    if (!coupleId) return;
-    try {
-      const key = coupleSeatingKey(coupleId);
-      const payload = req.body || { tables: [], guests: [] };
-      const json = JSON.stringify(payload);
-      const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, key));
-      if (existing) {
-        await db.update(appSettings).set({ value: json, updatedAt: new Date() }).where(eq(appSettings.key, key));
-      } else {
-        await db.insert(appSettings).values({ key, value: json, category: "couple_venue_seating" });
-      }
-      return res.status(201).json({ success: true });
-    } catch (error) {
-      console.error("Error saving couple seating:", error);
-      res.status(500).json({ error: "Kunne ikke lagre seating" });
-    }
-  });
-
-  // Vendor Venue planner (DB-backed with appSettings backfill)
-  const vendorVenueKey = (kind: "bookings" | "availability" | "timeline", vendorId: string) => `vendor_venue_${kind}_${vendorId}`;
-
-  const backfillVendorVenueFromSettings = async (kind: "bookings" | "availability" | "timeline", vendorId: string) => {
-    const key = vendorVenueKey(kind, vendorId);
-    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
-    if (!setting?.value) return null;
-    const parsed = JSON.parse(setting.value);
-
-    try {
-      if (kind === "bookings" && Array.isArray(parsed)) {
-        await db.transaction(async (tx) => {
-          await tx.delete(vendorVenueBookings).where(eq(vendorVenueBookings.vendorId, vendorId));
-          if (parsed.length === 0) return;
-          await tx.insert(vendorVenueBookings).values(
-            parsed.map((b: any) => ({
-              id: b.id || crypto.randomUUID(),
-              vendorId,
-              coupleName: b.coupleName,
-              date: b.date,
-              time: b.time,
-              location: b.location,
-              capacity: b.capacity ?? null,
-              notes: b.notes,
-              status: b.status || "booked",
-              completed: !!b.completed,
-            }))
-          );
-        });
-      }
-
-      if (kind === "availability" && Array.isArray(parsed)) {
-        await db.transaction(async (tx) => {
-          await tx.delete(vendorVenueAvailability).where(eq(vendorVenueAvailability.vendorId, vendorId));
-          if (parsed.length === 0) return;
-          await tx.insert(vendorVenueAvailability).values(
-            parsed.map((a: any) => ({
-              id: a.id || crypto.randomUUID(),
-              vendorId,
-              date: a.date,
-              status: a.status || "available",
-              maxBookings: a.maxBookings ?? null,
-              notes: a.notes,
-            }))
-          );
-        });
-      }
-
-      if (kind === "timeline" && parsed && typeof parsed === "object") {
-        await db.insert(vendorVenueTimelines)
-          .values({
-            vendorId,
-            siteVisitDone: !!parsed.siteVisitDone,
-            contractSigned: !!parsed.contractSigned,
-            depositReceived: !!parsed.depositReceived,
-            floorPlanFinalized: !!parsed.floorPlanFinalized,
-          })
-          .onConflictDoUpdate({
-            target: vendorVenueTimelines.vendorId,
-            set: {
-              siteVisitDone: !!parsed.siteVisitDone,
-              contractSigned: !!parsed.contractSigned,
-              depositReceived: !!parsed.depositReceived,
-              floorPlanFinalized: !!parsed.floorPlanFinalized,
-              updatedAt: new Date(),
-            },
-          });
-      }
-    } catch (err) {
-      console.error("Backfill vendor venue from appSettings failed", err);
-    }
-
-    return parsed;
-  };
-
-  app.get("/api/vendor/venue/:kind", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-    const { kind } = req.params as { kind: "bookings" | "availability" | "timeline" };
-    if (!["bookings", "availability", "timeline"].includes(kind)) {
-      return res.status(400).json({ error: "Ugyldig type" });
-    }
-    try {
-      if (kind === "bookings") {
-        const rows = await db.select().from(vendorVenueBookings).where(eq(vendorVenueBookings.vendorId, vendorId)).orderBy(desc(vendorVenueBookings.createdAt));
-        if (rows.length > 0) {
-          return res.json(rows.map((r) => ({
-            id: r.id,
-            coupleName: r.coupleName,
-            date: r.date,
-            time: r.time ?? undefined,
-            location: r.location ?? undefined,
-            capacity: r.capacity ?? undefined,
-            notes: r.notes ?? undefined,
-            status: r.status || "booked",
-            createdAt: r.createdAt?.toISOString?.() ?? r.createdAt,
-            updatedAt: r.updatedAt?.toISOString?.() ?? r.updatedAt,
-          })));
-        }
-        const fallback = await backfillVendorVenueFromSettings(kind, vendorId);
-        return res.json(Array.isArray(fallback) ? fallback : []);
-      }
-
-      if (kind === "availability") {
-        const rows = await db.select().from(vendorVenueAvailability).where(eq(vendorVenueAvailability.vendorId, vendorId)).orderBy(desc(vendorVenueAvailability.date));
-        if (rows.length > 0) {
-          return res.json(rows.map((r) => ({
-            id: r.id,
-            date: r.date,
-            status: (r.status as any) || "available",
-            maxBookings: r.maxBookings ?? undefined,
-            notes: r.notes ?? undefined,
-          })));
-        }
-        const fallback = await backfillVendorVenueFromSettings(kind, vendorId);
-        return res.json(Array.isArray(fallback) ? fallback : []);
-      }
-
-      const [timeline] = await db.select().from(vendorVenueTimelines).where(eq(vendorVenueTimelines.vendorId, vendorId));
-      if (timeline) {
-        return res.json({
-          siteVisitDone: !!timeline.siteVisitDone,
-          contractSigned: !!timeline.contractSigned,
-          depositReceived: !!timeline.depositReceived,
-          floorPlanFinalized: !!timeline.floorPlanFinalized,
-        });
-      }
-      const fallback = await backfillVendorVenueFromSettings(kind, vendorId);
-      return res.json(fallback && typeof fallback === "object" ? fallback : {});
-    } catch (error) {
-      console.error("Error fetching vendor venue data:", error);
-      res.status(500).json({ error: "Kunne ikke hente data" });
-    }
-  });
-
-  app.post("/api/vendor/venue/:kind", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-    const { kind } = req.params as { kind: "bookings" | "availability" | "timeline" };
-    if (!["bookings", "availability", "timeline"].includes(kind)) {
-      return res.status(400).json({ error: "Ugyldig type" });
-    }
-    try {
-      if (kind === "bookings") {
-        const payload = Array.isArray(req.body) ? req.body : [];
-        await db.transaction(async (tx) => {
-          await tx.delete(vendorVenueBookings).where(eq(vendorVenueBookings.vendorId, vendorId));
-          if (payload.length === 0) return;
-          await tx.insert(vendorVenueBookings).values(
-            payload.map((b: any) => ({
-              id: b.id || crypto.randomUUID(),
-              vendorId,
-              coupleName: b.coupleName,
-              date: b.date,
-              time: b.time,
-              location: b.location,
-              capacity: b.capacity ?? null,
-              notes: b.notes,
-              status: b.status || "booked",
-              completed: !!b.completed,
-            }))
-          );
-        });
-        return res.status(201).json({ success: true });
-      }
-
-      if (kind === "availability") {
-        const payload = Array.isArray(req.body) ? req.body : [];
-        await db.transaction(async (tx) => {
-          await tx.delete(vendorVenueAvailability).where(eq(vendorVenueAvailability.vendorId, vendorId));
-          if (payload.length === 0) return;
-          await tx.insert(vendorVenueAvailability).values(
-            payload.map((a: any) => ({
-              id: a.id || crypto.randomUUID(),
-              vendorId,
-              date: a.date,
-              status: a.status || "available",
-              maxBookings: a.maxBookings ?? null,
-              notes: a.notes,
-            }))
-          );
-        });
-        return res.status(201).json({ success: true });
-      }
-
-      const payload = req.body || {};
-      await db.insert(vendorVenueTimelines)
-        .values({
-          vendorId,
-          siteVisitDone: !!payload.siteVisitDone,
-          contractSigned: !!payload.contractSigned,
-          depositReceived: !!payload.depositReceived,
-          floorPlanFinalized: !!payload.floorPlanFinalized,
-        })
-        .onConflictDoUpdate({
-          target: vendorVenueTimelines.vendorId,
-          set: {
-            siteVisitDone: !!payload.siteVisitDone,
-            contractSigned: !!payload.contractSigned,
-            depositReceived: !!payload.depositReceived,
-            floorPlanFinalized: !!payload.floorPlanFinalized,
-            updatedAt: new Date(),
-          },
-        });
-      return res.status(201).json({ success: true });
-    } catch (error) {
-      console.error("Error saving vendor venue data:", error);
-      res.status(500).json({ error: "Kunne ikke lagre" });
-    }
-  });
-
-  app.patch("/api/vendor/venue/:kind", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-    const { kind } = req.params as { kind: "bookings" | "availability" | "timeline" };
-    if (!["bookings", "availability", "timeline"].includes(kind)) {
-      return res.status(400).json({ error: "Ugyldig type" });
-    }
-    try {
-      if (kind === "bookings") {
-        const payload = Array.isArray(req.body) ? req.body : [];
-        await db.transaction(async (tx) => {
-          await tx.delete(vendorVenueBookings).where(eq(vendorVenueBookings.vendorId, vendorId));
-          if (payload.length === 0) return;
-          await tx.insert(vendorVenueBookings).values(
-            payload.map((b: any) => ({
-              id: b.id || crypto.randomUUID(),
-              vendorId,
-              coupleName: b.coupleName,
-              date: b.date,
-              time: b.time,
-              location: b.location,
-              capacity: b.capacity ?? null,
-              notes: b.notes,
-              status: b.status || "booked",
-              completed: !!b.completed,
-            }))
-          );
-        });
-        return res.json({ success: true });
-      }
-
-      if (kind === "availability") {
-        const payload = Array.isArray(req.body) ? req.body : [];
-        await db.transaction(async (tx) => {
-          await tx.delete(vendorVenueAvailability).where(eq(vendorVenueAvailability.vendorId, vendorId));
-          if (payload.length === 0) return;
-          await tx.insert(vendorVenueAvailability).values(
-            payload.map((a: any) => ({
-              id: a.id || crypto.randomUUID(),
-              vendorId,
-              date: a.date,
-              status: a.status || "available",
-              maxBookings: a.maxBookings ?? null,
-              notes: a.notes,
-            }))
-          );
-        });
-        return res.json({ success: true });
-      }
-
-      const payload = req.body || {};
-      await db.insert(vendorVenueTimelines)
-        .values({
-          vendorId,
-          siteVisitDone: !!payload.siteVisitDone,
-          contractSigned: !!payload.contractSigned,
-          depositReceived: !!payload.depositReceived,
-          floorPlanFinalized: !!payload.floorPlanFinalized,
-        })
-        .onConflictDoUpdate({
-          target: vendorVenueTimelines.vendorId,
-          set: {
-            siteVisitDone: !!payload.siteVisitDone,
-            contractSigned: !!payload.contractSigned,
-            depositReceived: !!payload.depositReceived,
-            floorPlanFinalized: !!payload.floorPlanFinalized,
-            updatedAt: new Date(),
-          },
-        });
-      return res.json({ success: true });
-    } catch (error) {
-      console.error("Error updating vendor venue data:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere" });
-    }
-  });
-
-  app.delete("/api/vendor/venue/:kind", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-    const { kind } = req.params as { kind: "bookings" | "availability" | "timeline" };
-    if (!["bookings", "availability", "timeline"].includes(kind)) {
-      return res.status(400).json({ error: "Ugyldig type" });
-    }
-    try {
-      if (kind === "bookings") {
-        await db.delete(vendorVenueBookings).where(eq(vendorVenueBookings.vendorId, vendorId));
-        return res.json({ success: true });
-      }
-      if (kind === "availability") {
-        await db.delete(vendorVenueAvailability).where(eq(vendorVenueAvailability.vendorId, vendorId));
-        return res.json({ success: true });
-      }
-      await db.delete(vendorVenueTimelines).where(eq(vendorVenueTimelines.vendorId, vendorId));
-      return res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting vendor venue data:", error);
-      res.status(500).json({ error: "Kunne ikke slette" });
-    }
-  });
-
-  // Vendor seating chart endpoints
-  const vendorSeatingKey = (vendorId: string) => `vendor_venue_seating_${vendorId}`;
-
-  app.get("/api/vendor/venue/seating", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-    try {
-      const key = vendorSeatingKey(vendorId);
-      const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
-      const seating = setting?.value ? JSON.parse(setting.value) : { tables: [], guests: [] };
-      return res.json(seating);
-    } catch (error) {
-      console.error("Error fetching vendor seating:", error);
-      res.status(500).json({ error: "Kunne ikke hente seating" });
-    }
-  });
-
-  app.post("/api/vendor/venue/seating", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-    try {
-      const key = vendorSeatingKey(vendorId);
-      const payload = req.body || { tables: [], guests: [] };
-      const json = JSON.stringify(payload);
-      const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, key));
-      if (existing) {
-        await db.update(appSettings).set({ value: json, updatedAt: new Date() }).where(eq(appSettings.key, key));
-      } else {
-        await db.insert(appSettings).values({ key, value: json, category: "vendor_venue_seating" });
-      }
-      return res.status(201).json({ success: true });
-    } catch (error) {
-      console.error("Error saving vendor seating:", error);
-      res.status(500).json({ error: "Kunne ikke lagre seating" });
-    }
-  });
-
-  // Vendor site visits - get upcoming scheduled site visits at vendor's venue
-  app.get("/api/vendor/site-visits", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const siteVisits = await db.select({
-        id: coupleVenueBookings.id,
-        coupleName: coupleProfiles.displayName,
-        venueName: coupleVenueBookings.venueName,
-        siteVisitDate: coupleVenueBookings.siteVisitDate,
-        siteVisitTime: coupleVenueBookings.siteVisitTime,
-        address: coupleVenueBookings.address,
-        maxGuests: coupleVenueBookings.maxGuests,
-        invitedGuests: coupleVenueBookings.invitedGuests,
-        status: coupleVenueBookings.status,
-        notes: coupleVenueBookings.notes,
-        weddingDate: coupleProfiles.weddingDate,
-        email: coupleProfiles.email,
-        vendorVisitConfirmed: coupleVenueBookings.vendorVisitConfirmed,
-        vendorVisitNotes: coupleVenueBookings.vendorVisitNotes,
-        vendorVisitCompleted: coupleVenueBookings.vendorVisitCompleted,
-      })
-      .from(coupleVenueBookings)
-      .innerJoin(coupleProfiles, eq(coupleVenueBookings.coupleId, coupleProfiles.id))
-      .where(and(
-        eq(coupleVenueBookings.vendorId, vendorId),
-        isNotNull(coupleVenueBookings.siteVisitDate)
-      ))
-      .orderBy(coupleVenueBookings.siteVisitDate, coupleVenueBookings.siteVisitTime);
-
-      res.json(siteVisits);
-    } catch (error) {
-      console.error("Error fetching vendor site visits:", error);
-      res.status(500).json({ error: "Kunne ikke hente befaringer" });
-    }
-  });
-
-  // Update vendor site visit tracking
-  app.patch("/api/vendor/site-visits/:id", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const { id } = req.params;
-      const { vendorVisitConfirmed, vendorVisitNotes, vendorVisitCompleted } = req.body;
-
-      // Verify this site visit belongs to the vendor
-      const [existing] = await db.select()
-        .from(coupleVenueBookings)
+      const { date } = req.params;
+      
+      const [availability] = await db.select()
+        .from(vendorAvailability)
         .where(and(
-          eq(coupleVenueBookings.id, id),
-          eq(coupleVenueBookings.vendorId, vendorId)
+          eq(vendorAvailability.vendorId, vendorId),
+          eq(vendorAvailability.date, date)
+        ));
+      
+      res.json(availability || null);
+    } catch (error) {
+      console.error("Error fetching availability for date:", error);
+      res.status(500).json({ error: "Kunne ikke hente tilgjengelighet" });
+    }
+  });
+
+  // Create or update availability
+  app.post("/api/vendor/availability", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const validatedData = createVendorAvailabilitySchema.parse(req.body);
+      
+      // Check if entry already exists
+      const [existing] = await db.select()
+        .from(vendorAvailability)
+        .where(and(
+          eq(vendorAvailability.vendorId, vendorId),
+          eq(vendorAvailability.date, validatedData.date)
         ));
 
-      if (!existing) {
-        return res.status(404).json({ error: "Befaring ikke funnet" });
+      let result;
+      if (existing) {
+        // Update existing
+        [result] = await db.update(vendorAvailability)
+          .set({
+            status: validatedData.status,
+            maxBookings: validatedData.maxBookings,
+            notes: validatedData.notes,
+            updatedAt: new Date(),
+          })
+          .where(and(
+            eq(vendorAvailability.vendorId, vendorId),
+            eq(vendorAvailability.date, validatedData.date)
+          ))
+          .returning();
+      } else {
+        // Create new
+        [result] = await db.insert(vendorAvailability)
+          .values({
+            vendorId,
+            date: validatedData.date,
+            status: validatedData.status,
+            maxBookings: validatedData.maxBookings,
+            notes: validatedData.notes,
+          })
+          .returning();
       }
-
-      const [updated] = await db.update(coupleVenueBookings)
-        .set({
-          vendorVisitConfirmed: vendorVisitConfirmed ?? existing.vendorVisitConfirmed,
-          vendorVisitNotes: vendorVisitNotes ?? existing.vendorVisitNotes,
-          vendorVisitCompleted: vendorVisitCompleted ?? existing.vendorVisitCompleted,
-          updatedAt: new Date(),
-        })
-        .where(eq(coupleVenueBookings.id, id))
-        .returning();
-
-      res.json(updated);
+      
+      res.status(existing ? 200 : 201).json(result);
     } catch (error) {
-      console.error("Error updating site visit:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere befaring" });
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors[0].message });
+      }
+      console.error("Error creating/updating availability:", error);
+      res.status(500).json({ error: "Kunne ikke lagre tilgjengelighet" });
     }
   });
+
+  // Bulk update availability (multiple dates at once)
+  app.post("/api/vendor/availability/bulk", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { dates, status, maxBookings, notes } = req.body;
+      
+      if (!Array.isArray(dates) || dates.length === 0) {
+        return res.status(400).json({ error: "Dates array is required" });
+      }
+      
+      if (!["available", "blocked", "limited"].includes(status)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+
+      const results = [];
+      for (const date of dates) {
+        const [existing] = await db.select()
+          .from(vendorAvailability)
+          .where(and(
+            eq(vendorAvailability.vendorId, vendorId),
+            eq(vendorAvailability.date, date)
+          ));
+
+        let result;
+        if (existing) {
+          [result] = await db.update(vendorAvailability)
+            .set({
+              status,
+              maxBookings,
+              notes,
+              updatedAt: new Date(),
+            })
+            .where(and(
+              eq(vendorAvailability.vendorId, vendorId),
+              eq(vendorAvailability.date, date)
+            ))
+            .returning();
+        } else {
+          [result] = await db.insert(vendorAvailability)
+            .values({
+              vendorId,
+              date,
+              status,
+              maxBookings,
+              notes,
+            })
+            .returning();
+        }
+        results.push(result);
+      }
+      
+      res.json(results);
+    } catch (error) {
+      console.error("Error bulk updating availability:", error);
+      res.status(500).json({ error: "Kunne ikke oppdatere tilgjengelighet" });
+    }
+  });
+
+  // Delete availability entry (reset to default/available)
+  app.delete("/api/vendor/availability/:date", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { date } = req.params;
+      
+      await db.delete(vendorAvailability)
+        .where(and(
+          eq(vendorAvailability.vendorId, vendorId),
+          eq(vendorAvailability.date, date)
+        ));
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting availability:", error);
+      res.status(500).json({ error: "Kunne ikke slette tilgjengelighet" });
+    }
+  });
+
+  // Get bookings count for a date (for capacity checking)
+  app.get("/api/vendor/availability/:date/bookings", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { date } = req.params;
+      
+      // Count accepted offers for this date
+      const acceptedOffers = await db.select()
+        .from(vendorOffers)
+        .innerJoin(coupleProfiles, eq(vendorOffers.coupleId, coupleProfiles.id))
+        .where(and(
+          eq(vendorOffers.vendorId, vendorId),
+          eq(coupleProfiles.weddingDate, date),
+          eq(vendorOffers.status, "accepted")
+        ));
+      
+      res.json({ 
+        date,
+        acceptedBookings: acceptedOffers.length,
+      });
+    } catch (error) {
+      console.error("Error fetching bookings for date:", error);
+      res.status(500).json({ error: "Kunne ikke hente bookinger" });
+    }
+  });
+
+  // ============= END VENDOR AVAILABILITY =============
 
   // Couple can accept/decline offers
   app.post("/api/couple/offers/:id/respond", async (req: Request, res: Response) => {
     try {
-      const coupleId = await checkCoupleAuth(req, res);
-      if (!coupleId) return;
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ error: "Ikke autentisert" });
+      }
+
+      // Check couple session
+      let coupleId = COUPLE_SESSIONS.get(token)?.coupleId;
+      if (!coupleId) {
+        const [session] = await db.select()
+          .from(coupleSessions)
+          .where(eq(coupleSessions.token, token));
+
+        if (!session || session.expiresAt < new Date()) {
+          return res.status(401).json({ error: "Ugyldig økt" });
+        }
+        coupleId = session.coupleId;
+        COUPLE_SESSIONS.set(token, { coupleId, expiresAt: session.expiresAt });
+      }
 
       const { id } = req.params;
       const { response } = req.body; // 'accept' or 'decline'
@@ -6680,90 +4150,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (response === "accept") {
         updates.acceptedAt = new Date();
-        
-        // Use transaction for inventory updates and contract creation
-        try {
-          await db.transaction(async (tx) => {
-            // Update inventory - decrement available quantity for items with tracking
-            const offerItems = await tx.select()
-              .from(vendorOfferItems)
-              .where(eq(vendorOfferItems.offerId, id));
-            
-            for (const item of offerItems) {
-              if (!item.productId) continue;
-              
-              const [product] = await tx.select()
-                .from(vendorProducts)
-                .where(eq(vendorProducts.id, item.productId));
-              
-              if (product?.trackInventory && product.availableQuantity !== null) {
-                // Check if we have enough inventory
-                if (product.availableQuantity < (item.quantity || 0)) {
-                  throw new Error(`Ikke nok på lager av "${product.title}". Tilgjengelig: ${product.availableQuantity}, Ønsket: ${item.quantity}`);
-                }
-                
-                const newQuantity = product.availableQuantity - (item.quantity || 0);
-                await tx.update(vendorProducts)
-                  .set({ 
-                    availableQuantity: newQuantity,
-                    updatedAt: new Date()
-                  })
-                  .where(eq(vendorProducts.id, item.productId));
-              }
-            }
-            
-            // Create vendor contract automatically
-            await tx.insert(coupleVendorContracts).values({
-              coupleId: coupleId!,
-              vendorId: offer.vendorId,
-              offerId: offer.id,
-              status: "active",
-            });
-            
-            // Update offer status within transaction
-            const [updatedOffer] = await tx.update(vendorOffers)
-              .set(updates)
-              .where(and(
-                eq(vendorOffers.id, id),
-                eq(vendorOffers.status, "pending")
-              ))
-              .returning();
-
-            if (!updatedOffer) {
-              throw new Error("Tilbudet ble allerede behandlet");
-            }
-          });
-        } catch (txError: any) {
-          console.error("Transaction error accepting offer:", txError);
-          return res.status(400).json({ 
-            error: txError.message || "Kunne ikke akseptere tilbud - lagerstatus endret" 
-          });
-        }
-        
-        // Get updated offer for response (outside transaction)
-        const [updated] = await db.select()
-          .from(vendorOffers)
-          .where(eq(vendorOffers.id, id));
-
-        // Notify vendor via message if there's a conversation
-        if (offer.conversationId) {
-          await db.insert(messages).values({
-            conversationId: offer.conversationId,
-            senderType: "couple",
-            senderId: coupleId,
-            body: `✅ Tilbud "${offer.title}" er akseptert`,
-          });
-
-          await db.update(conversations)
-            .set({ 
-              lastMessageAt: new Date(),
-              vendorUnreadCount: 1,
-            })
-            .where(eq(conversations.id, offer.conversationId));
-        }
-
-        return res.json(updated);
-        
       } else {
         updates.declinedAt = new Date();
       }
@@ -6773,13 +4159,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(vendorOffers.id, id))
         .returning();
 
+      // Handle inventory based on response (DATE-AWARE)
+      if (response === "accept") {
+        const offerItems = await db.select()
+          .from(vendorOfferItems)
+          .where(eq(vendorOfferItems.offerId, id));
+
+        for (const item of offerItems) {
+          if (item.productId) {
+            const [product] = await db.select()
+              .from(vendorProducts)
+              .where(eq(vendorProducts.id, item.productId));
+            
+            if (product && product.trackInventory) {
+              // Reduce available quantity (this is a confirmed booking)
+              await db.update(vendorProducts)
+                .set({
+                  availableQuantity: sql`${vendorProducts.availableQuantity} - ${item.quantity}`,
+                  updatedAt: new Date(),
+                })
+                .where(eq(vendorProducts.id, item.productId));
+            }
+          }
+        }
+      }
+      // On decline, we don't need to do anything since we check availability by date dynamically
+
+      // If accepted, create a contract with the vendor
+      if (response === "accept") {
+        // Check if contract already exists
+        const [existingContract] = await db.select()
+          .from(coupleVendorContracts)
+          .where(and(
+            eq(coupleVendorContracts.coupleId, coupleId),
+            eq(coupleVendorContracts.vendorId, offer.vendorId)
+          ));
+
+        if (!existingContract) {
+          await db.insert(coupleVendorContracts).values({
+            coupleId,
+            vendorId: offer.vendorId,
+            offerId: offer.id,
+            status: "active",
+          });
+        }
+      }
+
       // Notify vendor via message if there's a conversation
       if (offer.conversationId) {
+        const statusText = response === "accept" ? "akseptert" : "avslått";
         await db.insert(messages).values({
           conversationId: offer.conversationId,
           senderType: "couple",
           senderId: coupleId,
-          body: `✅ Tilbud "${offer.title}" er avslått`,
+          body: `✅ Tilbud "${offer.title}" er ${statusText}`,
         });
 
         await db.update(conversations)
@@ -6800,8 +4233,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get offers for a couple
   app.get("/api/couple/offers", async (req: Request, res: Response) => {
     try {
-      const coupleId = await checkCoupleAuth(req, res);
-      if (!coupleId) return;
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ error: "Ikke autentisert" });
+      }
+
+      // Check couple session
+      let coupleId = COUPLE_SESSIONS.get(token)?.coupleId;
+      if (!coupleId) {
+        const [session] = await db.select()
+          .from(coupleSessions)
+          .where(eq(coupleSessions.token, token));
+
+        if (!session || session.expiresAt < new Date()) {
+          return res.status(401).json({ error: "Ugyldig økt" });
+        }
+        coupleId = session.coupleId;
+        COUPLE_SESSIONS.set(token, { coupleId, expiresAt: session.expiresAt });
+      }
 
       const offers = await db.select({
         offer: vendorOffers,
@@ -6816,7 +4265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(vendorOffers.coupleId, coupleId))
         .orderBy(desc(vendorOffers.createdAt));
 
-      // Get items for each offer
+      // Get items for each offer with product details
       const offersWithItems = await Promise.all(
         offers.map(async ({ offer, vendor }) => {
           const items = await db.select({
@@ -6828,16 +4277,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .where(eq(vendorOfferItems.offerId, offer.id))
             .orderBy(vendorOfferItems.sortOrder);
           
-          // Parse metadata for each product
-          const itemsWithMetadata = items.map(({ item, product }) => ({
+          // Format items with product availability info
+          const formattedItems = items.map(({ item, product }) => ({
             ...item,
             product: product ? {
-              ...product,
-              metadata: product.metadata ? JSON.parse(product.metadata) : null,
+              id: product.id,
+              title: product.title,
+              trackInventory: product.trackInventory,
+              availableQuantity: product.availableQuantity,
+              reservedQuantity: product.reservedQuantity,
+              bookingBuffer: product.bookingBuffer,
             } : null,
           }));
           
-          return { ...offer, vendor, items: itemsWithMetadata };
+          return { ...offer, vendor, items: formattedItems };
         })
       );
 
@@ -6850,10 +4303,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get couples that the vendor has conversations with (for offer recipient selection)
   app.get("/api/vendor/contacts", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
     try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ error: "Ikke autentisert" });
+      }
+
+      const session = VENDOR_SESSIONS.get(token);
+      if (!session || session.expiresAt < new Date()) {
+        return res.status(401).json({ error: "Ugyldig økt" });
+      }
 
       // Get all couples that have active conversations with this vendor
       const vendorConversations = await db.select({
@@ -6868,7 +4327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(conversations)
         .leftJoin(coupleProfiles, eq(conversations.coupleId, coupleProfiles.id))
         .where(and(
-          eq(conversations.vendorId, vendorId),
+          eq(conversations.vendorId, session.vendorId),
           eq(conversations.status, "active"),
           eq(conversations.deletedByVendor, false)
         ));
@@ -6888,10 +4347,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin Settings Routes
   // Admin Settings Routes - Public read for design settings (anyone can see the design)
   app.get("/api/admin/settings", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
     try {
-      const settings = await db.select().from(appSettings)
-        .where(inArray(appSettings.key, Array.from(ADMIN_SETTINGS_KEYS)));
+      const settings = await db.select().from(appSettings);
       res.json(settings);
     } catch (error) {
       console.error("Error fetching settings:", error);
@@ -6900,7 +4357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put("/api/admin/settings", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { settings: settingsArray } = req.body;
@@ -6931,7 +4388,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Statistics Routes
   app.get("/api/admin/statistics", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const [vendorCount] = await db.select({ count: sql<number>`count(*)` }).from(vendors);
@@ -6969,25 +4426,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Preview Routes - Allow admin to see the app from couple/vendor perspective
   app.get("/api/admin/preview/couple/users", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const coupleData = await db.select({
         id: coupleProfiles.id,
-        name: coupleProfiles.displayName,
+        name: coupleProfiles.partnerName,
         email: coupleProfiles.email,
       }).from(coupleProfiles).limit(50);
       
-      // Map the response to match frontend expectations
-      const mappedUsers = coupleData.map(user => ({
-        id: user.id,
-        name: user.name || "Ukjent brudepar",
-        email: user.email,
-      }));
-      
       res.json({
         role: "couple",
-        users: mappedUsers,
+        users: coupleData,
       });
     } catch (error) {
       console.error("Error fetching couple list:", error);
@@ -6996,30 +4446,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/admin/preview/vendor/users", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const vendorData = await db.select({
         id: vendors.id,
-        name: vendors.businessName,
+        name: vendors.companyName,
         email: vendors.email,
-        categoryId: vendors.categoryId,
+        category: vendors.category,
       })
         .from(vendors)
         .where(eq(vendors.status, "approved"))
         .limit(50);
       
-      // Map the response to match frontend expectations
-      const mappedUsers = vendorData.map(user => ({
-        id: user.id,
-        name: user.name || "Ukjent leverandør",
-        email: user.email,
-        categoryId: user.categoryId,
-      }));
-      
       res.json({
         role: "vendor",
-        users: mappedUsers,
+        users: vendorData,
       });
     } catch (error) {
       console.error("Error fetching vendor list:", error);
@@ -7029,7 +4471,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Impersonate endpoint - Creates a session token to use the app as a specific user
   app.post("/api/admin/preview/couple/impersonate", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { userId } = req.body;
@@ -7037,72 +4479,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "userId is required" });
       }
 
-      console.log("[Impersonate] Looking up couple with ID:", userId);
+      const couple = await db.select()
+        .from(coupleProfiles)
+        .where(eq(coupleProfiles.id, userId))
+        .limit(1);
 
-      if (!db) {
-        console.error("[Impersonate] Database connection not available");
-        return res.status(503).json({ error: "Databaseforbindelse ikke tilgjengelig" });
-      }
-
-      console.log("[Impersonate DEBUG] About to query database");
-
-      let coupleData: any[];
-      try {
-        // Use the exact same pattern as the working users endpoint
-        console.log("[Impersonate DEBUG] Executing select query");
-        coupleData = await db.select({
-          id: coupleProfiles.id,
-          name: coupleProfiles.displayName,
-          email: coupleProfiles.email,
-        }).from(coupleProfiles).limit(50);
-        console.log("[Impersonate DEBUG] Query succeeded, results:", coupleData?.length);
-      } catch (dbError) {
-        console.error("[Impersonate] Database query error:", dbError);
-        if (dbError instanceof Error) {
-          console.error("[Impersonate] Error message:", dbError.message);
-          console.error("[Impersonate] Error stack:", dbError.stack);
-        }
-        return res.status(503).json({ error: "Databasefeil ved oppslag" });
-      }
-
-      console.log("[Impersonate] Query result:", coupleData?.length ? "Found" : "Not found");
-
-      // Find the couple with matching ID
-      const couple = coupleData.find(c => c.id === userId);
-      
-      if (!couple) {
-        console.warn("[Impersonate] Couple not found for ID:", userId);
+      if (!couple || couple.length === 0) {
         return res.status(404).json({ error: "Brudepar ikke funnet" });
       }
 
       // Generate a preview session token
       const sessionToken = generateSessionToken();
-      const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
-
-      await db.insert(coupleSessions).values({
+      
+      // Store in a temporary cache with expiration (24 hours)
+      COUPLE_SESSIONS.set(sessionToken, {
         coupleId: userId,
-        token: sessionToken,
-        expiresAt,
-        isImpersonation: true,
-        impersonatedBy: "admin",
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       });
-
-      console.log("[Impersonate] Session created for couple:", userId);
 
       res.json({
         sessionToken,
         coupleId: userId,
-        coupleData: couple,
+        coupleData: couple[0],
       });
     } catch (error) {
-      console.error("[Impersonate] Error:", error instanceof Error ? error.message : String(error));
-      console.error("[Impersonate] Full error:", error);
+      console.error("Error impersonating couple:", error);
       res.status(500).json({ error: "Kunne ikke logge inn som brudepar" });
     }
   });
 
   app.post("/api/admin/preview/vendor/impersonate", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { userId } = req.body;
@@ -7110,73 +4517,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "userId is required" });
       }
 
-      console.log("[Impersonate Vendor] Looking up vendor with ID:", userId);
+      const vendor = await db.select()
+        .from(vendors)
+        .where(eq(vendors.id, userId))
+        .limit(1);
 
-      if (!db) {
-        console.error("[Impersonate Vendor] Database connection not available");
-        return res.status(503).json({ error: "Databaseforbindelse ikke tilgjengelig" });
-      }
-
-      let vendorData: any[];
-      try {
-        // Use the exact same pattern as the working users endpoint
-        vendorData = await db.select({
-          id: vendors.id,
-          name: vendors.businessName,
-          email: vendors.email,
-          categoryId: vendors.categoryId,
-        })
-          .from(vendors)
-          .where(eq(vendors.status, "approved"))
-          .limit(50);
-      } catch (dbError) {
-        console.error("[Impersonate Vendor] Database query error:", dbError);
-        if (dbError instanceof Error) {
-          console.error("[Impersonate Vendor] Error message:", dbError.message);
-          console.error("[Impersonate Vendor] Error stack:", dbError.stack);
-        }
-        return res.status(503).json({ error: "Databasefeil ved oppslag" });
-      }
-
-      console.log("[Impersonate Vendor] Query result:", vendorData?.length ? "Found" : "Not found");
-
-      // Find the vendor with matching ID
-      const vendor = vendorData.find(v => v.id === userId);
-
-      if (!vendor) {
-        console.warn("[Impersonate Vendor] Vendor not found for ID:", userId);
+      if (!vendor || vendor.length === 0) {
         return res.status(404).json({ error: "Leverandør ikke funnet" });
       }
 
       // Generate a preview session token
       const sessionToken = generateSessionToken();
-      const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
-
-      await db.insert(vendorSessions).values({
+      
+      // Store in a temporary cache with expiration (24 hours)
+      VENDOR_SESSIONS.set(sessionToken, {
         vendorId: userId,
-        token: sessionToken,
-        expiresAt,
-        isImpersonation: true,
-        impersonatedBy: "admin",
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       });
-
-      console.log("[Impersonate Vendor] Session created for vendor:", userId);
 
       res.json({
         sessionToken,
         vendorId: userId,
-        vendorData: vendor,
+        vendorData: vendor[0],
       });
     } catch (error) {
-      console.error("[Impersonate Vendor] Error:", error instanceof Error ? error.message : String(error));
-      console.error("[Impersonate Vendor] Full error:", error);
+      console.error("Error impersonating vendor:", error);
       res.status(500).json({ error: "Kunne ikke logge inn som leverandør" });
     }
   });
 
   // Background job: Expire old offers and notify couples
   app.post("/api/admin/jobs/expire-offers", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       // Find all pending offers that have expired
@@ -7225,7 +4598,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Categories Management
   app.post("/api/admin/inspiration-categories", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { name, icon, sortOrder } = req.body;
@@ -7242,7 +4615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put("/api/admin/inspiration-categories/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { id } = req.params;
@@ -7260,7 +4633,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/admin/inspiration-categories/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { id } = req.params;
@@ -7274,24 +4647,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Vendor Categories Management
   app.post("/api/admin/vendor-categories", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
-      const { name, icon, description, slug, dashboardKey, sortOrder, applicableEventTypes } = req.body;
-      const resolvedSlug = slug && String(slug).trim().length > 0 ? slugifyCategory(String(slug)) : slugifyCategory(String(name || ""));
-      const resolvedDashboardKey = dashboardKey && String(dashboardKey).trim().length > 0 ? String(dashboardKey) : resolvedSlug || null;
-      const resolvedSortOrder = Number.isFinite(Number(sortOrder)) ? Number(sortOrder) : 0;
-      const resolvedEventTypes = Array.isArray(applicableEventTypes) && applicableEventTypes.length > 0
-        ? applicableEventTypes
-        : null;
+      const { name, icon, description } = req.body;
       const [newCategory] = await db.insert(vendorCategories).values({
         name,
         icon,
         description: description || null,
-        slug: resolvedSlug || null,
-        dashboardKey: resolvedDashboardKey || null,
-        sortOrder: resolvedSortOrder,
-        applicableEventTypes: resolvedEventTypes,
       }).returning();
       res.json(newCategory);
     } catch (error) {
@@ -7301,28 +4664,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put("/api/admin/vendor-categories/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { id } = req.params;
-      const { name, icon, description, slug, dashboardKey, sortOrder, applicableEventTypes } = req.body;
-      const resolvedSlug = slug && String(slug).trim().length > 0 ? slugifyCategory(String(slug)) : slugifyCategory(String(name || ""));
-      const resolvedDashboardKey = dashboardKey && String(dashboardKey).trim().length > 0 ? String(dashboardKey) : resolvedSlug || null;
-      const resolvedSortOrder = Number.isFinite(Number(sortOrder)) ? Number(sortOrder) : 0;
-      const resolvedEventTypes = Array.isArray(applicableEventTypes) && applicableEventTypes.length > 0
-        ? applicableEventTypes
-        : null;
+      const { name, icon, description } = req.body;
       
       await db.update(vendorCategories)
-        .set({
-          name,
-          icon,
-          description,
-          slug: resolvedSlug || null,
-          dashboardKey: resolvedDashboardKey || null,
-          sortOrder: resolvedSortOrder,
-          applicableEventTypes: resolvedEventTypes,
-        })
+        .set({ name, icon, description })
         .where(eq(vendorCategories.id, id));
       
       res.json({ message: "Kategori oppdatert" });
@@ -7333,7 +4682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/admin/vendor-categories/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { id } = req.params;
@@ -7347,7 +4696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Couples Management
   app.get("/api/admin/couples", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const couples = await db.select().from(coupleProfiles).orderBy(desc(coupleProfiles.createdAt));
@@ -7359,7 +4708,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/admin/couples/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { id } = req.params;
@@ -7377,7 +4726,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Full Vendor Update
   app.put("/api/admin/vendors/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { id } = req.params;
@@ -7406,25 +4755,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/admin/vendors/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    if (!checkAdminAuth(req, res)) return;
     
     try {
       const { id } = req.params;
-      await db.transaction(async (tx) => {
-        // Delete related data
-        await tx.delete(vendorFeatures).where(eq(vendorFeatures.vendorId, id));
-        await tx.delete(vendorInspirationCategories).where(eq(vendorInspirationCategories.vendorId, id));
-        await tx.delete(deliveryItems).where(sql`delivery_id IN (SELECT id FROM deliveries WHERE vendor_id = ${id})`);
-        await tx.delete(deliveries).where(eq(deliveries.vendorId, id));
-        await tx.delete(inspirationMedia).where(sql`inspiration_id IN (SELECT id FROM inspirations WHERE vendor_id = ${id})`);
-        await tx.delete(inspirations).where(eq(inspirations.vendorId, id));
-        await tx.delete(messages).where(sql`conversation_id IN (SELECT id FROM conversations WHERE vendor_id = ${id})`);
-        await tx.delete(conversations).where(eq(conversations.vendorId, id));
-        await tx.delete(vendorOfferItems).where(sql`offer_id IN (SELECT id FROM vendor_offers WHERE vendor_id = ${id})`);
-        await tx.delete(vendorOffers).where(eq(vendorOffers.vendorId, id));
-        await tx.delete(vendorProducts).where(eq(vendorProducts.vendorId, id));
-        await tx.delete(vendors).where(eq(vendors.id, id));
-      });
+      // Delete related data
+      await db.delete(vendorFeatures).where(eq(vendorFeatures.vendorId, id));
+      await db.delete(vendorInspirationCategories).where(eq(vendorInspirationCategories.vendorId, id));
+      await db.delete(deliveryItems).where(sql`delivery_id IN (SELECT id FROM deliveries WHERE vendor_id = ${id})`);
+      await db.delete(deliveries).where(eq(deliveries.vendorId, id));
+      await db.delete(inspirationMedia).where(sql`inspiration_id IN (SELECT id FROM inspirations WHERE vendor_id = ${id})`);
+      await db.delete(inspirations).where(eq(inspirations.vendorId, id));
+      await db.delete(messages).where(sql`conversation_id IN (SELECT id FROM conversations WHERE vendor_id = ${id})`);
+      await db.delete(conversations).where(eq(conversations.vendorId, id));
+      await db.delete(vendorOfferItems).where(sql`offer_id IN (SELECT id FROM vendor_offers WHERE vendor_id = ${id})`);
+      await db.delete(vendorOffers).where(eq(vendorOffers.vendorId, id));
+      await db.delete(vendorProducts).where(eq(vendorProducts.vendorId, id));
+      await db.delete(vendors).where(eq(vendors.id, id));
       res.json({ message: "Leverandør slettet" });
     } catch (error) {
       console.error("Error deleting vendor:", error);
@@ -7464,23 +4811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Generate unique access token and code
       const accessToken = crypto.randomBytes(32).toString('hex');
-      let accessCode = "";
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const candidate = crypto.randomInt(0, 100000000).toString().padStart(8, "0");
-        const [existing] = await db.select({ id: coordinatorInvitations.id })
-          .from(coordinatorInvitations)
-          .where(and(
-            eq(coordinatorInvitations.accessCode, candidate),
-            eq(coordinatorInvitations.status, "active")
-          ));
-        if (!existing) {
-          accessCode = candidate;
-          break;
-        }
-      }
-      if (!accessCode) {
-        return res.status(500).json({ error: "Kunne ikke generere tilgangskode" });
-      }
+      const accessCode = Math.random().toString().slice(2, 8); // 6-digit code
       
       const [invitation] = await db.insert(coordinatorInvitations)
         .values({
@@ -7725,14 +5056,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!existing) {
         return res.status(404).json({ error: "Ugyldig invitasjon" });
-      }
-
-      if (!{"pending": true, "sent": true}[existing.status as string]) {
-        return res.status(409).json({ error: "Invitasjonen er allerede besvart" });
-      }
-
-      if (typeof attending !== "boolean") {
-        return res.status(400).json({ error: "Ugyldig svar" });
       }
 
       const expires = existing.expiresAt ? new Date(existing.expiresAt) : null;
@@ -7982,22 +5305,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Coordinator access by code
   app.post("/api/coordinator/access-by-code", async (req: Request, res: Response) => {
     try {
-      const COORDINATOR_CODE_LIMIT_MAX = 20;
-      const COORDINATOR_CODE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
-      const key = req.ip || "unknown";
-      const nowMs = Date.now();
-      const store = (req.app as any).locals.coordinatorCodeRateLimit || new Map<string, { count: number; resetAt: number }>();
-      (req.app as any).locals.coordinatorCodeRateLimit = store;
-      const entry = store.get(key);
-      if (!entry || entry.resetAt <= nowMs) {
-        store.set(key, { count: 1, resetAt: nowMs + COORDINATOR_CODE_LIMIT_WINDOW_MS });
-      } else {
-        entry.count += 1;
-        if (entry.count > COORDINATOR_CODE_LIMIT_MAX) {
-          return res.status(429).json({ error: "For mange forsok. Prov igjen senere." });
-        }
-      }
-
       const { code } = req.body;
       
       const [invitation] = await db.select()
@@ -8009,13 +5316,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!invitation) {
         return res.status(404).json({ error: "Ugyldig kode" });
-      }
-
-      if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
-        await db.update(coordinatorInvitations)
-          .set({ status: "expired" })
-          .where(eq(coordinatorInvitations.id, invitation.id));
-        return res.status(403).json({ error: "Tilgangen har utløpt" });
       }
       
       // Return the token for redirect
@@ -8049,14 +5349,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Helper to notify vendors about changes (defined early for use in couple endpoints)
-  async function notifyVendorsOfChangeInternal(coupleId: string, changeType: 'schedule' | 'speech' | 'table_seating' | 'music', actorName: string, description: string) {
+  async function notifyVendorsOfChangeInternal(coupleId: string, changeType: 'schedule' | 'speech', actorName: string, description: string) {
     try {
       const contracts = await db.select({
         vendorId: coupleVendorContracts.vendorId,
         notifyOnScheduleChanges: coupleVendorContracts.notifyOnScheduleChanges,
         notifyOnSpeechChanges: coupleVendorContracts.notifyOnSpeechChanges,
-        notifyOnTableChanges: coupleVendorContracts.notifyOnTableChanges,
-        notifyOnMusicChanges: coupleVendorContracts.notifyOnMusicChanges,
       })
         .from(coupleVendorContracts)
         .where(and(
@@ -8067,27 +5365,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [couple] = await db.select({
         displayName: coupleProfiles.displayName,
       }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-
-      const notifyConfig: Record<string, { field: keyof typeof contracts[0]; type: string; title: string; label: string }> = {
-        schedule: { field: 'notifyOnScheduleChanges', type: 'schedule_changed', title: 'Programendring', label: 'programmet' },
-        speech: { field: 'notifyOnSpeechChanges', type: 'speech_changed', title: 'Talelisteendring', label: 'talelisten' },
-        table_seating: { field: 'notifyOnTableChanges', type: 'table_changed', title: 'Bordplasseringsendring', label: 'bordplasseringen' },
-        music: { field: 'notifyOnMusicChanges', type: 'music_changed', title: 'Musikkendring', label: 'musikkplanen' },
-      };
-
-      const config = notifyConfig[changeType];
-      if (!config) return;
       
       for (const contract of contracts) {
-        const shouldNotify = contract[config.field];
+        const shouldNotify = changeType === 'schedule' 
+          ? contract.notifyOnScheduleChanges 
+          : contract.notifyOnSpeechChanges;
         
         if (shouldNotify) {
           await db.insert(notifications).values({
             recipientType: "vendor",
             recipientId: contract.vendorId,
-            type: config.type,
-            title: config.title,
-            body: `${actorName} har endret ${config.label} for ${couple?.displayName || 'arrangøren'}. ${description}`,
+            type: changeType === 'schedule' ? "schedule_changed" : "speech_changed",
+            title: changeType === 'schedule' ? "Programendring" : "Talelisteendring",
+            body: `${actorName} har endret ${changeType === 'schedule' ? 'bryllupsprogrammet' : 'talelisten'} for ${couple?.displayName || 'brudeparet'}. ${description}`,
             actorType: "couple",
             actorId: coupleId,
             actorName: actorName,
@@ -8273,22 +5563,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Read-only seating chart for coordinator (toastmaster needs table overview)
-  app.get("/api/coordinator/seating", async (req: Request, res: Response) => {
-    const coupleId = await checkCoordinatorAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const key = `couple_venue_seating_${coupleId}`;
-      const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
-      const seating = setting?.value ? JSON.parse(setting.value) : { tables: [] };
-      res.json(seating);
-    } catch (error) {
-      console.error("Error fetching coordinator seating:", error);
-      res.status(500).json({ error: "Kunne ikke hente bordplan" });
-    }
-  });
-
   // ==========================================
   // Wedding Guests Endpoints (Server-side storage)
   // ==========================================
@@ -8463,11 +5737,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
       
-      // Notify vendors about new table
-      const [cp] = await db.select({ displayName: coupleProfiles.displayName })
-        .from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-      await notifyVendorsOfChangeInternal(coupleId, 'table_seating', cp?.displayName || 'Arrangøren', `Nytt bord "${table.name}" ble opprettet.`);
-      
       res.status(201).json({ ...table, guests: [] });
     } catch (error) {
       console.error("Error creating table:", error);
@@ -8508,9 +5777,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Notify vendors who can view table seating
-      const [cp] = await db.select({ displayName: coupleProfiles.displayName })
+      const contracts = await db.select({
+        vendorId: coupleVendorContracts.vendorId,
+        notifyOnTableChanges: coupleVendorContracts.notifyOnTableChanges,
+      })
+        .from(coupleVendorContracts)
+        .where(and(
+          eq(coupleVendorContracts.coupleId, coupleId),
+          eq(coupleVendorContracts.status, "active"),
+          eq(coupleVendorContracts.canViewTableSeating, true)
+        ));
+      
+      const [couple] = await db.select({ displayName: coupleProfiles.displayName })
         .from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-      await notifyVendorsOfChangeInternal(coupleId, 'table_seating', cp?.displayName || 'Arrangøren', `"${updated.name}" ble endret.`);
+      
+      for (const contract of contracts) {
+        if (contract.notifyOnTableChanges) {
+          await db.insert(notifications).values({
+            recipientType: "vendor",
+            recipientId: contract.vendorId,
+            type: "table_changed",
+            title: "Bordplassering endret",
+            body: `${couple?.displayName || 'Brudeparet'} har endret "${updated.name}".`,
+            actorType: "couple",
+            actorId: coupleId,
+            actorName: couple?.displayName || 'Brudeparet',
+          });
+        }
+      }
       
       res.json(updated);
     } catch (error) {
@@ -8534,23 +5828,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(tableGuestAssignments.coupleId, coupleId)
         ));
       
-      // Get table name before deleting for notification
-      const [deleting] = await db.select({ name: weddingTables.name })
-        .from(weddingTables)
-        .where(and(eq(weddingTables.id, id), eq(weddingTables.coupleId, coupleId)));
-      
       await db.delete(weddingTables)
         .where(and(
           eq(weddingTables.id, id),
           eq(weddingTables.coupleId, coupleId)
         ));
-      
-      // Notify vendors
-      if (deleting) {
-        const [cp] = await db.select({ displayName: coupleProfiles.displayName })
-          .from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-        await notifyVendorsOfChangeInternal(coupleId, 'table_seating', cp?.displayName || 'Arrangøren', `"${deleting.name}" ble fjernet.`);
-      }
       
       res.json({ message: "Bord slettet" });
     } catch (error) {
@@ -9133,7 +6415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!coupleId) return;
 
     try {
-      const { vendorId, offerId, vendorRole, notifyOnScheduleChanges, notifyOnSpeechChanges, notifyOnTableChanges, notifyOnMusicChanges, canViewSchedule, canViewSpeeches, canViewTableSeating, canViewMusic, canViewCoordinators, canViewReviews } = req.body;
+      const { vendorId, offerId, vendorRole, notifyOnScheduleChanges, notifyOnSpeechChanges, canViewSchedule, canViewSpeeches } = req.body;
       
       // Check if contract already exists
       const [existing] = await db.select()
@@ -9156,14 +6438,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           vendorRole,
           notifyOnScheduleChanges: notifyOnScheduleChanges ?? true,
           notifyOnSpeechChanges: notifyOnSpeechChanges ?? true,
-          notifyOnTableChanges: notifyOnTableChanges ?? false,
-          notifyOnMusicChanges: notifyOnMusicChanges ?? false,
           canViewSchedule: canViewSchedule ?? true,
           canViewSpeeches: canViewSpeeches ?? false,
-          canViewTableSeating: canViewTableSeating ?? false,
-          canViewMusic: canViewMusic ?? false,
-          canViewCoordinators: canViewCoordinators ?? false,
-          canViewReviews: canViewReviews ?? false,
         })
         .returning();
       
@@ -9196,96 +6472,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { id } = req.params;
-      const { notifyOnScheduleChanges, notifyOnSpeechChanges, notifyOnTableChanges, notifyOnMusicChanges, canViewSchedule, canViewSpeeches, canViewTableSeating, canViewMusic, canViewCoordinators, canViewReviews, status } = req.body;
-      
-      // Get current contract to check if status is changing to cancelled
-      const [currentContract] = await db.select()
-        .from(coupleVendorContracts)
-        .where(and(
-          eq(coupleVendorContracts.id, id),
-          eq(coupleVendorContracts.coupleId, coupleId)
-        ));
-      
-      if (!currentContract) {
-        return res.status(404).json({ error: "Avtale ikke funnet" });
-      }
-      
-      // If status is changing to cancelled, restore inventory in a transaction
-      if (status === "cancelled" && currentContract.status !== "cancelled") {
-        try {
-          await db.transaction(async (tx) => {
-            // Get offer items to restore inventory
-            if (currentContract.offerId) {
-              const offerItems = await tx.select()
-                .from(vendorOfferItems)
-                .where(eq(vendorOfferItems.offerId, currentContract.offerId));
-              
-              for (const item of offerItems) {
-                if (!item.productId) continue;
-                
-                const [product] = await tx.select()
-                  .from(vendorProducts)
-                  .where(eq(vendorProducts.id, item.productId));
-                
-                if (product?.trackInventory && product.availableQuantity !== null) {
-                  // Restore the quantity
-                  const restoredQuantity = product.availableQuantity + (item.quantity || 0);
-                  await tx.update(vendorProducts)
-                    .set({ 
-                      availableQuantity: restoredQuantity,
-                      updatedAt: new Date()
-                    })
-                    .where(eq(vendorProducts.id, item.productId));
-                }
-              }
-            }
-            
-            // Update contract status within transaction
-            await tx.update(coupleVendorContracts)
-              .set({
-                notifyOnScheduleChanges,
-                notifyOnSpeechChanges,
-                notifyOnTableChanges,
-                notifyOnMusicChanges,
-                canViewSchedule,
-                canViewSpeeches,
-                canViewTableSeating,
-                canViewMusic,
-                canViewCoordinators,
-                canViewReviews,
-                status,
-                updatedAt: new Date(),
-              })
-              .where(and(
-                eq(coupleVendorContracts.id, id),
-                eq(coupleVendorContracts.coupleId, coupleId)
-              ));
-          });
-          
-          // Get updated contract for response
-          const [updated] = await db.select()
-            .from(coupleVendorContracts)
-            .where(eq(coupleVendorContracts.id, id));
-          
-          return res.json(updated);
-        } catch (txError: any) {
-          console.error("Transaction error cancelling contract:", txError);
-          return res.status(500).json({ error: "Kunne ikke kansellere avtale" });
-        }
-      }
+      const { notifyOnScheduleChanges, notifyOnSpeechChanges, canViewSchedule, canViewSpeeches, status } = req.body;
       
       const [updated] = await db.update(coupleVendorContracts)
         .set({
           notifyOnScheduleChanges,
           notifyOnSpeechChanges,
-          notifyOnTableChanges,
-          notifyOnMusicChanges,
           canViewSchedule,
           canViewSpeeches,
-          canViewTableSeating,
-          canViewMusic,
-          canViewCoordinators,
-          canViewReviews,
           status,
           updatedAt: new Date(),
         })
@@ -9294,6 +6488,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(coupleVendorContracts.coupleId, coupleId)
         ))
         .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Avtale ikke funnet" });
+      }
       
       res.json(updated);
     } catch (error) {
@@ -9537,9 +6735,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         actorId: vendorId,
         actorName: vendor?.businessName || "Leverandør",
         action: "schedule_suggestion",
-        entityType: "schedule_suggestion",
-        entityId: vendorId,
-        newValue: JSON.stringify({ message: message.substring(0, 100) }),
+        description: `Foreslo endring: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`,
       });
 
       res.json({ success: true, message: "Forslag sendt til brudeparet" });
@@ -9849,29 +7045,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Public endpoint to get vendor products (for couple viewing)
-  app.get("/api/vendors/:vendorId/products", async (req: Request, res: Response) => {
-    try {
-      const { vendorId } = req.params;
-
-      const products = await db.select()
-        .from(vendorProducts)
-        .where(eq(vendorProducts.vendorId, vendorId))
-        .orderBy(vendorProducts.createdAt);
-
-      // Parse metadata for each product
-      const productsWithMetadata = products.map(p => ({
-        ...p,
-        metadata: p.metadata ? JSON.parse(p.metadata) : null,
-      }));
-
-      res.json(productsWithMetadata);
-    } catch (error) {
-      console.error("Error fetching vendor products:", error);
-      res.status(500).json({ error: "Kunne ikke hente produkter" });
-    }
-  });
-
   // Vendor: Get reviews received
   app.get("/api/vendor/reviews", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
@@ -9934,9 +7107,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/vendor/reviews/:reviewId/response", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
-
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const { reviewId } = req.params;
@@ -10031,9 +7201,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
       const { contractId } = req.params;
 
@@ -10103,9 +7270,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
-
     try {
       const { googleReviewUrl } = req.body;
 
@@ -10127,7 +7291,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== APP FEEDBACK ====================
 
-  // Submit feedback to Evendi (couple)
+  // Submit feedback to Wedflow (couple)
   app.post("/api/couple/feedback", async (req: Request, res: Response) => {
     const coupleId = await checkCoupleAuth(req, res);
     if (!coupleId) return;
@@ -10154,13 +7318,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Submit feedback to Evendi (vendor)
+  // Submit feedback to Wedflow (vendor)
   app.post("/api/vendor/feedback", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
-
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const { category, subject, message } = req.body;
@@ -10186,7 +7347,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Get all feedback (protected by admin secret)
   app.get("/api/admin/feedback", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
 
     try {
       const feedback = await db.select()
@@ -10202,7 +7366,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Update feedback status
   app.patch("/api/admin/feedback/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
 
     try {
       const { id } = req.params;
@@ -10222,7 +7389,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Approve/reject vendor review
   app.patch("/api/admin/reviews/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
 
     try {
       const { id } = req.params;
@@ -10247,7 +7417,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Get pending reviews for moderation
   app.get("/api/admin/reviews/pending", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
 
     try {
       const reviews = await db.select({
@@ -10277,9 +7450,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/vendor/contracts/:id/complete", async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
-
-    // Check subscription access
-    if (!(await checkVendorSubscriptionAccess(vendorId, res))) return;
 
     try {
       const { id } = req.params;
@@ -10329,7 +7499,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Admin: Get all checklists (all couples)
   app.get("/api/admin/checklists", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
 
     try {
       const checklists = await db.select({
@@ -10360,7 +7533,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Get checklist for specific couple
   app.get("/api/admin/checklists/:coupleId", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
 
     try {
       const { coupleId } = req.params;
@@ -10383,7 +7559,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Update any checklist task
   app.patch("/api/admin/checklists/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
 
     try {
       const { id } = req.params;
@@ -10420,7 +7599,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin: Delete any checklist task
   app.delete("/api/admin/checklists/:id", async (req: Request, res: Response) => {
-    if (!(await checkAdminAuth(req, res))) return;
+    const adminSecret = req.headers["x-admin-secret"];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: "Ikke autorisert" });
+    }
 
     try {
       const { id } = req.params;
@@ -10518,34 +7700,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Create linked reminder if requested
-      const updated = await db.transaction(async (tx) => {
-        if (createReminder && monthsBefore !== undefined) {
-          const [couple] = await tx.select().from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+      if (createReminder && monthsBefore !== undefined) {
+        const [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
+        
+        if (couple?.weddingDate) {
+          const weddingDate = new Date(couple.weddingDate);
+          const reminderDate = new Date(weddingDate);
+          reminderDate.setMonth(reminderDate.getMonth() - monthsBefore);
           
-          if (couple?.weddingDate) {
-            const weddingDate = new Date(couple.weddingDate);
-            const reminderDate = new Date(weddingDate);
-            reminderDate.setMonth(reminderDate.getMonth() - monthsBefore);
-            
-            const [reminder] = await tx.insert(reminders).values({
-              coupleId,
-              title: title || existing.title,
-              description: notes || `Fra sjekkliste: ${title || existing.title}`,
-              reminderDate: reminderDate,
-              category: "planning",
-            }).returning();
+          const [reminder] = await db.insert(reminders).values({
+            title: title || existing.title,
+            description: notes || `Fra sjekkliste: ${title || existing.title}`,
+            reminderDate: reminderDate,
+            category: "planning",
+          }).returning();
 
-            updateData.linkedReminderId = reminder.id;
-          }
+          updateData.linkedReminderId = reminder.id;
         }
+      }
 
-        const [updated] = await tx.update(checklistTasks)
-          .set(updateData)
-          .where(eq(checklistTasks.id, id))
-          .returning();
-
-        return updated;
-      });
+      const [updated] = await db.update(checklistTasks)
+        .set(updateData)
+        .where(eq(checklistTasks.id, id))
+        .returning();
 
       res.json(updated);
     } catch (error) {
@@ -10645,1891 +7822,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ===== BUDGET ENDPOINTS =====
-
-  // Get couple's budget settings
-  app.get("/api/couple/budget/settings", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [settings] = await db.select()
-        .from(coupleBudgetSettings)
-        .where(eq(coupleBudgetSettings.coupleId, coupleId));
-
-      res.json(settings || { totalBudget: 0, currency: "NOK" });
-    } catch (error) {
-      console.error("Error fetching budget settings:", error);
-      res.status(500).json({ error: "Kunne ikke hente budsjettinnstillinger" });
-    }
-  });
-
-  // Update couple's budget settings
-  app.put("/api/couple/budget/settings", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { totalBudget, currency } = req.body;
-
-      const [existing] = await db.select()
-        .from(coupleBudgetSettings)
-        .where(eq(coupleBudgetSettings.coupleId, coupleId));
-
-      if (existing) {
-        const [updated] = await db.update(coupleBudgetSettings)
-          .set({ totalBudget, currency, updatedAt: new Date() })
-          .where(eq(coupleBudgetSettings.coupleId, coupleId))
-          .returning();
-        res.json(updated);
-      } else {
-        const [created] = await db.insert(coupleBudgetSettings).values({
-          coupleId,
-          totalBudget,
-          currency: currency || "NOK",
-        }).returning();
-        res.json(created);
-      }
-    } catch (error) {
-      console.error("Error updating budget settings:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere budsjettinnstillinger" });
-    }
-  });
-
-  // Get couple's budget items
-  app.get("/api/couple/budget/items", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const items = await db.select()
-        .from(coupleBudgetItems)
-        .where(eq(coupleBudgetItems.coupleId, coupleId))
-        .orderBy(coupleBudgetItems.sortOrder, coupleBudgetItems.createdAt);
-
-      res.json(items);
-    } catch (error) {
-      console.error("Error fetching budget items:", error);
-      res.status(500).json({ error: "Kunne ikke hente budsjettlinjer" });
-    }
-  });
-
-  // Create budget item
-  app.post("/api/couple/budget/items", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const parsed = createBudgetItemSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Ugyldig data", details: parsed.error.flatten() });
-      }
-
-      const [item] = await db.insert(coupleBudgetItems).values({
-        coupleId,
-        ...parsed.data,
-      }).returning();
-
-      res.json(item);
-    } catch (error) {
-      console.error("Error creating budget item:", error);
-      res.status(500).json({ error: "Kunne ikke opprette budsjettlinje" });
-    }
-  });
-
-  // Update budget item
-  app.patch("/api/couple/budget/items/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const { category, label, estimatedCost, actualCost, isPaid, notes, sortOrder } = req.body;
-
-      const [existing] = await db.select()
-        .from(coupleBudgetItems)
-        .where(and(eq(coupleBudgetItems.id, id), eq(coupleBudgetItems.coupleId, coupleId)));
-
-      if (!existing) {
-        return res.status(404).json({ error: "Fant ikke budsjettlinje" });
-      }
-
-      const updateData: any = { updatedAt: new Date() };
-      if (category !== undefined) updateData.category = category;
-      if (label !== undefined) updateData.label = label;
-      if (estimatedCost !== undefined) updateData.estimatedCost = estimatedCost;
-      if (actualCost !== undefined) updateData.actualCost = actualCost;
-      if (isPaid !== undefined) updateData.isPaid = isPaid;
-      if (notes !== undefined) updateData.notes = notes;
-      if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
-
-      const [updated] = await db.update(coupleBudgetItems)
-        .set(updateData)
-        .where(eq(coupleBudgetItems.id, id))
-        .returning();
-
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating budget item:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere budsjettlinje" });
-    }
-  });
-
-  // Delete budget item
-  app.delete("/api/couple/budget/items/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-
-      await db.delete(coupleBudgetItems)
-        .where(and(eq(coupleBudgetItems.id, id), eq(coupleBudgetItems.coupleId, coupleId)));
-
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting budget item:", error);
-      res.status(500).json({ error: "Kunne ikke slette budsjettlinje" });
-    }
-  });
-
-  // ===== DRESS TRACKING ENDPOINTS =====
-
-  // Get all dress data
-  app.get("/api/couple/dress", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [appointments, favorites, timeline] = await Promise.all([
-        db.select().from(coupleDressAppointments)
-          .where(eq(coupleDressAppointments.coupleId, coupleId))
-          .orderBy(coupleDressAppointments.date),
-        db.select().from(coupleDressFavorites)
-          .where(eq(coupleDressFavorites.coupleId, coupleId))
-          .orderBy(coupleDressFavorites.createdAt),
-        db.select().from(coupleDressTimeline)
-          .where(eq(coupleDressTimeline.coupleId, coupleId)),
-      ]);
-
-      res.json({
-        appointments,
-        favorites,
-        timeline: timeline[0] || null,
-      });
-    } catch (error) {
-      console.error("Error fetching dress data:", error);
-      res.status(500).json({ error: "Kunne ikke hente kjoledata" });
-    }
-  });
-
-  // Create dress appointment
-  app.post("/api/couple/dress/appointments", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const parsed = createDressAppointmentSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Ugyldig data", details: parsed.error.flatten() });
-      }
-
-      const [appointment] = await db.insert(coupleDressAppointments).values({
-        coupleId,
-        ...parsed.data,
-      }).returning();
-
-      res.json(appointment);
-    } catch (error) {
-      console.error("Error creating dress appointment:", error);
-      res.status(500).json({ error: "Kunne ikke opprette avtale" });
-    }
-  });
-
-  // Update dress appointment
-  app.patch("/api/couple/dress/appointments/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const { shopName, date, time, notes, completed } = req.body;
-
-      const updateData: any = { updatedAt: new Date() };
-      if (shopName !== undefined) updateData.shopName = shopName;
-      if (date !== undefined) updateData.date = date;
-      if (time !== undefined) updateData.time = time;
-      if (notes !== undefined) updateData.notes = notes;
-      if (completed !== undefined) updateData.completed = completed;
-
-      const [updated] = await db.update(coupleDressAppointments)
-        .set(updateData)
-        .where(and(eq(coupleDressAppointments.id, id), eq(coupleDressAppointments.coupleId, coupleId)))
-        .returning();
-
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating dress appointment:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere avtale" });
-    }
-  });
-
-  // Delete dress appointment
-  app.delete("/api/couple/dress/appointments/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleDressAppointments)
-        .where(and(eq(coupleDressAppointments.id, id), eq(coupleDressAppointments.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting dress appointment:", error);
-      res.status(500).json({ error: "Kunne ikke slette avtale" });
-    }
-  });
-
-  // Create dress favorite
-  app.post("/api/couple/dress/favorites", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const parsed = createDressFavoriteSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Ugyldig data", details: parsed.error.flatten() });
-      }
-
-      const [favorite] = await db.insert(coupleDressFavorites).values({
-        coupleId,
-        ...parsed.data,
-      }).returning();
-
-      res.json(favorite);
-    } catch (error) {
-      console.error("Error creating dress favorite:", error);
-      res.status(500).json({ error: "Kunne ikke lagre kjole" });
-    }
-  });
-
-  // Update dress favorite
-  app.patch("/api/couple/dress/favorites/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const { name, designer, shop, price, imageUrl, notes, isFavorite } = req.body;
-
-      const updateData: any = { updatedAt: new Date() };
-      if (name !== undefined) updateData.name = name;
-      if (designer !== undefined) updateData.designer = designer;
-      if (shop !== undefined) updateData.shop = shop;
-      if (price !== undefined) updateData.price = price;
-      if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
-      if (notes !== undefined) updateData.notes = notes;
-      if (isFavorite !== undefined) updateData.isFavorite = isFavorite;
-
-      const [updated] = await db.update(coupleDressFavorites)
-        .set(updateData)
-        .where(and(eq(coupleDressFavorites.id, id), eq(coupleDressFavorites.coupleId, coupleId)))
-        .returning();
-
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating dress favorite:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere kjole" });
-    }
-  });
-
-  // Delete dress favorite
-  app.delete("/api/couple/dress/favorites/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleDressFavorites)
-        .where(and(eq(coupleDressFavorites.id, id), eq(coupleDressFavorites.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting dress favorite:", error);
-      res.status(500).json({ error: "Kunne ikke slette kjole" });
-    }
-  });
-
-  // Update dress timeline
-  app.put("/api/couple/dress/timeline", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { ordered, orderedDate, firstFitting, firstFittingDate, alterations, alterationsDate, finalFitting, finalFittingDate, pickup, pickupDate, budget } = req.body;
-
-      const [existing] = await db.select()
-        .from(coupleDressTimeline)
-        .where(eq(coupleDressTimeline.coupleId, coupleId));
-
-      const timelineData = {
-        ordered: ordered ?? false,
-        orderedDate: orderedDate || null,
-        firstFitting: firstFitting ?? false,
-        firstFittingDate: firstFittingDate || null,
-        alterations: alterations ?? false,
-        alterationsDate: alterationsDate || null,
-        finalFitting: finalFitting ?? false,
-        finalFittingDate: finalFittingDate || null,
-        pickup: pickup ?? false,
-        pickupDate: pickupDate || null,
-        budget: budget ?? 0,
-        updatedAt: new Date(),
-      };
-
-      if (existing) {
-        const [updated] = await db.update(coupleDressTimeline)
-          .set(timelineData)
-          .where(eq(coupleDressTimeline.coupleId, coupleId))
-          .returning();
-        res.json(updated);
-      } else {
-        const [created] = await db.insert(coupleDressTimeline).values({
-          coupleId,
-          ...timelineData,
-        }).returning();
-        res.json(created);
-      }
-    } catch (error) {
-      console.error("Error updating dress timeline:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere tidslinje" });
-    }
-  });
-
-  // ===== IMPORTANT PEOPLE ENDPOINTS =====
-
-  // Get important people
-  app.get("/api/couple/important-people", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const people = await db.select()
-        .from(coupleImportantPeople)
-        .where(eq(coupleImportantPeople.coupleId, coupleId))
-        .orderBy(coupleImportantPeople.sortOrder, coupleImportantPeople.createdAt);
-
-      res.json(people);
-    } catch (error) {
-      console.error("Error fetching important people:", error);
-      res.status(500).json({ error: "Kunne ikke hente viktige personer" });
-    }
-  });
-
-  // Create important person
-  app.post("/api/couple/important-people", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const parsed = createImportantPersonSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Ugyldig data", details: parsed.error.flatten() });
-      }
-
-      const [person] = await db.insert(coupleImportantPeople).values({
-        coupleId,
-        ...parsed.data,
-      }).returning();
-
-      res.json(person);
-    } catch (error) {
-      console.error("Error creating important person:", error);
-      res.status(500).json({ error: "Kunne ikke legge til person" });
-    }
-  });
-
-  // Update important person
-  app.patch("/api/couple/important-people/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const { name, role, phone, email, notes, sortOrder } = req.body;
-
-      const updateData: any = { updatedAt: new Date() };
-      if (name !== undefined) updateData.name = name;
-      if (role !== undefined) updateData.role = role;
-      if (phone !== undefined) updateData.phone = phone;
-      if (email !== undefined) updateData.email = email;
-      if (notes !== undefined) updateData.notes = notes;
-      if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
-
-      const [updated] = await db.update(coupleImportantPeople)
-        .set(updateData)
-        .where(and(eq(coupleImportantPeople.id, id), eq(coupleImportantPeople.coupleId, coupleId)))
-        .returning();
-
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating important person:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere person" });
-    }
-  });
-
-  // Delete important person
-  app.delete("/api/couple/important-people/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleImportantPeople)
-        .where(and(eq(coupleImportantPeople.id, id), eq(coupleImportantPeople.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting important person:", error);
-      res.status(500).json({ error: "Kunne ikke slette person" });
-    }
-  });
-
-  // ===== PHOTO SHOTS ENDPOINTS =====
-
-  // Get photo shots
-  app.get("/api/couple/photo-shots", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const shots = await db.select()
-        .from(couplePhotoShots)
-        .where(eq(couplePhotoShots.coupleId, coupleId))
-        .orderBy(couplePhotoShots.sortOrder, couplePhotoShots.createdAt);
-
-      res.json(shots);
-    } catch (error) {
-      console.error("Error fetching photo shots:", error);
-      res.status(500).json({ error: "Kunne ikke hente fotoliste" });
-    }
-  });
-
-  // Create photo shot
-  app.post("/api/couple/photo-shots", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const parsed = createPhotoShotSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Ugyldig data", details: parsed.error.flatten() });
-      }
-
-      const [shot] = await db.insert(couplePhotoShots).values({
-        coupleId,
-        ...parsed.data,
-      }).returning();
-
-      res.json(shot);
-    } catch (error) {
-      console.error("Error creating photo shot:", error);
-      res.status(500).json({ error: "Kunne ikke legge til bilde" });
-    }
-  });
-
-  // Update photo shot
-  app.patch("/api/couple/photo-shots/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const { title, description, category, completed, sortOrder,
-              locationName, locationLat, locationLng, locationNotes,
-              weatherTip, travelFromVenue, imageUri, scouted } = req.body;
-
-      const updateData: any = { updatedAt: new Date() };
-      if (title !== undefined) updateData.title = title;
-      if (description !== undefined) updateData.description = description;
-      if (category !== undefined) updateData.category = category;
-      if (completed !== undefined) updateData.completed = completed;
-      if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
-      // Location scouting fields
-      if (locationName !== undefined) updateData.locationName = locationName;
-      if (locationLat !== undefined) updateData.locationLat = locationLat;
-      if (locationLng !== undefined) updateData.locationLng = locationLng;
-      if (locationNotes !== undefined) updateData.locationNotes = locationNotes;
-      if (weatherTip !== undefined) updateData.weatherTip = weatherTip;
-      if (travelFromVenue !== undefined) updateData.travelFromVenue = travelFromVenue;
-      if (imageUri !== undefined) updateData.imageUri = imageUri;
-      if (scouted !== undefined) updateData.scouted = scouted;
-
-      const [updated] = await db.update(couplePhotoShots)
-        .set(updateData)
-        .where(and(eq(couplePhotoShots.id, id), eq(couplePhotoShots.coupleId, coupleId)))
-        .returning();
-
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating photo shot:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere bilde" });
-    }
-  });
-
-  // Delete photo shot
-  app.delete("/api/couple/photo-shots/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(couplePhotoShots)
-        .where(and(eq(couplePhotoShots.id, id), eq(couplePhotoShots.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting photo shot:", error);
-      res.status(500).json({ error: "Kunne ikke slette bilde" });
-    }
-  });
-
-  // Get vendor-planned photo shots (pushed from CreatorHub)
-  app.get("/api/couple/photo-shots/vendor-planned", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const vendorShots = await db.select()
-        .from(couplePhotoShots)
-        .where(and(
-          eq(couplePhotoShots.coupleId, coupleId),
-          sql`${couplePhotoShots.id} LIKE 'vendor-%'`
-        ))
-        .orderBy(couplePhotoShots.sortOrder, couplePhotoShots.createdAt);
-
-      res.json({
-        vendorShots,
-        count: vendorShots.length,
-      });
-    } catch (error) {
-      console.error("Error fetching vendor-planned shots:", error);
-      res.status(500).json({ error: "Kunne ikke hente fotografens planlagte bilder" });
-    }
-  });
-
-  // Seed default photo shots
-  app.post("/api/couple/photo-shots/seed-defaults", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const existing = await db.select()
-        .from(couplePhotoShots)
-        .where(eq(couplePhotoShots.coupleId, coupleId));
-
-      if (existing.length > 0) {
-        return res.status(400).json({ error: "Fotoliste finnes allerede" });
-      }
-
-      const DEFAULT_SHOTS = [
-        { title: "Detaljer av brudekjolen", description: "Nærbilder av kjole og sko", category: "details", sortOrder: 1 },
-        { title: "Bruden og forlover", description: "Før seremonien", category: "portraits", sortOrder: 2 },
-        { title: "Brudgommen gjør seg klar", description: "Med bestmennene", category: "portraits", sortOrder: 3 },
-        { title: "Brudens ankomst", description: "Ved kirken/lokalet", category: "ceremony", sortOrder: 4 },
-        { title: "Seremonien", description: "Utveksling av løfter og ringer", category: "ceremony", sortOrder: 5 },
-        { title: "Første kyss", description: "Det viktige øyeblikket", category: "ceremony", sortOrder: 6 },
-        { title: "Gruppebilde med familie", description: "Begge familier samlet", category: "group", sortOrder: 7 },
-        { title: "Brudeparet alene", description: "Romantiske portretter", category: "portraits", sortOrder: 8 },
-        { title: "Middagen starter", description: "Første dans og taler", category: "reception", sortOrder: 9 },
-        { title: "Kaken skjæres", description: "Bryllupskaken", category: "reception", sortOrder: 10 },
-      ];
-
-      const shots = await db.insert(couplePhotoShots).values(
-        DEFAULT_SHOTS.map((shot) => ({
-          coupleId,
-          ...shot,
-        }))
-      ).returning();
-
-      res.json(shots);
-    } catch (error) {
-      console.error("Error seeding photo shots:", error);
-      res.status(500).json({ error: "Kunne ikke opprette standardfotoliste" });
-    }
-  });
-
-  // ===== HAIR & MAKEUP ROUTES =====
-
-  // Get all hair/makeup data
-  app.get("/api/couple/hair-makeup", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [appointments, looks, timelineRows] = await Promise.all([
-        db.select().from(coupleHairMakeupAppointments).where(eq(coupleHairMakeupAppointments.coupleId, coupleId)).orderBy(coupleHairMakeupAppointments.date),
-        db.select().from(coupleHairMakeupLooks).where(eq(coupleHairMakeupLooks.coupleId, coupleId)),
-        db.select().from(coupleHairMakeupTimeline).where(eq(coupleHairMakeupTimeline.coupleId, coupleId)),
-      ]);
-
-      const timeline = timelineRows[0] || {
-        consultationBooked: false, trialBooked: false, lookSelected: false, weddingDayBooked: false, budget: 0
-      };
-
-      res.json({ appointments, looks, timeline });
-    } catch (error) {
-      console.error("Error fetching hair/makeup data:", error);
-      res.status(500).json({ error: "Kunne ikke hente hår/makeup data" });
-    }
-  });
-
-  // Create hair/makeup appointment
-  app.post("/api/couple/hair-makeup/appointments", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { stylistName, serviceType, appointmentType, date, time, location, notes } = req.body;
-      const [appointment] = await db.insert(coupleHairMakeupAppointments).values({
-        coupleId, stylistName, serviceType, appointmentType, date, time, location, notes
-      }).returning();
-      res.json(appointment);
-    } catch (error) {
-      console.error("Error creating appointment:", error);
-      res.status(500).json({ error: "Kunne ikke opprette avtale" });
-    }
-  });
-
-  // Update hair/makeup appointment
-  app.patch("/api/couple/hair-makeup/appointments/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const [appointment] = await db.update(coupleHairMakeupAppointments)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleHairMakeupAppointments.id, id), eq(coupleHairMakeupAppointments.coupleId, coupleId)))
-        .returning();
-      res.json(appointment);
-    } catch (error) {
-      console.error("Error updating appointment:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere avtale" });
-    }
-  });
-
-  // Delete hair/makeup appointment
-  app.delete("/api/couple/hair-makeup/appointments/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleHairMakeupAppointments)
-        .where(and(eq(coupleHairMakeupAppointments.id, id), eq(coupleHairMakeupAppointments.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting appointment:", error);
-      res.status(500).json({ error: "Kunne ikke slette avtale" });
-    }
-  });
-
-  // Create hair/makeup look
-  app.post("/api/couple/hair-makeup/looks", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { name, lookType, imageUrl, notes, isFavorite } = req.body;
-      const [look] = await db.insert(coupleHairMakeupLooks).values({
-        coupleId, name, lookType, imageUrl, notes, isFavorite
-      }).returning();
-      res.json(look);
-    } catch (error) {
-      console.error("Error creating look:", error);
-      res.status(500).json({ error: "Kunne ikke opprette look" });
-    }
-  });
-
-  // Update hair/makeup look
-  app.patch("/api/couple/hair-makeup/looks/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const [look] = await db.update(coupleHairMakeupLooks)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleHairMakeupLooks.id, id), eq(coupleHairMakeupLooks.coupleId, coupleId)))
-        .returning();
-      res.json(look);
-    } catch (error) {
-      console.error("Error updating look:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere look" });
-    }
-  });
-
-  // Delete hair/makeup look
-  app.delete("/api/couple/hair-makeup/looks/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleHairMakeupLooks)
-        .where(and(eq(coupleHairMakeupLooks.id, id), eq(coupleHairMakeupLooks.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting look:", error);
-      res.status(500).json({ error: "Kunne ikke slette look" });
-    }
-  });
-
-  // Update hair/makeup timeline
-  app.put("/api/couple/hair-makeup/timeline", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const existing = await db.select().from(coupleHairMakeupTimeline).where(eq(coupleHairMakeupTimeline.coupleId, coupleId));
-      
-      if (existing.length > 0) {
-        const [timeline] = await db.update(coupleHairMakeupTimeline)
-          .set({ ...req.body, updatedAt: new Date() })
-          .where(eq(coupleHairMakeupTimeline.coupleId, coupleId))
-          .returning();
-        res.json(timeline);
-      } else {
-        const [timeline] = await db.insert(coupleHairMakeupTimeline).values({
-          coupleId, ...req.body
-        }).returning();
-        res.json(timeline);
-      }
-    } catch (error) {
-      console.error("Error updating timeline:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere tidslinje" });
-    }
-  });
-
-  // ===== TRANSPORT ROUTES =====
-
-  // Get all transport data
-  app.get("/api/couple/transport", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [bookings, timelineRows] = await Promise.all([
-        db.select().from(coupleTransportBookings).where(eq(coupleTransportBookings.coupleId, coupleId)),
-        db.select().from(coupleTransportTimeline).where(eq(coupleTransportTimeline.coupleId, coupleId)),
-      ]);
-
-      const timeline = timelineRows[0] || {
-        brideCarBooked: false, groomCarBooked: false, guestShuttleBooked: false, getawayCarBooked: false, allConfirmed: false, budget: 0
-      };
-
-      res.json({ bookings, timeline });
-    } catch (error) {
-      console.error("Error fetching transport data:", error);
-      res.status(500).json({ error: "Kunne ikke hente transport data" });
-    }
-  });
-
-  // Create transport booking
-  app.post("/api/couple/transport/bookings", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [booking] = await db.insert(coupleTransportBookings).values({
-        coupleId, ...req.body
-      }).returning();
-      res.json(booking);
-    } catch (error) {
-      console.error("Error creating booking:", error);
-      res.status(500).json({ error: "Kunne ikke opprette bestilling" });
-    }
-  });
-
-  // Update transport booking
-  app.patch("/api/couple/transport/bookings/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const [booking] = await db.update(coupleTransportBookings)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleTransportBookings.id, id), eq(coupleTransportBookings.coupleId, coupleId)))
-        .returning();
-      res.json(booking);
-    } catch (error) {
-      console.error("Error updating booking:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere bestilling" });
-    }
-  });
-
-  // Delete transport booking
-  app.delete("/api/couple/transport/bookings/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleTransportBookings)
-        .where(and(eq(coupleTransportBookings.id, id), eq(coupleTransportBookings.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting booking:", error);
-      res.status(500).json({ error: "Kunne ikke slette bestilling" });
-    }
-  });
-
-  // Update transport timeline
-  app.put("/api/couple/transport/timeline", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const existing = await db.select().from(coupleTransportTimeline).where(eq(coupleTransportTimeline.coupleId, coupleId));
-      
-      if (existing.length > 0) {
-        const [timeline] = await db.update(coupleTransportTimeline)
-          .set({ ...req.body, updatedAt: new Date() })
-          .where(eq(coupleTransportTimeline.coupleId, coupleId))
-          .returning();
-        res.json(timeline);
-      } else {
-        const [timeline] = await db.insert(coupleTransportTimeline).values({
-          coupleId, ...req.body
-        }).returning();
-        res.json(timeline);
-      }
-    } catch (error) {
-      console.error("Error updating timeline:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere tidslinje" });
-    }
-  });
-
-  // ===== FLOWERS/FLORIST ROUTES =====
-
-  // Get all flower data
-  app.get("/api/couple/flowers", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [appointments, selections, timelineRows] = await Promise.all([
-        db.select().from(coupleFlowerAppointments).where(eq(coupleFlowerAppointments.coupleId, coupleId)).orderBy(coupleFlowerAppointments.date),
-        db.select().from(coupleFlowerSelections).where(eq(coupleFlowerSelections.coupleId, coupleId)),
-        db.select().from(coupleFlowerTimeline).where(eq(coupleFlowerTimeline.coupleId, coupleId)),
-      ]);
-
-      const timeline = timelineRows[0] || {
-        floristSelected: false, consultationDone: false, mockupApproved: false, deliveryConfirmed: false, budget: 0
-      };
-
-      res.json({ appointments, selections, timeline });
-    } catch (error) {
-      console.error("Error fetching flower data:", error);
-      res.status(500).json({ error: "Kunne ikke hente blomster data" });
-    }
-  });
-
-  // Create flower appointment
-  app.post("/api/couple/flowers/appointments", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [appointment] = await db.insert(coupleFlowerAppointments).values({
-        coupleId, ...req.body
-      }).returning();
-      res.json(appointment);
-    } catch (error) {
-      console.error("Error creating appointment:", error);
-      res.status(500).json({ error: "Kunne ikke opprette avtale" });
-    }
-  });
-
-  // Update flower appointment
-  app.patch("/api/couple/flowers/appointments/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const [appointment] = await db.update(coupleFlowerAppointments)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleFlowerAppointments.id, id), eq(coupleFlowerAppointments.coupleId, coupleId)))
-        .returning();
-      res.json(appointment);
-    } catch (error) {
-      console.error("Error updating appointment:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere avtale" });
-    }
-  });
-
-  // Delete flower appointment
-  app.delete("/api/couple/flowers/appointments/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleFlowerAppointments)
-        .where(and(eq(coupleFlowerAppointments.id, id), eq(coupleFlowerAppointments.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting appointment:", error);
-      res.status(500).json({ error: "Kunne ikke slette avtale" });
-    }
-  });
-
-  // Create flower selection
-  app.post("/api/couple/flowers/selections", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [selection] = await db.insert(coupleFlowerSelections).values({
-        coupleId, ...req.body
-      }).returning();
-      res.json(selection);
-    } catch (error) {
-      console.error("Error creating selection:", error);
-      res.status(500).json({ error: "Kunne ikke opprette valg" });
-    }
-  });
-
-  // Update flower selection
-  app.patch("/api/couple/flowers/selections/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const [selection] = await db.update(coupleFlowerSelections)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleFlowerSelections.id, id), eq(coupleFlowerSelections.coupleId, coupleId)))
-        .returning();
-      res.json(selection);
-    } catch (error) {
-      console.error("Error updating selection:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere valg" });
-    }
-  });
-
-  // Delete flower selection
-  app.delete("/api/couple/flowers/selections/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleFlowerSelections)
-        .where(and(eq(coupleFlowerSelections.id, id), eq(coupleFlowerSelections.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting selection:", error);
-      res.status(500).json({ error: "Kunne ikke slette valg" });
-    }
-  });
-
-  // Update flower timeline
-  app.put("/api/couple/flowers/timeline", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const existing = await db.select().from(coupleFlowerTimeline).where(eq(coupleFlowerTimeline.coupleId, coupleId));
-      
-      if (existing.length > 0) {
-        const [timeline] = await db.update(coupleFlowerTimeline)
-          .set({ ...req.body, updatedAt: new Date() })
-          .where(eq(coupleFlowerTimeline.coupleId, coupleId))
-          .returning();
-        res.json(timeline);
-      } else {
-        const [timeline] = await db.insert(coupleFlowerTimeline).values({
-          coupleId, ...req.body
-        }).returning();
-        res.json(timeline);
-      }
-    } catch (error) {
-      console.error("Error updating timeline:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere tidslinje" });
-    }
-  });
-
-  // ===== CATERING ROUTES =====
-
-  // Get all catering data
-  app.get("/api/couple/catering", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [tastings, menu, dietaryNeeds, timelineRows] = await Promise.all([
-        db.select().from(coupleCateringTastings).where(eq(coupleCateringTastings.coupleId, coupleId)).orderBy(coupleCateringTastings.date),
-        db.select().from(coupleCateringMenu).where(eq(coupleCateringMenu.coupleId, coupleId)),
-        db.select().from(coupleCateringDietaryNeeds).where(eq(coupleCateringDietaryNeeds.coupleId, coupleId)),
-        db.select().from(coupleCateringTimeline).where(eq(coupleCateringTimeline.coupleId, coupleId)),
-      ]);
-
-      const timeline = timelineRows[0] || {
-        catererSelected: false, tastingCompleted: false, menuFinalized: false, guestCountConfirmed: false, guestCount: 0, budget: 0
-      };
-
-      res.json({ tastings, menu, dietaryNeeds, timeline });
-    } catch (error) {
-      console.error("Error fetching catering data:", error);
-      res.status(500).json({ error: "Kunne ikke hente catering data" });
-    }
-  });
-
-  // Create catering tasting
-  app.post("/api/couple/catering/tastings", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [tasting] = await db.insert(coupleCateringTastings).values({
-        coupleId, ...req.body
-      }).returning();
-      res.json(tasting);
-    } catch (error) {
-      console.error("Error creating tasting:", error);
-      res.status(500).json({ error: "Kunne ikke opprette smaksprøve" });
-    }
-  });
-
-  // Update catering tasting
-  app.patch("/api/couple/catering/tastings/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const [tasting] = await db.update(coupleCateringTastings)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleCateringTastings.id, id), eq(coupleCateringTastings.coupleId, coupleId)))
-        .returning();
-      res.json(tasting);
-    } catch (error) {
-      console.error("Error updating tasting:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere smaksprøve" });
-    }
-  });
-
-  // Delete catering tasting
-  app.delete("/api/couple/catering/tastings/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleCateringTastings)
-        .where(and(eq(coupleCateringTastings.id, id), eq(coupleCateringTastings.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting tasting:", error);
-      res.status(500).json({ error: "Kunne ikke slette smaksprøve" });
-    }
-  });
-
-  // Create menu item
-  app.post("/api/couple/catering/menu", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [menuItem] = await db.insert(coupleCateringMenu).values({
-        coupleId, ...req.body
-      }).returning();
-      res.json(menuItem);
-    } catch (error) {
-      console.error("Error creating menu item:", error);
-      res.status(500).json({ error: "Kunne ikke opprette rett" });
-    }
-  });
-
-  // Update menu item
-  app.patch("/api/couple/catering/menu/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const [menuItem] = await db.update(coupleCateringMenu)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleCateringMenu.id, id), eq(coupleCateringMenu.coupleId, coupleId)))
-        .returning();
-      res.json(menuItem);
-    } catch (error) {
-      console.error("Error updating menu item:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere rett" });
-    }
-  });
-
-  // Delete menu item
-  app.delete("/api/couple/catering/menu/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleCateringMenu)
-        .where(and(eq(coupleCateringMenu.id, id), eq(coupleCateringMenu.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting menu item:", error);
-      res.status(500).json({ error: "Kunne ikke slette rett" });
-    }
-  });
-
-  // Create dietary need
-  app.post("/api/couple/catering/dietary", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [need] = await db.insert(coupleCateringDietaryNeeds).values({
-        coupleId, ...req.body
-      }).returning();
-      res.json(need);
-    } catch (error) {
-      console.error("Error creating dietary need:", error);
-      res.status(500).json({ error: "Kunne ikke opprette kostbehov" });
-    }
-  });
-
-  // Update dietary need
-  app.patch("/api/couple/catering/dietary/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const [need] = await db.update(coupleCateringDietaryNeeds)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleCateringDietaryNeeds.id, id), eq(coupleCateringDietaryNeeds.coupleId, coupleId)))
-        .returning();
-      res.json(need);
-    } catch (error) {
-      console.error("Error updating dietary need:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere kostbehov" });
-    }
-  });
-
-  // Delete dietary need
-  app.delete("/api/couple/catering/dietary/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleCateringDietaryNeeds)
-        .where(and(eq(coupleCateringDietaryNeeds.id, id), eq(coupleCateringDietaryNeeds.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting dietary need:", error);
-      res.status(500).json({ error: "Kunne ikke slette kostbehov" });
-    }
-  });
-
-  // Update catering timeline
-  app.put("/api/couple/catering/timeline", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const existing = await db.select().from(coupleCateringTimeline).where(eq(coupleCateringTimeline.coupleId, coupleId));
-      
-      if (existing.length > 0) {
-        const [timeline] = await db.update(coupleCateringTimeline)
-          .set({ ...req.body, updatedAt: new Date() })
-          .where(eq(coupleCateringTimeline.coupleId, coupleId))
-          .returning();
-        res.json(timeline);
-      } else {
-        const [timeline] = await db.insert(coupleCateringTimeline).values({
-          coupleId, ...req.body
-        }).returning();
-        res.json(timeline);
-      }
-    } catch (error) {
-      console.error("Error updating timeline:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere tidslinje" });
-    }
-  });
-
-  // ===== WEDDING CAKE ROUTES =====
-
-  // Get all cake data
-  app.get("/api/couple/cake", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [tastings, designs, timelineRows] = await Promise.all([
-        db.select().from(coupleCakeTastings).where(eq(coupleCakeTastings.coupleId, coupleId)).orderBy(coupleCakeTastings.date),
-        db.select().from(coupleCakeDesigns).where(eq(coupleCakeDesigns.coupleId, coupleId)),
-        db.select().from(coupleCakeTimeline).where(eq(coupleCakeTimeline.coupleId, coupleId)),
-      ]);
-
-      const timeline = timelineRows[0] || {
-        bakerySelected: false, tastingCompleted: false, designFinalized: false, depositPaid: false, deliveryConfirmed: false, budget: 0
-      };
-
-      res.json({ tastings, designs, timeline });
-    } catch (error) {
-      console.error("Error fetching cake data:", error);
-      res.status(500).json({ error: "Kunne ikke hente kake data" });
-    }
-  });
-
-  // Create cake tasting
-  app.post("/api/couple/cake/tastings", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [tasting] = await db.insert(coupleCakeTastings).values({
-        coupleId, ...req.body
-      }).returning();
-      res.json(tasting);
-    } catch (error) {
-      console.error("Error creating tasting:", error);
-      res.status(500).json({ error: "Kunne ikke opprette smaksprøve" });
-    }
-  });
-
-  // Update cake tasting
-  app.patch("/api/couple/cake/tastings/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const [tasting] = await db.update(coupleCakeTastings)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleCakeTastings.id, id), eq(coupleCakeTastings.coupleId, coupleId)))
-        .returning();
-      res.json(tasting);
-    } catch (error) {
-      console.error("Error updating tasting:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere smaksprøve" });
-    }
-  });
-
-  // Delete cake tasting
-  app.delete("/api/couple/cake/tastings/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleCakeTastings)
-        .where(and(eq(coupleCakeTastings.id, id), eq(coupleCakeTastings.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting tasting:", error);
-      res.status(500).json({ error: "Kunne ikke slette smaksprøve" });
-    }
-  });
-
-  // Create cake design
-  app.post("/api/couple/cake/designs", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const [design] = await db.insert(coupleCakeDesigns).values({
-        coupleId, ...req.body
-      }).returning();
-      res.json(design);
-    } catch (error) {
-      console.error("Error creating design:", error);
-      res.status(500).json({ error: "Kunne ikke opprette design" });
-    }
-  });
-
-  // Update cake design
-  app.patch("/api/couple/cake/designs/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const [design] = await db.update(coupleCakeDesigns)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleCakeDesigns.id, id), eq(coupleCakeDesigns.coupleId, coupleId)))
-        .returning();
-      res.json(design);
-    } catch (error) {
-      console.error("Error updating design:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere design" });
-    }
-  });
-
-  // Delete cake design
-  app.delete("/api/couple/cake/designs/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      await db.delete(coupleCakeDesigns)
-        .where(and(eq(coupleCakeDesigns.id, id), eq(coupleCakeDesigns.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting design:", error);
-      res.status(500).json({ error: "Kunne ikke slette design" });
-    }
-  });
-
-  // Update cake timeline
-  app.put("/api/couple/cake/timeline", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const existing = await db.select().from(coupleCakeTimeline).where(eq(coupleCakeTimeline.coupleId, coupleId));
-      
-      if (existing.length > 0) {
-        const [timeline] = await db.update(coupleCakeTimeline)
-          .set({ ...req.body, updatedAt: new Date() })
-          .where(eq(coupleCakeTimeline.coupleId, coupleId))
-          .returning();
-        res.json(timeline);
-      } else {
-        const [timeline] = await db.insert(coupleCakeTimeline).values({
-          coupleId, ...req.body
-        }).returning();
-        res.json(timeline);
-      }
-    } catch (error) {
-      console.error("Error updating timeline:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere tidslinje" });
-    }
-  });
-
-  // ===== PHOTOGRAPHER ROUTES =====
-
-  app.get("/api/couple/photographer", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [sessions, shots, timelineRows] = await Promise.all([
-        db.select().from(couplePhotographerSessions).where(eq(couplePhotographerSessions.coupleId, coupleId)).orderBy(couplePhotographerSessions.date),
-        db.select().from(couplePhotographerShots).where(eq(couplePhotographerShots.coupleId, coupleId)),
-        db.select().from(couplePhotographerTimeline).where(eq(couplePhotographerTimeline.coupleId, coupleId)),
-      ]);
-      const timeline = timelineRows[0] || { photographerSelected: false, sessionBooked: false, contractSigned: false, depositPaid: false, budget: 0 };
-      res.json({ sessions, shots, timeline });
-    } catch (error) {
-      console.error("Error fetching photographer data:", error);
-      res.status(500).json({ error: "Kunne ikke hente fotograf data" });
-    }
-  });
-
-  app.post("/api/couple/photographer/sessions", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [session] = await db.insert(couplePhotographerSessions).values({ coupleId, ...req.body }).returning();
-      res.json(session);
-    } catch (error) {
-      console.error("Error creating session:", error);
-      res.status(500).json({ error: "Kunne ikke opprette session" });
-    }
-  });
-
-  app.patch("/api/couple/photographer/sessions/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const { id } = req.params;
-      const [session] = await db.update(couplePhotographerSessions)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(couplePhotographerSessions.id, id), eq(couplePhotographerSessions.coupleId, coupleId)))
-        .returning();
-      res.json(session);
-    } catch (error) {
-      console.error("Error updating session:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere session" });
-    }
-  });
-
-  app.delete("/api/couple/photographer/sessions/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const { id } = req.params;
-      await db.delete(couplePhotographerSessions)
-        .where(and(eq(couplePhotographerSessions.id, id), eq(couplePhotographerSessions.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting session:", error);
-      res.status(500).json({ error: "Kunne ikke slette session" });
-    }
-  });
-
-  app.post("/api/couple/photographer/shots", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [shot] = await db.insert(couplePhotographerShots).values({ coupleId, ...req.body }).returning();
-      res.json(shot);
-    } catch (error) {
-      console.error("Error creating shot:", error);
-      res.status(500).json({ error: "Kunne ikke opprette bildeidé" });
-    }
-  });
-
-  app.patch("/api/couple/photographer/shots/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const { id } = req.params;
-      const [shot] = await db.update(couplePhotographerShots)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(couplePhotographerShots.id, id), eq(couplePhotographerShots.coupleId, coupleId)))
-        .returning();
-      res.json(shot);
-    } catch (error) {
-      console.error("Error updating shot:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere bildeidé" });
-    }
-  });
-
-  app.delete("/api/couple/photographer/shots/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const { id } = req.params;
-      await db.delete(couplePhotographerShots)
-        .where(and(eq(couplePhotographerShots.id, id), eq(couplePhotographerShots.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting shot:", error);
-      res.status(500).json({ error: "Kunne ikke slette bildeidé" });
-    }
-  });
-
-  app.put("/api/couple/photographer/timeline", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const existing = await db.select().from(couplePhotographerTimeline).where(eq(couplePhotographerTimeline.coupleId, coupleId));
-      if (existing.length > 0) {
-        const [timeline] = await db.update(couplePhotographerTimeline)
-          .set({ ...req.body, updatedAt: new Date() })
-          .where(eq(couplePhotographerTimeline.coupleId, coupleId))
-          .returning();
-        res.json(timeline);
-      } else {
-        const [timeline] = await db.insert(couplePhotographerTimeline).values({ coupleId, ...req.body }).returning();
-        res.json(timeline);
-      }
-    } catch (error) {
-      console.error("Error updating timeline:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere tidslinje" });
-    }
-  });
-
-  // ===== VIDEOGRAPHER ROUTES =====
-
-  app.get("/api/couple/videographer", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [sessions, deliverables, timelineRows] = await Promise.all([
-        db.select().from(coupleVideographerSessions).where(eq(coupleVideographerSessions.coupleId, coupleId)).orderBy(coupleVideographerSessions.date),
-        db.select().from(coupleVideographerDeliverables).where(eq(coupleVideographerDeliverables.coupleId, coupleId)),
-        db.select().from(coupleVideographerTimeline).where(eq(coupleVideographerTimeline.coupleId, coupleId)),
-      ]);
-      const timeline = timelineRows[0] || { videographerSelected: false, sessionBooked: false, contractSigned: false, depositPaid: false, budget: 0 };
-      res.json({ sessions, deliverables, timeline });
-    } catch (error) {
-      console.error("Error fetching videographer data:", error);
-      res.status(500).json({ error: "Kunne ikke hente videograf data" });
-    }
-  });
-
-  app.post("/api/couple/videographer/sessions", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [session] = await db.insert(coupleVideographerSessions).values({ coupleId, ...req.body }).returning();
-      res.json(session);
-    } catch (error) {
-      console.error("Error creating session:", error);
-      res.status(500).json({ error: "Kunne ikke opprette session" });
-    }
-  });
-
-  app.patch("/api/couple/videographer/sessions/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const { id } = req.params;
-      const [session] = await db.update(coupleVideographerSessions)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleVideographerSessions.id, id), eq(coupleVideographerSessions.coupleId, coupleId)))
-        .returning();
-      res.json(session);
-    } catch (error) {
-      console.error("Error updating session:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere session" });
-    }
-  });
-
-  app.delete("/api/couple/videographer/sessions/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const { id } = req.params;
-      await db.delete(coupleVideographerSessions)
-        .where(and(eq(coupleVideographerSessions.id, id), eq(coupleVideographerSessions.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting session:", error);
-      res.status(500).json({ error: "Kunne ikke slette session" });
-    }
-  });
-
-  app.post("/api/couple/videographer/deliverables", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [deliverable] = await db.insert(coupleVideographerDeliverables).values({ coupleId, ...req.body }).returning();
-      res.json(deliverable);
-    } catch (error) {
-      console.error("Error creating deliverable:", error);
-      res.status(500).json({ error: "Kunne ikke opprette leveranse" });
-    }
-  });
-
-  app.patch("/api/couple/videographer/deliverables/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const { id } = req.params;
-      const [deliverable] = await db.update(coupleVideographerDeliverables)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleVideographerDeliverables.id, id), eq(coupleVideographerDeliverables.coupleId, coupleId)))
-        .returning();
-      res.json(deliverable);
-    } catch (error) {
-      console.error("Error updating deliverable:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere leveranse" });
-    }
-  });
-
-  app.delete("/api/couple/videographer/deliverables/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const { id } = req.params;
-      await db.delete(coupleVideographerDeliverables)
-        .where(and(eq(coupleVideographerDeliverables.id, id), eq(coupleVideographerDeliverables.coupleId, coupleId)));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting deliverable:", error);
-      res.status(500).json({ error: "Kunne ikke slette leveranse" });
-    }
-  });
-
-  app.put("/api/couple/videographer/timeline", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const existing = await db.select().from(coupleVideographerTimeline).where(eq(coupleVideographerTimeline.coupleId, coupleId));
-      if (existing.length > 0) {
-        const [timeline] = await db.update(coupleVideographerTimeline)
-          .set({ ...req.body, updatedAt: new Date() })
-          .where(eq(coupleVideographerTimeline.coupleId, coupleId))
-          .returning();
-        res.json(timeline);
-      } else {
-        const [timeline] = await db.insert(coupleVideographerTimeline).values({ coupleId, ...req.body }).returning();
-        res.json(timeline);
-      }
-    } catch (error) {
-      console.error("Error updating timeline:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere tidslinje" });
-    }
-  });
-
-  // ===== MUSIC/DJ ROUTES =====
-
-  app.get("/api/couple/music", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [performances, setlists, timelineRows] = await Promise.all([
-        db.select().from(coupleMusicPerformances).where(eq(coupleMusicPerformances.coupleId, coupleId)).orderBy(coupleMusicPerformances.date),
-        db.select().from(coupleMusicSetlists).where(eq(coupleMusicSetlists.coupleId, coupleId)),
-        db.select().from(coupleMusicTimeline).where(eq(coupleMusicTimeline.coupleId, coupleId)),
-      ]);
-      const timeline = timelineRows[0] || { musicianSelected: false, setlistDiscussed: false, contractSigned: false, depositPaid: false, budget: 0 };
-      res.json({ performances, setlists, timeline });
-    } catch (error) {
-      console.error("Error fetching music data:", error);
-      res.status(500).json({ error: "Kunne ikke hente musikk data" });
-    }
-  });
-
-  app.post("/api/couple/music/performances", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [performance] = await db.insert(coupleMusicPerformances).values({ coupleId, ...req.body }).returning();
-      const [cp] = await db.select({ displayName: coupleProfiles.displayName }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-      await notifyVendorsOfChangeInternal(coupleId, 'music', cp?.displayName || 'Arrangøren', `Ny opptreden lagt til.`);
-      res.json(performance);
-    } catch (error) {
-      console.error("Error creating performance:", error);
-      res.status(500).json({ error: "Kunne ikke opprette opptreden" });
-    }
-  });
-
-  app.patch("/api/couple/music/performances/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const { id } = req.params;
-      const [performance] = await db.update(coupleMusicPerformances)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleMusicPerformances.id, id), eq(coupleMusicPerformances.coupleId, coupleId)))
-        .returning();
-      const [cp] = await db.select({ displayName: coupleProfiles.displayName }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-      await notifyVendorsOfChangeInternal(coupleId, 'music', cp?.displayName || 'Arrangøren', `Opptreden ble oppdatert.`);
-      res.json(performance);
-    } catch (error) {
-      console.error("Error updating performance:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere opptreden" });
-    }
-  });
-
-  app.delete("/api/couple/music/performances/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const { id } = req.params;
-      await db.delete(coupleMusicPerformances)
-        .where(and(eq(coupleMusicPerformances.id, id), eq(coupleMusicPerformances.coupleId, coupleId)));
-      const [cp] = await db.select({ displayName: coupleProfiles.displayName }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-      await notifyVendorsOfChangeInternal(coupleId, 'music', cp?.displayName || 'Arrangøren', `En opptreden ble fjernet.`);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting performance:", error);
-      res.status(500).json({ error: "Kunne ikke slette opptreden" });
-    }
-  });
-
-  app.post("/api/couple/music/setlists", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [setlist] = await db.insert(coupleMusicSetlists).values({ coupleId, ...req.body }).returning();
-      const [cp] = await db.select({ displayName: coupleProfiles.displayName }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-      await notifyVendorsOfChangeInternal(coupleId, 'music', cp?.displayName || 'Arrangøren', `Ny spilleliste lagt til.`);
-      res.json(setlist);
-    } catch (error) {
-      console.error("Error creating setlist:", error);
-      res.status(500).json({ error: "Kunne ikke opprette spilleliste" });
-    }
-  });
-
-  app.patch("/api/couple/music/setlists/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const { id } = req.params;
-      const [setlist] = await db.update(coupleMusicSetlists)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(coupleMusicSetlists.id, id), eq(coupleMusicSetlists.coupleId, coupleId)))
-        .returning();
-      const [cp] = await db.select({ displayName: coupleProfiles.displayName }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-      await notifyVendorsOfChangeInternal(coupleId, 'music', cp?.displayName || 'Arrangøren', `Spilleliste ble oppdatert.`);
-      res.json(setlist);
-    } catch (error) {
-      console.error("Error updating setlist:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere spilleliste" });
-    }
-  });
-
-  app.delete("/api/couple/music/setlists/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const { id } = req.params;
-      await db.delete(coupleMusicSetlists)
-        .where(and(eq(coupleMusicSetlists.id, id), eq(coupleMusicSetlists.coupleId, coupleId)));
-      const [cp] = await db.select({ displayName: coupleProfiles.displayName }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
-      await notifyVendorsOfChangeInternal(coupleId, 'music', cp?.displayName || 'Arrangøren', `En spilleliste ble fjernet.`);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting setlist:", error);
-      res.status(500).json({ error: "Kunne ikke slette spilleliste" });
-    }
-  });
-
-  app.put("/api/couple/music/timeline", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const existing = await db.select().from(coupleMusicTimeline).where(eq(coupleMusicTimeline.coupleId, coupleId));
-      if (existing.length > 0) {
-        const [timeline] = await db.update(coupleMusicTimeline)
-          .set({ ...req.body, updatedAt: new Date() })
-          .where(eq(coupleMusicTimeline.coupleId, coupleId))
-          .returning();
-        res.json(timeline);
-      } else {
-        const [timeline] = await db.insert(coupleMusicTimeline).values({ coupleId, ...req.body }).returning();
-        res.json(timeline);
-      }
-    } catch (error) {
-      console.error("Error updating timeline:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere tidslinje" });
-    }
-  });
-
-  // ===== PLANNER ROUTES =====
-
-  // Get all planner data (meetings, tasks, timeline)
-  app.get("/api/couple/planner", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [meetings, tasks, timeline] = await Promise.all([
-        db.select().from(couplePlannerMeetings).where(eq(couplePlannerMeetings.coupleId, coupleId)).orderBy(desc(couplePlannerMeetings.createdAt)),
-        db.select().from(couplePlannerTasks).where(eq(couplePlannerTasks.coupleId, coupleId)).orderBy(desc(couplePlannerTasks.createdAt)),
-        db.select().from(couplePlannerTimeline).where(eq(couplePlannerTimeline.coupleId, coupleId)),
-      ]);
-      res.json({ meetings, tasks, timeline: timeline[0] || null });
-    } catch (error) {
-      console.error("Error fetching planner data:", error);
-      res.status(500).json({ error: "Kunne ikke hente planlegger-data" });
-    }
-  });
-
-  // Create a planner meeting
-  app.post("/api/couple/planner/meetings", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [meeting] = await db.insert(couplePlannerMeetings).values({ coupleId, ...req.body }).returning();
-      res.json(meeting);
-    } catch (error) {
-      console.error("Error creating meeting:", error);
-      res.status(500).json({ error: "Kunne ikke opprette møte" });
-    }
-  });
-
-  // Update a planner meeting
-  app.patch("/api/couple/planner/meetings/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [meeting] = await db.update(couplePlannerMeetings)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(couplePlannerMeetings.id, req.params.id), eq(couplePlannerMeetings.coupleId, coupleId)))
-        .returning();
-      if (!meeting) return res.status(404).json({ error: "Møte ikke funnet" });
-      res.json(meeting);
-    } catch (error) {
-      console.error("Error updating meeting:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere møte" });
-    }
-  });
-
-  // Delete a planner meeting
-  app.delete("/api/couple/planner/meetings/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [deleted] = await db.delete(couplePlannerMeetings)
-        .where(and(eq(couplePlannerMeetings.id, req.params.id), eq(couplePlannerMeetings.coupleId, coupleId)))
-        .returning();
-      if (!deleted) return res.status(404).json({ error: "Møte ikke funnet" });
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting meeting:", error);
-      res.status(500).json({ error: "Kunne ikke slette møte" });
-    }
-  });
-
-  // Create a planner task
-  app.post("/api/couple/planner/tasks", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [task] = await db.insert(couplePlannerTasks).values({ coupleId, ...req.body }).returning();
-      res.json(task);
-    } catch (error) {
-      console.error("Error creating task:", error);
-      res.status(500).json({ error: "Kunne ikke opprette oppgave" });
-    }
-  });
-
-  // Update a planner task
-  app.patch("/api/couple/planner/tasks/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [task] = await db.update(couplePlannerTasks)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(and(eq(couplePlannerTasks.id, req.params.id), eq(couplePlannerTasks.coupleId, coupleId)))
-        .returning();
-      if (!task) return res.status(404).json({ error: "Oppgave ikke funnet" });
-      res.json(task);
-    } catch (error) {
-      console.error("Error updating task:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere oppgave" });
-    }
-  });
-
-  // Delete a planner task
-  app.delete("/api/couple/planner/tasks/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const [deleted] = await db.delete(couplePlannerTasks)
-        .where(and(eq(couplePlannerTasks.id, req.params.id), eq(couplePlannerTasks.coupleId, coupleId)))
-        .returning();
-      if (!deleted) return res.status(404).json({ error: "Oppgave ikke funnet" });
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting task:", error);
-      res.status(500).json({ error: "Kunne ikke slette oppgave" });
-    }
-  });
-
-  // Update planner timeline (upsert)
-  app.put("/api/couple/planner/timeline", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-    try {
-      const existing = await db.select().from(couplePlannerTimeline).where(eq(couplePlannerTimeline.coupleId, coupleId));
-      if (existing.length > 0) {
-        const [timeline] = await db.update(couplePlannerTimeline)
-          .set({ ...req.body, updatedAt: new Date() })
-          .where(eq(couplePlannerTimeline.coupleId, coupleId))
-          .returning();
-        res.json(timeline);
-      } else {
-        const [timeline] = await db.insert(couplePlannerTimeline).values({ coupleId, ...req.body }).returning();
-        res.json(timeline);
-      }
-    } catch (error) {
-      console.error("Error updating planner timeline:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere tidslinje" });
-    }
-  });
-
   // ===== FAQ ROUTES =====
   
   // Get FAQ items by category (public)
@@ -12605,7 +7897,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const parsed = updateFaqItemSchema.parse(req.body);
       
       const [item] = await db.update(faqItems)
-        .set({ ...parsed, updatedAt: new Date() })
+        .set(parsed)
         .where(eq(faqItems.id, id))
         .returning();
 
@@ -12638,11 +7930,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== APP SETTINGS ROUTES =====
+
   // Get app settings (public)
   app.get("/api/app-settings", async (req: Request, res: Response) => {
     try {
-      const settings = await db.select().from(appSettings)
-        .where(inArray(appSettings.key, Array.from(PUBLIC_APP_SETTINGS_KEYS)));
+      const settings = await db.select().from(appSettings);
       res.json(settings);
     } catch (error) {
       console.error("Error fetching app settings:", error);
@@ -12654,9 +7946,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/app-settings/:key", async (req: Request, res: Response) => {
     try {
       const { key } = req.params;
-      if (!PUBLIC_APP_SETTINGS_KEYS.has(key)) {
-        return res.status(404).json({ error: "Innstilling ikke funnet" });
-      }
       const [setting] = await db.select()
         .from(appSettings)
         .where(eq(appSettings.key, key));
@@ -13175,759 +8464,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ==============================================================
-  // VENDOR ↔ CREATORHUB PROJECT BRIDGE
-  // Lets vendors see CreatorHub projects, timeline, comments, shots
-  // ==============================================================
-
-  // GET /api/vendor/creatorhub-bridge — Vendor sees linked CreatorHub projects + timeline for their couples
-  app.get("/api/vendor/creatorhub-bridge", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const coupleId = req.query.coupleId as string;
-      if (!coupleId) return res.status(400).json({ error: "coupleId er påkrevd" });
-
-      // Verify vendor has access to this couple
-      const [conv] = await db.select({ id: conversations.id })
-        .from(conversations)
-        .where(and(eq(conversations.vendorId, vendorId), eq(conversations.coupleId, coupleId)));
-      if (!conv) return res.status(403).json({ error: "Ingen tilgang til dette paret" });
-
-      // Get couple email
-      const [couple] = await db.select({ email: coupleProfiles.email, displayName: coupleProfiles.displayName })
-        .from(coupleProfiles)
-        .where(eq(coupleProfiles.id, coupleId));
-      if (!couple) return res.status(404).json({ error: "Par ikke funnet" });
-
-      // Find projects linked to this couple's email
-      const projectsResult = await db.execute(sql`
-        SELECT id, title, category, status, client_email, metadata, settings, created_at
-        FROM legacy.projects
-        WHERE LOWER(client_email) = LOWER(${couple.email})
-        ORDER BY created_at DESC
-      `);
-
-      const projects: any[] = [];
-      for (const proj of (projectsResult.rows || [])) {
-        // Get timeline for this project
-        const timelineResult = await db.execute(sql`
-          SELECT id, title, wedding_date, venue, couple_name, cultural_type, status,
-                 photographer_message, client_notes, client_access_enabled
-          FROM wedding_timelines
-          WHERE project_id = ${(proj as any).id}
-          ORDER BY created_at DESC LIMIT 1
-        `);
-        const timeline = (timelineResult.rows || [])[0] || null;
-
-        let events: any[] = [];
-        let comments: any[] = [];
-        if (timeline) {
-          const eventsResult = await db.execute(sql`
-            SELECT id, title, event_time, duration_minutes, description, location, status, can_client_edit
-            FROM wedding_timeline_events
-            WHERE timeline_id = ${(timeline as any).id}
-            ORDER BY event_time ASC
-          `);
-          events = eventsResult.rows || [];
-
-          const commentsResult = await db.execute(sql`
-            SELECT id, author_type, author_name, message, is_private, created_at
-            FROM wedding_timeline_comments
-            WHERE timeline_id = ${(timeline as any).id} AND is_private = false
-            ORDER BY created_at ASC
-          `);
-          comments = commentsResult.rows || [];
-        }
-
-        // Get shot list from project metadata
-        const metadata = (proj as any).metadata;
-        const shotList = metadata?.shotList || [];
-
-        projects.push({
-          id: (proj as any).id,
-          title: (proj as any).title,
-          category: (proj as any).category,
-          status: (proj as any).status,
-          createdAt: (proj as any).created_at,
-          timeline,
-          events,
-          comments,
-          shotList,
-        });
-      }
-
-      res.json({
-        success: true,
-        coupleId,
-        coupleName: couple.displayName,
-        coupleEmail: couple.email,
-        projects,
-        conversationId: conv.id,
-      });
-    } catch (error) {
-      console.error("Vendor CreatorHub bridge error:", error);
-      res.status(500).json({ error: "Kunne ikke hente prosjektdata" });
-    }
-  });
-
-  async function resolveTimelineCoupleId(timelineId: string): Promise<string | null> {
-    const timelineResult = await db.execute(sql`
-      SELECT LOWER(p.client_email) AS client_email
-      FROM wedding_timelines t
-      JOIN legacy.projects p ON t.project_id = p.id
-      WHERE t.id = ${timelineId}
-      LIMIT 1
-    `);
-
-    const clientEmail = (timelineResult.rows || [])[0]?.client_email as string | undefined;
-    if (!clientEmail) return null;
-
-    const coupleResult = await db.execute(sql`
-      SELECT id
-      FROM couple_profiles
-      WHERE LOWER(email) = ${clientEmail}
-      LIMIT 1
-    `);
-
-    const coupleId = (coupleResult.rows || [])[0]?.id as string | undefined;
-    return coupleId ?? null;
-  }
-
-  // GET /api/vendor/timeline-comments/:timelineId — Get timeline comments
-  app.get("/api/vendor/timeline-comments/:timelineId", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const { timelineId } = req.params;
-
-      const coupleId = await resolveTimelineCoupleId(timelineId);
-      if (!coupleId) {
-        return res.status(404).json({ error: "Tidslinje ikke funnet" });
-      }
-
-      const [conv] = await db.select({ id: conversations.id })
-        .from(conversations)
-        .where(and(eq(conversations.vendorId, vendorId), eq(conversations.coupleId, coupleId)));
-      if (!conv) {
-        return res.status(403).json({ error: "Ingen tilgang til dette paret" });
-      }
-
-      const result = await db.execute(sql`
-        SELECT id, author_type, author_name, message, is_private, created_at
-        FROM wedding_timeline_comments
-        WHERE timeline_id = ${timelineId}
-        ORDER BY created_at ASC
-      `);
-
-      res.json({ success: true, comments: result.rows || [] });
-    } catch (error) {
-      console.error("Get timeline comments error:", error);
-      res.status(500).json({ error: "Kunne ikke hente kommentarer" });
-    }
-  });
-
-  // POST /api/vendor/timeline-comments/:timelineId — Add a comment to the timeline
-  app.post("/api/vendor/timeline-comments/:timelineId", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const { timelineId } = req.params;
-      const { message, isPrivate } = req.body;
-
-      if (!message || !message.trim()) {
-        return res.status(400).json({ error: "Melding er påkrevd" });
-      }
-
-      const coupleId = await resolveTimelineCoupleId(timelineId);
-      if (!coupleId) {
-        return res.status(404).json({ error: "Tidslinje ikke funnet" });
-      }
-
-      const [conv] = await db.select({ id: conversations.id })
-        .from(conversations)
-        .where(and(eq(conversations.vendorId, vendorId), eq(conversations.coupleId, coupleId)));
-      if (!conv) {
-        return res.status(403).json({ error: "Ingen tilgang til dette paret" });
-      }
-
-      // Get vendor name
-      const [vendor] = await db.select({ businessName: vendors.businessName })
-        .from(vendors)
-        .where(eq(vendors.id, vendorId));
-      const vendorName = vendor?.businessName || "Leverandør";
-
-      const id = crypto.randomUUID();
-      const now = new Date().toISOString();
-
-      await db.execute(sql`
-        INSERT INTO wedding_timeline_comments (id, timeline_id, author_type, author_name, message, is_private, created_at, updated_at)
-        VALUES (${id}, ${timelineId}, 'vendor', ${vendorName}, ${message.trim()}, ${isPrivate || false}, ${now}, ${now})
-      `);
-
-      res.json({
-        success: true,
-        comment: {
-          id,
-          timeline_id: timelineId,
-          author_type: "vendor",
-          author_name: vendorName,
-          message: message.trim(),
-          is_private: isPrivate || false,
-          created_at: now,
-        },
-      });
-    } catch (error) {
-      console.error("Add timeline comment error:", error);
-      res.status(500).json({ error: "Kunne ikke legge til kommentar" });
-    }
-  });
-
-  // POST /api/vendor/timeline-events/:timelineId — Vendor adds an event to the timeline
-  app.post("/api/vendor/timeline-events/:timelineId", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const { timelineId } = req.params;
-      const { title, eventTime, durationMinutes, description, location } = req.body;
-
-      if (!title) return res.status(400).json({ error: "Tittel er påkrevd" });
-
-      const coupleId = await resolveTimelineCoupleId(timelineId);
-      if (!coupleId) {
-        return res.status(404).json({ error: "Tidslinje ikke funnet" });
-      }
-
-      const [conv] = await db.select({ id: conversations.id })
-        .from(conversations)
-        .where(and(eq(conversations.vendorId, vendorId), eq(conversations.coupleId, coupleId)));
-      if (!conv) {
-        return res.status(403).json({ error: "Ingen tilgang til dette paret" });
-      }
-
-      const id = crypto.randomUUID();
-
-      await db.execute(sql`
-        INSERT INTO wedding_timeline_events (id, timeline_id, title, event_time, duration_minutes, description, location, status, can_client_edit)
-        VALUES (${id}, ${timelineId}, ${title}, ${eventTime || null}, ${durationMinutes || 30}, ${description || ""}, ${location || ""}, 'planned', false)
-      `);
-
-      res.json({
-        success: true,
-        event: { id, timeline_id: timelineId, title, event_time: eventTime, duration_minutes: durationMinutes || 30, description, location, status: "planned" },
-      });
-    } catch (error) {
-      console.error("Add timeline event error:", error);
-      res.status(500).json({ error: "Kunne ikke legge til hendelse" });
-    }
-  });
-
-  // ==========================================
-  // Wedding Role Invitations — Join/Invite System
-  // ==========================================
-
-  const INVITE_RATE_LIMIT_MAX = 20;
-  const INVITE_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
-  const inviteRateLimit = new Map<string, { count: number; resetAt: number }>();
-
-  const checkInviteRateLimit = (req: Request, res: Response): boolean => {
-    const key = req.ip || "unknown";
-    const now = Date.now();
-    const entry = inviteRateLimit.get(key);
-    if (!entry || entry.resetAt <= now) {
-      inviteRateLimit.set(key, { count: 1, resetAt: now + INVITE_RATE_LIMIT_WINDOW_MS });
-      return true;
-    }
-    entry.count += 1;
-    if (entry.count > INVITE_RATE_LIMIT_MAX) {
-      res.status(429).json({ error: "For mange forsok. Prov igjen senere." });
-      return false;
-    }
-    return true;
-  };
-
-  // Generate a unique invite code
-  function generateInviteCode(): string {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No I/O/0/1 for clarity
-    let code = "WED-";
-    for (let i = 0; i < 7; i++) code += chars[Math.floor(Math.random() * chars.length)];
-    return code;
-  }
-
-  // Get all wedding role invitations for the couple
-  app.get("/api/couple/wedding-invites", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const invitations = await db.select()
-        .from(weddingRoleInvitations)
-        .where(eq(weddingRoleInvitations.coupleId, coupleId))
-        .orderBy(desc(weddingRoleInvitations.createdAt));
-
-      res.json(invitations);
-    } catch (error) {
-      console.error("Error fetching wedding invitations:", error);
-      res.status(500).json({ error: "Kunne ikke hente invitasjoner" });
-    }
-  });
-
-  // Create a wedding role invitation (used from SharePartnerScreen or ImportantPeopleScreen)
-  app.post("/api/couple/wedding-invites", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { name, email, role, importantPersonId, canViewTimeline, canCommentTimeline, canViewSchedule, canEditSchedule, canViewShotlist, canViewBudget, canViewGuestlist, canViewImportantPeople, canEditPlanning, expiresAt } = req.body;
-
-      if (!name || name.trim().length === 0) {
-        return res.status(400).json({ error: "Navn er påkrevd" });
-      }
-
-      // Generate unique access token and invite code
-      const accessToken = crypto.randomBytes(32).toString("hex");
-      let inviteCode = generateInviteCode();
-
-      // Ensure invite code is unique
-      let existing = await db.select({ id: weddingRoleInvitations.id }).from(weddingRoleInvitations).where(eq(weddingRoleInvitations.inviteCode, inviteCode));
-      while (existing.length > 0) {
-        inviteCode = generateInviteCode();
-        existing = await db.select({ id: weddingRoleInvitations.id }).from(weddingRoleInvitations).where(eq(weddingRoleInvitations.inviteCode, inviteCode));
-      }
-
-      // Default permissions based on role
-      const isPartner = role === "partner";
-      const isKey = ["toastmaster", "coordinator", "bestman", "maidofhonor"].includes(role);
-
-      const [invitation] = await db.insert(weddingRoleInvitations)
-        .values({
-          coupleId,
-          importantPersonId: importantPersonId || null,
-          name,
-          email: email || null,
-          role: role || "partner",
-          accessToken,
-          inviteCode,
-          canViewTimeline: canViewTimeline ?? true,
-          canCommentTimeline: canCommentTimeline ?? (isPartner || isKey),
-          canViewSchedule: canViewSchedule ?? true,
-          canEditSchedule: canEditSchedule ?? isPartner,
-          canViewShotlist: canViewShotlist ?? (isPartner || isKey),
-          canViewBudget: canViewBudget ?? isPartner,
-          canViewGuestlist: canViewGuestlist ?? isPartner,
-          canViewImportantPeople: canViewImportantPeople ?? isPartner,
-          canEditPlanning: canEditPlanning ?? isPartner,
-          expiresAt: expiresAt ? new Date(expiresAt) : null,
-        })
-        .returning();
-
-      // If linked to an important person, update their email if provided
-      if (importantPersonId && email) {
-        await db.update(coupleImportantPeople)
-          .set({ email, updatedAt: new Date() })
-          .where(and(
-            eq(coupleImportantPeople.id, importantPersonId),
-            eq(coupleImportantPeople.coupleId, coupleId)
-          ));
-      }
-
-      res.status(201).json(invitation);
-    } catch (error) {
-      console.error("Error creating wedding invitation:", error);
-      res.status(500).json({ error: "Kunne ikke opprette invitasjon" });
-    }
-  });
-
-  // Update a wedding role invitation (change permissions)
-  app.patch("/api/couple/wedding-invites/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-      const { name, role, canViewTimeline, canCommentTimeline, canViewSchedule, canEditSchedule, canViewShotlist, canViewBudget, canViewGuestlist, canViewImportantPeople, canEditPlanning, status } = req.body;
-
-      const [updated] = await db.update(weddingRoleInvitations)
-        .set({
-          ...(name !== undefined && { name }),
-          ...(role !== undefined && { role }),
-          ...(canViewTimeline !== undefined && { canViewTimeline }),
-          ...(canCommentTimeline !== undefined && { canCommentTimeline }),
-          ...(canViewSchedule !== undefined && { canViewSchedule }),
-          ...(canEditSchedule !== undefined && { canEditSchedule }),
-          ...(canViewShotlist !== undefined && { canViewShotlist }),
-          ...(canViewBudget !== undefined && { canViewBudget }),
-          ...(canViewGuestlist !== undefined && { canViewGuestlist }),
-          ...(canViewImportantPeople !== undefined && { canViewImportantPeople }),
-          ...(canEditPlanning !== undefined && { canEditPlanning }),
-          ...(status !== undefined && { status }),
-          updatedAt: new Date(),
-        })
-        .where(and(
-          eq(weddingRoleInvitations.id, id),
-          eq(weddingRoleInvitations.coupleId, coupleId)
-        ))
-        .returning();
-
-      if (!updated) {
-        return res.status(404).json({ error: "Invitasjon ikke funnet" });
-      }
-
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating wedding invitation:", error);
-      res.status(500).json({ error: "Kunne ikke oppdatere invitasjon" });
-    }
-  });
-
-  // Delete (revoke) a wedding role invitation
-  app.delete("/api/couple/wedding-invites/:id", async (req: Request, res: Response) => {
-    const coupleId = await checkCoupleAuth(req, res);
-    if (!coupleId) return;
-
-    try {
-      const { id } = req.params;
-
-      await db.delete(weddingRoleInvitations)
-        .where(and(
-          eq(weddingRoleInvitations.id, id),
-          eq(weddingRoleInvitations.coupleId, coupleId)
-        ));
-
-      res.json({ message: "Invitasjon slettet" });
-    } catch (error) {
-      console.error("Error deleting wedding invitation:", error);
-      res.status(500).json({ error: "Kunne ikke slette invitasjon" });
-    }
-  });
-
-  // ==========================================
-  // Partner/Join — Public endpoints (no auth required)
-  // ==========================================
-
-  // Validate invite code and get basic info (for JoinWeddingScreen)
-  app.post("/api/partner/validate-code", async (req: Request, res: Response) => {
-    try {
-      if (!checkInviteRateLimit(req, res)) return;
-      const { code } = req.body;
-      if (!code) return res.status(400).json({ error: "Invitasjonskode er påkrevd" });
-
-      const normalizedCode = code.trim().toUpperCase();
-
-      const [invitation] = await db.select({
-        id: weddingRoleInvitations.id,
-        role: weddingRoleInvitations.role,
-        name: weddingRoleInvitations.name,
-        status: weddingRoleInvitations.status,
-        expiresAt: weddingRoleInvitations.expiresAt,
-        coupleId: weddingRoleInvitations.coupleId,
-      })
-        .from(weddingRoleInvitations)
-        .where(eq(weddingRoleInvitations.inviteCode, normalizedCode));
-
-      if (!invitation) {
-        return res.status(404).json({ error: "Ugyldig invitasjonskode" });
-      }
-
-      if (invitation.status === "revoked") {
-        return res.status(403).json({ error: "Denne invitasjonen er trukket tilbake" });
-      }
-
-      if (invitation.status === "accepted") {
-        return res.status(409).json({ error: "Denne invitasjonen er allerede brukt" });
-      }
-
-      if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
-        await db.update(weddingRoleInvitations)
-          .set({ status: "expired" })
-          .where(eq(weddingRoleInvitations.id, invitation.id));
-        return res.status(403).json({ error: "Invitasjonen har utløpt" });
-      }
-
-      // Get couple info
-      const [couple] = await db.select({
-        displayName: coupleProfiles.displayName,
-        weddingDate: coupleProfiles.weddingDate,
-      }).from(coupleProfiles).where(eq(coupleProfiles.id, invitation.coupleId));
-
-      res.json({
-        valid: true,
-        invitation: {
-          id: invitation.id,
-          role: invitation.role,
-          name: invitation.name,
-        },
-        couple: couple || null,
-      });
-    } catch (error) {
-      console.error("Error validating invite code:", error);
-      res.status(500).json({ error: "Kunne ikke validere kode" });
-    }
-  });
-
-  // Join a wedding — redeem invite code
-  app.post("/api/partner/join", async (req: Request, res: Response) => {
-    try {
-      if (!checkInviteRateLimit(req, res)) return;
-      const { code, name, email, role } = req.body;
-      if (!code) return res.status(400).json({ error: "Invitasjonskode er påkrevd" });
-      if (!name) return res.status(400).json({ error: "Navn er påkrevd" });
-      if (!email) return res.status(400).json({ error: "E-post er påkrevd" });
-
-      const normalizedCode = code.trim().toUpperCase();
-
-      const [invitation] = await db.select()
-        .from(weddingRoleInvitations)
-        .where(and(
-          eq(weddingRoleInvitations.inviteCode, normalizedCode),
-          eq(weddingRoleInvitations.status, "pending")
-        ));
-
-      if (!invitation) {
-        return res.status(404).json({ error: "Ugyldig eller allerede brukt invitasjonskode" });
-      }
-
-      // Check expiry
-      if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
-        await db.update(weddingRoleInvitations)
-          .set({ status: "expired" })
-          .where(eq(weddingRoleInvitations.id, invitation.id));
-        return res.status(403).json({ error: "Invitasjonen har utløpt" });
-      }
-
-      // Mark invitation as accepted
-      const [updated] = await db.update(weddingRoleInvitations)
-        .set({
-          status: "accepted",
-          email,
-          name,
-          role: invitation.role,
-          joinedAt: new Date(),
-          lastAccessedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(weddingRoleInvitations.id, invitation.id))
-        .returning();
-
-      // If linked to an important person, update their info
-      if (invitation.importantPersonId) {
-        await db.update(coupleImportantPeople)
-          .set({
-            name,
-            email,
-            updatedAt: new Date(),
-          })
-          .where(eq(coupleImportantPeople.id, invitation.importantPersonId));
-      }
-
-      // Return the access token for future access
-      res.json({
-        success: true,
-        accessToken: updated.accessToken,
-        invitation: {
-          id: updated.id,
-          role: updated.role,
-          name: updated.name,
-          canViewTimeline: updated.canViewTimeline,
-          canCommentTimeline: updated.canCommentTimeline,
-          canViewSchedule: updated.canViewSchedule,
-          canEditSchedule: updated.canEditSchedule,
-          canViewShotlist: updated.canViewShotlist,
-          canViewBudget: updated.canViewBudget,
-          canViewGuestlist: updated.canViewGuestlist,
-          canViewImportantPeople: updated.canViewImportantPeople,
-          canEditPlanning: updated.canEditPlanning,
-        },
-      });
-    } catch (error) {
-      console.error("Error joining wedding:", error);
-      res.status(500).json({ error: "Kunne ikke delta i bryllupet" });
-    }
-  });
-
-  // Access wedding data by token (for invited persons)
-  app.get("/api/partner/access/:token", async (req: Request, res: Response) => {
-    try {
-      const { token } = req.params;
-
-      const [invitation] = await db.select()
-        .from(weddingRoleInvitations)
-        .where(and(
-          eq(weddingRoleInvitations.accessToken, token),
-          eq(weddingRoleInvitations.status, "accepted")
-        ));
-
-      if (!invitation) {
-        return res.status(404).json({ error: "Ugyldig eller utløpt tilgang" });
-      }
-
-      // Check expiry
-      if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
-        await db.update(weddingRoleInvitations)
-          .set({ status: "expired" })
-          .where(eq(weddingRoleInvitations.id, invitation.id));
-        return res.status(403).json({ error: "Tilgangen har utløpt" });
-      }
-
-      // Update last accessed
-      await db.update(weddingRoleInvitations)
-        .set({ lastAccessedAt: new Date() })
-        .where(eq(weddingRoleInvitations.id, invitation.id));
-
-      // Get couple info
-      const [couple] = await db.select({
-        displayName: coupleProfiles.displayName,
-        weddingDate: coupleProfiles.weddingDate,
-      }).from(coupleProfiles).where(eq(coupleProfiles.id, invitation.coupleId));
-
-      // Build response based on permissions
-      const responseData: any = {
-        invitation: {
-          id: invitation.id,
-          name: invitation.name,
-          role: invitation.role,
-          canViewTimeline: invitation.canViewTimeline,
-          canCommentTimeline: invitation.canCommentTimeline,
-          canViewSchedule: invitation.canViewSchedule,
-          canEditSchedule: invitation.canEditSchedule,
-          canViewShotlist: invitation.canViewShotlist,
-          canViewBudget: invitation.canViewBudget,
-          canViewGuestlist: invitation.canViewGuestlist,
-          canViewImportantPeople: invitation.canViewImportantPeople,
-          canEditPlanning: invitation.canEditPlanning,
-        },
-        couple,
-      };
-
-      // Get timeline if allowed
-      if (invitation.canViewTimeline) {
-        // Find timeline through vendor conversations -> projects -> timelines
-        const timelines = await db.execute(sql`
-          SELECT DISTINCT wt.id, wt.title, wt.wedding_date, wt.status, wt.couple_name, wt.created_at
-          FROM wedding_timelines wt
-          JOIN creatorhub_projects cp ON wt.project_id = cp.id
-          JOIN creatorhub_users cu ON cu.project_id = cp.id
-          JOIN conversations c ON c.vendor_id = cu.vendor_id
-          WHERE c.couple_id = ${invitation.coupleId}
-          ORDER BY wt.created_at DESC LIMIT 1
-        `);
-        if ((timelines.rows || []).length > 0) {
-          const timeline = (timelines.rows as any[])[0];
-          responseData.timeline = timeline;
-
-          // Get timeline events
-          const events = await db.execute(sql`
-            SELECT id, title, event_time, duration_minutes, description, location, status
-            FROM wedding_timeline_events
-            WHERE timeline_id = ${timeline.id}
-            ORDER BY event_time ASC NULLS LAST
-          `);
-          responseData.timelineEvents = events.rows || [];
-
-          // Get timeline comments if can comment
-          if (invitation.canCommentTimeline) {
-            const comments = await db.execute(sql`
-              SELECT id, message, author_name, author_type, is_private, created_at
-              FROM wedding_timeline_comments
-              WHERE timeline_id = ${timeline.id} AND is_private = false
-              ORDER BY created_at DESC LIMIT 50
-            `);
-            responseData.timelineComments = comments.rows || [];
-          }
-        }
-      }
-
-      // Get schedule if allowed
-      if (invitation.canViewSchedule) {
-        const scheduleList = await db.select()
-          .from(scheduleEvents)
-          .where(eq(scheduleEvents.coupleId, invitation.coupleId))
-          .orderBy(scheduleEvents.time);
-        responseData.schedule = scheduleList;
-      }
-
-      // Get shotlist if allowed
-      if (invitation.canViewShotlist) {
-        const shots = await db.execute(sql`
-          SELECT id, title, description, category, completed
-          FROM couple_photo_shots
-          WHERE couple_id = ${invitation.coupleId}
-          ORDER BY sort_order ASC
-        `);
-        responseData.shotlist = shots.rows || [];
-      }
-
-      // Get important people if allowed
-      if (invitation.canViewImportantPeople) {
-        const people = await db.select()
-          .from(coupleImportantPeople)
-          .where(eq(coupleImportantPeople.coupleId, invitation.coupleId))
-          .orderBy(coupleImportantPeople.sortOrder);
-        responseData.importantPeople = people;
-      }
-
-      res.json(responseData);
-    } catch (error) {
-      console.error("Error accessing wedding data:", error);
-      res.status(500).json({ error: "Kunne ikke hente bryllupsdata" });
-    }
-  });
-
-  // ==========================================
-  // Vendor — View important people for a couple
-  // ==========================================
-
-  app.get("/api/vendor/couple/:coupleId/important-people", async (req: Request, res: Response) => {
-    const vendorId = await checkVendorAuth(req, res);
-    if (!vendorId) return;
-
-    try {
-      const { coupleId } = req.params;
-
-      // Verify vendor has a relationship with this couple (active contract or conversation)
-      const contractCheck = await db.execute(sql`
-        SELECT id FROM couple_vendor_contracts
-        WHERE vendor_id = ${vendorId} AND couple_id = ${coupleId} AND status = 'active'
-        LIMIT 1
-      `);
-      const convCheck = await db.execute(sql`
-        SELECT id FROM conversations
-        WHERE vendor_id = ${vendorId} AND couple_id = ${coupleId}
-        LIMIT 1
-      `);
-
-      if (!(contractCheck.rows || []).length && !(convCheck.rows || []).length) {
-        return res.status(403).json({ error: "Ingen tilgang til dette bryllupet" });
-      }
-
-      const people = await db.select({
-        id: coupleImportantPeople.id,
-        name: coupleImportantPeople.name,
-        role: coupleImportantPeople.role,
-        phone: coupleImportantPeople.phone,
-        email: coupleImportantPeople.email,
-        notes: coupleImportantPeople.notes,
-      })
-        .from(coupleImportantPeople)
-        .where(eq(coupleImportantPeople.coupleId, coupleId))
-        .orderBy(coupleImportantPeople.sortOrder);
-
-      res.json(people);
-    } catch (error) {
-      console.error("Error fetching important people for vendor:", error);
-      res.status(500).json({ error: "Kunne ikke hente viktige personer" });
-    }
-  });
-
   // Register subscription routes
   registerSubscriptionRoutes(app);
-
-  // Register CreatorHub API routes
-  registerCreatorhubRoutes(app);
 
   return httpServer;
 }

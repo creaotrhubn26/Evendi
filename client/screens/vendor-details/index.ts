@@ -8,12 +8,24 @@ export { default as CakeDetailsScreen } from "./CakeDetailsScreen";
 export { default as BeautyDetailsScreen } from "./BeautyDetailsScreen";
 export { default as TransportDetailsScreen } from "./TransportDetailsScreen";
 export { default as PlannerDetailsScreen } from "./PlannerDetailsScreen";
-export { default as PhotoVideoDetailsScreen } from "./PhotoVideoDetailsScreen";
-export { default as DressDetailsScreen } from "./DressDetailsScreen";
 
-// Category mapping helper — backed by shared VENDOR_CATEGORIES registry
-import { getVendorDetailsRoute } from "@shared/event-types";
-
-export const getCategoryDetailsScreen = (category: string): string | null => {
-  return getVendorDetailsRoute(category);
+// Category mapping helper
+export const getCategoryDetailsScreen = (category: string) => {
+  const mapping: Record<string, string> = {
+    venue: "VenueDetails",
+    photographer: "PhotographerDetails",
+    videographer: "PhotographerDetails", // Same screen
+    florist: "FloristDetails",
+    catering: "CateringDetails",
+    music: "MusicDetails",
+    dj: "MusicDetails", // Same screen
+    cake: "CakeDetails",
+    beauty: "BeautyDetails",
+    hair: "BeautyDetails", // Same screen
+    makeup: "BeautyDetails", // Same screen
+    transport: "TransportDetails",
+    planner: "PlannerDetails",
+    coordinator: "PlannerDetails", // Same screen
+  };
+  return mapping[category.toLowerCase()] || null;
 };

@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, View, TextInput, Pressable, ActivityIndicator, Switch } from "react-native";
+import { StyleSheet, View, TextInput, Pressable, ActivityIndicator, Alert, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { EvendiIcon } from "@/components/EvendiIcon";
+import { Feather } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
-import { useEventType } from "@/hooks/useEventType";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { showToast } from "@/lib/toast";
-import PersistentTextInput from "@/components/PersistentTextInput";
-const VENDOR_STORAGE_KEY = "evendi_vendor_session";
+
+const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
+
 interface MusicDetails {
   // Type
   isDJ: boolean;
@@ -57,6 +56,7 @@ interface MusicDetails {
   travelIncluded: boolean;
   travelRadius: number | null;
 }
+
 const defaultDetails: MusicDetails = {
   isDJ: true, isLiveBand: false, isSoloArtist: false, isEnsemble: false,
   soundSystemIncluded: true, speakersIncluded: true, microphoneIncluded: true,
@@ -68,19 +68,22 @@ const defaultDetails: MusicDetails = {
   minHours: null, maxHours: null, overtimeRate: null,
   travelIncluded: false, travelRadius: null,
 };
+
 const MUSIC_GENRES = ["Pop", "Rock", "Jazz", "Klassisk", "Soul/R&B", "EDM/House", "Hip-hop", "Country", "Latin", "70-/80-tallet", "Norsk", "Akustisk"];
+
 export default function MusicDetailsScreen({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const { theme } = useTheme();
-  const { isWedding } = useEventType();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [details, setDetails] = useState<MusicDetails>(defaultDetails);
+
   useEffect(() => {
     AsyncStorage.getItem(VENDOR_STORAGE_KEY).then((data) => {
       if (data) setSessionToken(JSON.parse(data).sessionToken);
     });
   }, []);
+
   const { data: savedData, isLoading } = useQuery({
     queryKey: ["/api/vendor/music-details"],
     queryFn: async () => {
@@ -92,7 +95,9 @@ export default function MusicDetailsScreen({ navigation }: { navigation: NativeS
     },
     enabled: !!sessionToken,
   });
+
   useEffect(() => { if (savedData) setDetails({ ...defaultDetails, ...savedData }); }, [savedData]);
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!sessionToken) throw new Error("Ikke innlogget");
@@ -107,15 +112,17 @@ export default function MusicDetailsScreen({ navigation }: { navigation: NativeS
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/music-details"] });
-      showToast("Musikkdetaljene er oppdatert");
+      Alert.alert("Lagret", "Musikkdetaljene er oppdatert");
     },
     onError: (error: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast(error.message);
+      Alert.alert("Feil", error.message);
     },
   });
+
   const updateDetail = <K extends keyof MusicDetails>(key: K, value: MusicDetails[K]) => setDetails(prev => ({ ...prev, [key]: value }));
   const toggleGenre = (genre: string) => setDetails(prev => ({ ...prev, musicGenres: prev.musicGenres.includes(genre) ? prev.musicGenres.filter(g => g !== genre) : [...prev.musicGenres, genre] }));
+
   const renderSwitch = (label: string, value: boolean, onChange: (v: boolean) => void, description?: string) => (
     <View style={styles.switchContainer}>
       <View style={styles.switchRow}>
@@ -123,47 +130,51 @@ export default function MusicDetailsScreen({ navigation }: { navigation: NativeS
           <ThemedText style={[styles.switchLabel, { color: theme.text }]}>{label}</ThemedText>
           {description && <ThemedText style={[styles.switchDescription, { color: theme.textSecondary }]}>{description}</ThemedText>}
         </View>
-        <Switch value={value} onValueChange={onChange} trackColor={{ false: theme.border, true: theme.accent + "60" }} thumbColor={value ? theme.accent : theme.backgroundSecondary} />
+        <Switch value={value} onValueChange={onChange} trackColor={{ false: theme.border, true: Colors.dark.accent + "60" }} thumbColor={value ? Colors.dark.accent : theme.backgroundSecondary} />
       </View>
     </View>
   );
+
   const renderInput = (label: string, value: string | null, onChange: (v: string) => void, options?: { placeholder?: string; keyboardType?: "default" | "number-pad"; suffix?: string }) => (
     <View style={styles.inputGroup}>
       <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>{label}</ThemedText>
       <View style={styles.inputWrapper}>
-        <PersistentTextInput style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }, options?.suffix && { paddingRight: 50 }]} value={value || ""} onChangeText={onChange} placeholder={options?.placeholder} placeholderTextColor={theme.textMuted} keyboardType={options?.keyboardType || "default"} />
-          draftKey="MusicDetailsScreen-input-1"
+        <TextInput style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border }, options?.suffix && { paddingRight: 50 }]} value={value || ""} onChangeText={onChange} placeholder={options?.placeholder} placeholderTextColor={theme.textMuted} keyboardType={options?.keyboardType || "default"} />
         {options?.suffix && <ThemedText style={[styles.inputSuffix, { color: theme.textSecondary }]}>{options.suffix}</ThemedText>}
       </View>
     </View>
   );
+
   const renderSectionHeader = (icon: string, title: string) => (
     <View style={styles.sectionHeader}>
-      <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}><EvendiIcon name={icon as any} size={16} color={theme.accent} /></View>
+      <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}><Feather name={icon as any} size={16} color={theme.accent} /></View>
       <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>{title}</ThemedText>
     </View>
   );
+
   if (isLoading) return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
         <View style={styles.headerContent}>
-          <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}><EvendiIcon name="music" size={20} color="#FFFFFF" /></View>
+          <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}><Feather name="music" size={20} color="#FFFFFF" /></View>
           <ThemedText style={[styles.headerTitle, { color: theme.text }]}>Musikkdetaljer</ThemedText>
         </View>
-        <Pressable onPress={() => navigation.goBack()} style={styles.closeButton}><EvendiIcon name="x" size={20} color={theme.textSecondary} /></Pressable>
+        <Pressable onPress={() => navigation.goBack()} style={styles.closeButton}><Feather name="x" size={20} color={theme.textSecondary} /></Pressable>
       </View>
       <View style={styles.loadingContainer}><ActivityIndicator size="large" color={theme.accent} /></View>
     </View>
   );
+
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
         <View style={styles.headerContent}>
-          <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}><EvendiIcon name="music" size={20} color="#FFFFFF" /></View>
+          <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}><Feather name="music" size={20} color="#FFFFFF" /></View>
           <View><ThemedText style={[styles.headerTitle, { color: theme.text }]}>Musikkdetaljer</ThemedText><ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>Spesifiser dine tjenester</ThemedText></View>
         </View>
-        <Pressable onPress={() => navigation.goBack()} style={styles.closeButton}><EvendiIcon name="x" size={20} color={theme.textSecondary} /></Pressable>
+        <Pressable onPress={() => navigation.goBack()} style={styles.closeButton}><Feather name="x" size={20} color={theme.textSecondary} /></Pressable>
       </View>
+
       <KeyboardAwareScrollViewCompat style={{ flex: 1 }} contentContainerStyle={[styles.content, { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }]}>
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("mic", "Type artist")}
@@ -172,6 +183,7 @@ export default function MusicDetailsScreen({ navigation }: { navigation: NativeS
           {renderSwitch("Solo artist", details.isSoloArtist, (v) => updateDetail("isSoloArtist", v))}
           {renderSwitch("Ensemble", details.isEnsemble, (v) => updateDetail("isEnsemble", v))}
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("speaker", "Utstyr")}
           {renderSwitch("Lydanlegg inkludert", details.soundSystemIncluded, (v) => updateDetail("soundSystemIncluded", v))}
@@ -180,14 +192,16 @@ export default function MusicDetailsScreen({ navigation }: { navigation: NativeS
           {renderSwitch("Lysshow inkludert", details.lightingIncluded, (v) => updateDetail("lightingIncluded", v))}
           {renderSwitch("Røykmaskin tilgjengelig", details.fogMachineAvailable, (v) => updateDetail("fogMachineAvailable", v))}
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("award", "Tjenester")}
           {renderSwitch("Seremonimester/MC", details.mcServicesAvailable, (v) => updateDetail("mcServicesAvailable", v))}
-          {renderSwitch(isWedding ? "Bryllupsleker-koordinering" : "Aktivitetskoordinering", details.weddingGameCoordination, (v) => updateDetail("weddingGameCoordination", v))}
+          {renderSwitch("Bryllupsleker-koordinering", details.weddingGameCoordination, (v) => updateDetail("weddingGameCoordination", v))}
           {renderSwitch("Førstdans-koordinering", details.firstDanceCoordination, (v) => updateDetail("firstDanceCoordination", v))}
           {renderSwitch("Tilpasset spilleliste", details.customPlaylistCreation, (v) => updateDetail("customPlaylistCreation", v))}
           {renderSwitch("Tar imot ønsker", details.requestsAccepted, (v) => updateDetail("requestsAccepted", v))}
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("calendar", "Tidspunkter")}
           {renderSwitch("Seremonimusikk", details.ceremonyMusicAvailable, (v) => updateDetail("ceremonyMusicAvailable", v))}
@@ -195,6 +209,7 @@ export default function MusicDetailsScreen({ navigation }: { navigation: NativeS
           {renderSwitch("Middagsmusikk", details.dinnerMusicAvailable, (v) => updateDetail("dinnerMusicAvailable", v))}
           {renderSwitch("Festmusikk", details.partyMusicAvailable, (v) => updateDetail("partyMusicAvailable", v))}
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("disc", "Sjangre")}
           <View style={styles.styleGrid}>
@@ -205,6 +220,7 @@ export default function MusicDetailsScreen({ navigation }: { navigation: NativeS
             ))}
           </View>
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("clock", "Tid & Priser")}
           <View style={styles.rowInputs}>
@@ -216,18 +232,21 @@ export default function MusicDetailsScreen({ navigation }: { navigation: NativeS
           {renderSwitch("Pauser underveis", details.breaksDuring, (v) => updateDetail("breaksDuring", v))}
           {details.breaksDuring && renderInput("Pauselengde", details.breakDurationMinutes?.toString() || "", (v) => updateDetail("breakDurationMinutes", v ? parseInt(v) : null), { placeholder: "15", keyboardType: "number-pad", suffix: "min" })}
         </View>
+
         <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           {renderSectionHeader("map-pin", "Reise")}
           {renderSwitch("Reise inkludert", details.travelIncluded, (v) => updateDetail("travelIncluded", v))}
           {!details.travelIncluded && renderInput("Gratis innenfor", details.travelRadius?.toString() || "", (v) => updateDetail("travelRadius", v ? parseInt(v) : null), { placeholder: "50", keyboardType: "number-pad", suffix: "km" })}
         </View>
+
         <Pressable onPress={() => saveMutation.mutate()} disabled={saveMutation.isPending} style={({ pressed }) => [styles.saveBtn, { backgroundColor: theme.accent }, pressed && { opacity: 0.9 }]}>
-          {saveMutation.isPending ? <ActivityIndicator color="#FFFFFF" /> : <><View style={styles.saveBtnIcon}><EvendiIcon name="save" size={16} color="#FFFFFF" /></View><ThemedText style={styles.saveBtnText}>Lagre musikkdetaljer</ThemedText></>}
+          {saveMutation.isPending ? <ActivityIndicator color="#FFFFFF" /> : <><View style={styles.saveBtnIcon}><Feather name="save" size={16} color="#FFFFFF" /></View><ThemedText style={styles.saveBtnText}>Lagre musikkdetaljer</ThemedText></>}
         </Pressable>
       </KeyboardAwareScrollViewCompat>
     </View>
   );
 }
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md, borderBottomWidth: 1 },

@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { InitialState } from "@react-navigation/native";
 import { NavigationContainer } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
+import { KeyboardProviderCompat } from "@/components/KeyboardProviderCompat";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
@@ -18,18 +18,26 @@ import { ToastProvider } from "@/components/ToastProvider";
 import { DialogProvider } from "@/components/DialogProvider";
 
 export default function App() {
+  console.log("[App] Component mounting");
   const [isReady, setIsReady] = useState(false);
   const [initialState, setInitialState] = useState<InitialState | undefined>(undefined);
   const PERSISTENCE_KEY = "evendi_nav_state";
 
   useEffect(() => {
+    console.log("[App] useEffect - Starting state restoration");
     const restoreState = async () => {
       try {
         const savedState = await AsyncStorage.getItem(PERSISTENCE_KEY);
         if (savedState) {
+          console.log("[App] Restored navigation state");
           setInitialState(JSON.parse(savedState));
+        } else {
+          console.log("[App] No saved navigation state");
         }
+      } catch (error) {
+        console.error("[App] Error restoring state:", error);
       } finally {
+        console.log("[App] Setting isReady = true");
         setIsReady(true);
       }
     };
@@ -48,8 +56,11 @@ export default function App() {
   }, []);
 
   if (!isReady) {
+    console.log("[App] Waiting for ready state...");
     return null;
   }
+
+  console.log("[App] Rendering app with initialState:", !!initialState);
 
   return (
     <ErrorBoundary>
@@ -59,12 +70,12 @@ export default function App() {
             <ToastProvider>
               <DialogProvider>
                 <GestureHandlerRootView style={styles.root}>
-                  <KeyboardProvider>
+                  <KeyboardProviderCompat>
                     <NavigationContainer initialState={initialState} onStateChange={handleStateChange}>
                       <RootStackNavigator skipSplash={Boolean(initialState)} />
                     </NavigationContainer>
                     <StatusBar style="auto" />
-                  </KeyboardProvider>
+                  </KeyboardProviderCompat>
                 </GestureHandlerRootView>
               </DialogProvider>
             </ToastProvider>

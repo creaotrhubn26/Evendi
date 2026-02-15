@@ -26,10 +26,12 @@ export class ErrorBoundary extends Component<
   };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    console.error("[ErrorBoundary] Error caught:", error);
     return { error };
   }
 
   componentDidCatch(error: Error, info: { componentStack: string }): void {
+    console.error("[ErrorBoundary] Component stack:", info.componentStack);
     if (typeof this.props.onError === "function") {
       this.props.onError(error, info.componentStack);
     }

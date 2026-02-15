@@ -2,93 +2,75 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   StyleSheet,
   View,
+  FlatList,
   Pressable,
   ActivityIndicator,
-  FlatList,
-  ScrollView,
-  Dimensions,
+  Alert,
   RefreshControl,
-  Image,
+  ScrollView,
   Linking,
+  Platform,
+  Dimensions,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { EvendiIcon, EvendiIconGlyphMap } from "@/components/EvendiIcon";
+import { Feather } from "@expo/vector-icons";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
-import * as Clipboard from "expo-clipboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import Animated, { FadeInDown } from "react-native-reanimated";
+import * as Clipboard from "expo-clipboard";
+
 import { ThemedText } from "@/components/ThemedText";
-import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { useAppSettings } from "@/hooks/useAppSettings";
-import { formatCurrency } from "@/lib/format-currency";
-import { Spacing, BorderRadius, Typography } from "@/constants/theme";
+import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
-import { getVendorConfig, getEnabledTabs, type VendorTab } from "@/lib/vendor-adapter";
-import { showToast } from "@/lib/toast";
-import { showConfirm, showOptions } from "@/lib/dialogs";
-const VENDOR_STORAGE_KEY = "evendi_vendor_session";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+
+const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
+
 interface VendorSession {
   sessionToken: string;
   vendorId: string;
+  email: string;
   businessName: string;
 }
-// Types (matching server schema)
+
+interface DeliveryItem {
+  id: string;
+  type: string;
+  label: string;
+  url: string;
+  description: string | null;
+}
+
 interface Delivery {
   id: string;
-  title: string;
-  link: string | null;
-  createdAt: string;
-  description?: string;
+  coupleName: string;
+  coupleEmail: string | null;
   accessCode: string;
-  status?: string;
-  coupleName?: string;
-  weddingDate?: string | null;
-  items?: any[]; // delivery items
-}
-interface UpcomingEvent {
-  id: string;
-  eventDate: string;
-  eventType: string;
-  notes: string | null;
-  couple?: {
-    id: string;
-    displayName: string;
-  };
-}
-interface VendorProfile {
-  id: string;
-  businessName: string;
+  title: string;
   description: string | null;
-  category: {
-    id: string;
-    name: string;
-    dashboardKey?: string | null;
-  } | null;
-}
-interface VendorCoupleAccess {
-  id: string;
-  displayName: string;
   weddingDate: string | null;
-  accessTypes: string[];
+  status: string;
+  createdAt: string;
+  items: DeliveryItem[];
 }
-interface Props {
-  navigation: NativeStackNavigationProp<any>;
-}
+
 interface InspirationMedia {
   id: string;
   type: string;
   url: string;
   caption: string | null;
 }
+
 interface InspirationCategory {
   id: string;
   name: string;
   icon: string;
 }
+
 interface Inspiration {
   id: string;
   title: string;
@@ -99,19 +81,22 @@ interface Inspiration {
   media: InspirationMedia[];
   category: InspirationCategory | null;
 }
+
 type TabType = "deliveries" | "inspirations" | "messages" | "products" | "offers" | "reviews" | "couples";
+
 interface Conversation {
   id: string;
   coupleId: string;
   vendorId: string;
   inspirationId: string | null;
   status: string;
-  lastMessageAt: string | null;
+  lastMessageAt: string;
   vendorUnreadCount: number;
-  couple?: { id: string; displayName: string; email: string; weddingDate: string | null };
+  couple: { id: string; displayName: string; email: string };
   inspiration: { id: string; title: string } | null;
   lastMessage: { body: string; senderType: string; createdAt: string } | null;
 }
+
 interface VendorProduct {
   id: string;
   title: string;
@@ -125,6 +110,7 @@ interface VendorProduct {
   sortOrder: number | null;
   createdAt: string;
 }
+
 interface VendorOfferItem {
   id: string;
   title: string;
@@ -133,6 +119,7 @@ interface VendorOfferItem {
   unitPrice: number;
   lineTotal: number;
 }
+
 interface VendorOffer {
   id: string;
   title: string;
@@ -142,9 +129,10 @@ interface VendorOffer {
   currency: string | null;
   validUntil: string | null;
   createdAt: string;
-  couple?: { id: string; displayName: string; email: string };
+  couple: { id: string; displayName: string; email: string } | null;
   items: VendorOfferItem[];
 }
+
 interface VendorReceivedReview {
   id: string;
   contractId: string;
@@ -157,6 +145,7 @@ interface VendorReceivedReview {
   coupleName: string;
   response: { id: string; body: string; createdAt: string } | null;
 }
+
 interface VendorContract {
   id: string;
   coupleId: string;
@@ -166,6 +155,7 @@ interface VendorContract {
   coupleName: string;
   hasReview: boolean;
 }
+
 interface CoupleContract {
   id: string;
   coupleId: string;
@@ -178,15 +168,17 @@ interface CoupleContract {
   canViewTableSeating: boolean;
   createdAt: string;
 }
+
 interface Props {
   navigation: NativeStackNavigationProp<any>;
 }
+
 export default function VendorDashboardScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
-  const { getSetting } = useAppSettings();
   const queryClient = useQueryClient();
+
   const [session, setSession] = useState<VendorSession | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("deliveries");
@@ -195,10 +187,12 @@ export default function VendorDashboardScreen({ navigation }: Props) {
   const [favoriteConversations, setFavoriteConversations] = useState<Set<string>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
   const [wsConversations, setWsConversations] = useState<Conversation[]>([]);
+
   useEffect(() => {
     loadSession();
     loadFavorites();
   }, []);
+
   const loadSession = async () => {
     const sessionData = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
     if (sessionData) {
@@ -207,6 +201,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       navigation.replace("VendorLogin");
     }
   };
+
   const loadFavorites = async () => {
     try {
       const favoritesData = await AsyncStorage.getItem("vendor_favorite_conversations");
@@ -217,6 +212,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       console.error("Error loading favorites:", error);
     }
   };
+
   const toggleFavorite = async (conversationId: string) => {
     const newFavorites = new Set(favoriteConversations);
     if (newFavorites.has(conversationId)) {
@@ -228,6 +224,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     await AsyncStorage.setItem("vendor_favorite_conversations", JSON.stringify(Array.from(newFavorites)));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
+
   const { data: deliveries = [], isLoading: deliveriesLoading, refetch: refetchDeliveries } = useQuery<Delivery[]>({
     queryKey: ["/api/vendor/deliveries"],
     queryFn: async () => {
@@ -242,6 +239,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     },
     enabled: !!session?.sessionToken,
   });
+
   const { data: inspirationsData = [], isLoading: inspirationsLoading, refetch: refetchInspirations } = useQuery<Inspiration[]>({
     queryKey: ["/api/vendor/inspirations"],
     queryFn: async () => {
@@ -256,6 +254,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     },
     enabled: !!session?.sessionToken,
   });
+
   const { data: conversationsData = [], isLoading: conversationsLoading, refetch: refetchConversations } = useQuery<Conversation[]>({
     queryKey: ["/api/vendor/conversations"],
     queryFn: async () => {
@@ -270,6 +269,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     },
     enabled: !!session?.sessionToken,
   });
+
   // Query subscription status
   const { data: subscriptionStatus } = useQuery({
     queryKey: ["/api/vendor/subscription/status", session?.sessionToken],
@@ -286,6 +286,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     enabled: !!session?.sessionToken,
     refetchInterval: 60000, // Refetch every minute
   });
+
   // Merge fetched conversations with WebSocket updates
   const mergedConversationsData = React.useMemo(() => {
     const base = [...conversationsData];
@@ -297,25 +298,30 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     }
     return base;
   }, [conversationsData, wsConversations]);
+
   // Filter and sort conversations
   const filteredAndSortedConversations = React.useMemo(() => {
     let filtered = [...mergedConversationsData];
+
     // Apply filter
     if (conversationFilter === "unread") {
       filtered = filtered.filter(conv => conv.vendorUnreadCount > 0);
     } else if (conversationFilter === "favorites") {
       filtered = filtered.filter(conv => favoriteConversations.has(conv.id));
     }
+
     // Apply sort
     if (conversationSort === "recent") {
-      filtered.sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime());
+      filtered.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
     } else if (conversationSort === "name") {
-      filtered.sort((a, b) => (a.couple?.displayName || "").localeCompare(b.couple?.displayName || ""));
+      filtered.sort((a, b) => a.couple.displayName.localeCompare(b.couple.displayName));
     } else if (conversationSort === "unread") {
       filtered.sort((a, b) => b.vendorUnreadCount - a.vendorUnreadCount);
     }
+
     return filtered;
   }, [mergedConversationsData, conversationFilter, conversationSort, favoriteConversations]);
+
   const { data: productsData = [], isLoading: productsLoading, refetch: refetchProducts } = useQuery<VendorProduct[]>({
     queryKey: ["/api/vendor/products"],
     queryFn: async () => {
@@ -330,6 +336,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     },
     enabled: !!session?.sessionToken,
   });
+
   const { data: offersData = [], isLoading: offersLoading, refetch: refetchOffers } = useQuery<VendorOffer[]>({
     queryKey: ["/api/vendor/offers"],
     queryFn: async () => {
@@ -344,23 +351,22 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     },
     enabled: !!session?.sessionToken,
   });
-  const { data: vendorProfile } = useQuery<{ 
-    googleReviewUrl: string | null;
-    category: { id: string; name: string; dashboardKey?: string | null } | null;
-  }>({
+
+  const { data: vendorProfile } = useQuery<{ googleReviewUrl: string | null }>({
     queryKey: ["/api/vendor/profile"],
     queryFn: async () => {
-      if (!session?.sessionToken) return { googleReviewUrl: null, category: null };
+      if (!session?.sessionToken) return { googleReviewUrl: null };
       const response = await fetch(new URL("/api/vendor/profile", getApiUrl()).toString(), {
         headers: {
           Authorization: `Bearer ${session.sessionToken}`,
         },
       });
-      if (!response.ok) return { googleReviewUrl: null, category: null };
+      if (!response.ok) return { googleReviewUrl: null };
       return response.json();
     },
     enabled: !!session?.sessionToken,
   });
+
   const { data: reviewsResponse, isLoading: reviewsLoading, refetch: refetchReviews } = useQuery<{ reviews: VendorReceivedReview[]; stats: { total: number; approved: number; average: number } }>({
     queryKey: ["/api/vendor/reviews"],
     queryFn: async () => {
@@ -375,7 +381,9 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     },
     enabled: !!session?.sessionToken,
   });
+
   const reviewsData = reviewsResponse?.reviews || [];
+
   const { data: contractsData = [], refetch: refetchContracts } = useQuery<VendorContract[]>({
     queryKey: ["/api/vendor/contracts"],
     queryFn: async () => {
@@ -390,6 +398,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     },
     enabled: !!session?.sessionToken,
   });
+
   // Query for couple contracts with schedule access
   const { data: coupleContractsData = [], refetch: refetchCoupleContracts } = useQuery<CoupleContract[]>({
     queryKey: ["/api/vendor/couple-contracts"],
@@ -405,7 +414,9 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     },
     enabled: !!session?.sessionToken,
   });
+
   const completedWithoutReview = contractsData.filter(c => c.status === "completed" && !c.hasReview);
+
   const sendReminderMutation = useMutation({
     mutationFn: async (contractId: string) => {
       if (!session?.sessionToken) throw new Error("Ikke autentisert");
@@ -426,102 +437,22 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     },
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast("Påminnelse om anmeldelse er sendt til brudeparet.");
+      Alert.alert("Sendt!", "Påminnelse om anmeldelse er sendt til brudeparet.");
       refetchContracts();
     },
     onError: (error: any) => {
-      showToast(error.message || "Kunne ikke sende påminnelse");
+      Alert.alert("Feil", error.message || "Kunne ikke sende påminnelse");
     },
   });
+
   const totalUnread = mergedConversationsData.reduce((sum, c) => sum + (c.vendorUnreadCount || 0), 0);
-  // Get vendor category configuration
-  const vendorConfig = getVendorConfig(
-    vendorProfile?.category?.id || null,
-    vendorProfile?.category?.name || null,
-    vendorProfile?.category?.dashboardKey || null
-  );
-  const enabledTabs = getEnabledTabs(vendorConfig);
-  useEffect(() => {
-    const firstTab = enabledTabs[0]?.key;
-    const stillEnabled = enabledTabs.some((t) => t.key === activeTab);
-    if (!stillEnabled && firstTab) {
-      setActiveTab(firstTab);
-    }
-  }, [enabledTabs, activeTab]);
-  // Helper: Calculate business insights
-  const getBusinessInsights = () => {
-    const insights = [];
-    const pendingOffers = offersData.filter(o => o.status === "pending").length;
-    const unapprovedReviews = reviewsData.filter(r => !r.isApproved).length;
-    const emptyDeliveries = deliveries.filter(d => (d.items?.length || 0) === 0).length;
-    const draftShowcases = inspirationsData.filter(i => i.status === "draft").length;
-    const completedWithoutReview = contractsData.filter(c => c.status === "completed" && !c.hasReview && !c.reviewReminderSentAt);
-    if (totalUnread > 0) {
-      insights.push({
-        icon: "message-circle" as const,
-        label: `${totalUnread} ulest${totalUnread > 1 ? 'e' : ''} melding${totalUnread > 1 ? 'er' : ''}`,
-        color: theme.error,
-        priority: "urgent",
-        action: () => setActiveTab("messages"),
-      });
-    }
-    if (vendorConfig.insights.showPendingOffers && pendingOffers > 0) {
-      insights.push({
-        icon: "clock" as const,
-        label: `${pendingOffers} tilbud venter svar`,
-        color: theme.warning,
-        priority: "high",
-        action: () => setActiveTab("offers"),
-      });
-    }
-    if (vendorConfig.insights.showReviewRequests && completedWithoutReview.length > 0) {
-      insights.push({
-        icon: "star" as const,
-        label: `${completedWithoutReview.length} kan anmeldes`,
-        color: theme.accent,
-        priority: "normal",
-        action: () => setActiveTab("reviews"),
-      });
-    }
-    if (vendorConfig.insights.showReviewRequests && unapprovedReviews > 0) {
-      insights.push({
-        icon: "eye" as const,
-        label: `${unapprovedReviews} nye anmeldelse${unapprovedReviews > 1 ? 'r' : ''}`,
-        color: theme.accent,
-        priority: "normal",
-        action: () => setActiveTab("reviews"),
-      });
-    }
-    return insights.slice(0, 3); // Max 3 insights
-  };
-  const businessInsights = getBusinessInsights();
-  // Helper: Get quick stats
-  const getQuickStats = () => {
-    const stats = [];
-    if (vendorConfig.quickStats.showDeliveryCount && deliveries.length > 0) {
-      const activeDeliveries = deliveries.filter(d => d.status === "active").length;
-      stats.push({ label: "Leveranser", value: activeDeliveries, total: deliveries.length, icon: "package" as const });
-    }
-    if (vendorConfig.quickStats.showShowcaseCount && inspirationsData.length > 0) {
-      const publishedShowcases = inspirationsData.filter(i => i.status === "published").length;
-      stats.push({ label: "Showcase", value: publishedShowcases, total: inspirationsData.length, icon: "image" as const });
-    }
-    if (vendorConfig.quickStats.showOfferAcceptance && offersData.length > 0) {
-      const acceptedOffers = offersData.filter(o => o.status === "accepted").length;
-      stats.push({ label: "Tilbud", value: acceptedOffers, total: offersData.length, icon: "file-text" as const });
-    }
-    if (vendorConfig.quickStats.showAverageRating && reviewsData.length > 0) {
-      const avgRating = reviewsResponse?.stats?.average || 0;
-      stats.push({ label: "Snitt rating", value: avgRating.toFixed(1), icon: "star" as const, isRating: true });
-    }
-    return stats;
-  };
-  const quickStats = getQuickStats();
+
   // WebSocket subscription for vendor list updates
   useEffect(() => {
     if (!session?.sessionToken) return;
     let closedByUs = false;
     let reconnectTimer: any = null;
+
     const connect = () => {
       try {
         const wsUrl = getApiUrl().replace(/^http/, "ws") + `/ws/vendor-list?token=${encodeURIComponent(session.sessionToken)}`;
@@ -555,6 +486,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         reconnectTimer = setTimeout(connect, 3000);
       }
     };
+
     connect();
     return () => {
       closedByUs = true;
@@ -562,6 +494,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
   }, [session?.sessionToken, conversationsData]);
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     if (activeTab === "deliveries") {
@@ -581,6 +514,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     }
     setIsRefreshing(false);
   }, [activeTab, refetchDeliveries, refetchInspirations, refetchConversations, refetchProducts, refetchOffers, refetchReviews, refetchContracts, refetchCoupleContracts]);
+
   const handleLogout = async () => {
     const performLogout = async () => {
       if (session?.sessionToken) {
@@ -604,23 +538,35 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       queryClient.clear();
       navigation.replace("VendorLogin");
     };
-    const confirmed = await showConfirm({
-      title: "Logg ut",
-      message: "Er du sikker på at du vil logge ut?",
-      confirmLabel: "Logg ut",
-      cancelLabel: "Avbryt",
-      destructive: true,
-    });
-    if (confirmed) {
-      await performLogout();
+
+    // Use window.confirm on web for better compatibility
+    if (typeof window !== "undefined" && window.confirm) {
+      if (window.confirm("Er du sikker på at du vil logge ut?")) {
+        await performLogout();
+      }
+    } else {
+      Alert.alert(
+        "Logg ut",
+        "Er du sikker på at du vil logge ut?",
+        [
+          { text: "Avbryt", style: "cancel" },
+          {
+            text: "Logg ut",
+            style: "destructive",
+            onPress: performLogout,
+          },
+        ]
+      );
     }
   };
+
   const copyAccessCode = async (code: string) => {
     await Clipboard.setStringAsync(code);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    showToast(`Tilgangskode ${code} er kopiert.`);
+    Alert.alert("Kopiert!", `Tilgangskode ${code} er kopiert.`);
   };
-  const getTypeIcon = (type: string): keyof typeof EvendiIconGlyphMap => {
+
+  const getTypeIcon = (type: string): keyof typeof Feather.glyphMap => {
     switch (type) {
       case "gallery": return "image";
       case "video": return "video";
@@ -631,6 +577,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       default: return "link";
     }
   };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("nb-NO", {
@@ -639,14 +586,16 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       year: "numeric",
     });
   };
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "approved": return theme.success;
-      case "pending": return theme.warning;
-      case "rejected": return theme.error;
+      case "approved": return "#4CAF50";
+      case "pending": return "#FF9800";
+      case "rejected": return "#F44336";
       default: return theme.accent;
     }
   };
+
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "approved": return "Godkjent";
@@ -655,6 +604,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       default: return status;
     }
   };
+
   const renderInspirationItem = ({ item, index }: { item: Inspiration; index: number }) => {
     // Get thumbnail: prefer coverImageUrl, then first image from media
     const thumbnailUrl = item.coverImageUrl || item.media.find(m => m.type === "image")?.url;
@@ -706,7 +656,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                         />
                         {i === 2 && item.media.length > 4 && (
                           <View style={styles.moreOverlay}>
-                            <ThemedText style={[styles.moreText, { color: theme.buttonText }]}>+{item.media.length - 4}</ThemedText>
+                            <ThemedText style={styles.moreText}>+{item.media.length - 4}</ThemedText>
                           </View>
                         )}
                       </View>
@@ -716,17 +666,18 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               )}
               {/* Status badge overlay */}
               <View style={[styles.statusOverlay, { backgroundColor: getStatusColor(item.status) }]}>
-                <ThemedText style={[styles.statusOverlayText, { color: theme.buttonText }]}>
+                <ThemedText style={styles.statusOverlayText}>
                   {getStatusLabel(item.status)}
                 </ThemedText>
               </View>
             </View>
           ) : (
             <View style={[styles.noThumbnail, { backgroundColor: theme.backgroundRoot }]}>
-              <EvendiIcon name="image" size={32} color={theme.textMuted} />
+              <Feather name="image" size={32} color={theme.textMuted} />
               <ThemedText style={[styles.noThumbnailText, { color: theme.textMuted }]}>Ingen bilder</ThemedText>
             </View>
           )}
+
           {/* Content */}
           <View style={styles.showcaseContent}>
             <ThemedText style={[styles.showcaseTitle, { color: theme.text }]} numberOfLines={1}>
@@ -734,7 +685,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             </ThemedText>
             {item.category ? (
               <View style={styles.categoryRow}>
-                <EvendiIcon name="folder" size={12} color={theme.textSecondary} />
+                <Feather name="folder" size={12} color={theme.textSecondary} />
                 <ThemedText style={[styles.categoryText, { color: theme.textSecondary }]}>
                   {item.category.name}
                 </ThemedText>
@@ -747,7 +698,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             ) : null}
             <View style={styles.showcaseFooter}>
               <View style={styles.mediaCount}>
-                <EvendiIcon name="image" size={12} color={theme.textMuted} />
+                <Feather name="image" size={12} color={theme.textMuted} />
                 <ThemedText style={[styles.mediaCountText, { color: theme.textMuted }]}>
                   {item.media.length}
                 </ThemedText>
@@ -761,22 +712,12 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       </Animated.View>
     );
   };
+
   const renderDeliveryItem = ({ item, index }: { item: Delivery; index: number }) => {
     // Get thumbnails from delivery items that are images
-    const imageThumbnails = (item.items || [])
-      .filter((i: any) => i.type === "image" || i.type === "photo" || i.url.match(/\.(jpg|jpeg|png|gif|webp)$/i))
+    const imageThumbnails = item.items
+      .filter(i => i.type === "image" || i.type === "photo" || i.url.match(/\.(jpg|jpeg|png|gif|webp)$/i))
       .slice(0, 4);
-    const duplicateDelivery = () => {
-      const duplicated = {
-        ...item,
-        id: undefined,
-        title: `Kopi av ${item.title}`,
-        accessCode: undefined,
-        createdAt: undefined,
-      };
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      navigation.navigate("DeliveryCreate", { delivery: duplicated });
-    };
     
     return (
       <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
@@ -785,19 +726,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             navigation.navigate("DeliveryCreate", { delivery: item });
           }}
-          onLongPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            showOptions({
-              title: item.title,
-              message: "Velg handling",
-              cancelLabel: "Avbryt",
-              options: [
-                { label: "Rediger", onPress: () => navigation.navigate("DeliveryCreate", { delivery: item }) },
-                { label: "Dupliser", onPress: duplicateDelivery },
-              ],
-            });
-          }}
-          style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, shadowColor: theme.textMuted }]}
+          style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
           {/* Thumbnail Grid */}
           {imageThumbnails.length > 0 ? (
@@ -834,10 +763,10 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                           style={styles.deliverySmallThumbnail}
                           resizeMode="cover"
                         />
-                        {i === 2 && (item.items || []).filter((it: any) => it.type === "image" || it.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)).length > 4 && (
+                        {i === 2 && item.items.filter(it => it.type === "image" || it.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)).length > 4 && (
                           <View style={styles.deliveryMoreOverlay}>
-                            <ThemedText style={[styles.deliveryMoreText, { color: theme.buttonText }]}>
-                              +{(item.items || []).filter((it: any) => it.type === "image" || it.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)).length - 4}
+                            <ThemedText style={styles.deliveryMoreText}>
+                              +{item.items.filter(it => it.type === "image" || it.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)).length - 4}
                             </ThemedText>
                           </View>
                         )}
@@ -848,10 +777,11 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               )}
               {/* Status badge overlay */}
               <View style={[styles.deliveryStatusOverlay, { backgroundColor: theme.accent }]}>
-                <ThemedText style={[styles.deliveryStatusText, { color: theme.buttonText }]}>Aktiv</ThemedText>
+                <ThemedText style={styles.deliveryStatusText}>Aktiv</ThemedText>
               </View>
             </View>
           ) : null}
+
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
               <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
@@ -868,13 +798,14 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             </ThemedText>
             {item.weddingDate ? (
               <View style={styles.dateRow}>
-                <EvendiIcon name="calendar" size={12} color={theme.textMuted} />
+                <Feather name="calendar" size={12} color={theme.textMuted} />
                 <ThemedText style={[styles.dateText, { color: theme.textMuted }]}>
                   {item.weddingDate}
                 </ThemedText>
               </View>
             ) : null}
           </View>
+
           <View style={[styles.accessCodeContainer, { backgroundColor: theme.backgroundRoot }]}>
             <View style={styles.accessCodeLeft}>
               <ThemedText style={[styles.accessCodeLabel, { color: theme.textMuted }]}>Tilgangskode:</ThemedText>
@@ -884,19 +815,21 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               onPress={() => copyAccessCode(item.accessCode)}
               style={[styles.copyBtn, { backgroundColor: theme.accent + "20" }]}
             >
-              <EvendiIcon name="copy" size={16} color={theme.accent} />
+              <Feather name="copy" size={16} color={theme.accent} />
             </Pressable>
           </View>
+
           <View style={styles.itemsList}>
-            {(item.items || []).map((deliveryItem: any) => (
+            {item.items.map((deliveryItem) => (
               <View key={deliveryItem.id} style={styles.itemRow}>
-                <EvendiIcon name={getTypeIcon(deliveryItem.type)} size={14} color={theme.textSecondary} />
+                <Feather name={getTypeIcon(deliveryItem.type)} size={14} color={theme.textSecondary} />
                 <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]} numberOfLines={1}>
                   {deliveryItem.label}
                 </ThemedText>
               </View>
             ))}
           </View>
+
           <ThemedText style={[styles.createdAt, { color: theme.textMuted }]}>
             Opprettet {formatDate(item.createdAt)}
           </ThemedText>
@@ -904,6 +837,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       </Animated.View>
     );
   };
+
   if (!session) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -911,6 +845,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       </View>
     );
   }
+
   const isLoading = 
     activeTab === "deliveries" ? deliveriesLoading : 
     activeTab === "inspirations" ? inspirationsLoading : 
@@ -918,17 +853,20 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     activeTab === "offers" ? offersLoading :
     activeTab === "reviews" ? reviewsLoading :
     conversationsLoading;
+
   const formatPrice = (priceInOre: number) => {
-    return formatCurrency(priceInOre / 100, getSetting);
+    return (priceInOre / 100).toLocaleString("nb-NO", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " kr";
   };
+
   const getOfferStatusColor = (status: string) => {
     switch (status) {
-      case "accepted": return theme.success;
-      case "declined": return theme.error;
-      case "expired": return theme.textMuted;
-      default: return theme.warning;
+      case "accepted": return "#4CAF50";
+      case "declined": return "#F44336";
+      case "expired": return "#9E9E9E";
+      default: return "#FF9800";
     }
   };
+
   const getOfferStatusLabel = (status: string) => {
     switch (status) {
       case "accepted": return "Akseptert";
@@ -937,144 +875,77 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       default: return "Venter";
     }
   };
-  const renderProductItem = ({ item, index }: { item: VendorProduct; index: number }) => {
-    const duplicateProduct = () => {
-      const duplicated = {
-        ...item,
-        id: undefined,
-        title: `Kopi av ${item.title}`,
-      };
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      navigation.navigate("ProductCreate", { product: duplicated });
-    };
-    return (
-      <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.navigate("ProductCreate", { product: item });
-          }}
-          onLongPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            showOptions({
-              title: item.title,
-              message: "Velg handling",
-              cancelLabel: "Avbryt",
-              options: [
-                { label: "Rediger", onPress: () => navigation.navigate("ProductCreate", { product: item }) },
-                { label: "Dupliser", onPress: duplicateProduct },
-              ],
-            });
-          }}
-          style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, shadowColor: theme.textMuted }]}
-        >
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleRow}>
-              <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.xs }}>
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    duplicateProduct();
-                  }}
-                  style={[styles.quickActionBtn, { backgroundColor: theme.accent + "20" }]}
-                >
-                  <EvendiIcon name="copy" size={14} color={theme.accent} />
-                </Pressable>
-                <ThemedText style={[styles.priceTag, { color: theme.accent }]}>
-                  {formatPrice(item.unitPrice)} / {item.unitType}
-                </ThemedText>
-              </View>
-            </View>
-            {item.description ? (
-              <ThemedText style={[styles.dateText, { color: theme.textMuted, marginTop: 4 }]} numberOfLines={2}>
-                {item.description}
+
+  const renderProductItem = ({ item, index }: { item: VendorProduct; index: number }) => (
+    <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
+      <Pressable
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          navigation.navigate("ProductCreate", { product: item });
+        }}
+        style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+      >
+        <View style={styles.cardHeader}>
+          <View style={styles.cardTitleRow}>
+            <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
+            <ThemedText style={[styles.priceTag, { color: theme.accent }]}>
+              {formatPrice(item.unitPrice)} / {item.unitType}
+            </ThemedText>
+          </View>
+          {item.description ? (
+            <ThemedText style={[styles.dateText, { color: theme.textMuted, marginTop: 4 }]} numberOfLines={2}>
+              {item.description}
+            </ThemedText>
+          ) : null}
+        </View>
+        <View style={styles.itemsList}>
+          {item.minQuantity && item.minQuantity > 1 ? (
+            <View style={styles.itemRow}>
+              <Feather name="hash" size={14} color={theme.textSecondary} />
+              <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
+                Min. antall: {item.minQuantity}
               </ThemedText>
-            ) : null}
-          </View>
-          <View style={styles.itemsList}>
-            {item.minQuantity && item.minQuantity > 1 ? (
-              <View style={styles.itemRow}>
-                <EvendiIcon name="hash" size={14} color={theme.textSecondary} />
-                <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
-                  Min. antall: {item.minQuantity}
-                </ThemedText>
-              </View>
-            ) : null}
-            {item.leadTimeDays ? (
-              <View style={styles.itemRow}>
-                <EvendiIcon name="clock" size={14} color={theme.textSecondary} />
-                <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
-                  Leveringstid: {item.leadTimeDays} dager
-                </ThemedText>
-              </View>
-            ) : null}
-            {item.categoryTag ? (
-              <View style={styles.itemRow}>
-                <EvendiIcon name="tag" size={14} color={theme.textSecondary} />
-                <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
-                  {item.categoryTag}
-                </ThemedText>
-              </View>
-            ) : null}
-          </View>
-        </Pressable>
-      </Animated.View>
-    );
-  };
-  const renderOfferItem = ({ item, index }: { item: VendorOffer; index: number }) => {
-    const duplicateOffer = () => {
-      const duplicated = {
-        ...item,
-        id: undefined,
-        title: `Kopi av ${item.title}`,
-        status: "pending",
-        createdAt: undefined,
-      };
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      navigation.navigate("OfferCreate", { offer: duplicated });
-    };
-    return (
-      <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.navigate("OfferCreate", { offer: item });
-          }}
-          onLongPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            showOptions({
-              title: item.title,
-              message: "Velg handling",
-              cancelLabel: "Avbryt",
-              options: [
-                { label: "Rediger", onPress: () => navigation.navigate("OfferCreate", { offer: item }) },
-                { label: "Dupliser", onPress: duplicateOffer },
-              ],
-            });
-          }}
-          style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, shadowColor: theme.textMuted }]}
-        >
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleRow}>
-              <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.xs }}>
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    duplicateOffer();
-                  }}
-                  style={[styles.quickActionBtn, { backgroundColor: theme.accent + "20" }]}
-                >
-                  <EvendiIcon name="copy" size={14} color={theme.accent} />
-                </Pressable>
-                <View style={[styles.statusBadge, { backgroundColor: getOfferStatusColor(item.status) + "30" }]}>
-                  <ThemedText style={[styles.statusText, { color: getOfferStatusColor(item.status) }]}>
-                    {getOfferStatusLabel(item.status)}
-                  </ThemedText>
-                </View>
-              </View>
             </View>
+          ) : null}
+          {item.leadTimeDays ? (
+            <View style={styles.itemRow}>
+              <Feather name="clock" size={14} color={theme.textSecondary} />
+              <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
+                Leveringstid: {item.leadTimeDays} dager
+              </ThemedText>
+            </View>
+          ) : null}
+          {item.categoryTag ? (
+            <View style={styles.itemRow}>
+              <Feather name="tag" size={14} color={theme.textSecondary} />
+              <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]}>
+                {item.categoryTag}
+              </ThemedText>
+            </View>
+          ) : null}
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+
+  const renderOfferItem = ({ item, index }: { item: VendorOffer; index: number }) => (
+    <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
+      <Pressable
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          navigation.navigate("OfferCreate", { offer: item });
+        }}
+        style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+      >
+        <View style={styles.cardHeader}>
+          <View style={styles.cardTitleRow}>
+            <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
+            <View style={[styles.statusBadge, { backgroundColor: getOfferStatusColor(item.status) + "30" }]}>
+              <ThemedText style={[styles.statusText, { color: getOfferStatusColor(item.status) }]}>
+                {getOfferStatusLabel(item.status)}
+              </ThemedText>
+            </View>
+          </View>
           {item.couple ? (
             <ThemedText style={[styles.coupleName, { color: theme.textSecondary }]}>
               Til: {item.couple.displayName}
@@ -1090,7 +961,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         <View style={styles.itemsList}>
           {item.items.slice(0, 3).map((offerItem) => (
             <View key={offerItem.id} style={styles.itemRow}>
-              <EvendiIcon name="check" size={14} color={theme.textSecondary} />
+              <Feather name="check" size={14} color={theme.textSecondary} />
               <ThemedText style={[styles.itemLabel, { color: theme.textSecondary }]} numberOfLines={1}>
                 {offerItem.quantity}x {offerItem.title} - {formatPrice(offerItem.lineTotal)}
               </ThemedText>
@@ -1108,7 +979,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       </Pressable>
     </Animated.View>
   );
-};
+
   const formatConversationTime = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -1119,6 +990,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     if (days < 7) return date.toLocaleDateString("no-NO", { weekday: "short" });
     return date.toLocaleDateString("no-NO", { day: "numeric", month: "short" });
   };
+
   const renderConversationItem = ({ item, index }: { item: Conversation; index: number }) => {
     const isFavorite = favoriteConversations.has(item.id);
     
@@ -1127,17 +999,13 @@ export default function VendorDashboardScreen({ navigation }: Props) {
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            navigation.navigate("VendorChat", {
-              conversationId: item.id,
-              coupleName: item.couple?.displayName || "Unknown",
-              chatType: "couple",
-            });
+            navigation.navigate("VendorChat", { conversationId: item.id, coupleName: item.couple.displayName });
           }}
-          style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, shadowColor: theme.textMuted }]}
+          style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
-              <ThemedText style={styles.cardTitle}>{item.couple?.displayName || "Unknown"}</ThemedText>
+              <ThemedText style={styles.cardTitle}>{item.couple.displayName}</ThemedText>
               <View style={styles.conversationBadges}>
                 <Pressable
                   onPress={(e) => {
@@ -1147,24 +1015,22 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                   style={styles.favoriteBtn}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <EvendiIcon 
+                  <Feather 
                     name={isFavorite ? "star" : "star"} 
                     size={18} 
-                    color={isFavorite ? theme.warning : theme.textMuted}
-                    fill={isFavorite ? theme.warning : "none"}
+                    color={isFavorite ? "#FFD700" : theme.textMuted}
+                    fill={isFavorite ? "#FFD700" : "none"}
                   />
                 </Pressable>
                 {item.vendorUnreadCount > 0 ? (
                   <View style={[styles.unreadBadge, { backgroundColor: theme.accent }]}>
-                    <ThemedText style={[styles.unreadText, { color: theme.buttonText }]}>
-                      {item.vendorUnreadCount}
-                    </ThemedText>
+                    <ThemedText style={styles.unreadText}>{item.vendorUnreadCount}</ThemedText>
                   </View>
                 ) : null}
               </View>
             </View>
             <ThemedText style={[styles.coupleName, { color: theme.textSecondary }]}>
-              {item.couple?.email || "No email"}
+              {item.couple.email}
             </ThemedText>
             {item.inspiration ? (
               <ThemedText style={[styles.dateText, { color: theme.accent, marginTop: 4 }]}>
@@ -1186,16 +1052,17 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       </Animated.View>
     );
   };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.header, { paddingTop: headerHeight + Spacing.lg }]}>
-        <View style={[styles.headerCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, shadowColor: theme.textMuted }]}>
+        <View style={[styles.headerCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <Pressable 
             onPress={() => navigation.navigate("VendorProfile")}
             style={styles.headerContent}
           >
             <View style={[styles.avatarContainer, { backgroundColor: theme.accent }]}>
-              <ThemedText style={[styles.avatarText, { color: theme.buttonText }]}>
+              <ThemedText style={styles.avatarText}>
                 {session.businessName.charAt(0).toUpperCase()}
               </ThemedText>
             </View>
@@ -1204,18 +1071,8 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               <ThemedText style={[styles.businessName, { color: theme.text }]} numberOfLines={1}>{session.businessName}</ThemedText>
             </View>
             <View style={[styles.profileArrow, { backgroundColor: theme.accent + "15" }]}>
-              <EvendiIcon name="chevron-right" size={16} color={theme.accent} />
+              <Feather name="chevron-right" size={16} color={theme.accent} />
             </View>
-          </Pressable>
-          <Pressable
-            onPress={() => navigation.navigate("VendorDashboard")}
-            style={({ pressed }) => [
-              styles.logoutBtn,
-              { backgroundColor: pressed ? theme.backgroundTertiary : theme.backgroundSecondary }
-            ]}
-            accessibilityLabel="Til forsiden"
-          >
-            <EvendiIcon name="home" size={18} color={theme.textSecondary} />
           </Pressable>
           <Pressable 
             onPress={handleLogout} 
@@ -1224,7 +1081,17 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               { backgroundColor: pressed ? theme.backgroundTertiary : theme.backgroundSecondary }
             ]}
           >
-            <EvendiIcon name="log-out" size={18} color={theme.textSecondary} />
+            <Feather name="log-out" size={18} color={theme.textSecondary} />
+          </Pressable>
+          <Pressable 
+            onPress={() => navigation.navigate("VendorAvailability")}
+            style={({ pressed }) => [
+              styles.logoutBtn,
+              { backgroundColor: pressed ? theme.backgroundTertiary : theme.backgroundSecondary }
+            ]}
+            accessibilityLabel="Kalender & Tilgjengelighet"
+          >
+            <Feather name="calendar" size={18} color={theme.accent} />
           </Pressable>
           <Pressable 
             onPress={() => navigation.navigate("VendorHelp")}
@@ -1234,7 +1101,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             ]}
             accessibilityLabel="Hjelp & FAQ"
           >
-            <EvendiIcon name="help-circle" size={18} color={theme.accent} />
+            <Feather name="help-circle" size={18} color={theme.accent} />
           </Pressable>
           <Pressable 
             onPress={() => navigation.navigate("VendorAdminChat")}
@@ -1242,23 +1109,24 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               styles.logoutBtn,
               { backgroundColor: pressed ? theme.backgroundTertiary : theme.backgroundSecondary }
             ]}
-            accessibilityLabel="Evendi Support"
+            accessibilityLabel="Wedflow Support"
           >
-            <EvendiIcon name="message-circle" size={18} color={theme.accent} />
+            <Feather name="message-circle" size={18} color={theme.accent} />
           </Pressable>
         </View>
       </View>
+
       {/* Payment Reminder Banner - FOMO messaging */}
       {subscriptionStatus?.needsPayment && (
-        <View style={[styles.paymentBanner, { backgroundColor: subscriptionStatus.isPaused ? theme.error : theme.warning }]}>
-          <EvendiIcon name={subscriptionStatus.isPaused ? "lock" : "alert-triangle"} size={24} color={theme.text} />
+        <View style={[styles.paymentBanner, { backgroundColor: subscriptionStatus.isPaused ? "#EF5350" : "#FFA726" }]}>
+          <Feather name={subscriptionStatus.isPaused ? "lock" : "alert-triangle"} size={24} color="#1A1A1A" />
           <View style={{ flex: 1, marginLeft: Spacing.md }}>
-            <ThemedText style={[styles.paymentBannerTitle, { color: theme.text }]}>
+            <ThemedText style={styles.paymentBannerTitle}>
               {subscriptionStatus.isPaused 
                 ? "Tilgangen din er satt på pause" 
                 : `Kun ${subscriptionStatus.daysRemaining} dager igjen!`}
             </ThemedText>
-            <ThemedText style={[styles.paymentBannerText, { color: theme.text }]}>
+            <ThemedText style={styles.paymentBannerText}>
               {subscriptionStatus.isPaused 
                 ? "Du går glipp av nye henvendelser, showcase-visninger og potensielle kunder" 
                 : "Sikre din plass og fortsett å motta henvendelser fra brudepar"}
@@ -1266,15 +1134,15 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             {subscriptionStatus.isPaused && (
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                  <EvendiIcon name="x-circle" size={14} color={theme.text} />
+                  <Feather name="x-circle" size={14} color="#1A1A1A" />
                   <ThemedText style={[styles.paymentBannerText, { fontSize: 13, fontWeight: "600" }]}>Ingen showcase</ThemedText>
                 </View>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                  <EvendiIcon name="mail" size={14} color={theme.text} />
+                  <Feather name="mail" size={14} color="#1A1A1A" />
                   <ThemedText style={[styles.paymentBannerText, { fontSize: 13, fontWeight: "600" }]}>Meldinger deaktivert</ThemedText>
                 </View>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                  <EvendiIcon name="slash" size={14} color={theme.text} />
+                  <Feather name="slash" size={14} color="#1A1A1A" />
                   <ThemedText style={[styles.paymentBannerText, { fontSize: 13, fontWeight: "600" }]}>Henvendelser blokkert</ThemedText>
                 </View>
               </View>
@@ -1285,15 +1153,16 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               navigation.navigate("VendorPayment");
             }}
-            style={[styles.paymentBtn, { backgroundColor: theme.backgroundDefault }]}
+            style={[styles.paymentBtn, { backgroundColor: "#1A1A1A" }]}
           >
-            <ThemedText style={[styles.paymentBtnText, { color: theme.text }]}> 
+            <ThemedText style={styles.paymentBtnText}>
               {subscriptionStatus.isPaused ? "Reaktiver" : "Sikre plass"}
             </ThemedText>
-            <EvendiIcon name="arrow-right" size={16} color={subscriptionStatus.isPaused ? theme.error : theme.warning} />
+            <Feather name="arrow-right" size={16} color={subscriptionStatus.isPaused ? "#EF5350" : "#FFA726"} />
           </Pressable>
         </View>
       )}
+
       {/* Trial Info Banner - Progressive scarcity */}
       {subscriptionStatus?.isTrialing && !subscriptionStatus.needsPayment && (
         <Pressable
@@ -1309,41 +1178,38 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             } else if (days <= 14) {
               message = `${days} dager til prøveperioden utløper. Ikke gå glipp av potensielle kunder!`;
             }
-            if (days <= 14) {
-              showOptions({
-                title: days <= 7 ? "Prøveperioden går snart ut!" : "Prøveperiode aktiv",
-                message,
-                cancelLabel: "OK",
-                options: [
-                  { label: "Betal nå", onPress: () => navigation.navigate("VendorPayment") },
-                ],
-              });
-            } else {
-              showToast(message);
-            }
+            
+            Alert.alert(
+              days <= 7 ? "Prøveperioden går snart ut!" : "Prøveperiode aktiv",
+              message,
+              [
+                { text: "OK" },
+                ...(days <= 14 ? [{ text: "Betal nå", onPress: () => navigation.navigate("VendorPayment") }] : [])
+              ]
+            );
           }}
           style={[
             styles.trialBanner, 
             { 
               backgroundColor: subscriptionStatus.daysRemaining <= 7 
-                ? theme.warning + "20" 
-                : theme.accent + "20", 
+                ? "#FFA726" + "20" 
+                : Colors.dark.accent + "20", 
               borderColor: subscriptionStatus.daysRemaining <= 7 
-                ? theme.warning 
-                : theme.accent 
+                ? "#FFA726" 
+                : Colors.dark.accent 
             }
           ]}
         >
-          <EvendiIcon 
+          <Feather 
             name={subscriptionStatus.daysRemaining <= 7 ? "alert-circle" : "star"} 
             size={18} 
-            color={subscriptionStatus.daysRemaining <= 7 ? theme.warning : theme.accent} 
+            color={subscriptionStatus.daysRemaining <= 7 ? "#FFA726" : Colors.dark.accent} 
           />
           <View style={{ flex: 1, marginLeft: Spacing.sm }}>
             <ThemedText 
               style={[
                 styles.trialBannerText, 
-                { color: subscriptionStatus.daysRemaining <= 7 ? theme.warning : theme.accent }
+                { color: subscriptionStatus.daysRemaining <= 7 ? "#FFA726" : Colors.dark.accent }
               ]}
             >
               {subscriptionStatus.daysRemaining <= 3 
@@ -1353,71 +1219,33 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                 : `Prøveperiode: ${subscriptionStatus.daysRemaining} dager gjenstår`}
             </ThemedText>
             {subscriptionStatus.daysRemaining <= 7 && (
-              <ThemedText style={[styles.trialBannerSubtext, { color: theme.warning }]}>
+              <ThemedText style={[styles.trialBannerSubtext, { color: "#FFA726" }]}>
                 Trykk for å se hva du mister
               </ThemedText>
             )}
           </View>
           {subscriptionStatus.daysRemaining <= 7 && (
-            <EvendiIcon name="chevron-right" size={18} color={theme.warning} />
+            <Feather name="chevron-right" size={18} color="#FFA726" />
           )}
         </Pressable>
       )}
-      {/* Business Insights */}
-      {businessInsights.length > 0 && (
-        <View style={styles.insightsContainer}>
-          {businessInsights.map((insight, idx) => (
-            <Pressable
-              key={idx}
-              onPress={() => {
-                insight.action();
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              style={[
-                styles.insightCard,
-                { 
-                  backgroundColor: insight.color + "15", 
-                  borderLeftColor: insight.color,
-                  borderLeftWidth: 3,
-                }
-              ]}
-            >
-              <EvendiIcon name={insight.icon} size={16} color={insight.color} />
-              <ThemedText style={[styles.insightText, { color: theme.text }]}>
-                {insight.label}
-              </ThemedText>
-              <EvendiIcon name="chevron-right" size={14} color={insight.color} />
-            </Pressable>
-          ))}
-        </View>
-      )}
-      {/* Quick Stats */}
-      {quickStats.length > 0 && activeTab === "deliveries" && (
-        <View style={[styles.statsContainer, { backgroundColor: theme.backgroundDefault }]}>
-          {quickStats.map((stat, idx) => (
-            <View key={idx} style={styles.quickStatCard}>
-              <EvendiIcon name={stat.icon} size={16} color={theme.accent} />
-              <View style={styles.quickStatContent}>
-                <ThemedText style={[styles.quickStatValue, { color: theme.text }]}>
-                  {stat.isRating ? stat.value : `${stat.value}${stat.total ? `/${stat.total}` : ''}`}
-                </ThemedText>
-                <ThemedText style={[styles.quickStatLabel, { color: theme.textMuted }]}>
-                  {stat.label}
-                </ThemedText>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
+
       <ScrollView 
         horizontal 
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.tabContainer}
         style={[styles.tabScroll, { backgroundColor: theme.backgroundRoot }]}
       >
-        {enabledTabs.map((tab) => {
+        {[
+          { key: "deliveries" as TabType, icon: "package" as const, label: "Leveranser" },
+          { key: "inspirations" as TabType, icon: "image" as const, label: "Showcase" },
+          { key: "products" as TabType, icon: "shopping-bag" as const, label: "Produkter" },
+          { key: "offers" as TabType, icon: "file-text" as const, label: "Tilbud" },
+          { key: "couples" as TabType, icon: "users" as const, label: "Brudepar" },
+          { key: "messages" as TabType, icon: "message-circle" as const, label: "Meldinger", badge: totalUnread },
+          { key: "reviews" as TabType, icon: "star" as const, label: "Anmeldelser", badge: reviewsData.length },
+        ].map((tab) => {
           const isActive = activeTab === tab.key;
-          const badge = tab.key === "messages" ? totalUnread : tab.key === "reviews" ? reviewsData.length : undefined;
           return (
             <Pressable
               key={tab.key}
@@ -1427,21 +1255,21 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               }}
               style={({ pressed }) => [
                 styles.tab,
-                isActive && [styles.tabActive, { backgroundColor: theme.accent, shadowColor: theme.accent }],
+                isActive && [styles.tabActive, { backgroundColor: theme.accent }],
                 !isActive && { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
                 pressed && !isActive && { backgroundColor: theme.backgroundSecondary },
               ]}
             >
               <View style={styles.tabIconContainer}>
-                <EvendiIcon 
+                <Feather 
                   name={tab.icon} 
                   size={20} 
-                  color={isActive ? theme.buttonText : theme.textSecondary} 
+                  color={isActive ? "#FFFFFF" : theme.textSecondary} 
                 />
-                {badge && badge > 0 ? (
-                  <View style={[styles.tabBadge, { backgroundColor: isActive ? theme.buttonText : theme.accent }]}>
-                    <ThemedText style={[styles.tabBadgeText, { color: isActive ? theme.accent : theme.buttonText }]}>
-                      {badge > 9 ? "9+" : badge}
+                {tab.badge && tab.badge > 0 ? (
+                  <View style={[styles.tabBadge, { backgroundColor: isActive ? "#FFFFFF" : theme.accent }]}>
+                    <ThemedText style={[styles.tabBadgeText, { color: isActive ? theme.accent : "#FFFFFF" }]}>
+                      {tab.badge > 9 ? "9+" : tab.badge}
                     </ThemedText>
                   </View>
                 ) : null}
@@ -1449,7 +1277,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               <ThemedText 
                 style={[
                   styles.tabText, 
-                  { color: isActive ? theme.buttonText : theme.textSecondary },
+                  { color: isActive ? "#FFFFFF" : theme.textSecondary },
                   isActive && { fontWeight: "600" }
                 ]}
               >
@@ -1459,6 +1287,8 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           );
         })}
       </ScrollView>
+
+
       {activeTab !== "messages" && activeTab !== "reviews" && activeTab !== "couples" ? (
         <View style={styles.createBtnContainer}>
           <Pressable
@@ -1481,14 +1311,14 @@ export default function VendorDashboardScreen({ navigation }: Props) {
             ]}
           >
             <View style={[styles.createBtnIconCircle, { backgroundColor: theme.accent }]}>
-              <EvendiIcon 
+              <Feather 
                 name={
                   activeTab === "deliveries" ? "package" : 
                   activeTab === "inspirations" ? "image" :
                   activeTab === "products" ? "shopping-bag" : "file-text"
                 } 
                 size={18} 
-                color={theme.buttonText} 
+                color="#FFFFFF" 
               />
             </View>
             <View style={styles.createBtnContent}>
@@ -1504,11 +1334,12 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               </ThemedText>
             </View>
             <View style={[styles.createBtnArrow, { backgroundColor: theme.accent + "15" }]}>
-              <EvendiIcon name="plus" size={20} color={theme.accent} />
+              <Feather name="plus" size={20} color={theme.accent} />
             </View>
           </Pressable>
         </View>
       ) : null}
+
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.accent} />
@@ -1534,13 +1365,13 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
               <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
-                <EvendiIcon name="package" size={32} color={theme.accent} />
+                <Feather name="package" size={32} color={theme.accent} />
               </View>
               <ThemedText style={[styles.emptyText, { color: theme.text }]}>
-                {vendorConfig.emptyStates.deliveries.title}
+                Ingen leveranser ennå
               </ThemedText>
               <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-                {vendorConfig.emptyStates.deliveries.subtitle}
+                Opprett din første leveranse for å dele innhold med brudepar
               </ThemedText>
             </View>
           )}
@@ -1566,13 +1397,13 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
               <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
-                <EvendiIcon name="image" size={32} color={theme.accent} />
+                <Feather name="image" size={32} color={theme.accent} />
               </View>
               <ThemedText style={[styles.emptyText, { color: theme.text }]}>
-                {vendorConfig.emptyStates.inspirations.title}
+                Ingen showcases ennå
               </ThemedText>
               <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-                {vendorConfig.emptyStates.inspirations.subtitle}
+                Del vakre bilder og videoer for å inspirere brudepar
               </ThemedText>
             </View>
           )}
@@ -1598,13 +1429,13 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
               <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
-                <EvendiIcon name="shopping-bag" size={32} color={theme.accent} />
+                <Feather name="shopping-bag" size={32} color={theme.accent} />
               </View>
               <ThemedText style={[styles.emptyText, { color: theme.text }]}>
-                {vendorConfig.emptyStates.products.title}
+                Ingen produkter ennå
               </ThemedText>
               <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-                {vendorConfig.emptyStates.products.subtitle}
+                Opprett produkter og tjenester for å kunne sende tilbud
               </ThemedText>
             </View>
           )}
@@ -1630,7 +1461,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
               <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
-                <EvendiIcon name="file-text" size={32} color={theme.accent} />
+                <Feather name="file-text" size={32} color={theme.accent} />
               </View>
               <ThemedText style={[styles.emptyText, { color: theme.text }]}>
                 Ingen tilbud ennå
@@ -1647,13 +1478,13 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           data={reviewsData}
           renderItem={({ item, index }) => (
             <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
-              <View style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, shadowColor: theme.textMuted }]}>
+              <View style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
                 <View style={styles.cardHeader}>
                   <View style={styles.cardTitleRow}>
                     <ThemedText style={styles.cardTitle}>{item.coupleName}</ThemedText>
                     <View style={styles.reviewRatingRow}>
                       {[1, 2, 3, 4, 5].map((star) => (
-                        <EvendiIcon
+                        <Feather
                           key={star}
                           name="star"
                           size={14}
@@ -1663,8 +1494,8 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                     </View>
                   </View>
                   {!item.isApproved ? (
-                    <View style={[styles.statusBadge, { backgroundColor: theme.warning + "30" }]}>
-                      <ThemedText style={[styles.statusText, { color: theme.warning }]}>
+                    <View style={[styles.statusBadge, { backgroundColor: "#FF9800" + "30" }]}>
+                      <ThemedText style={[styles.statusText, { color: "#FF9800" }]}>
                         Under godkjenning
                       </ThemedText>
                     </View>
@@ -1728,13 +1559,13 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                 </View>
                 {vendorProfile?.googleReviewUrl ? (
                   <Pressable
-                    style={[styles.googleReviewsBtn, { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: theme.border }]}
+                    style={[styles.googleReviewsBtn, { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#DADCE0" }]}
                     onPress={async () => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       try {
                         await Linking.openURL(vendorProfile.googleReviewUrl!);
                       } catch (e) {
-                        showToast("Kunne ikke åpne lenken");
+                        Alert.alert("Feil", "Kunne ikke åpne lenken");
                       }
                     }}
                   >
@@ -1753,11 +1584,12 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                       navigation.navigate("VendorProfile");
                     }}
                   >
-                    <EvendiIcon name="edit-2" size={14} color={theme.buttonText} />
-                    <ThemedText style={[styles.googleReviewsBtnText, { color: theme.buttonText }]}>Rediger profil</ThemedText>
+                    <Feather name="edit-2" size={14} color="#FFFFFF" />
+                    <ThemedText style={styles.googleReviewsBtnText}>Rediger profil</ThemedText>
                   </Pressable>
                 )}
               </View>
+
               {/* Stats Card */}
               {reviewsResponse?.stats && reviewsResponse.stats.total > 0 ? (
                 <View style={[styles.reviewStatsCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
@@ -1767,7 +1599,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                     </ThemedText>
                     <View style={styles.starsRow}>
                       {[1, 2, 3, 4, 5].map((star) => (
-                        <EvendiIcon
+                        <Feather
                           key={star}
                           name="star"
                           size={12}
@@ -1786,13 +1618,14 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                   </View>
                   <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
                   <View style={styles.statItem}>
-                    <ThemedText style={[styles.statValue, { color: theme.success }]}>
+                    <ThemedText style={[styles.statValue, { color: "#4CAF50" }]}>
                       {reviewsResponse.stats.approved}
                     </ThemedText>
                     <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Godkjent</ThemedText>
                   </View>
                 </View>
               ) : null}
+
               {/* Reminders Section */}
               {completedWithoutReview.length > 0 ? (
             <View style={styles.reminderSection}>
@@ -1824,19 +1657,19 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                         if (canSend) {
                           sendReminderMutation.mutate(contract.id);
                         } else {
-                          showToast("Du kan kun sende påminnelse én gang per 14 dager.");
+                          Alert.alert("Vent litt", "Du kan kun sende påminnelse én gang per 14 dager.");
                         }
                       }}
                       disabled={sendReminderMutation.isPending}
                     >
-                      <EvendiIcon 
+                      <Feather 
                         name="send" 
                         size={14} 
-                        color={canSend ? theme.buttonText : theme.textMuted} 
+                        color={canSend ? "#1A1A1A" : theme.textMuted} 
                       />
                       <ThemedText style={[
                         styles.reminderBtnText, 
-                        { color: canSend ? theme.buttonText : theme.textMuted }
+                        { color: canSend ? "#1A1A1A" : theme.textMuted }
                       ]}>
                         Send
                       </ThemedText>
@@ -1851,7 +1684,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
               <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
-                <EvendiIcon name="star" size={32} color={theme.accent} />
+                <Feather name="star" size={32} color={theme.accent} />
               </View>
               <ThemedText style={[styles.emptyText, { color: theme.text }]}>
                 Ingen anmeldelser ennå
@@ -1872,17 +1705,17 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               : null;
             return (
               <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
-                <View style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, shadowColor: theme.textMuted }]}>
+                <View style={[styles.deliveryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
                   <View style={styles.cardHeader}>
                     <View style={styles.cardTitleRow}>
                       <View style={[styles.coupleAvatar, { backgroundColor: theme.accent + "20" }]}>
-                        <EvendiIcon name="heart" size={18} color={theme.accent} />
+                        <Feather name="heart" size={18} color={theme.accent} />
                       </View>
                       <View style={{ flex: 1, marginLeft: Spacing.sm }}>
                         <ThemedText style={styles.cardTitle}>{item.coupleName}</ThemedText>
                         {weddingDateFormatted && (
                           <ThemedText style={[styles.coupleDate, { color: theme.textSecondary }]}>
-                            <EvendiIcon name="calendar" size={12} color={theme.textSecondary} /> {weddingDateFormatted}
+                            <Feather name="calendar" size={12} color={theme.textSecondary} /> {weddingDateFormatted}
                           </ThemedText>
                         )}
                       </View>
@@ -1905,34 +1738,34 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                             coupleName: item.coupleName 
                           });
                         }}
-                        style={[styles.accessBadge, { backgroundColor: theme.success + "20", borderColor: theme.success }]}
+                        style={[styles.accessBadge, { backgroundColor: "#4CAF50" + "20", borderColor: "#4CAF50" }]}
                       >
-                        <EvendiIcon name="calendar" size={14} color={theme.success} />
-                        <ThemedText style={[styles.accessBadgeText, { color: theme.success }]}>
+                        <Feather name="calendar" size={14} color="#4CAF50" />
+                        <ThemedText style={[styles.accessBadgeText, { color: "#4CAF50" }]}>
                           Program
                         </ThemedText>
-                        <EvendiIcon name="chevron-right" size={14} color={theme.success} />
+                        <Feather name="chevron-right" size={14} color="#4CAF50" />
                       </Pressable>
                     )}
                     {item.canViewSpeeches && (
-                      <View style={[styles.accessBadge, { backgroundColor: theme.accent + "20", borderColor: theme.accent }]}> 
-                        <EvendiIcon name="mic" size={14} color={theme.accent} />
-                        <ThemedText style={[styles.accessBadgeText, { color: theme.accent }]}>
+                      <View style={[styles.accessBadge, { backgroundColor: "#2196F3" + "20", borderColor: "#2196F3" }]}>
+                        <Feather name="mic" size={14} color="#2196F3" />
+                        <ThemedText style={[styles.accessBadgeText, { color: "#2196F3" }]}>
                           Taler
                         </ThemedText>
                       </View>
                     )}
                     {item.canViewTableSeating && (
-                      <View style={[styles.accessBadge, { backgroundColor: theme.accent + "20", borderColor: theme.accent }]}> 
-                        <EvendiIcon name="grid" size={14} color={theme.accent} />
-                        <ThemedText style={[styles.accessBadgeText, { color: theme.accent }]}>
+                      <View style={[styles.accessBadge, { backgroundColor: "#9C27B0" + "20", borderColor: "#9C27B0" }]}>
+                        <Feather name="grid" size={14} color="#9C27B0" />
+                        <ThemedText style={[styles.accessBadgeText, { color: "#9C27B0" }]}>
                           Bordplassering
                         </ThemedText>
                       </View>
                     )}
                     {!item.canViewSchedule && !item.canViewSpeeches && !item.canViewTableSeating && (
                       <View style={[styles.accessBadge, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-                        <EvendiIcon name="lock" size={14} color={theme.textMuted} />
+                        <Feather name="lock" size={14} color={theme.textMuted} />
                         <ThemedText style={[styles.accessBadgeText, { color: theme.textMuted }]}>
                           Ingen tilgang gitt ennå
                         </ThemedText>
@@ -1958,7 +1791,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           }
           ListHeaderComponent={() => (
             <View style={[styles.coupleInfoCard, { backgroundColor: theme.accent + "10", borderColor: theme.accent }]}>
-              <EvendiIcon name="info" size={18} color={theme.accent} />
+              <Feather name="info" size={18} color={theme.accent} />
               <View style={{ flex: 1, marginLeft: Spacing.sm }}>
                 <ThemedText style={[styles.coupleInfoTitle, { color: theme.accent }]}>
                   Brudepar med tilgang
@@ -1972,7 +1805,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
               <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
-                <EvendiIcon name="users" size={32} color={theme.accent} />
+                <Feather name="users" size={32} color={theme.accent} />
               </View>
               <ThemedText style={[styles.emptyText, { color: theme.text }]}>
                 Ingen brudepar ennå
@@ -2002,7 +1835,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                 >
                   <ThemedText style={[
                     styles.filterChipText,
-                    conversationFilter === "all" && { color: theme.buttonText },
+                    conversationFilter === "all" && { color: "#1A1A1A" },
                     { color: theme.text }
                   ]}>
                     Alle
@@ -2019,14 +1852,14 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                     { borderColor: theme.border }
                   ]}
                 >
-                  <EvendiIcon 
+                  <Feather 
                     name="message-circle" 
                     size={14} 
-                    color={conversationFilter === "unread" ? theme.buttonText : theme.text} 
+                    color={conversationFilter === "unread" ? "#1A1A1A" : theme.text} 
                   />
                   <ThemedText style={[
                     styles.filterChipText,
-                    conversationFilter === "unread" && { color: theme.buttonText },
+                    conversationFilter === "unread" && { color: "#1A1A1A" },
                     { color: theme.text }
                   ]}>
                     Ulest
@@ -2043,14 +1876,14 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                     { borderColor: theme.border }
                   ]}
                 >
-                  <EvendiIcon 
+                  <Feather 
                     name="star" 
                     size={14} 
-                    color={conversationFilter === "favorites" ? theme.buttonText : theme.text} 
+                    color={conversationFilter === "favorites" ? "#1A1A1A" : theme.text} 
                   />
                   <ThemedText style={[
                     styles.filterChipText,
-                    conversationFilter === "favorites" && { color: theme.buttonText },
+                    conversationFilter === "favorites" && { color: "#1A1A1A" },
                     { color: theme.text }
                   ]}>
                     Favoritter
@@ -2072,14 +1905,14 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                     { borderColor: theme.border }
                   ]}
                 >
-                  <EvendiIcon 
+                  <Feather 
                     name="clock" 
                     size={14} 
-                    color={conversationSort === "recent" ? theme.buttonText : theme.text} 
+                    color={conversationSort === "recent" ? "#1A1A1A" : theme.text} 
                   />
                   <ThemedText style={[
                     styles.filterChipText,
-                    conversationSort === "recent" && { color: theme.buttonText },
+                    conversationSort === "recent" && { color: "#1A1A1A" },
                     { color: theme.text }
                   ]}>
                     Nylig
@@ -2096,14 +1929,14 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                     { borderColor: theme.border }
                   ]}
                 >
-                  <EvendiIcon 
+                  <Feather 
                     name="user" 
                     size={14} 
-                    color={conversationSort === "name" ? theme.buttonText : theme.text} 
+                    color={conversationSort === "name" ? "#1A1A1A" : theme.text} 
                   />
                   <ThemedText style={[
                     styles.filterChipText,
-                    conversationSort === "name" && { color: theme.buttonText },
+                    conversationSort === "name" && { color: "#1A1A1A" },
                     { color: theme.text }
                   ]}>
                     Navn
@@ -2120,14 +1953,14 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                     { borderColor: theme.border }
                   ]}
                 >
-                  <EvendiIcon 
+                  <Feather 
                     name="message-square" 
                     size={14} 
-                    color={conversationSort === "unread" ? theme.buttonText : theme.text} 
+                    color={conversationSort === "unread" ? "#1A1A1A" : theme.text} 
                   />
                   <ThemedText style={[
                     styles.filterChipText,
-                    conversationSort === "unread" && { color: theme.buttonText },
+                    conversationSort === "unread" && { color: "#1A1A1A" },
                     { color: theme.text }
                   ]}>
                     Uleste
@@ -2156,7 +1989,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
               <View style={[styles.emptyIconContainer, { backgroundColor: theme.accent + "15" }]}>
-                <EvendiIcon name="message-circle" size={32} color={theme.accent} />
+                <Feather name="message-circle" size={32} color={theme.accent} />
               </View>
               <ThemedText style={[styles.emptyText, { color: theme.text }]}>
                 Ingen meldinger ennå
@@ -2172,6 +2005,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
     </View>
   );
 }
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
@@ -2189,6 +2023,7 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -2210,6 +2045,7 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 18,
     fontWeight: "700",
+    color: "#FFFFFF",
   },
   headerTextContainer: {
     flex: 1,
@@ -2263,6 +2099,7 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     borderWidth: 0,
+    shadowColor: "#C9A962",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
@@ -2368,6 +2205,7 @@ const styles = StyleSheet.create({
   deliveryCard: {
     borderRadius: BorderRadius.md,
     borderWidth: 1,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
@@ -2419,6 +2257,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   deliveryMoreText: {
+    color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "700",
   },
@@ -2431,6 +2270,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   deliveryStatusText: {
+    color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "600",
     textTransform: "uppercase",
@@ -2533,6 +2373,7 @@ const styles = StyleSheet.create({
   unreadText: {
     fontSize: 12,
     fontWeight: "700",
+    color: "#1A1A1A",
   },
   lastMessageContainer: {
     flexDirection: "row",
@@ -2685,6 +2526,7 @@ const styles = StyleSheet.create({
   googleReviewsBtnText: {
     fontSize: 14,
     fontWeight: "600",
+    color: "#FFFFFF",
   },
   reviewStatsCard: {
     flexDirection: "row",
@@ -2803,6 +2645,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   moreText: {
+    color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "700",
   },
@@ -2815,6 +2658,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   statusOverlayText: {
+    color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "600",
     textTransform: "uppercase",
@@ -2924,10 +2768,12 @@ const styles = StyleSheet.create({
   paymentBannerTitle: {
     fontSize: 15,
     fontWeight: "700",
+    color: "#1A1A1A",
     marginBottom: 2,
   },
   paymentBannerText: {
     fontSize: 13,
+    color: "#1A1A1A",
   },
   paymentBtn: {
     flexDirection: "row",
@@ -2940,6 +2786,7 @@ const styles = StyleSheet.create({
   paymentBtnText: {
     fontSize: 13,
     fontWeight: "600",
+    color: "#FFA726",
   },
   trialBanner: {
     flexDirection: "row",
@@ -2991,13 +2838,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
-  quickActionBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   coupleInfoCard: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -3014,48 +2854,5 @@ const styles = StyleSheet.create({
   coupleInfoText: {
     fontSize: 13,
     lineHeight: 18,
-  },
-  insightsContainer: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    gap: Spacing.sm,
-  },
-  insightCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    gap: Spacing.sm,
-  },
-  insightText: {
-    fontSize: 13,
-    fontWeight: "500",
-    flex: 1,
-  },
-  statsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    gap: Spacing.sm,
-    marginTop: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    marginHorizontal: Spacing.lg,
-  },
-  quickStatCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    paddingRight: Spacing.md,
-  },
-  quickStatContent: {
-    gap: 2,
-  },
-  quickStatValue: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  quickStatLabel: {
-    fontSize: 11,
   },
 });

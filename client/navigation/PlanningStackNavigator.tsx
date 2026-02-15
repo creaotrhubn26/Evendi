@@ -1,6 +1,5 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { Pressable } from "react-native";
 
 import PlanningScreen from "@/screens/PlanningScreen";
 import ScheduleScreen from "@/screens/ScheduleScreen";
@@ -23,32 +22,14 @@ import MessagesScreen from "@/screens/MessagesScreen";
 import CoupleLoginScreen from "@/screens/CoupleLoginScreen";
 import ChatScreen from "@/screens/ChatScreen";
 import CoupleOffersScreen from "@/screens/CoupleOffersScreen";
-import CoupleContractsScreen from "@/screens/CoupleContractsScreen";
 import CoordinatorSharingScreen from "@/screens/CoordinatorSharingScreen";
 import CoordinatorTimelineScreen from "@/screens/CoordinatorTimelineScreen";
 import SpeechListScreen from "@/screens/SpeechListScreen";
-import QaSystemScreen from "@/screens/QaSystemScreen";
 import VendorReviewsScreen from "@/screens/VendorReviewsScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
 import VendorDetailScreen from "@/screens/VendorDetailScreen";
-import BrudekjoleScreen from "@/screens/BrudekjoleScreen";
-import HaarMakeupScreen from "@/screens/HaarMakeupScreen";
-import TransportScreen from "@/screens/TransportScreen";
-import BlomsterScreen from "@/screens/BlomsterScreen";
-import CateringScreen from "@/screens/CateringScreen";
-import { KakeScreen } from "@/screens/KakeScreen";
-import { FotografScreen } from "@/screens/FotografScreen";
-import { VideografScreen } from "@/screens/VideografScreen";
-import { MusikkScreen } from "@/screens/MusikkScreen";
-import { VenueScreen } from "@/screens/VenueScreen";
-import { PlanleggerScreen } from "@/screens/PlanleggerScreen";
-import { FotoVideografScreen } from "@/screens/FotoVideografScreen";
-import JoinWeddingScreen from "@/screens/JoinWeddingScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
-import { EvendiIcon } from "@/components/EvendiIcon";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
-import { useEventType } from "@/hooks/useEventType";
-import { useTheme } from "@/hooks/useTheme";
 
 export type PlanningStackParamList = {
   Planning: undefined;
@@ -57,12 +38,7 @@ export type PlanningStackParamList = {
   Budget: undefined;
   AITime: undefined;
   Vendors: undefined;
-  VendorMatching: {
-    category?: string;
-    guestCount?: number;
-    cuisineTypes?: string[];
-    selectedTraditions?: string[];
-  };
+  VendorMatching: { category?: string; guestCount?: number };
   Timeline: undefined;
   StressTracker: undefined;
   BudgetScenarios: undefined;
@@ -77,26 +53,11 @@ export type PlanningStackParamList = {
   CoupleLogin: undefined;
   Chat: { conversationId: string; vendorName: string };
   CoupleOffers: undefined;
-  CoupleContracts: undefined;
   CoordinatorSharing: undefined;
   CoordinatorTimeline: undefined;
   SpeechList: undefined;
-  QaSystem: undefined;
   VendorReviews: undefined;
   Feedback: undefined;
-  Brudekjole: undefined;
-  HaarMakeup: undefined;
-  Transport: undefined;
-  Blomster: undefined;
-  Catering: undefined;
-  Kake: undefined;
-  Fotograf: undefined;
-  Videograf: undefined;
-  Musikk: undefined;
-  Venue: undefined;
-  Planlegger: undefined;
-  FotoVideograf: undefined;
-  JoinWedding: undefined;
   VendorDetail: {
     vendorId: string;
     vendorName: string;
@@ -111,23 +72,9 @@ const Stack = createNativeStackNavigator<PlanningStackParamList>();
 
 export default function PlanningStackNavigator() {
   const screenOptions = useScreenOptions();
-  const { isWedding } = useEventType();
-  const { theme } = useTheme();
 
   return (
-    <Stack.Navigator
-      screenOptions={({ navigation, route }) => ({
-        ...screenOptions,
-        headerRight:
-          route.name === "Planning"
-            ? undefined
-            : () => (
-                <Pressable onPress={() => navigation.navigate("Planning")}>
-                  <EvendiIcon name="home" size={20} color={theme.text} />
-                </Pressable>
-              ),
-      })}
-    >
+    <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen
         name="Planning"
         component={PlanningScreen}
@@ -239,11 +186,6 @@ export default function PlanningStackNavigator() {
         options={{ title: "Tilbud" }}
       />
       <Stack.Screen
-        name="CoupleContracts"
-        component={CoupleContractsScreen}
-        options={{ title: "Avtaler" }}
-      />
-      <Stack.Screen
         name="CoordinatorSharing"
         component={CoordinatorSharingScreen}
         options={{ title: "Del med koordinatorer" }}
@@ -259,11 +201,6 @@ export default function PlanningStackNavigator() {
         options={{ title: "Talerliste" }}
       />
       <Stack.Screen
-        name="QaSystem"
-        component={QaSystemScreen}
-        options={{ title: "Spørsmål & Svar" }}
-      />
-      <Stack.Screen
         name="VendorReviews"
         component={VendorReviewsScreen}
         options={{ title: "Anmeldelser" }}
@@ -274,74 +211,9 @@ export default function PlanningStackNavigator() {
         options={{ title: "Tilbakemelding" }}
       />
       <Stack.Screen
-        name="Brudekjole"
-        component={BrudekjoleScreen}
-        options={{ title: isWedding ? "Brudekjole" : "Antrekk" }}
-      />
-      <Stack.Screen
-        name="HaarMakeup"
-        component={HaarMakeupScreen}
-        options={{ title: "Hår & Makeup" }}
-      />
-      <Stack.Screen
-        name="Transport"
-        component={TransportScreen}
-        options={{ title: "Transport" }}
-      />
-      <Stack.Screen
-        name="Blomster"
-        component={BlomsterScreen}
-        options={{ title: "Blomster" }}
-      />
-      <Stack.Screen
-        name="Catering"
-        component={CateringScreen}
-        options={{ title: "Catering" }}
-      />
-      <Stack.Screen
-        name="Kake"
-        component={KakeScreen}
-        options={{ title: isWedding ? "Bryllupskake" : "Kake" }}
-      />
-      <Stack.Screen
-        name="Fotograf"
-        component={FotografScreen}
-        options={{ title: "Fotograf" }}
-      />
-      <Stack.Screen
-        name="Videograf"
-        component={VideografScreen}
-        options={{ title: "Videograf" }}
-      />
-      <Stack.Screen
-        name="Musikk"
-        component={MusikkScreen}
-        options={{ title: "Musikk & DJ" }}
-      />
-      <Stack.Screen
-        name="Venue"
-        component={VenueScreen}
-        options={{ title: "Lokale" }}
-      />
-      <Stack.Screen
-        name="Planlegger"
-        component={PlanleggerScreen}
-        options={{ title: isWedding ? "Bryllupsplanlegger" : "Arrangementsplanlegger" }}
-      />
-      <Stack.Screen
-        name="FotoVideograf"
-        component={FotoVideografScreen}
-        options={{ title: "Foto & Video" }}
-      />
-      <Stack.Screen
         name="VendorDetail"
         component={VendorDetailScreen}
         options={({ route }) => ({ title: route.params.vendorName })}
-      />
-      <Stack.Screen
-        name="JoinWedding"
-        component={JoinWeddingScreen}
-        options={{ title: isWedding ? "Bli med i bryllup" : "Bli med i arrangement" }}
       />
     </Stack.Navigator>
   );
