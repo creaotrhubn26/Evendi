@@ -3,6 +3,7 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
+import { registerCreatorhubRoutes } from "./creatorhub-routes";
 import { initializeSubscriptionCrons } from "./cron-subscriptions";
 import * as fs from "fs";
 import * as path from "path";
@@ -278,6 +279,9 @@ function setupErrorHandler(app: express.Application) {
   }));
 
   const server = await registerRoutes(app);
+
+  // Register CreatorHub external API routes
+  registerCreatorhubRoutes(app);
 
   // Serve Terms of Sale page
   app.get("/terms-of-sale", (_req: Request, res: Response) => {

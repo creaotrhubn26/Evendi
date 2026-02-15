@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, date, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -366,6 +366,8 @@ export const coupleProfiles = pgTable("couple_profiles", {
   password: text("password").notNull(),
   partnerEmail: text("partner_email"),
   weddingDate: text("wedding_date"),
+  eventType: text("event_type").default("wedding"),
+  eventCategory: text("event_category").default("personal"),
   lastActiveAt: timestamp("last_active_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -1432,3 +1434,239 @@ export type InsertVendorUsageMetrics = z.infer<typeof insertVendorUsageSchema>;
 
 export type VendorPayment = typeof vendorPayments.$inferSelect;
 export type InsertVendorPayment = z.infer<typeof insertVendorPaymentSchema>;
+
+// ════════════════════════════════════════════════════════════════
+//  Couple Music Tables
+// ════════════════════════════════════════════════════════════════
+
+export const coupleMusicPerformances = pgTable("couple_music_performances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  date: text("date").notNull(),
+  time: text("time"),
+  duration: text("duration"),
+  musicianName: text("musician_name"),
+  performanceType: text("performance_type"),
+  notes: text("notes"),
+  completed: boolean("completed").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const coupleMusicSetlists = pgTable("couple_music_setlists", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  songs: text("songs"),
+  genre: text("genre"),
+  duration: text("duration"),
+  mood: text("mood"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const coupleMusicPreferences = pgTable("couple_music_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
+  spotifyPlaylistUrl: text("spotify_playlist_url"),
+  youtubePlaylistUrl: text("youtube_playlist_url"),
+  entranceSong: text("entrance_song"),
+  firstDanceSong: text("first_dance_song"),
+  lastSong: text("last_song"),
+  doNotPlay: text("do_not_play"),
+  additionalNotes: text("additional_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// ════════════════════════════════════════════════════════════════
+//  CreatorHub Tables
+// ════════════════════════════════════════════════════════════════
+
+export const creatorhubProjects = pgTable("creatorhub_projects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  logoUrl: text("logo_url"),
+  ownerId: varchar("owner_id").notNull(),
+  status: text("status").notNull().default("active"),
+  apiKey: text("api_key").notNull().unique(),
+  apiKeyPrefix: text("api_key_prefix").notNull(),
+  webhookUrl: text("webhook_url"),
+  webhookSecret: text("webhook_secret"),
+  defaultTimezone: text("default_timezone").default("Europe/Oslo"),
+  defaultCurrency: text("default_currency").default("NOK"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const creatorhubUsers = pgTable("creatorhub_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
+  vendorId: varchar("vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+  email: text("email").notNull(),
+  displayName: text("display_name").notNull(),
+  avatarUrl: text("avatar_url"),
+  role: text("role").notNull().default("creator"),
+  status: text("status").notNull().default("active"),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  projectEmailIdx: uniqueIndex("idx_creatorhub_users_project_email").on(table.projectId, table.email),
+}));
+
+export const creatorhubInvitations = pgTable("creatorhub_invitations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
+  invitedBy: varchar("invited_by").notNull().references(() => creatorhubUsers.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("creator"),
+  token: text("token").notNull().unique(),
+  message: text("message"),
+  status: text("status").notNull().default("pending"),
+  acceptedAt: timestamp("accepted_at"),
+  acceptedUserId: varchar("accepted_user_id").references(() => creatorhubUsers.id, { onDelete: "set null" }),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const creatorhubBookings = pgTable("creatorhub_bookings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
+  creatorUserId: varchar("creator_user_id").notNull().references(() => creatorhubUsers.id, { onDelete: "cascade" }),
+  vendorId: varchar("vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+  coupleId: varchar("couple_id").references(() => coupleProfiles.id, { onDelete: "set null" }),
+  conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+  offerId: varchar("offer_id").references(() => vendorOffers.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  clientName: text("client_name").notNull(),
+  clientEmail: text("client_email"),
+  clientPhone: text("client_phone"),
+  eventDate: date("event_date").notNull(),
+  eventTime: text("event_time"),
+  eventEndTime: text("event_end_time"),
+  location: text("location"),
+  totalAmount: integer("total_amount"),
+  depositAmount: integer("deposit_amount"),
+  depositPaid: boolean("deposit_paid").default(false),
+  fullPaid: boolean("full_paid").default(false),
+  currency: text("currency").default("NOK"),
+  status: text("status").notNull().default("confirmed"),
+  notes: text("notes"),
+  internalNotes: text("internal_notes"),
+  tags: text("tags").array(),
+  externalRef: text("external_ref"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  projectDateIdx: index("idx_creatorhub_bookings_project_date").on(table.projectId, table.eventDate),
+  creatorIdx: index("idx_creatorhub_bookings_creator").on(table.creatorUserId),
+}));
+
+export const creatorhubCrmNotes = pgTable("creatorhub_crm_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
+  bookingId: varchar("booking_id").references(() => creatorhubBookings.id, { onDelete: "cascade" }),
+  creatorUserId: varchar("creator_user_id").notNull().references(() => creatorhubUsers.id, { onDelete: "cascade" }),
+  conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+  noteType: text("note_type").notNull().default("note"),
+  subject: text("subject"),
+  body: text("body").notNull(),
+  dueDate: timestamp("due_date"),
+  isCompleted: boolean("is_completed").default(false),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const creatorhubAnalyticsEvents = pgTable("creatorhub_analytics_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
+  creatorUserId: varchar("creator_user_id").references(() => creatorhubUsers.id, { onDelete: "set null" }),
+  bookingId: varchar("booking_id").references(() => creatorhubBookings.id, { onDelete: "set null" }),
+  eventType: text("event_type").notNull(),
+  eventData: text("event_data"),
+  source: text("source").default("creatorhub"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  projectTypeIdx: index("idx_creatorhub_analytics_project_type").on(table.projectId, table.eventType),
+  createdAtIdx: index("idx_creatorhub_analytics_created_at").on(table.createdAt),
+}));
+
+export const creatorhubApiAuditLog = pgTable("creatorhub_api_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => creatorhubProjects.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => creatorhubUsers.id, { onDelete: "set null" }),
+  method: text("method").notNull(),
+  path: text("path").notNull(),
+  statusCode: integer("status_code"),
+  requestBody: text("request_body"),
+  responseTime: integer("response_time"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// CreatorHub Zod schemas
+export const createCreatorhubProjectSchema = z.object({
+  name: z.string().min(2, "Project name must be at least 2 characters"),
+  slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
+  description: z.string().optional(),
+  logoUrl: z.string().url().optional().or(z.literal("")),
+  defaultTimezone: z.string().default("Europe/Oslo"),
+  defaultCurrency: z.string().default("NOK"),
+});
+
+export const createCreatorhubInvitationSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  role: z.enum(["admin", "creator", "viewer"]).default("creator"),
+  message: z.string().max(500).optional(),
+});
+
+export const createCreatorhubBookingSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  description: z.string().optional(),
+  clientName: z.string().min(1, "Client name is required"),
+  clientEmail: z.string().email().optional().or(z.literal("")),
+  clientPhone: z.string().optional(),
+  eventDate: z.string().min(1, "Event date is required"),
+  eventTime: z.string().optional(),
+  eventEndTime: z.string().optional(),
+  location: z.string().optional(),
+  totalAmount: z.number().int().min(0).optional(),
+  depositAmount: z.number().int().min(0).optional(),
+  status: z.enum(["inquiry", "confirmed", "completed", "cancelled"]).default("confirmed"),
+  notes: z.string().optional(),
+  internalNotes: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  externalRef: z.string().optional(),
+  vendorId: z.string().optional(),
+  coupleId: z.string().optional(),
+  conversationId: z.string().optional(),
+  offerId: z.string().optional(),
+});
+
+export const createCreatorhubCrmNoteSchema = z.object({
+  bookingId: z.string().optional(),
+  conversationId: z.string().optional(),
+  noteType: z.enum(["note", "call_log", "email_log", "task", "follow_up"]).default("note"),
+  subject: z.string().optional(),
+  body: z.string().min(1, "Note body is required"),
+  dueDate: z.string().optional(),
+});
+
+// CreatorHub Types
+export type CreatorhubProject = typeof creatorhubProjects.$inferSelect;
+export type CreatorhubUser = typeof creatorhubUsers.$inferSelect;
+export type CreatorhubInvitation = typeof creatorhubInvitations.$inferSelect;
+export type CreatorhubBooking = typeof creatorhubBookings.$inferSelect;
+export type CreatorhubCrmNote = typeof creatorhubCrmNotes.$inferSelect;
+export type CreatorhubAnalyticsEvent = typeof creatorhubAnalyticsEvents.$inferSelect;
+export type CreatorhubApiAuditLog = typeof creatorhubApiAuditLog.$inferSelect;
