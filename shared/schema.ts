@@ -1626,7 +1626,7 @@ export const createCreatorhubProjectSchema = z.object({
 
 export const createCreatorhubInvitationSchema = z.object({
   email: z.string().email("Invalid email address"),
-  role: z.enum(["admin", "creator", "viewer"]).default("creator"),
+  role: z.enum(["admin", "creator", "vendor", "viewer"]).default("creator"),
   message: z.string().max(500).optional(),
 });
 

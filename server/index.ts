@@ -1,4 +1,3 @@
-import "dotenv/config";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import helmet from "helmet";
@@ -8,8 +7,9 @@ import { initializeSubscriptionCrons } from "./cron-subscriptions";
 import * as fs from "fs";
 import * as path from "path";
 
-// Load .env.local if exists
+// Load .env with override so it wins over Codespace/system env vars
 import { config } from "dotenv";
+config({ path: ".env", override: true });
 config({ path: ".env.local", override: true });
 
 console.log("DATABASE_URL loaded:", process.env.DATABASE_URL ? "YES" : "NO");
