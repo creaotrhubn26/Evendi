@@ -17,17 +17,18 @@ export default defineConfig({
   projects: [
     {
       name: 'evendi-api',
-      testMatch: /evendi.*\.spec\.ts/,
+      testMatch: /evendi-.*\.spec\.ts$/,
+      testIgnore: /creatorhub-/,
       use: { baseURL: 'http://localhost:5000' },
     },
     {
       name: 'creatorhub-api',
-      testMatch: /creatorhub.*\.spec\.ts/,
+      testMatch: /creatorhub-.*\.spec\.ts$/,
       use: { baseURL: 'http://localhost:3001' },
     },
     {
       name: 'bridge-api',
-      testMatch: /bridge.*\.spec\.ts/,
+      testMatch: /bridge-.*\.spec\.ts$/,
       use: { baseURL: 'http://localhost:5000' },
     },
   ],

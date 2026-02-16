@@ -257,7 +257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(forecast);
     } catch (error) {
-      console.error("Weather API error:", error);
+      console.error("Weather API error:", error?.message || String(error));
       res.status(500).json({ error: "Failed to fetch weather data" });
     }
   });
@@ -318,7 +318,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ entities: formattedEntities });
     } catch (error) {
-      console.error("Error searching brreg:", error);
+      console.error("Error searching brreg:", error?.message || String(error));
       res.json({ entities: [] });
     }
   });
@@ -328,7 +328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const categories = await db.select().from(vendorCategories);
       res.json(categories);
     } catch (error) {
-      console.error("Error fetching categories:", error);
+      console.error("Error fetching categories:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente kategorier" });
     }
   });
@@ -343,7 +343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .orderBy(subscriptionTiers.sortOrder);
       res.json(tiers);
     } catch (error) {
-      console.error("Error fetching subscription tiers:", error);
+      console.error("Error fetching subscription tiers:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente abonnement" });
     }
   });
@@ -407,7 +407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiredCount: expiredTrials.length 
       });
     } catch (error) {
-      console.error("Error checking expired trials:", error);
+      console.error("Error checking expired trials:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke sjekke utløpte prøveperioder" });
     }
   });
@@ -480,7 +480,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sentCount 
       });
     } catch (error) {
-      console.error("Error sending trial reminders:", error);
+      console.error("Error sending trial reminders:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke sende påminnelser" });
     }
   });
@@ -541,7 +541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         vendor: vendorWithoutPassword 
       });
     } catch (error) {
-      console.error("Error registering vendor:", error);
+      console.error("Error registering vendor:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke registrere leverandør" });
     }
   });
@@ -575,7 +575,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { password: _, ...vendorWithoutPassword } = vendor;
       res.json({ vendor: vendorWithoutPassword, sessionToken });
     } catch (error) {
-      console.error("Error logging in vendor:", error);
+      console.error("Error logging in vendor:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke logge inn" });
     }
   });
@@ -649,7 +649,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Konto opprettet! Din søknad venter på godkjenning.",
       });
     } catch (error) {
-      console.error("Error with Google vendor login:", error);
+      console.error("Error with Google vendor login:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke logge inn med Google" });
     }
   });
@@ -721,7 +721,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(filtered);
     } catch (error) {
-      console.error("Error fetching vendors:", error);
+      console.error("Error fetching vendors:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente leverandører" });
     }
   });
@@ -804,7 +804,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(result);
     } catch (error) {
-      console.error("Error fetching matching vendors:", error);
+      console.error("Error fetching matching vendors:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente matchende leverandører" });
     }
   });
@@ -847,7 +847,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(vendorList);
     } catch (error) {
-      console.error("Error fetching admin vendors:", error);
+      console.error("Error fetching admin vendors:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente leverandører" });
     }
   });
@@ -900,7 +900,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ message: "Leverandør godkjent" });
     } catch (error) {
-      console.error("Error approving vendor:", error);
+      console.error("Error approving vendor:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke godkjenne leverandør" });
     }
   });
@@ -922,7 +922,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ message: "Leverandør avvist" });
     } catch (error) {
-      console.error("Error rejecting vendor:", error);
+      console.error("Error rejecting vendor:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke avvise leverandør" });
     }
   });
@@ -1009,7 +1009,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       return true;
     } catch (error) {
-      console.error("Error checking subscription access:", error);
+      console.error("Error checking subscription access:", error?.message || String(error));
       return true; // Allow access on error to avoid breaking functionality
     }
   };
@@ -1048,7 +1048,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         category,
       });
     } catch (error) {
-      console.error("Error fetching vendor profile:", error);
+      console.error("Error fetching vendor profile:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente profil" });
     }
   });
@@ -1106,7 +1106,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         autoRenew: subscription.autoRenew,
       });
     } catch (error) {
-      console.error("Error fetching subscription status:", error);
+      console.error("Error fetching subscription status:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente abonnementsstatus" });
     }
   });
@@ -1140,7 +1140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updatedVendor);
     } catch (error) {
-      console.error("Error updating vendor profile:", error);
+      console.error("Error updating vendor profile:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere profil" });
     }
   });
@@ -1171,7 +1171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         categoryName,
       });
     } catch (error) {
-      console.error("Error fetching category details:", error);
+      console.error("Error fetching category details:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente kategori-detaljer" });
     }
   });
@@ -1208,7 +1208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(created);
       }
     } catch (error) {
-      console.error("Error updating category details:", error);
+      console.error("Error updating category details:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere kategori-detaljer" });
     }
   });
@@ -1229,7 +1229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(deliveriesWithItems);
     } catch (error) {
-      console.error("Error fetching deliveries:", error);
+      console.error("Error fetching deliveries:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente leveranser" });
     }
   });
@@ -1283,7 +1283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: `Leveranse opprettet! Tilgangskode: ${accessCode}` 
       });
     } catch (error) {
-      console.error("Error creating delivery:", error);
+      console.error("Error creating delivery:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette leveranse" });
     }
   });
@@ -1350,7 +1350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Leveranse oppdatert!" 
       });
     } catch (error) {
-      console.error("Error updating delivery:", error);
+      console.error("Error updating delivery:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere leveranse" });
     }
   });
@@ -1382,7 +1382,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ message: "Leveranse slettet" });
     } catch (error) {
-      console.error("Error deleting delivery:", error);
+      console.error("Error deleting delivery:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette leveranse" });
     }
   });
@@ -1408,7 +1408,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         vendor 
       });
     } catch (error) {
-      console.error("Error fetching delivery:", error);
+      console.error("Error fetching delivery:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente leveranse" });
     }
   });
@@ -1418,7 +1418,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const categories = await db.select().from(inspirationCategories);
       res.json(categories);
     } catch (error) {
-      console.error("Error fetching inspiration categories:", error);
+      console.error("Error fetching inspiration categories:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente kategorier" });
     }
   });
@@ -1447,7 +1447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(inspirationsWithDetails);
     } catch (error) {
-      console.error("Error fetching inspirations:", error);
+      console.error("Error fetching inspirations:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente inspirasjoner" });
     }
   });
@@ -1469,7 +1469,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(inspirationsWithMedia);
     } catch (error) {
-      console.error("Error fetching vendor inspirations:", error);
+      console.error("Error fetching vendor inspirations:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente inspirasjoner" });
     }
   });
@@ -1544,7 +1544,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Inspirasjon opprettet! Den vil bli synlig etter godkjenning.",
       });
     } catch (error) {
-      console.error("Error creating inspiration:", error);
+      console.error("Error creating inspiration:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette inspirasjon" });
     }
   });
@@ -1620,7 +1620,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Showcase oppdatert! Endringer vil bli synlig etter godkjenning.",
       });
     } catch (error) {
-      console.error("Error updating inspiration:", error);
+      console.error("Error updating inspiration:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere showcase" });
     }
   });
@@ -1652,7 +1652,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ message: "Showcase slettet" });
     } catch (error) {
-      console.error("Error deleting inspiration:", error);
+      console.error("Error deleting inspiration:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette showcase" });
     }
   });
@@ -1679,7 +1679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(inspirationsWithDetails);
     } catch (error) {
-      console.error("Error fetching admin inspirations:", error);
+      console.error("Error fetching admin inspirations:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente inspirasjoner" });
     }
   });
@@ -1696,7 +1696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ message: "Inspirasjon godkjent" });
     } catch (error) {
-      console.error("Error approving inspiration:", error);
+      console.error("Error approving inspiration:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke godkjenne inspirasjon" });
     }
   });
@@ -1718,7 +1718,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ message: "Inspirasjon avvist" });
     } catch (error) {
-      console.error("Error rejecting inspiration:", error);
+      console.error("Error rejecting inspiration:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke avvise inspirasjon" });
     }
   });
@@ -1731,7 +1731,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const features = await db.select().from(vendorFeatures).where(eq(vendorFeatures.vendorId, id));
       res.json(features);
     } catch (error) {
-      console.error("Error fetching vendor features:", error);
+      console.error("Error fetching vendor features:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente funksjoner" });
     }
   });
@@ -1774,7 +1774,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ message: "Funksjoner oppdatert" });
     } catch (error) {
-      console.error("Error updating vendor features:", error);
+      console.error("Error updating vendor features:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere funksjoner" });
     }
   });
@@ -1787,7 +1787,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const assignments = await db.select().from(vendorInspirationCategories).where(eq(vendorInspirationCategories.vendorId, id));
       res.json(assignments.map(a => a.categoryId));
     } catch (error) {
-      console.error("Error fetching vendor categories:", error);
+      console.error("Error fetching vendor categories:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente kategorier" });
     }
   });
@@ -1827,7 +1827,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ message: "Kategorier oppdatert" });
     } catch (error) {
-      console.error("Error updating vendor categories:", error);
+      console.error("Error updating vendor categories:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere kategorier" });
     }
   });
@@ -1848,7 +1848,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(allowedCategories.filter(c => categoryIds.includes(c.id)));
       }
     } catch (error) {
-      console.error("Error fetching allowed categories:", error);
+      console.error("Error fetching allowed categories:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente kategorier" });
     }
   });
@@ -1871,7 +1871,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(featureMap);
     } catch (error) {
-      console.error("Error fetching vendor features:", error);
+      console.error("Error fetching vendor features:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente funksjoner" });
     }
   });
@@ -1918,7 +1918,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json({ message: "Forespørsel sendt!" });
     } catch (error) {
-      console.error("Error creating inquiry:", error);
+      console.error("Error creating inquiry:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke sende forespørsel" });
     }
   });
@@ -1939,7 +1939,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(inquiriesWithDetails);
     } catch (error) {
-      console.error("Error fetching inquiries:", error);
+      console.error("Error fetching inquiries:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente forespørsler" });
     }
   });
@@ -1963,7 +1963,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ message: "Status oppdatert" });
     } catch (error) {
-      console.error("Error updating inquiry status:", error);
+      console.error("Error updating inquiry status:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere status" });
     }
   });
@@ -2052,7 +2052,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ couple, sessionToken: token });
     } catch (error) {
-      console.error("Couple login error:", error);
+      console.error("Couple login error:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke logge inn" });
     }
   });
@@ -2078,7 +2078,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(couple);
     } catch (error) {
-      console.error("Error fetching couple profile:", error);
+      console.error("Error fetching couple profile:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente profil" });
     }
   });
@@ -2121,7 +2121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(enriched);
     } catch (error) {
-      console.error("Error fetching conversations:", error);
+      console.error("Error fetching conversations:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente samtaler" });
     }
   });
@@ -2160,7 +2160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(enriched);
     } catch (error) {
-      console.error("Error fetching vendor conversations:", error);
+      console.error("Error fetching vendor conversations:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente samtaler" });
     }
   });
@@ -2208,7 +2208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ ...conv, couple, inspiration, lastMessage: lastMsg });
     } catch (error) {
-      console.error("Error fetching conversation:", error);
+      console.error("Error fetching conversation:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente samtale" });
     }
   });
@@ -2240,7 +2240,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(msgs);
     } catch (error) {
-      console.error("Error fetching messages:", error);
+      console.error("Error fetching messages:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente meldinger" });
     }
   });
@@ -2272,7 +2272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         vendorTypingAt: conv.vendorTypingAt,
       });
     } catch (error) {
-      console.error("Error fetching conversation details:", error);
+      console.error("Error fetching conversation details:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente samtaledetaljer" });
     }
   });
@@ -2304,7 +2304,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(msgs);
     } catch (error) {
-      console.error("Error fetching messages:", error);
+      console.error("Error fetching messages:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente meldinger" });
     }
   });
@@ -2386,7 +2386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json(msg);
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("Error sending message:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke sende melding" });
     }
   });
@@ -2438,7 +2438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json(msg);
     } catch (error) {
-      console.error("Error sending vendor message:", error);
+      console.error("Error sending vendor message:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke sende melding" });
     }
   });
@@ -2461,7 +2461,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(conv);
     } catch (error) {
-      console.error("Error fetching admin conversation:", error);
+      console.error("Error fetching admin conversation:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente admin-samtale" });
     }
   });
@@ -2488,7 +2488,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(msgs);
     } catch (error) {
-      console.error("Error fetching admin messages:", error);
+      console.error("Error fetching admin messages:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente admin-meldinger" });
     }
   });
@@ -2541,7 +2541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json(msg);
     } catch (error) {
-      console.error("Error sending admin message:", error);
+      console.error("Error sending admin message:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke sende melding til admin" });
     }
   });
@@ -2559,7 +2559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .orderBy(desc(adminConversations.lastMessageAt));
       res.json(rows);
     } catch (error) {
-      console.error("Error listing admin convs:", error);
+      console.error("Error listing admin convs:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke liste admin-samtaler" });
     }
   });
@@ -2577,7 +2577,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(adminConversations.id, id));
       res.json(msgs);
     } catch (error) {
-      console.error("Error fetching admin msgs:", error);
+      console.error("Error fetching admin msgs:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente meldinger" });
     }
   });
@@ -2619,7 +2619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json(msg);
     } catch (error) {
-      console.error("Error sending admin reply:", error);
+      console.error("Error sending admin reply:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke sende admin-svar" });
     }
   });
@@ -2655,7 +2655,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       broadcastAdminConv(id, { type: "status-update", payload: { status, updatedAt: new Date().toISOString() } });
       res.json({ success: true, status });
     } catch (error) {
-      console.error("Error updating conversation status:", error);
+      console.error("Error updating conversation status:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere status" });
     }
   });
@@ -2702,7 +2702,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error editing message:", error);
+      console.error("Error editing message:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke redigere melding" });
     }
   });
@@ -2733,7 +2733,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error updating typing status:", error);
+      console.error("Error updating typing status:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere skrive-status" });
     }
   });
@@ -2764,7 +2764,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error updating typing status:", error);
+      console.error("Error updating typing status:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere skrive-status" });
     }
   });
@@ -2795,7 +2795,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true, message: "Melding slettet" });
     } catch (error) {
-      console.error("Error deleting message:", error);
+      console.error("Error deleting message:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette melding" });
     }
   });
@@ -2825,7 +2825,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true, message: "Samtale og meldinger slettet" });
     } catch (error) {
-      console.error("Error deleting conversation:", error);
+      console.error("Error deleting conversation:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette samtale" });
     }
   });
@@ -2854,7 +2854,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true, message: "Melding slettet" });
     } catch (error) {
-      console.error("Error deleting vendor message:", error);
+      console.error("Error deleting vendor message:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette melding" });
     }
   });
@@ -2896,7 +2896,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error editing vendor message:", error);
+      console.error("Error editing vendor message:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke redigere melding" });
     }
   });
@@ -2924,7 +2924,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true, message: "Samtale og meldinger slettet" });
     } catch (error) {
-      console.error("Error deleting vendor conversation:", error);
+      console.error("Error deleting vendor conversation:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette samtale" });
     }
   });
@@ -2970,7 +2970,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json(conv);
     } catch (error) {
-      console.error("Error creating conversation from inquiry:", error);
+      console.error("Error creating conversation from inquiry:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette samtale" });
     }
   });
@@ -2981,7 +2981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allReminders = await db.select().from(reminders).orderBy(reminders.reminderDate);
       res.json(allReminders);
     } catch (error) {
-      console.error("Error fetching reminders:", error);
+      console.error("Error fetching reminders:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente påminnelser" });
     }
   });
@@ -2999,7 +2999,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .returning();
       res.status(201).json(newReminder);
     } catch (error) {
-      console.error("Error creating reminder:", error);
+      console.error("Error creating reminder:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette påminnelse" });
     }
   });
@@ -3024,7 +3024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating reminder:", error);
+      console.error("Error updating reminder:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere påminnelse" });
     }
   });
@@ -3042,7 +3042,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting reminder:", error);
+      console.error("Error deleting reminder:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette påminnelse" });
     }
   });
@@ -3058,7 +3058,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .orderBy(speeches.sortOrder);
       res.json(allSpeeches);
     } catch (error) {
-      console.error("Error fetching speeches:", error);
+      console.error("Error fetching speeches:", error?.message || String(error));
       if (!res.headersSent) res.status(500).json({ error: "Kunne ikke hente taleliste" });
     }
   });
@@ -3122,7 +3122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json(newSpeech);
     } catch (error) {
-      console.error("Error creating speech:", error);
+      console.error("Error creating speech:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette tale" });
     }
   });
@@ -3184,7 +3184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating speech:", error);
+      console.error("Error updating speech:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere tale" });
     }
   });
@@ -3241,7 +3241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting speech:", error);
+      console.error("Error deleting speech:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette tale" });
     }
   });
@@ -3262,7 +3262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error reordering speeches:", error);
+      console.error("Error reordering speeches:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke sortere taler" });
     }
   });
@@ -3316,7 +3316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ success: true });
     } catch (error) {
-      console.error("Error marking conversation as read:", error);
+      console.error("Error marking conversation as read:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke markere som lest" });
     }
   });
@@ -3361,7 +3361,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastSeenAt: lastVendorMessage?.readAt || null,
       });
     } catch (error) {
-      console.error("Error fetching conversation details:", error);
+      console.error("Error fetching conversation details:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente samtaledetaljer" });
     }
   });
@@ -3392,7 +3392,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json(reminder);
     } catch (error) {
-      console.error("Error scheduling reminder:", error);
+      console.error("Error scheduling reminder:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke planlegge påminnelse" });
     }
   });
@@ -3413,7 +3413,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(pendingReminders);
     } catch (error) {
-      console.error("Error fetching message reminders:", error);
+      console.error("Error fetching message reminders:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente påminnelser" });
     }
   });
@@ -3467,7 +3467,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: `${sent} påminnelser sendt`, sent });
     } catch (error) {
-      console.error("Error processing message reminders:", error);
+      console.error("Error processing message reminders:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke behandle påminnelser" });
     }
   });
@@ -3494,7 +3494,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ success: true });
     } catch (error) {
-      console.error("Error cancelling reminder:", error);
+      console.error("Error cancelling reminder:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke avbryte påminnelse" });
     }
   });
@@ -3515,7 +3515,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(products);
     } catch (error) {
-      console.error("Error fetching vendor products:", error);
+      console.error("Error fetching vendor products:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente produkter" });
     }
   });
@@ -3582,7 +3582,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating vendor product:", error);
+      console.error("Error updating vendor product:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere produkt" });
     }
   });
@@ -3609,7 +3609,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting vendor product:", error);
+      console.error("Error deleting vendor product:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette produkt" });
     }
   });
@@ -3646,7 +3646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(offersWithItems);
     } catch (error) {
-      console.error("Error fetching vendor offers:", error);
+      console.error("Error fetching vendor offers:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente tilbud" });
     }
   });
@@ -3818,7 +3818,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json({ ...offer, items });
     } catch (error) {
-      console.error("Error creating vendor offer:", error);
+      console.error("Error creating vendor offer:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette tilbud" });
     }
   });
@@ -3850,7 +3850,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating vendor offer:", error);
+      console.error("Error updating vendor offer:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere tilbud" });
     }
   });
@@ -3884,7 +3884,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting vendor offer:", error);
+      console.error("Error deleting vendor offer:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette tilbud" });
     }
   });
@@ -3917,7 +3917,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const availability = await query.orderBy(vendorAvailability.date);
       res.json(availability);
     } catch (error) {
-      console.error("Error fetching availability:", error);
+      console.error("Error fetching availability:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente tilgjengelighet" });
     }
   });
@@ -3939,7 +3939,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(availability || null);
     } catch (error) {
-      console.error("Error fetching availability for date:", error);
+      console.error("Error fetching availability for date:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente tilgjengelighet" });
     }
   });
@@ -3993,7 +3993,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors[0].message });
       }
-      console.error("Error creating/updating availability:", error);
+      console.error("Error creating/updating availability:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke lagre tilgjengelighet" });
     }
   });
@@ -4053,7 +4053,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(results);
     } catch (error) {
-      console.error("Error bulk updating availability:", error);
+      console.error("Error bulk updating availability:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere tilgjengelighet" });
     }
   });
@@ -4074,7 +4074,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting availability:", error);
+      console.error("Error deleting availability:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette tilgjengelighet" });
     }
   });
@@ -4102,7 +4102,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         acceptedBookings: acceptedOffers.length,
       });
     } catch (error) {
-      console.error("Error fetching bookings for date:", error);
+      console.error("Error fetching bookings for date:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente bookinger" });
     }
   });
@@ -4232,7 +4232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error responding to offer:", error);
+      console.error("Error responding to offer:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke svare på tilbud" });
     }
   });
@@ -4303,7 +4303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(offersWithItems);
     } catch (error) {
-      console.error("Error fetching couple offers:", error);
+      console.error("Error fetching couple offers:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente tilbud" });
     }
   });
@@ -4339,7 +4339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(uniqueCouples);
     } catch (error) {
-      console.error("Error fetching vendor contacts:", error);
+      console.error("Error fetching vendor contacts:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente kontakter" });
     }
   });
@@ -4351,7 +4351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settings = await db.select().from(appSettings);
       res.json(settings);
     } catch (error) {
-      console.error("Error fetching settings:", error);
+      console.error("Error fetching settings:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente innstillinger" });
     }
   });
@@ -4381,7 +4381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updated = await db.select().from(appSettings);
       res.json(updated);
     } catch (error) {
-      console.error("Error updating settings:", error);
+      console.error("Error updating settings:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere innstillinger" });
     }
   });
@@ -4419,7 +4419,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         offers: Number(offerCount?.count || 0),
       });
     } catch (error) {
-      console.error("Error fetching statistics:", error);
+      console.error("Error fetching statistics:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente statistikk" });
     }
   });
@@ -4440,7 +4440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         users: coupleData,
       });
     } catch (error) {
-      console.error("Error fetching couple list:", error);
+      console.error("Error fetching couple list:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente brudepar-liste" });
     }
   });
@@ -4464,7 +4464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         users: vendorData,
       });
     } catch (error) {
-      console.error("Error fetching vendor list:", error);
+      console.error("Error fetching vendor list:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente leverandør-liste" });
     }
   });
@@ -4503,7 +4503,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         coupleData: couple[0],
       });
     } catch (error) {
-      console.error("Error impersonating couple:", error);
+      console.error("Error impersonating couple:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke logge inn som brudepar" });
     }
   });
@@ -4542,7 +4542,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         vendorData: vendor[0],
       });
     } catch (error) {
-      console.error("Error impersonating vendor:", error);
+      console.error("Error impersonating vendor:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke logge inn som leverandør" });
     }
   });
@@ -4591,7 +4591,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: `${expiredOffers.length} tilbud marked som utløpt`, updated: expiredOffers.length });
     } catch (error) {
-      console.error("Error expiring offers:", error);
+      console.error("Error expiring offers:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere tilbud" });
     }
   });
@@ -4609,7 +4609,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).returning();
       res.json(newCategory);
     } catch (error) {
-      console.error("Error creating category:", error);
+      console.error("Error creating category:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette kategori" });
     }
   });
@@ -4627,7 +4627,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: "Kategori oppdatert" });
     } catch (error) {
-      console.error("Error updating category:", error);
+      console.error("Error updating category:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere kategori" });
     }
   });
@@ -4640,7 +4640,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db.delete(inspirationCategories).where(eq(inspirationCategories.id, id));
       res.json({ message: "Kategori slettet" });
     } catch (error) {
-      console.error("Error deleting category:", error);
+      console.error("Error deleting category:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette kategori" });
     }
   });
@@ -4658,7 +4658,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).returning();
       res.json(newCategory);
     } catch (error) {
-      console.error("Error creating vendor category:", error);
+      console.error("Error creating vendor category:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette kategori" });
     }
   });
@@ -4676,7 +4676,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: "Kategori oppdatert" });
     } catch (error) {
-      console.error("Error updating vendor category:", error);
+      console.error("Error updating vendor category:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere kategori" });
     }
   });
@@ -4689,7 +4689,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db.delete(vendorCategories).where(eq(vendorCategories.id, id));
       res.json({ message: "Kategori slettet" });
     } catch (error) {
-      console.error("Error deleting vendor category:", error);
+      console.error("Error deleting vendor category:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette kategori" });
     }
   });
@@ -4702,7 +4702,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const couples = await db.select().from(coupleProfiles).orderBy(desc(coupleProfiles.createdAt));
       res.json(couples);
     } catch (error) {
-      console.error("Error fetching couples:", error);
+      console.error("Error fetching couples:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente par" });
     }
   });
@@ -4719,7 +4719,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db.delete(coupleProfiles).where(eq(coupleProfiles.id, id));
       res.json({ message: "Par slettet" });
     } catch (error) {
-      console.error("Error deleting couple:", error);
+      console.error("Error deleting couple:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette par" });
     }
   });
@@ -4749,7 +4749,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: "Leverandør oppdatert" });
     } catch (error) {
-      console.error("Error updating vendor:", error);
+      console.error("Error updating vendor:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere leverandør" });
     }
   });
@@ -4774,7 +4774,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db.delete(vendors).where(eq(vendors.id, id));
       res.json({ message: "Leverandør slettet" });
     } catch (error) {
-      console.error("Error deleting vendor:", error);
+      console.error("Error deleting vendor:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette leverandør" });
     }
   });
@@ -4796,7 +4796,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(invitations);
     } catch (error) {
-      console.error("Error fetching coordinators:", error);
+      console.error("Error fetching coordinators:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente koordinatorer" });
     }
   });
@@ -4829,7 +4829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json(invitation);
     } catch (error) {
-      console.error("Error creating coordinator invitation:", error);
+      console.error("Error creating coordinator invitation:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette invitasjon" });
     }
   });
@@ -4864,7 +4864,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(updated);
     } catch (error) {
-      console.error("Error updating coordinator:", error);
+      console.error("Error updating coordinator:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere invitasjon" });
     }
   });
@@ -4885,7 +4885,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: "Invitasjon slettet" });
     } catch (error) {
-      console.error("Error deleting coordinator:", error);
+      console.error("Error deleting coordinator:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette invitasjon" });
     }
   });
@@ -4916,7 +4916,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })),
       );
     } catch (error) {
-      console.error("Error fetching guest invitations:", error);
+      console.error("Error fetching guest invitations:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente invitasjoner" });
     }
   });
@@ -4958,7 +4958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         inviteUrl: `${domain}/invite/${inviteToken}`,
       });
     } catch (error) {
-      console.error("Error creating guest invitation:", error);
+      console.error("Error creating guest invitation:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette invitasjon" });
     }
   });
@@ -4987,7 +4987,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating guest invitation:", error);
+      console.error("Error updating guest invitation:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere invitasjon" });
     }
   });
@@ -5005,7 +5005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ message: "Invitasjon slettet" });
     } catch (error) {
-      console.error("Error deleting guest invitation:", error);
+      console.error("Error deleting guest invitation:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette invitasjon" });
     }
   });
@@ -5038,7 +5038,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         coupleName: invitation.coupleName,
       });
     } catch (error) {
-      console.error("Error fetching guest invitation:", error);
+      console.error("Error fetching guest invitation:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente invitasjon" });
     }
   });
@@ -5080,7 +5080,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error responding to invitation:", error);
+      console.error("Error responding to invitation:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke lagre svar" });
     }
   });
@@ -5297,7 +5297,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         schedule: scheduleList,
       });
     } catch (error) {
-      console.error("Error accessing coordinator view:", error);
+      console.error("Error accessing coordinator view:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente data" });
     }
   });
@@ -5321,7 +5321,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Return the token for redirect
       res.json({ token: invitation.accessToken });
     } catch (error) {
-      console.error("Error validating access code:", error);
+      console.error("Error validating access code:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke validere kode" });
     }
   });
@@ -5343,7 +5343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(events);
     } catch (error) {
-      console.error("Error fetching schedule events:", error);
+      console.error("Error fetching schedule events:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente program" });
     }
   });
@@ -5385,7 +5385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
     } catch (error) {
-      console.error("Error notifying vendors:", error);
+      console.error("Error notifying vendors:", error?.message || String(error));
     }
   }
 
@@ -5417,7 +5417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json(event);
     } catch (error) {
-      console.error("Error creating schedule event:", error);
+      console.error("Error creating schedule event:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette hendelse" });
     }
   });
@@ -5459,7 +5459,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(updated);
     } catch (error) {
-      console.error("Error updating schedule event:", error);
+      console.error("Error updating schedule event:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere hendelse" });
     }
   });
@@ -5495,7 +5495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: "Hendelse slettet" });
     } catch (error) {
-      console.error("Error deleting schedule event:", error);
+      console.error("Error deleting schedule event:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette hendelse" });
     }
   });
@@ -5540,7 +5540,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .orderBy(scheduleEvents.time);
       res.json(events);
     } catch (error) {
-      console.error("Error fetching coordinator schedule:", error);
+      console.error("Error fetching coordinator schedule:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente program" });
     }
   });
@@ -5558,7 +5558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!couple) return res.status(404).json({ error: "Profil ikke funnet" });
       res.json(couple);
     } catch (error) {
-      console.error("Error fetching coordinator couple profile:", error);
+      console.error("Error fetching coordinator couple profile:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente profil" });
     }
   });
@@ -5581,7 +5581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(guests);
     } catch (error) {
-      console.error("Error fetching guests:", error);
+      console.error("Error fetching guests:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente gjester" });
     }
   });
@@ -5600,7 +5600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(guest);
     } catch (error) {
-      console.error("Error creating guest:", error);
+      console.error("Error creating guest:", error?.message || String(error));
       res.status(400).json({ error: "Kunne ikke opprett gjest" });
     }
   });
@@ -5637,7 +5637,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating guest:", error);
+      console.error("Error updating guest:", error?.message || String(error));
       res.status(400).json({ error: "Kunne ikke oppdatere gjest" });
     }
   });
@@ -5669,7 +5669,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting guest:", error);
+      console.error("Error deleting guest:", error?.message || String(error));
       res.status(400).json({ error: "Kunne ikke slette gjest" });
     }
   });
@@ -5709,7 +5709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(tablesWithGuests);
     } catch (error) {
-      console.error("Error fetching tables:", error);
+      console.error("Error fetching tables:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente bord" });
     }
   });
@@ -5739,7 +5739,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json({ ...table, guests: [] });
     } catch (error) {
-      console.error("Error creating table:", error);
+      console.error("Error creating table:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette bord" });
     }
   });
@@ -5808,7 +5808,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(updated);
     } catch (error) {
-      console.error("Error updating table:", error);
+      console.error("Error updating table:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere bord" });
     }
   });
@@ -5836,7 +5836,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: "Bord slettet" });
     } catch (error) {
-      console.error("Error deleting table:", error);
+      console.error("Error deleting table:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette bord" });
     }
   });
@@ -5868,7 +5868,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json({ success: true });
     } catch (error) {
-      console.error("Error assigning guest:", error);
+      console.error("Error assigning guest:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke plassere gjest" });
     }
   });
@@ -5890,7 +5890,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ success: true });
     } catch (error) {
-      console.error("Error removing guest:", error);
+      console.error("Error removing guest:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke fjerne gjest" });
     }
   });
@@ -5948,7 +5948,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(tablesWithGuests);
     } catch (error) {
-      console.error("Error fetching tables for vendor:", error);
+      console.error("Error fetching tables for vendor:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente bordplassering" });
     }
   });
@@ -6024,7 +6024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
     } catch (error) {
-      console.error("Error notifying vendors:", error);
+      console.error("Error notifying vendors:", error?.message || String(error));
     }
   }
 
@@ -6089,7 +6089,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(updated);
     } catch (error) {
-      console.error("Error updating schedule event:", error);
+      console.error("Error updating schedule event:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere hendelse" });
     }
   });
@@ -6139,7 +6139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json(event);
     } catch (error) {
-      console.error("Error creating schedule event:", error);
+      console.error("Error creating schedule event:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette hendelse" });
     }
   });
@@ -6194,7 +6194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: "Hendelse slettet" });
     } catch (error) {
-      console.error("Error deleting schedule event:", error);
+      console.error("Error deleting schedule event:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette hendelse" });
     }
   });
@@ -6262,7 +6262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(updated);
     } catch (error) {
-      console.error("Error updating speech:", error);
+      console.error("Error updating speech:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere tale" });
     }
   });
@@ -6313,7 +6313,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json(speech);
     } catch (error) {
-      console.error("Error creating speech:", error);
+      console.error("Error creating speech:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette tale" });
     }
   });
@@ -6368,7 +6368,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: "Tale slettet" });
     } catch (error) {
-      console.error("Error deleting speech:", error);
+      console.error("Error deleting speech:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette tale" });
     }
   });
@@ -6404,7 +6404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(contracts);
     } catch (error) {
-      console.error("Error fetching vendor contracts:", error);
+      console.error("Error fetching vendor contracts:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente leverandøravtaler" });
     }
   });
@@ -6460,7 +6460,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json(contract);
     } catch (error) {
-      console.error("Error creating vendor contract:", error);
+      console.error("Error creating vendor contract:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette avtale" });
     }
   });
@@ -6495,7 +6495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(updated);
     } catch (error) {
-      console.error("Error updating vendor contract:", error);
+      console.error("Error updating vendor contract:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere avtale" });
     }
   });
@@ -6526,7 +6526,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(updated);
     } catch (error) {
-      console.error("Error completing vendor contract:", error);
+      console.error("Error completing vendor contract:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke fullføre avtale" });
     }
   });
@@ -6552,7 +6552,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(vendorNotifications);
     } catch (error) {
-      console.error("Error fetching vendor notifications:", error);
+      console.error("Error fetching vendor notifications:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente varsler" });
     }
   });
@@ -6574,7 +6574,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: "Varsel markert som lest" });
     } catch (error) {
-      console.error("Error marking notification read:", error);
+      console.error("Error marking notification read:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere varsel" });
     }
   });
@@ -6596,7 +6596,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(coupleNotifications);
     } catch (error) {
-      console.error("Error fetching couple notifications:", error);
+      console.error("Error fetching couple notifications:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente varsler" });
     }
   });
@@ -6617,7 +6617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ count: result?.count || 0 });
     } catch (error) {
-      console.error("Error fetching unread count:", error);
+      console.error("Error fetching unread count:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente antall uleste" });
     }
   });
@@ -6672,7 +6672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         canViewSpeeches: contract.canViewSpeeches,
       });
     } catch (error) {
-      console.error("Error fetching couple schedule for vendor:", error);
+      console.error("Error fetching couple schedule for vendor:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente program" });
     }
   });
@@ -6741,7 +6741,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true, message: "Forslag sendt til brudeparet" });
     } catch (error) {
-      console.error("Error sending schedule suggestion:", error);
+      console.error("Error sending schedule suggestion:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke sende forslag" });
     }
   });
@@ -6774,7 +6774,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(contracts);
     } catch (error) {
-      console.error("Error fetching vendor couple contracts:", error);
+      console.error("Error fetching vendor couple contracts:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente avtaler" });
     }
   });
@@ -6793,7 +6793,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(logs);
     } catch (error) {
-      console.error("Error fetching activity log:", error);
+      console.error("Error fetching activity log:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente aktivitetslogg" });
     }
   });
@@ -6835,7 +6835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(result);
     } catch (error) {
-      console.error("Error fetching reviewable contracts:", error);
+      console.error("Error fetching reviewable contracts:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente avsluttede avtaler" });
     }
   });
@@ -6901,7 +6901,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(review);
     } catch (error) {
-      console.error("Error submitting review:", error);
+      console.error("Error submitting review:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke lagre anmeldelse" });
     }
   });
@@ -6944,7 +6944,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating review:", error);
+      console.error("Error updating review:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere anmeldelse" });
     }
   });
@@ -6975,7 +6975,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(reviews);
     } catch (error) {
-      console.error("Error fetching couple reviews:", error);
+      console.error("Error fetching couple reviews:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente anmeldelser" });
     }
   });
@@ -7041,7 +7041,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       });
     } catch (error) {
-      console.error("Error fetching vendor reviews:", error);
+      console.error("Error fetching vendor reviews:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente anmeldelser" });
     }
   });
@@ -7099,7 +7099,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       });
     } catch (error) {
-      console.error("Error fetching vendor reviews:", error);
+      console.error("Error fetching vendor reviews:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente anmeldelser" });
     }
   });
@@ -7151,7 +7151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(response);
       }
     } catch (error) {
-      console.error("Error responding to review:", error);
+      console.error("Error responding to review:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke lagre svar" });
     }
   });
@@ -7192,7 +7192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(contractsWithReviewStatus);
     } catch (error) {
-      console.error("Error fetching vendor contracts:", error);
+      console.error("Error fetching vendor contracts:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente avtaler" });
     }
   });
@@ -7261,7 +7261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true, message: "Påminnelse sendt" });
     } catch (error) {
-      console.error("Error sending review reminder:", error);
+      console.error("Error sending review reminder:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke sende påminnelse" });
     }
   });
@@ -7285,7 +7285,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error updating Google review URL:", error);
+      console.error("Error updating Google review URL:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere lenke" });
     }
   });
@@ -7314,7 +7314,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(feedback);
     } catch (error) {
-      console.error("Error submitting couple feedback:", error);
+      console.error("Error submitting couple feedback:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke sende tilbakemelding" });
     }
   });
@@ -7341,7 +7341,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(feedback);
     } catch (error) {
-      console.error("Error submitting vendor feedback:", error);
+      console.error("Error submitting vendor feedback:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke sende tilbakemelding" });
     }
   });
@@ -7360,7 +7360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(feedback);
     } catch (error) {
-      console.error("Error fetching feedback:", error);
+      console.error("Error fetching feedback:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente tilbakemeldinger" });
     }
   });
@@ -7383,7 +7383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating feedback:", error);
+      console.error("Error updating feedback:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere tilbakemelding" });
     }
   });
@@ -7411,7 +7411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating review approval:", error);
+      console.error("Error updating review approval:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere godkjenning" });
     }
   });
@@ -7442,7 +7442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(reviews);
     } catch (error) {
-      console.error("Error fetching pending reviews:", error);
+      console.error("Error fetching pending reviews:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente ventende anmeldelser" });
     }
   });
@@ -7491,7 +7491,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error completing contract:", error);
+      console.error("Error completing contract:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke fullføre avtale" });
     }
   });
@@ -7527,7 +7527,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(checklists);
     } catch (error) {
-      console.error("Error fetching admin checklists:", error);
+      console.error("Error fetching admin checklists:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente sjekklister" });
     }
   });
@@ -7553,7 +7553,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ couple, tasks });
     } catch (error) {
-      console.error("Error fetching couple checklist:", error);
+      console.error("Error fetching couple checklist:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente sjekkliste" });
     }
   });
@@ -7593,7 +7593,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating checklist task (admin):", error);
+      console.error("Error updating checklist task (admin):", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere oppgave" });
     }
   });
@@ -7613,7 +7613,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting checklist task (admin):", error);
+      console.error("Error deleting checklist task (admin):", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette oppgave" });
     }
   });
@@ -7631,7 +7631,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(tasks);
     } catch (error) {
-      console.error("Error fetching checklist:", error);
+      console.error("Error fetching checklist:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente sjekkliste" });
     }
   });
@@ -7657,7 +7657,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(task);
     } catch (error) {
-      console.error("Error creating checklist task:", error);
+      console.error("Error creating checklist task:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette oppgave" });
     }
   });
@@ -7727,7 +7727,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating checklist task:", error);
+      console.error("Error updating checklist task:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere oppgave" });
     }
   });
@@ -7761,7 +7761,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting checklist task:", error);
+      console.error("Error deleting checklist task:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette oppgave" });
     }
   });
@@ -7818,7 +7818,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(tasks);
     } catch (error) {
-      console.error("Error seeding checklist:", error);
+      console.error("Error seeding checklist:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke opprette standardsjekkliste" });
     }
   });
@@ -7844,7 +7844,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(items);
     } catch (error) {
-      console.error("Error fetching FAQ:", error);
+      console.error("Error fetching FAQ:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente FAQ" });
     }
   });
@@ -7868,7 +7868,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(items);
     } catch (error) {
-      console.error("Error fetching FAQ:", error);
+      console.error("Error fetching FAQ:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente FAQ" });
     }
   });
@@ -7883,7 +7883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [item] = await db.insert(faqItems).values(parsed).returning();
       res.json(item);
     } catch (error: any) {
-      console.error("Error creating FAQ:", error);
+      console.error("Error creating FAQ:", error?.message || String(error));
       res.status(400).json({ error: error.message || "Kunne ikke opprette FAQ" });
     }
   });
@@ -7908,7 +7908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(item);
     } catch (error: any) {
-      console.error("Error updating FAQ:", error);
+      console.error("Error updating FAQ:", error?.message || String(error));
       res.status(400).json({ error: error.message || "Kunne ikke oppdatere FAQ" });
     }
   });
@@ -7925,7 +7925,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting FAQ:", error);
+      console.error("Error deleting FAQ:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette FAQ" });
     }
   });
@@ -7938,7 +7938,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settings = await db.select().from(appSettings);
       res.json(settings);
     } catch (error) {
-      console.error("Error fetching app settings:", error);
+      console.error("Error fetching app settings:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente innstillinger" });
     }
   });
@@ -7957,7 +7957,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(setting);
     } catch (error) {
-      console.error("Error fetching app setting:", error);
+      console.error("Error fetching app setting:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente innstilling" });
     }
   });
@@ -7971,7 +7971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settings = await db.select().from(appSettings);
       res.json(settings);
     } catch (error) {
-      console.error("Error fetching app settings:", error);
+      console.error("Error fetching app settings:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente innstillinger" });
     }
   });
@@ -8005,7 +8005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(setting);
     } catch (error: any) {
-      console.error("Error updating app setting:", error);
+      console.error("Error updating app setting:", error?.message || String(error));
       res.status(400).json({ error: error.message || "Kunne ikke oppdatere innstilling" });
     }
   });
@@ -8030,7 +8030,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(items);
     } catch (error) {
-      console.error("Error fetching what's new:", error);
+      console.error("Error fetching what's new:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente hva som er nytt" });
     }
   });
@@ -8053,7 +8053,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(items);
     } catch (error) {
-      console.error("Error fetching what's new:", error);
+      console.error("Error fetching what's new:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente hva som er nytt" });
     }
   });
@@ -8071,8 +8071,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(item);
     } catch (error: any) {
-      console.error("Error creating what's new:", error);
-      res.status(400).json({ error: error.message || "Kunne ikke opprette hva som er nytt" });
+      console.error("Error creating what's new:", error?.message || String(error));
+      res.status(400).json({ error: error?.message || "Kunne ikke opprette hva som er nytt" });
     }
   });
 
@@ -8096,7 +8096,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(item);
     } catch (error: any) {
-      console.error("Error updating what's new:", error);
+      console.error("Error updating what's new:", error?.message || String(error));
       res.status(400).json({ error: error.message || "Kunne ikke oppdatere hva som er nytt" });
     }
   });
@@ -8112,7 +8112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting what's new:", error);
+      console.error("Error deleting what's new:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette hva som er nytt" });
     }
   });
@@ -8130,7 +8130,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(guides);
     } catch (error) {
-      console.error("Error fetching video guides:", error);
+      console.error("Error fetching video guides:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente videoguider" });
     }
   });
@@ -8151,7 +8151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(guides);
     } catch (error) {
-      console.error("Error fetching video guides:", error);
+      console.error("Error fetching video guides:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente videoguider" });
     }
   });
@@ -8171,7 +8171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(guides);
     } catch (error) {
-      console.error("Error fetching video guides:", error);
+      console.error("Error fetching video guides:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente videoguider" });
     }
   });
@@ -8190,7 +8190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(guide);
     } catch (error: any) {
-      console.error("Error creating video guide:", error);
+      console.error("Error creating video guide:", error?.message || String(error));
       res.status(400).json({ error: error.message || "Kunne ikke opprette videoguide" });
     }
   });
@@ -8212,7 +8212,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(guide);
     } catch (error: any) {
-      console.error("Error updating video guide:", error);
+      console.error("Error updating video guide:", error?.message || String(error));
       res.status(400).json({ error: error.message || "Kunne ikke oppdatere videoguide" });
     }
   });
@@ -8228,7 +8228,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting video guide:", error);
+      console.error("Error deleting video guide:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke slette videoguide" });
     }
   });
