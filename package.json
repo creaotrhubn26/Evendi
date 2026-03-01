@@ -13,6 +13,8 @@
     "server:prod": "NODE_ENV=production node server_dist/index.js",
     "db:push": "drizzle-kit push",
     "seed:app-settings": "tsx scripts/seed-app-settings.ts",
+    "seed:music-matcher": "tsx scripts/seed-music-matcher.ts",
+    "validate:music-catalog": "tsx scripts/validate-music-catalog.ts",
     "lint": "npx expo lint",
     "lint:fix": "npx expo lint --fix",
     "check:types": "tsc --noEmit",

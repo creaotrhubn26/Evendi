@@ -337,6 +337,13 @@ test.describe('CreatorHub Bridge — Couple Data', () => {
       headers: bridgeApiHeaders(),
     });
     expect([200, 404]).toContain(res.status());
+    if (res.status() !== 200) return;
+    const body = await res.json();
+    expect(body).toHaveProperty('matcherProfile');
+    expect(Array.isArray(body.sets)).toBe(true);
+    expect(Array.isArray(body.moments)).toBe(true);
+    expect(body.couple).toBeDefined();
+    expect(Array.isArray(body.couple?.selectedTraditions || [])).toBe(true);
   });
 
   test('GET /api/creatorhub/coordinators/:coupleId returns data', async ({ request }) => {

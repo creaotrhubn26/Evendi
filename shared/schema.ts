@@ -368,6 +368,7 @@ export const coupleProfiles = pgTable("couple_profiles", {
   weddingDate: text("wedding_date"),
   eventType: text("event_type").default("wedding"),
   eventCategory: text("event_category").default("personal"),
+  selectedTraditions: text("selected_traditions").array(),
   lastActiveAt: timestamp("last_active_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -2030,9 +2031,162 @@ export const coupleMusicPreferences = pgTable("couple_music_preferences", {
   lastSong: text("last_song"),
   doNotPlay: text("do_not_play"),
   additionalNotes: text("additional_notes"),
+  preferredCultures: text("preferred_cultures").array(),
+  preferredLanguages: text("preferred_languages").array(),
+  vibeLevel: integer("vibe_level").default(50),
+  energyLevel: integer("energy_level").default(50),
+  cleanLyricsOnly: boolean("clean_lyrics_only").default(true),
+  selectedMoments: text("selected_moments").array(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+export const musicMoments = pgTable("music_moments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description"),
+  category: text("category"),
+  defaultEnergy: integer("default_energy").default(50),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  momentKeyIdx: index("idx_music_moments_key").on(table.key),
+}));
+
+export const musicSongs = pgTable("music_songs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  artist: text("artist"),
+  youtubeVideoId: text("youtube_video_id").notNull().unique(),
+  bpmMin: integer("bpm_min"),
+  bpmMax: integer("bpm_max"),
+  energyScore: integer("energy_score").default(50),
+  dholScore: integer("dhol_score").default(0),
+  danceability: integer("danceability").default(50),
+  popularityScore: integer("popularity_score").default(0),
+  explicitFlag: boolean("explicit_flag").default(false),
+  cultureTags: text("culture_tags").array(),
+  languageTags: text("language_tags").array(),
+  tagTokens: text("tag_tokens").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  songVideoIdx: index("idx_music_songs_video").on(table.youtubeVideoId),
+}));
+
+export const musicMomentProfiles = pgTable("music_moment_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  momentId: varchar("moment_id").notNull().references(() => musicMoments.id, { onDelete: "cascade" }),
+  cultureKey: text("culture_key").notNull(),
+  defaultWeight: integer("default_weight").default(50),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  momentCultureIdx: uniqueIndex("idx_music_moment_profiles_moment_culture").on(table.momentId, table.cultureKey),
+}));
+
+export const musicMomentSongRankings = pgTable("music_moment_song_rankings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  momentId: varchar("moment_id").notNull().references(() => musicMoments.id, { onDelete: "cascade" }),
+  songId: varchar("song_id").notNull().references(() => musicSongs.id, { onDelete: "cascade" }),
+  cultureKey: text("culture_key"),
+  rankScore: integer("rank_score").default(50),
+  isPrimary: boolean("is_primary").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  rankingIdx: uniqueIndex("idx_music_ranking_moment_song_culture").on(table.momentId, table.songId, table.cultureKey),
+}));
+
+export const musicSets = pgTable("music_sets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  offerId: varchar("offer_id").references(() => vendorOffers.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  visibility: text("visibility").default("private"),
+  createdByRole: text("created_by_role").default("couple"),
+  updatedByRole: text("updated_by_role").default("couple"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  musicSetCoupleIdx: index("idx_music_sets_couple").on(table.coupleId),
+  musicSetOfferIdx: index("idx_music_sets_offer").on(table.offerId),
+}));
+
+export const musicSetItems = pgTable("music_set_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  setId: varchar("set_id").notNull().references(() => musicSets.id, { onDelete: "cascade" }),
+  songId: varchar("song_id").references(() => musicSongs.id, { onDelete: "set null" }),
+  youtubeVideoId: text("youtube_video_id"),
+  title: text("title").notNull(),
+  artist: text("artist"),
+  momentKey: text("moment_key"),
+  position: integer("position").default(0),
+  dropMarkerSeconds: integer("drop_marker_seconds"),
+  notes: text("notes"),
+  addedByRole: text("added_by_role").default("couple"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  musicSetItemOrderIdx: uniqueIndex("idx_music_set_items_order").on(table.setId, table.position),
+  musicSetItemSetIdx: index("idx_music_set_items_set").on(table.setId),
+}));
+
+export const coupleYoutubeConnections = pgTable("couple_youtube_connections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }).unique(),
+  youtubeChannelId: text("youtube_channel_id"),
+  youtubeChannelTitle: text("youtube_channel_title"),
+  accessTokenEnc: text("access_token_enc"),
+  refreshTokenEnc: text("refresh_token_enc"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  scope: text("scope"),
+  connectedAt: timestamp("connected_at"),
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const musicExportJobs = pgTable("music_export_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  offerId: varchar("offer_id").references(() => vendorOffers.id, { onDelete: "set null" }),
+  setId: varchar("set_id").references(() => musicSets.id, { onDelete: "set null" }),
+  youtubePlaylistId: text("youtube_playlist_id"),
+  youtubePlaylistUrl: text("youtube_playlist_url"),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  status: text("status").default("pending"),
+  requestedByRole: text("requested_by_role").notNull(),
+  requestedByVendorId: varchar("requested_by_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+  requestedByCoupleId: varchar("requested_by_couple_id").references(() => coupleProfiles.id, { onDelete: "set null" }),
+  exportedTrackCount: integer("exported_track_count").default(0),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  exportJobCoupleIdx: index("idx_music_export_jobs_couple").on(table.coupleId),
+  exportJobOfferIdx: index("idx_music_export_jobs_offer").on(table.offerId),
+  exportJobStatusIdx: index("idx_music_export_jobs_status").on(table.status),
+}));
+
+export const coupleMusicVendorPermissions = pgTable("couple_music_vendor_permissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coupleId: varchar("couple_id").notNull().references(() => coupleProfiles.id, { onDelete: "cascade" }),
+  offerId: varchar("offer_id").notNull().references(() => vendorOffers.id, { onDelete: "cascade" }).unique(),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id, { onDelete: "cascade" }),
+  canExportYoutube: boolean("can_export_youtube").default(false),
+  grantedAt: timestamp("granted_at"),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  musicPermissionVendorIdx: index("idx_music_vendor_permissions_vendor").on(table.vendorId),
+  musicPermissionCoupleIdx: index("idx_music_vendor_permissions_couple").on(table.coupleId),
+}));
 
 // ════════════════════════════════════════════════════════════════
 //  CreatorHub Tables

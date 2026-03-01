@@ -1541,6 +1541,296 @@ export async function updateMusicPreferences(data: Partial<MusicPreferences>): P
   return res.json();
 }
 
+export interface MusicMatcherProfile {
+  preferredCultures: string[];
+  preferredLanguages: string[];
+  vibeLevel: number;
+  energyLevel: number;
+  cleanLyricsOnly: boolean;
+  selectedMoments: string[];
+}
+
+export interface MusicMoment {
+  id: string;
+  key: string;
+  title: string;
+  description?: string | null;
+  category?: string | null;
+  defaultEnergy?: number | null;
+  sortOrder?: number | null;
+}
+
+export interface MusicRecommendation {
+  songId: string;
+  youtubeVideoId: string;
+  title: string;
+  artist?: string | null;
+  energyScore: number;
+  tags: string[];
+  matchScore: number;
+  momentKey: string;
+}
+
+export interface MusicSetItem {
+  id: string;
+  setId: string;
+  songId?: string | null;
+  youtubeVideoId?: string | null;
+  title: string;
+  artist?: string | null;
+  momentKey?: string | null;
+  position: number;
+  dropMarkerSeconds?: number | null;
+  notes?: string | null;
+  addedByRole?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MusicSet {
+  id: string;
+  coupleId: string;
+  offerId?: string | null;
+  title: string;
+  description?: string | null;
+  visibility?: string | null;
+  createdByRole?: string | null;
+  updatedByRole?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  items: MusicSetItem[];
+}
+
+export interface ShareLinkExportResult {
+  setId: string;
+  setTitle: string;
+  totalLinks: number;
+  links: Array<{
+    itemId: string;
+    title: string;
+    artist?: string | null;
+    momentKey?: string | null;
+    youtubeVideoId: string;
+    url: string;
+    dropMarkerSeconds?: number | null;
+  }>;
+}
+
+export interface MusicExportJob {
+  id: string;
+  coupleId: string;
+  offerId?: string | null;
+  setId?: string | null;
+  youtubePlaylistId?: string | null;
+  youtubePlaylistUrl?: string | null;
+  status: string;
+  requestedByRole: string;
+  exportedTrackCount: number;
+  errorMessage?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface VendorMusicPermission {
+  id: string;
+  coupleId: string;
+  offerId: string;
+  vendorId: string;
+  canExportYoutube: boolean;
+  grantedAt?: string | null;
+  revokedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function getMusicMatcherProfile(): Promise<MusicMatcherProfile> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/matcher/profile`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch matcher profile");
+  return res.json();
+}
+
+export async function updateMusicMatcherProfile(data: Partial<MusicMatcherProfile>): Promise<MusicMatcherProfile> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/matcher/profile`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update matcher profile");
+  return res.json();
+}
+
+export async function getMusicMoments(): Promise<MusicMoment[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/matcher/moments`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch music moments");
+  return res.json();
+}
+
+export async function getMusicRecommendations(input: {
+  moments?: string[];
+  limitPerMoment?: number;
+  feedbackByMoment?: Record<string, { moreLikeThis?: string[]; tooSlow?: string[]; tooRomantic?: string[]; moreDhol?: boolean }>;
+}): Promise<{ profile: MusicMatcherProfile; recommendations: Record<string, MusicRecommendation[]> }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/matcher/recommendations`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error("Failed to fetch recommendations");
+  return res.json();
+}
+
+export async function getMusicSets(): Promise<MusicSet[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/sets`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch music sets");
+  return res.json();
+}
+
+export async function createMusicSet(data: Partial<MusicSet>): Promise<MusicSet> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/sets`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create music set");
+  return res.json();
+}
+
+export async function updateMusicSet(setId: string, data: Partial<MusicSet>): Promise<MusicSet> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/sets/${setId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update music set");
+  return res.json();
+}
+
+export async function reorderMusicSetItems(setId: string, orderedItemIds: string[]): Promise<MusicSet> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/sets/${setId}/reorder`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ orderedItemIds }),
+  });
+  if (!res.ok) throw new Error("Failed to reorder set items");
+  return res.json();
+}
+
+export async function addMusicSetItem(setId: string, data: Partial<MusicSetItem>): Promise<MusicSetItem> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/sets/${setId}/items`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to add set item");
+  return res.json();
+}
+
+export async function updateMusicSetItem(setId: string, itemId: string, data: Partial<MusicSetItem>): Promise<MusicSetItem> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/sets/${setId}/items/${itemId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update set item");
+  return res.json();
+}
+
+export async function deleteMusicSetItem(setId: string, itemId: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/sets/${setId}/items/${itemId}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to delete set item");
+}
+
+export async function exportMusicShareLinks(setId: string): Promise<ShareLinkExportResult> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/export/share-links`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ setId }),
+  });
+  if (!res.ok) throw new Error("Failed to export share links");
+  return res.json();
+}
+
+export async function getMusicYouTubeConnectUrl(): Promise<{ url: string; state: string; redirectUri: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/youtube/connect-url`, { headers });
+  if (!res.ok) throw new Error("Failed to create YouTube connect URL");
+  return res.json();
+}
+
+export async function disconnectMusicYouTube(): Promise<{ success: boolean }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/youtube/disconnect`, {
+    method: "POST",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to disconnect YouTube");
+  return res.json();
+}
+
+export async function exportMusicYouTubePlaylist(data: {
+  setId: string;
+  title?: string;
+  description?: string;
+  privacyStatus?: "private" | "public" | "unlisted";
+  idempotencyKey?: string;
+}): Promise<MusicExportJob> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/export/youtube-playlist`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to export YouTube playlist");
+  return res.json();
+}
+
+export async function updateMusicVendorPermission(offerId: string, canExportYoutube: boolean): Promise<VendorMusicPermission> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/vendor-permissions/${offerId}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ canExportYoutube }),
+  });
+  if (!res.ok) throw new Error("Failed to update vendor permission");
+  return res.json();
+}
+
+export interface CoupleOfferSummary {
+  id: string;
+  vendorId: string;
+  title: string;
+  status: string;
+  totalAmount?: number;
+  currency?: string | null;
+  vendor?: {
+    id: string;
+    businessName?: string | null;
+    imageUrl?: string | null;
+  } | null;
+}
+
+export async function getCoupleOffers(): Promise<CoupleOfferSummary[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/offers`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch couple offers");
+  return res.json();
+}
+
 // ===== PLANNER =====
 
 export interface PlannerMeeting {

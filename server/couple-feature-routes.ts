@@ -9,7 +9,7 @@
  */
 import type { Express, Request, Response } from "express";
 import crypto from "node:crypto";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray, asc } from "drizzle-orm";
 import {
   appSettings,
   guestInvitations,
@@ -50,6 +50,15 @@ import {
   coupleMusicSetlists,
   coupleMusicTimeline,
   coupleMusicPreferences,
+  musicMoments,
+  musicSongs,
+  musicMomentSongRankings,
+  musicSets,
+  musicSetItems,
+  coupleYoutubeConnections,
+  musicExportJobs,
+  coupleMusicVendorPermissions,
+  vendorOffers,
   // Catering
   coupleCateringTastings,
   coupleCateringMenu,
@@ -67,6 +76,21 @@ import {
   couplePlannerTasks,
   couplePlannerTimeline,
 } from "@shared/schema";
+import {
+  DEFAULT_MOMENT_KEYS,
+  normalizeMatcherProfile,
+  scoreRecommendation,
+  createSignedOAuthState,
+  verifySignedOAuthState,
+  getYouTubeOAuthConfig,
+  exchangeCodeForTokens,
+  refreshYouTubeAccessToken,
+  fetchYouTubeChannel,
+  createYouTubePlaylist,
+  insertYouTubePlaylistItem,
+  encryptSecret,
+  decryptSecret,
+} from "./music-matcher";
 
 type DbClient = typeof import("./db")["db"];
 type CheckCoupleAuth = (req: Request, res: Response) => Promise<string | null>;
@@ -152,6 +176,147 @@ function crudRoutes(
       res.status(500).json({ error: "Kunne ikke slette" });
     }
   });
+}
+
+function isMusicMatcherEnabled() {
+  const raw = (process.env.MUSIC_MATCHER_V1 || "true").toLowerCase();
+  return raw !== "false" && raw !== "0" && raw !== "off";
+}
+
+function getOAuthRedirectUri(req: Request) {
+  if (process.env.YOUTUBE_REDIRECT_URI) return process.env.YOUTUBE_REDIRECT_URI;
+  const forwardedProto = req.header("x-forwarded-proto");
+  const proto = forwardedProto || req.protocol || "https";
+  const host = req.header("x-forwarded-host") || req.get("host");
+  return `${proto}://${host}/api/couple/music/youtube/callback`;
+}
+
+async function getYouTubeAccessTokenForCouple(db: DbClient, coupleId: string, redirectUri: string) {
+  const [connection] = await db
+    .select()
+    .from(coupleYoutubeConnections)
+    .where(eq(coupleYoutubeConnections.coupleId, coupleId));
+
+  if (!connection?.refreshTokenEnc) {
+    throw new Error("YouTube is not connected");
+  }
+
+  const oauth = getYouTubeOAuthConfig(redirectUri);
+  if (!oauth.clientId || !oauth.clientSecret || !oauth.redirectUri) {
+    throw new Error("YouTube OAuth environment variables are missing");
+  }
+
+  const refreshToken = decryptSecret(connection.refreshTokenEnc);
+
+  // Always refresh before export to avoid invalid access token windows.
+  const refreshed = await refreshYouTubeAccessToken({
+    refreshToken,
+    clientId: oauth.clientId,
+    clientSecret: oauth.clientSecret,
+  });
+
+  const accessToken = String(refreshed.access_token);
+  const expiresAt = new Date(Date.now() + Number(refreshed.expires_in || 3600) * 1000);
+
+  await db
+    .update(coupleYoutubeConnections)
+    .set({
+      accessTokenEnc: encryptSecret(accessToken),
+      tokenExpiresAt: expiresAt,
+      lastUsedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(coupleYoutubeConnections.coupleId, coupleId));
+
+  return accessToken;
+}
+
+async function getSetWithItems(db: DbClient, coupleId: string, setId: string) {
+  const [setRow] = await db
+    .select()
+    .from(musicSets)
+    .where(and(eq(musicSets.id, setId), eq(musicSets.coupleId, coupleId)));
+  if (!setRow) return null;
+
+  const items = await db
+    .select()
+    .from(musicSetItems)
+    .where(eq(musicSetItems.setId, setId))
+    .orderBy(asc(musicSetItems.position), asc(musicSetItems.createdAt));
+
+  return { set: setRow, items };
+}
+
+async function exportSetToYouTubePlaylist(params: {
+  db: DbClient;
+  coupleId: string;
+  requestedByRole: "couple" | "vendor";
+  requestedByVendorId?: string | null;
+  requestedByCoupleId?: string | null;
+  setId: string;
+  title: string;
+  description?: string;
+  privacyStatus?: "private" | "public" | "unlisted";
+  idempotencyKey?: string;
+  redirectUri: string;
+  offerId?: string | null;
+}) {
+  const { db, coupleId, requestedByRole, requestedByVendorId, requestedByCoupleId, setId, title, description, privacyStatus, redirectUri, offerId } = params;
+  const idempotencyKey = params.idempotencyKey || crypto.randomUUID();
+
+  const existingJobs = await db
+    .select()
+    .from(musicExportJobs)
+    .where(eq(musicExportJobs.idempotencyKey, idempotencyKey));
+  if (existingJobs.length > 0) {
+    return existingJobs[0];
+  }
+
+  const withItems = await getSetWithItems(db, coupleId, setId);
+  if (!withItems) throw new Error("Music set not found");
+
+  const videoIds = withItems.items
+    .map((item) => item.youtubeVideoId)
+    .filter((id): id is string => !!id);
+
+  if (videoIds.length === 0) {
+    throw new Error("Set has no YouTube tracks");
+  }
+
+  const accessToken = await getYouTubeAccessTokenForCouple(db, coupleId, redirectUri);
+  const playlist = await createYouTubePlaylist({
+    accessToken,
+    title,
+    description,
+    privacyStatus: privacyStatus || "unlisted",
+  });
+
+  for (const videoId of videoIds) {
+    await insertYouTubePlaylistItem({
+      accessToken,
+      playlistId: playlist.id,
+      videoId,
+    });
+  }
+
+  const [job] = await db
+    .insert(musicExportJobs)
+    .values({
+      coupleId,
+      offerId: offerId || null,
+      setId,
+      youtubePlaylistId: playlist.id,
+      youtubePlaylistUrl: playlist.url,
+      idempotencyKey,
+      status: "success",
+      requestedByRole,
+      requestedByVendorId: requestedByVendorId || null,
+      requestedByCoupleId: requestedByCoupleId || null,
+      exportedTrackCount: videoIds.length,
+    })
+    .returning();
+
+  return job;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -645,6 +810,613 @@ export function registerCoupleFeatureRoutes(
     } catch (error) {
       console.error("Error updating music preferences:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere musikkpreferanser" });
+    }
+  });
+
+  app.get("/api/couple/music/matcher/profile", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const [row] = await db.select().from(coupleMusicPreferences).where(eq(coupleMusicPreferences.coupleId, coupleId));
+      const profile = normalizeMatcherProfile({
+        preferredCultures: row?.preferredCultures || [],
+        preferredLanguages: row?.preferredLanguages || [],
+        vibeLevel: row?.vibeLevel ?? 50,
+        energyLevel: row?.energyLevel ?? 50,
+        cleanLyricsOnly: row?.cleanLyricsOnly ?? true,
+        selectedMoments: row?.selectedMoments || DEFAULT_MOMENT_KEYS,
+      });
+      res.json(profile);
+    } catch (error) {
+      console.error("Error fetching music matcher profile:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke hente matcher-profil" });
+    }
+  });
+
+  app.put("/api/couple/music/matcher/profile", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const body = req.body || {};
+      const updates = normalizeMatcherProfile({
+        preferredCultures: body.preferredCultures || [],
+        preferredLanguages: body.preferredLanguages || [],
+        vibeLevel: body.vibeLevel,
+        energyLevel: body.energyLevel,
+        cleanLyricsOnly: body.cleanLyricsOnly,
+        selectedMoments: body.selectedMoments || DEFAULT_MOMENT_KEYS,
+      });
+
+      const existing = await db.select().from(coupleMusicPreferences).where(eq(coupleMusicPreferences.coupleId, coupleId));
+      if (existing.length > 0) {
+        const [row] = await db.update(coupleMusicPreferences).set({ ...updates, updatedAt: new Date() }).where(eq(coupleMusicPreferences.coupleId, coupleId)).returning();
+        return res.json(row);
+      }
+      const [row] = await db.insert(coupleMusicPreferences).values({ coupleId, ...updates }).returning();
+      res.json(row);
+    } catch (error) {
+      console.error("Error updating music matcher profile:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke oppdatere matcher-profil" });
+    }
+  });
+
+  app.get("/api/couple/music/matcher/moments", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const rows = await db.select().from(musicMoments).orderBy(asc(musicMoments.sortOrder), asc(musicMoments.createdAt));
+      res.json(rows);
+    } catch (error) {
+      console.error("Error fetching music moments:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke hente moments" });
+    }
+  });
+
+  app.post("/api/couple/music/matcher/recommendations", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const [profileRow] = await db.select().from(coupleMusicPreferences).where(eq(coupleMusicPreferences.coupleId, coupleId));
+      const profile = normalizeMatcherProfile({
+        preferredCultures: profileRow?.preferredCultures || [],
+        preferredLanguages: profileRow?.preferredLanguages || [],
+        vibeLevel: profileRow?.vibeLevel ?? 50,
+        energyLevel: profileRow?.energyLevel ?? 50,
+        cleanLyricsOnly: profileRow?.cleanLyricsOnly ?? true,
+        selectedMoments: profileRow?.selectedMoments || DEFAULT_MOMENT_KEYS,
+      });
+
+      const inputMoments = Array.isArray(req.body?.moments) && req.body.moments.length > 0
+        ? req.body.moments
+        : profile.selectedMoments;
+
+      const limitPerMoment = Math.max(10, Math.min(20, Number(req.body?.limitPerMoment || 12)));
+
+      const momentRows = await db
+        .select()
+        .from(musicMoments)
+        .where(inArray(musicMoments.key, inputMoments));
+      const momentIds = momentRows.map((m) => m.id);
+
+      if (momentIds.length === 0) {
+        return res.json({ profile, recommendations: {} });
+      }
+
+      const rankingRows = await db
+        .select()
+        .from(musicMomentSongRankings)
+        .where(inArray(musicMomentSongRankings.momentId, momentIds));
+      const songIds = [...new Set(rankingRows.map((r) => r.songId))];
+      const songs = songIds.length > 0
+        ? await db.select().from(musicSongs).where(inArray(musicSongs.id, songIds))
+        : [];
+      const songsById = new Map(songs.map((song) => [song.id, song]));
+      const feedbackByMoment = req.body?.feedbackByMoment || {};
+
+      const recommendations: Record<string, any[]> = {};
+      for (const moment of momentRows) {
+        const ranked = rankingRows
+          .filter((row) => row.momentId === moment.id)
+          .map((row) => {
+            const song = songsById.get(row.songId);
+            if (!song) return null;
+            if (profile.cleanLyricsOnly && song.explicitFlag) return null;
+            const matchScore = scoreRecommendation({
+              rankScore: row.rankScore || 50,
+              songEnergy: song.energyScore || 50,
+              songDhol: song.dholScore || 0,
+              songDanceability: song.danceability || 50,
+              songPopularity: song.popularityScore || 0,
+              songCultures: song.cultureTags || [],
+              songLanguages: song.languageTags || [],
+              profile,
+              feedback: feedbackByMoment[moment.key],
+              songTagTokens: song.tagTokens || [],
+              songYoutubeVideoId: song.youtubeVideoId,
+            });
+
+            return {
+              songId: song.id,
+              youtubeVideoId: song.youtubeVideoId,
+              title: song.title,
+              artist: song.artist || null,
+              energyScore: song.energyScore || 50,
+              tags: [
+                ...(song.tagTokens || []),
+                ...(song.explicitFlag ? [] : ["couple-friendly"]),
+              ],
+              matchScore,
+              momentKey: moment.key,
+            };
+          })
+          .filter(Boolean) as any[];
+
+        recommendations[moment.key] = ranked
+          .sort((a, b) => b.matchScore - a.matchScore)
+          .slice(0, limitPerMoment);
+      }
+
+      res.json({ profile, recommendations });
+    } catch (error) {
+      console.error("Error generating music recommendations:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke hente anbefalinger" });
+    }
+  });
+
+  app.get("/api/couple/music/sets", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const sets = await db.select().from(musicSets).where(eq(musicSets.coupleId, coupleId)).orderBy(desc(musicSets.updatedAt));
+      const setIds = sets.map((set) => set.id);
+      const items = setIds.length > 0
+        ? await db.select().from(musicSetItems).where(inArray(musicSetItems.setId, setIds)).orderBy(asc(musicSetItems.position))
+        : [];
+      const itemMap = new Map<string, typeof items>();
+      for (const item of items) {
+        const existing = itemMap.get(item.setId) || [];
+        existing.push(item);
+        itemMap.set(item.setId, existing);
+      }
+      res.json(sets.map((set) => ({ ...set, items: itemMap.get(set.id) || [] })));
+    } catch (error) {
+      console.error("Error fetching music sets:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke hente set-lister" });
+    }
+  });
+
+  app.post("/api/couple/music/sets", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+
+    try {
+      const body = req.body || {};
+      const title = String(body.title || "Untitled Set").trim();
+      const offerId = body.offerId ? String(body.offerId) : null;
+
+      if (offerId) {
+        const [offer] = await db
+          .select()
+          .from(vendorOffers)
+          .where(and(eq(vendorOffers.id, offerId), eq(vendorOffers.coupleId, coupleId)));
+        if (!offer) {
+          return res.status(400).json({ error: "Ugyldig offerId for dette paret" });
+        }
+      }
+
+      const [created] = await db
+        .insert(musicSets)
+        .values({
+          coupleId,
+          offerId,
+          title,
+          description: body.description || null,
+          visibility: body.visibility || "private",
+          createdByRole: "couple",
+          updatedByRole: "couple",
+        })
+        .returning();
+      res.status(201).json({ ...created, items: [] });
+    } catch (error) {
+      console.error("Error creating music set:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke opprette set-liste" });
+    }
+  });
+
+  app.patch("/api/couple/music/sets/:setId", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const { setId } = req.params;
+      const updates: Record<string, unknown> = { updatedAt: new Date(), updatedByRole: "couple" };
+      if (req.body?.title !== undefined) updates.title = req.body.title;
+      if (req.body?.description !== undefined) updates.description = req.body.description;
+      if (req.body?.visibility !== undefined) updates.visibility = req.body.visibility;
+
+      const [updated] = await db
+        .update(musicSets)
+        .set(updates)
+        .where(and(eq(musicSets.id, setId), eq(musicSets.coupleId, coupleId)))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Set-liste ikke funnet" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating music set:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke oppdatere set-liste" });
+    }
+  });
+
+  app.patch("/api/couple/music/sets/:setId/reorder", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const { setId } = req.params;
+      const orderedItemIds = Array.isArray(req.body?.orderedItemIds) ? req.body.orderedItemIds.map(String) : [];
+      if (orderedItemIds.length === 0) {
+        return res.status(400).json({ error: "orderedItemIds er påkrevd" });
+      }
+
+      const withItems = await getSetWithItems(db, coupleId, setId);
+      if (!withItems) return res.status(404).json({ error: "Set-liste ikke funnet" });
+      const allowed = new Set(withItems.items.map((item) => item.id));
+      if (orderedItemIds.some((id: string) => !allowed.has(id))) {
+        return res.status(400).json({ error: "orderedItemIds inneholder ugyldige elementer" });
+      }
+
+      for (let i = 0; i < orderedItemIds.length; i += 1) {
+        await db
+          .update(musicSetItems)
+          .set({ position: i, updatedAt: new Date() })
+          .where(eq(musicSetItems.id, orderedItemIds[i]));
+      }
+      await db
+        .update(musicSets)
+        .set({ updatedAt: new Date(), updatedByRole: "couple" })
+        .where(eq(musicSets.id, setId));
+
+      const fresh = await getSetWithItems(db, coupleId, setId);
+      res.json(fresh);
+    } catch (error) {
+      console.error("Error reordering music set items:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke reordne set-liste" });
+    }
+  });
+
+  app.post("/api/couple/music/sets/:setId/items", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const { setId } = req.params;
+      const withItems = await getSetWithItems(db, coupleId, setId);
+      if (!withItems) return res.status(404).json({ error: "Set-liste ikke funnet" });
+
+      let songSnapshot: any = null;
+      if (req.body?.songId) {
+        const [song] = await db.select().from(musicSongs).where(eq(musicSongs.id, String(req.body.songId)));
+        if (song) songSnapshot = song;
+      }
+
+      const [created] = await db.insert(musicSetItems).values({
+        setId,
+        songId: songSnapshot?.id || null,
+        youtubeVideoId: songSnapshot?.youtubeVideoId || req.body?.youtubeVideoId || null,
+        title: songSnapshot?.title || req.body?.title || "Untitled song",
+        artist: songSnapshot?.artist || req.body?.artist || null,
+        momentKey: req.body?.momentKey || null,
+        position: Number.isFinite(req.body?.position) ? Number(req.body.position) : withItems.items.length,
+        dropMarkerSeconds: Number.isFinite(req.body?.dropMarkerSeconds) ? Number(req.body.dropMarkerSeconds) : null,
+        notes: req.body?.notes || null,
+        addedByRole: "couple",
+      }).returning();
+
+      await db
+        .update(musicSets)
+        .set({ updatedAt: new Date(), updatedByRole: "couple" })
+        .where(eq(musicSets.id, setId));
+
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Error creating music set item:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke legge til låt i set-liste" });
+    }
+  });
+
+  app.patch("/api/couple/music/sets/:setId/items/:itemId", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const { setId, itemId } = req.params;
+      const withItems = await getSetWithItems(db, coupleId, setId);
+      if (!withItems) return res.status(404).json({ error: "Set-liste ikke funnet" });
+
+      const updates: Record<string, unknown> = { updatedAt: new Date() };
+      if (req.body?.title !== undefined) updates.title = req.body.title;
+      if (req.body?.artist !== undefined) updates.artist = req.body.artist;
+      if (req.body?.momentKey !== undefined) updates.momentKey = req.body.momentKey;
+      if (req.body?.dropMarkerSeconds !== undefined) updates.dropMarkerSeconds = req.body.dropMarkerSeconds;
+      if (req.body?.notes !== undefined) updates.notes = req.body.notes;
+      if (req.body?.position !== undefined) updates.position = req.body.position;
+
+      const [updated] = await db
+        .update(musicSetItems)
+        .set(updates)
+        .where(and(eq(musicSetItems.id, itemId), eq(musicSetItems.setId, setId)))
+        .returning();
+
+      if (!updated) return res.status(404).json({ error: "Set-item ikke funnet" });
+
+      await db
+        .update(musicSets)
+        .set({ updatedAt: new Date(), updatedByRole: "couple" })
+        .where(eq(musicSets.id, setId));
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating music set item:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke oppdatere set-item" });
+    }
+  });
+
+  app.delete("/api/couple/music/sets/:setId/items/:itemId", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const { setId, itemId } = req.params;
+      const withItems = await getSetWithItems(db, coupleId, setId);
+      if (!withItems) return res.status(404).json({ error: "Set-liste ikke funnet" });
+
+      await db
+        .delete(musicSetItems)
+        .where(and(eq(musicSetItems.id, itemId), eq(musicSetItems.setId, setId)));
+
+      await db
+        .update(musicSets)
+        .set({ updatedAt: new Date(), updatedByRole: "couple" })
+        .where(eq(musicSets.id, setId));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting music set item:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke slette set-item" });
+    }
+  });
+
+  app.post("/api/couple/music/export/share-links", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const { setId } = req.body || {};
+      if (!setId) return res.status(400).json({ error: "setId er påkrevd" });
+      const withItems = await getSetWithItems(db, coupleId, String(setId));
+      if (!withItems) return res.status(404).json({ error: "Set-liste ikke funnet" });
+
+      const links = withItems.items
+        .filter((item) => !!item.youtubeVideoId)
+        .map((item) => ({
+          itemId: item.id,
+          title: item.title,
+          artist: item.artist,
+          momentKey: item.momentKey,
+          youtubeVideoId: item.youtubeVideoId,
+          url: `https://www.youtube.com/watch?v=${item.youtubeVideoId}`,
+          dropMarkerSeconds: item.dropMarkerSeconds,
+        }));
+
+      res.json({
+        setId: withItems.set.id,
+        setTitle: withItems.set.title,
+        totalLinks: links.length,
+        links,
+      });
+    } catch (error) {
+      console.error("Error exporting share links:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke eksportere lenkeliste" });
+    }
+  });
+
+  app.get("/api/couple/music/youtube/connect-url", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const redirectUri = getOAuthRedirectUri(req);
+      const oauth = getYouTubeOAuthConfig(redirectUri);
+      if (!oauth.clientId || !oauth.redirectUri) {
+        return res.status(500).json({ error: "YouTube OAuth er ikke konfigurert" });
+      }
+      const state = createSignedOAuthState(coupleId);
+      const params = new URLSearchParams({
+        client_id: oauth.clientId,
+        redirect_uri: oauth.redirectUri,
+        response_type: "code",
+        scope: oauth.scope,
+        access_type: "offline",
+        include_granted_scopes: "true",
+        prompt: "consent",
+        state,
+      });
+      const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+      res.json({ url, state, redirectUri: oauth.redirectUri });
+    } catch (error) {
+      console.error("Error creating YouTube connect URL:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke starte YouTube OAuth" });
+    }
+  });
+
+  app.get("/api/couple/music/youtube/callback", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    try {
+      const code = String(req.query.code || "");
+      const state = String(req.query.state || "");
+      if (!code || !state) return res.status(400).json({ error: "Missing code/state" });
+
+      const verified = verifySignedOAuthState(state);
+      if (!verified.valid || !verified.coupleId) {
+        return res.status(400).json({ error: "Ugyldig OAuth state" });
+      }
+
+      const redirectUri = getOAuthRedirectUri(req);
+      const oauth = getYouTubeOAuthConfig(redirectUri);
+      if (!oauth.clientId || !oauth.clientSecret || !oauth.redirectUri) {
+        return res.status(500).json({ error: "YouTube OAuth er ikke konfigurert" });
+      }
+
+      const tokens = await exchangeCodeForTokens({
+        code,
+        clientId: oauth.clientId,
+        clientSecret: oauth.clientSecret,
+        redirectUri: oauth.redirectUri,
+      });
+
+      const accessToken = String(tokens.access_token || "");
+      const refreshToken = String(tokens.refresh_token || "");
+      if (!accessToken) return res.status(400).json({ error: "Mangler access token" });
+
+      const channel = await fetchYouTubeChannel(accessToken);
+      const expiresAt = new Date(Date.now() + Number(tokens.expires_in || 3600) * 1000);
+
+      const existing = await db
+        .select()
+        .from(coupleYoutubeConnections)
+        .where(eq(coupleYoutubeConnections.coupleId, verified.coupleId));
+
+      const updatePayload = {
+        youtubeChannelId: channel.channelId,
+        youtubeChannelTitle: channel.channelTitle,
+        accessTokenEnc: encryptSecret(accessToken),
+        refreshTokenEnc: refreshToken ? encryptSecret(refreshToken) : existing[0]?.refreshTokenEnc || null,
+        tokenExpiresAt: expiresAt,
+        scope: String(tokens.scope || oauth.scope),
+        connectedAt: new Date(),
+        lastUsedAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      if (existing.length > 0) {
+        await db
+          .update(coupleYoutubeConnections)
+          .set(updatePayload)
+          .where(eq(coupleYoutubeConnections.coupleId, verified.coupleId));
+      } else {
+        await db.insert(coupleYoutubeConnections).values({
+          coupleId: verified.coupleId,
+          ...updatePayload,
+        });
+      }
+
+      return res.status(200).send(
+        `<html><body><h3>YouTube connected</h3><p>You can return to Evendi now.</p></body></html>`,
+      );
+    } catch (error) {
+      console.error("Error handling YouTube OAuth callback:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke fullføre YouTube-tilkobling" });
+    }
+  });
+
+  app.post("/api/couple/music/youtube/disconnect", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      await db.delete(coupleYoutubeConnections).where(eq(coupleYoutubeConnections.coupleId, coupleId));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error disconnecting YouTube:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke koble fra YouTube" });
+    }
+  });
+
+  app.post("/api/couple/music/export/youtube-playlist", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const setId = String(req.body?.setId || "");
+      if (!setId) return res.status(400).json({ error: "setId er påkrevd" });
+
+      const withItems = await getSetWithItems(db, coupleId, setId);
+      if (!withItems) return res.status(404).json({ error: "Set-liste ikke funnet" });
+
+      const job = await exportSetToYouTubePlaylist({
+        db,
+        coupleId,
+        requestedByRole: "couple",
+        requestedByCoupleId: coupleId,
+        setId,
+        title: String(req.body?.title || withItems.set.title || "Evendi Music Set"),
+        description: req.body?.description ? String(req.body.description) : `Exported from Evendi set: ${withItems.set.title}`,
+        privacyStatus: req.body?.privacyStatus || "unlisted",
+        idempotencyKey: req.body?.idempotencyKey ? String(req.body.idempotencyKey) : undefined,
+        redirectUri: getOAuthRedirectUri(req),
+        offerId: withItems.set.offerId || null,
+      });
+
+      res.json(job);
+    } catch (error) {
+      console.error("Error exporting YouTube playlist:", error?.message || String(error));
+      res.status(500).json({ error: error instanceof Error ? error.message : "Kunne ikke eksportere YouTube-playlist" });
+    }
+  });
+
+  app.put("/api/couple/music/vendor-permissions/:offerId", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const { offerId } = req.params;
+      const canExportYoutube = !!req.body?.canExportYoutube;
+
+      const [offer] = await db
+        .select()
+        .from(vendorOffers)
+        .where(and(eq(vendorOffers.id, offerId), eq(vendorOffers.coupleId, coupleId)));
+      if (!offer) return res.status(404).json({ error: "Offer ikke funnet" });
+
+      const [existing] = await db
+        .select()
+        .from(coupleMusicVendorPermissions)
+        .where(eq(coupleMusicVendorPermissions.offerId, offerId));
+
+      const payload = {
+        coupleId,
+        offerId,
+        vendorId: offer.vendorId,
+        canExportYoutube,
+        grantedAt: canExportYoutube ? new Date() : null,
+        revokedAt: canExportYoutube ? null : new Date(),
+        updatedAt: new Date(),
+      };
+
+      if (existing) {
+        const [updated] = await db
+          .update(coupleMusicVendorPermissions)
+          .set(payload)
+          .where(eq(coupleMusicVendorPermissions.id, existing.id))
+          .returning();
+        return res.json(updated);
+      }
+
+      const [created] = await db.insert(coupleMusicVendorPermissions).values(payload).returning();
+      res.json(created);
+    } catch (error) {
+      console.error("Error updating music vendor permissions:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke oppdatere leverandør-samtykke" });
     }
   });
 

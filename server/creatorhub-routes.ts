@@ -40,6 +40,9 @@ import {
   coupleMusicPerformances,
   coupleMusicSetlists,
   coupleMusicPreferences,
+  musicMoments,
+  musicSets,
+  musicSetItems,
   coordinatorInvitations,
   vendorReviews,
   vendorReviewResponses,
@@ -1535,13 +1538,14 @@ export function registerCreatorhubRoutes(app: Express) {
       const [organizer] = await db.select({
         displayName: coupleProfiles.displayName,
         eventType: coupleProfiles.eventType,
+        selectedTraditions: coupleProfiles.selectedTraditions,
       }).from(coupleProfiles).where(eq(coupleProfiles.id, coupleId));
 
       if (!organizer) {
         return res.status(404).json({ error: "Organizer not found" });
       }
 
-      const [performances, setlists, preferencesRows] = await Promise.all([
+      const [performances, setlists, preferencesRows, sets, moments] = await Promise.all([
         db.select().from(coupleMusicPerformances)
           .where(eq(coupleMusicPerformances.coupleId, coupleId))
           .orderBy(coupleMusicPerformances.date),
@@ -1549,13 +1553,38 @@ export function registerCreatorhubRoutes(app: Express) {
           .where(eq(coupleMusicSetlists.coupleId, coupleId)),
         db.select().from(coupleMusicPreferences)
           .where(eq(coupleMusicPreferences.coupleId, coupleId)),
+        db.select().from(musicSets)
+          .where(eq(musicSets.coupleId, coupleId))
+          .orderBy(desc(musicSets.updatedAt)),
+        db.select().from(musicMoments)
+          .orderBy(musicMoments.sortOrder),
       ]);
 
       const preferences = preferencesRows[0] || null;
+      const setIds = sets.map((set) => set.id);
+      const setItems = setIds.length > 0
+        ? await db.select().from(musicSetItems).where(inArray(musicSetItems.setId, setIds))
+        : [];
+      const setItemMap = new Map<string, typeof setItems>();
+      for (const item of setItems) {
+        const existing = setItemMap.get(item.setId) || [];
+        existing.push(item);
+        setItemMap.set(item.setId, existing);
+      }
 
       return res.json({
         performances,
         setlists,
+        matcherProfile: preferences ? {
+          preferredCultures: preferences.preferredCultures || [],
+          preferredLanguages: preferences.preferredLanguages || [],
+          vibeLevel: preferences.vibeLevel ?? 50,
+          energyLevel: preferences.energyLevel ?? 50,
+          cleanLyricsOnly: preferences.cleanLyricsOnly ?? true,
+          selectedMoments: preferences.selectedMoments || [],
+        } : null,
+        sets: sets.map((set) => ({ ...set, items: setItemMap.get(set.id) || [] })),
+        moments,
         preferences: preferences ? {
           spotifyPlaylistUrl: preferences.spotifyPlaylistUrl,
           youtubePlaylistUrl: preferences.youtubePlaylistUrl,
@@ -1565,6 +1594,11 @@ export function registerCreatorhubRoutes(app: Express) {
           doNotPlay: preferences.doNotPlay,
           additionalNotes: preferences.additionalNotes,
         } : null,
+        couple: {
+          id: coupleId,
+          displayName: organizer.displayName,
+          selectedTraditions: organizer.selectedTraditions || [],
+        },
         coupleId,
         eventType: organizer.eventType || "wedding",
         organizerName: organizer.displayName,

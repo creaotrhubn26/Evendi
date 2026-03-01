@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Linking, Modal } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Linking, Modal, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -22,6 +22,7 @@ import { getSpeeches } from "@/lib/storage";
 import { Speech } from "@/lib/types";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
+import { MusicYouTubePreviewModal } from "@/components/music/MusicYouTubePreviewModal";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 type Navigation = NativeStackNavigationProp<any>;
 type VendorProduct = {
@@ -72,6 +73,41 @@ type MusicBrief = {
     budget: number;
   };
   preferences: MusicPreferences;
+  matcherProfile?: {
+    preferredCultures?: string[];
+    preferredLanguages?: string[];
+    vibeLevel?: number;
+    energyLevel?: number;
+    cleanLyricsOnly?: boolean;
+    selectedMoments?: string[];
+  } | null;
+  offer?: {
+    id: string;
+    status: string;
+  } | null;
+  moments?: Array<{
+    id: string;
+    key: string;
+    title: string;
+  }>;
+  sets?: Array<{
+    id: string;
+    title: string;
+    offerId?: string | null;
+    updatedByRole?: string | null;
+    items: Array<{
+      id: string;
+      title: string;
+      artist?: string | null;
+      youtubeVideoId?: string | null;
+      momentKey?: string | null;
+      position: number;
+      dropMarkerSeconds?: number | null;
+    }>;
+  }>;
+  vendorPermission?: {
+    canExportYoutube?: boolean;
+  } | null;
 };
 type CulturalVendor = {
   id: string;
@@ -141,6 +177,27 @@ const normalizeCultureKey = (key: string) => {
   const normalized = key.trim().toLowerCase();
   return CULTURE_ALIASES[normalized] || normalized;
 };
+
+const extractYouTubeVideoId = (value: string): string | null => {
+  const input = value.trim();
+  if (!input) return null;
+  if (/^[a-zA-Z0-9_-]{11}$/.test(input)) return input;
+  try {
+    const normalized = input.startsWith("http") ? input : `https://${input}`;
+    const parsed = new URL(normalized);
+    if (parsed.hostname.includes("youtu.be")) {
+      const id = parsed.pathname.replace("/", "").trim();
+      return id || null;
+    }
+    if (parsed.hostname.includes("youtube.com")) {
+      return parsed.searchParams.get("v") || null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
 export default function VendorMusikkScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -154,6 +211,14 @@ export default function VendorMusikkScreen() {
   const [chatVendor, setChatVendor] = useState<CulturalVendor | null>(null);
   const [isChatPickerOpen, setIsChatPickerOpen] = useState(false);
   const [isStartingChat, setIsStartingChat] = useState(false);
+  const [selectedMusicSetId, setSelectedMusicSetId] = useState<string | null>(null);
+  const [manualSongTitle, setManualSongTitle] = useState("");
+  const [manualSongArtist, setManualSongArtist] = useState("");
+  const [manualSongYouTubeInput, setManualSongYouTubeInput] = useState("");
+  const [isUpdatingSet, setIsUpdatingSet] = useState(false);
+  const [isExportingSet, setIsExportingSet] = useState(false);
+  const [lastExportUrl, setLastExportUrl] = useState<string | null>(null);
+  const [previewVideo, setPreviewVideo] = useState<{ videoId: string; title: string } | null>(null);
   const vendorProfileQuery = useVendorProfile(sessionToken);
   const vendorConfig = getVendorConfig(
     vendorProfileQuery.data?.category?.id ?? null,
@@ -233,6 +298,23 @@ export default function VendorMusikkScreen() {
     },
     enabled: !!sessionToken && !!selectedOfferId,
   });
+  const canEditSharedSets = musicBrief?.offer?.status === "accepted";
+  const canExportToCoupleYoutube = !!musicBrief?.vendorPermission?.canExportYoutube;
+  const sharedSets = musicBrief?.sets || [];
+  const selectedMusicSet = useMemo(
+    () => sharedSets.find((set) => set.id === selectedMusicSetId) || null,
+    [sharedSets, selectedMusicSetId]
+  );
+  useEffect(() => {
+    if (sharedSets.length === 0) {
+      setSelectedMusicSetId(null);
+      return;
+    }
+    setSelectedMusicSetId((current) => {
+      if (current && sharedSets.some((set) => set.id === current)) return current;
+      return sharedSets[0].id;
+    });
+  }, [sharedSets]);
   const cultureKeys = useMemo(() => {
     const raw = musicBrief?.couple?.selectedTraditions || [];
     const normalized = raw.map(normalizeCultureKey).filter(Boolean);
@@ -329,6 +411,134 @@ export default function VendorMusikkScreen() {
       vendorCategory: vendor.categoryId || "music",
       readOnly: true,
     });
+  };
+  const vendorMusicRequest = async (path: string, init?: RequestInit) => {
+    if (!sessionToken) throw new Error("Mangler vendor-session");
+    const response = await fetch(new URL(path, getApiUrl()).toString(), {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${sessionToken}`,
+        "Content-Type": "application/json",
+        ...(init?.headers || {}),
+      },
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || "Vendor music API-feil");
+    }
+    return response.json().catch(() => null);
+  };
+  const moveMusicSetItem = async (itemId: string, direction: -1 | 1) => {
+    if (!selectedMusicSet || !canEditSharedSets) return;
+    const ordered = [...(selectedMusicSet.items || [])].sort((a, b) => a.position - b.position);
+    const index = ordered.findIndex((item) => item.id === itemId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= ordered.length) return;
+    const reordered = [...ordered];
+    const temp = reordered[index];
+    reordered[index] = reordered[nextIndex];
+    reordered[nextIndex] = temp;
+
+    setIsUpdatingSet(true);
+    try {
+      await vendorMusicRequest(`/api/vendor/music/sets/${selectedMusicSet.id}/reorder`, {
+        method: "PATCH",
+        body: JSON.stringify({ orderedItemIds: reordered.map((item) => item.id) }),
+      });
+      await refetchBrief();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Kunne ikke reordne sett");
+    } finally {
+      setIsUpdatingSet(false);
+    }
+  };
+  const updateDropMarker = async (itemId: string, nextDropValue: number | null) => {
+    if (!selectedMusicSet || !canEditSharedSets) return;
+    setIsUpdatingSet(true);
+    try {
+      await vendorMusicRequest(`/api/vendor/music/sets/${selectedMusicSet.id}/items/${itemId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ dropMarkerSeconds: nextDropValue }),
+      });
+      await refetchBrief();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Kunne ikke oppdatere drop marker");
+    } finally {
+      setIsUpdatingSet(false);
+    }
+  };
+  const removeMusicSetItem = async (itemId: string) => {
+    if (!selectedMusicSet || !canEditSharedSets) return;
+    setIsUpdatingSet(true);
+    try {
+      await vendorMusicRequest(`/api/vendor/music/sets/${selectedMusicSet.id}/items/${itemId}`, {
+        method: "DELETE",
+      });
+      await refetchBrief();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Kunne ikke fjerne låten");
+    } finally {
+      setIsUpdatingSet(false);
+    }
+  };
+  const addManualMusicSetItem = async () => {
+    if (!selectedMusicSet || !canEditSharedSets) return;
+    const title = manualSongTitle.trim();
+    const videoId = extractYouTubeVideoId(manualSongYouTubeInput);
+    if (!title) {
+      showToast("Legg inn låttittel");
+      return;
+    }
+    if (!videoId) {
+      showToast("Legg inn gyldig YouTube URL eller video-id");
+      return;
+    }
+
+    setIsUpdatingSet(true);
+    try {
+      await vendorMusicRequest(`/api/vendor/music/sets/${selectedMusicSet.id}/items`, {
+        method: "POST",
+        body: JSON.stringify({
+          title,
+          artist: manualSongArtist.trim() || null,
+          youtubeVideoId: videoId,
+          momentKey: null,
+        }),
+      });
+      setManualSongTitle("");
+      setManualSongArtist("");
+      setManualSongYouTubeInput("");
+      await refetchBrief();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Kunne ikke legge til låt");
+    } finally {
+      setIsUpdatingSet(false);
+    }
+  };
+  const exportMusicSetToYouTube = async () => {
+    if (!selectedOfferId || !selectedMusicSet) return;
+    if (!canExportToCoupleYoutube) {
+      showToast("Paret må gi samtykke før eksport.");
+      return;
+    }
+    setIsExportingSet(true);
+    try {
+      const job = await vendorMusicRequest(`/api/vendor/music/export/youtube-playlist/${selectedOfferId}`, {
+        method: "POST",
+        body: JSON.stringify({
+          setId: selectedMusicSet.id,
+          title: selectedMusicSet.title,
+          privacyStatus: "unlisted",
+        }),
+      });
+      setLastExportUrl(job?.youtubePlaylistUrl || null);
+      await refetchBrief();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Kunne ikke eksportere YouTube-playlist");
+    } finally {
+      setIsExportingSet(false);
+    }
   };
   const handleStartVendorChat = async (coupleId: string) => {
     if (!sessionToken || !chatVendor) return;
@@ -580,6 +790,168 @@ export default function VendorMusikkScreen() {
                     </ThemedText>
                   </View>
                 ) : null}
+                <View style={styles.musicBriefSection}>
+                  <View style={styles.cultureHeaderRow}>
+                    <ThemedText style={[styles.musicBriefTitle, { color: theme.text }]}>Delte set-lister</ThemedText>
+                    <ThemedText style={{ color: canEditSharedSets ? theme.success : theme.textMuted, fontSize: 11, fontWeight: "700" }}>
+                      {canEditSharedSets ? "Redigering aktiv" : "Kun lesetilgang"}
+                    </ThemedText>
+                  </View>
+                  {sharedSets.length === 0 ? (
+                    <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                      Paret har ikke opprettet set-liste ennå.
+                    </ThemedText>
+                  ) : (
+                    <>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalChipRow}>
+                        {sharedSets.map((set) => {
+                          const active = selectedMusicSetId === set.id;
+                          return (
+                            <Pressable
+                              key={set.id}
+                              onPress={() => setSelectedMusicSetId(set.id)}
+                              style={[
+                                styles.offerChip,
+                                {
+                                  borderColor: active ? theme.accent : theme.border,
+                                  backgroundColor: active ? theme.accent : theme.backgroundSecondary,
+                                },
+                              ]}
+                            >
+                              <ThemedText
+                                style={{ color: active ? theme.buttonText : theme.textSecondary, fontSize: 12, fontWeight: "600" }}
+                              >
+                                {set.title}
+                              </ThemedText>
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
+
+                      {selectedMusicSet ? (
+                        <View style={styles.sharedSetCard}>
+                          <ThemedText style={[styles.musicBriefTitle, { color: theme.text }]}>Legg til låt manuelt</ThemedText>
+                          <TextInput
+                            value={manualSongTitle}
+                            onChangeText={setManualSongTitle}
+                            placeholder="Låttittel"
+                            placeholderTextColor={theme.textMuted}
+                            editable={canEditSharedSets && !isUpdatingSet}
+                            style={[styles.setInput, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary, color: theme.text }]}
+                          />
+                          <TextInput
+                            value={manualSongArtist}
+                            onChangeText={setManualSongArtist}
+                            placeholder="Artist (valgfritt)"
+                            placeholderTextColor={theme.textMuted}
+                            editable={canEditSharedSets && !isUpdatingSet}
+                            style={[styles.setInput, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary, color: theme.text }]}
+                          />
+                          <TextInput
+                            value={manualSongYouTubeInput}
+                            onChangeText={setManualSongYouTubeInput}
+                            placeholder="YouTube URL / video-id"
+                            placeholderTextColor={theme.textMuted}
+                            editable={canEditSharedSets && !isUpdatingSet}
+                            style={[styles.setInput, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary, color: theme.text }]}
+                          />
+                          <Button onPress={addManualMusicSetItem} disabled={!canEditSharedSets || isUpdatingSet}>
+                            {isUpdatingSet ? "Lagrer..." : "Add to set"}
+                          </Button>
+
+                          <View style={styles.sharedItemList}>
+                            {[...(selectedMusicSet.items || [])]
+                              .sort((a, b) => a.position - b.position)
+                              .map((item, index, arr) => (
+                                <View key={item.id} style={[styles.sharedItemRow, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+                                  <View style={styles.sharedItemTitleRow}>
+                                    <View style={{ flex: 1 }}>
+                                      <ThemedText style={{ color: theme.text, fontWeight: "700", fontSize: 13 }} numberOfLines={1}>
+                                        {item.title}
+                                      </ThemedText>
+                                      <ThemedText style={{ color: theme.textSecondary, fontSize: 11 }} numberOfLines={1}>
+                                        {item.artist || "Ukjent artist"}
+                                        {item.momentKey ? ` • ${item.momentKey.replace(/_/g, " ")}` : ""}
+                                      </ThemedText>
+                                    </View>
+                                    <ThemedText style={{ color: theme.textMuted, fontSize: 11 }}>
+                                      {index + 1}/{arr.length}
+                                    </ThemedText>
+                                  </View>
+                                  <View style={styles.sharedItemActions}>
+                                    <Pressable
+                                      onPress={() => moveMusicSetItem(item.id, -1)}
+                                      disabled={!canEditSharedSets || index === 0 || isUpdatingSet}
+                                      style={[styles.sharedIconBtn, { borderColor: theme.border, opacity: !canEditSharedSets || index === 0 || isUpdatingSet ? 0.45 : 1 }]}
+                                    >
+                                      <EvendiIcon name="chevron-up" size={14} color={theme.textSecondary} />
+                                    </Pressable>
+                                    <Pressable
+                                      onPress={() => moveMusicSetItem(item.id, 1)}
+                                      disabled={!canEditSharedSets || index === arr.length - 1 || isUpdatingSet}
+                                      style={[styles.sharedIconBtn, { borderColor: theme.border, opacity: !canEditSharedSets || index === arr.length - 1 || isUpdatingSet ? 0.45 : 1 }]}
+                                    >
+                                      <EvendiIcon name="chevron-down" size={14} color={theme.textSecondary} />
+                                    </Pressable>
+                                    <Pressable
+                                      onPress={() => updateDropMarker(item.id, item.dropMarkerSeconds ? Math.max(0, item.dropMarkerSeconds - 5) : 0)}
+                                      disabled={!canEditSharedSets || isUpdatingSet}
+                                      style={[styles.sharedIconBtn, { borderColor: theme.border, opacity: !canEditSharedSets || isUpdatingSet ? 0.45 : 1 }]}
+                                    >
+                                      <EvendiIcon name="minus" size={14} color={theme.textSecondary} />
+                                    </Pressable>
+                                    <Pressable
+                                      onPress={() => updateDropMarker(item.id, item.dropMarkerSeconds ? item.dropMarkerSeconds + 5 : 30)}
+                                      disabled={!canEditSharedSets || isUpdatingSet}
+                                      style={[styles.sharedIconBtn, { borderColor: theme.border, opacity: !canEditSharedSets || isUpdatingSet ? 0.45 : 1 }]}
+                                    >
+                                      <EvendiIcon name="plus" size={14} color={theme.textSecondary} />
+                                    </Pressable>
+                                    <Pressable
+                                      onPress={() => updateDropMarker(item.id, item.dropMarkerSeconds ? null : 45)}
+                                      disabled={!canEditSharedSets || isUpdatingSet}
+                                      style={[styles.dropMarkerBtn, { borderColor: theme.accent, backgroundColor: `${theme.accent}20`, opacity: !canEditSharedSets || isUpdatingSet ? 0.45 : 1 }]}
+                                    >
+                                      <ThemedText style={{ color: theme.accent, fontSize: 10, fontWeight: "700" }}>
+                                        {item.dropMarkerSeconds ? `DROP ${item.dropMarkerSeconds}s` : "DROP HERE"}
+                                      </ThemedText>
+                                    </Pressable>
+                                    {item.youtubeVideoId ? (
+                                      <Pressable
+                                        onPress={() => setPreviewVideo({ videoId: item.youtubeVideoId as string, title: item.title })}
+                                        style={[styles.sharedIconBtn, { borderColor: theme.border }]}
+                                      >
+                                        <EvendiIcon name="play" size={14} color={theme.textSecondary} />
+                                      </Pressable>
+                                    ) : null}
+                                    <Pressable
+                                      onPress={() => removeMusicSetItem(item.id)}
+                                      disabled={!canEditSharedSets || isUpdatingSet}
+                                      style={[styles.sharedIconBtn, { borderColor: theme.border, opacity: !canEditSharedSets || isUpdatingSet ? 0.45 : 1 }]}
+                                    >
+                                      <EvendiIcon name="trash" size={14} color={theme.error} />
+                                    </Pressable>
+                                  </View>
+                                </View>
+                              ))}
+                          </View>
+                        </View>
+                      ) : null}
+
+                      <View style={styles.setExportSection}>
+                        <Button onPress={exportMusicSetToYouTube} disabled={!canExportToCoupleYoutube || isExportingSet || !selectedMusicSet}>
+                          {isExportingSet ? "Eksporterer..." : canExportToCoupleYoutube ? "Eksporter til parets YouTube" : "Mangler samtykke"}
+                        </Button>
+                        {lastExportUrl ? (
+                          <Pressable onPress={() => openLink(lastExportUrl)} style={styles.exportLinkRow}>
+                            <EvendiIcon name="external-link" size={13} color={theme.accent} />
+                            <ThemedText style={[styles.musicLink, { color: theme.accent }]} numberOfLines={1}>{lastExportUrl}</ThemedText>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    </>
+                  )}
+                </View>
                 {cultureKeys.length > 0 ? (
                   <View style={styles.musicBriefSection}>
                     <View style={styles.cultureHeaderRow}>
@@ -737,6 +1109,17 @@ export default function VendorMusikkScreen() {
             })}
         </View>
       )}
+      <MusicYouTubePreviewModal
+        visible={!!previewVideo}
+        videoId={previewVideo?.videoId || null}
+        title={previewVideo?.title || null}
+        onClose={() => setPreviewVideo(null)}
+        onOpenYouTube={(videoId) => openLink(`https://www.youtube.com/watch?v=${videoId}`)}
+        backgroundColor={theme.backgroundDefault}
+        borderColor={theme.border}
+        textColor={theme.text}
+        mutedTextColor={theme.textSecondary}
+      />
       <Modal
         visible={isChatPickerOpen}
         transparent
@@ -832,6 +1215,11 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginBottom: Spacing.md,
   },
+  horizontalChipRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
   offerChip: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
@@ -847,6 +1235,61 @@ const styles = StyleSheet.create({
   },
   musicBriefSection: {
     marginTop: Spacing.xs,
+  },
+  sharedSetCard: {
+    marginTop: Spacing.xs,
+    gap: Spacing.xs,
+  },
+  setInput: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    height: 40,
+    paddingHorizontal: Spacing.sm,
+    fontSize: 13,
+  },
+  sharedItemList: {
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  sharedItemRow: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  sharedItemTitleRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    alignItems: "center",
+  },
+  sharedItemActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.xs,
+    alignItems: "center",
+  },
+  sharedIconBtn: {
+    width: 28,
+    height: 28,
+    borderWidth: 1,
+    borderRadius: BorderRadius.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dropMarkerBtn: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 5,
+  },
+  setExportSection: {
+    marginTop: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  exportLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
   },
   cultureHeaderRow: {
     flexDirection: "row",
