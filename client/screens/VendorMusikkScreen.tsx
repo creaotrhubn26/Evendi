@@ -63,8 +63,8 @@ type MusicBrief = {
     weddingDate: string | null;
     selectedTraditions?: string[] | null;
   };
-  performances: Array<{ id: string; title: string; date: string; time?: string | null }>;
-  setlists: Array<{ id: string; title: string; songs?: string | null; genre?: string | null }>;
+  performances: { id: string; title: string; date: string; time?: string | null }[];
+  setlists: { id: string; title: string; songs?: string | null; genre?: string | null }[];
   timeline: {
     musicianSelected: boolean;
     setlistDiscussed: boolean;
@@ -85,17 +85,17 @@ type MusicBrief = {
     id: string;
     status: string;
   } | null;
-  moments?: Array<{
+  moments?: {
     id: string;
     key: string;
     title: string;
-  }>;
-  sets?: Array<{
+  }[];
+  sets?: {
     id: string;
     title: string;
     offerId?: string | null;
     updatedByRole?: string | null;
-    items: Array<{
+    items: {
       id: string;
       title: string;
       artist?: string | null;
@@ -103,8 +103,8 @@ type MusicBrief = {
       momentKey?: string | null;
       position: number;
       dropMarkerSeconds?: number | null;
-    }>;
-  }>;
+    }[];
+  }[];
   vendorPermission?: {
     canExportYoutube?: boolean;
   } | null;
@@ -300,7 +300,7 @@ export default function VendorMusikkScreen() {
   });
   const canEditSharedSets = musicBrief?.offer?.status === "accepted";
   const canExportToCoupleYoutube = !!musicBrief?.vendorPermission?.canExportYoutube;
-  const sharedSets = musicBrief?.sets || [];
+  const sharedSets = useMemo(() => musicBrief?.sets || [], [musicBrief?.sets]);
   const selectedMusicSet = useMemo(
     () => sharedSets.find((set) => set.id === selectedMusicSetId) || null,
     [sharedSets, selectedMusicSetId]
@@ -344,16 +344,16 @@ export default function VendorMusikkScreen() {
     },
     enabled: cultureKeys.length > 0,
   });
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    const refreshPromises: Array<Promise<unknown>> = [refetchProducts(), refetchOffers(), refetchBrief()];
+    const refreshPromises: Promise<unknown>[] = [refetchProducts(), refetchOffers(), refetchBrief()];
     if (cultureKeys.length > 0) {
       refreshPromises.push(refetchCulture());
     }
     await Promise.all(refreshPromises);
     setIsRefreshing(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
+  }, [cultureKeys.length, refetchBrief, refetchCulture, refetchOffers, refetchProducts]);
   const goToProducts = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("ProductCreate");
@@ -596,7 +596,9 @@ export default function VendorMusikkScreen() {
       }
     >
       <ThemedText style={[styles.title, { color: theme.text }]}>Musikk dashboard</ThemedText>
-      <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Publiser musikk- og DJ-pakker, og send tilbud raskt.</ThemedText>
+      <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
+        Publiser pakker for {vendorConfig.categoryName.toLowerCase()}, og send tilbud raskt.
+      </ThemedText>
       <View style={styles.cardRow}>
         <Pressable
           onPress={goToProducts}

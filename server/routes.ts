@@ -1,10 +1,11 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
+import { spawn } from "node:child_process";
 import { WebSocketServer, type WebSocket } from "ws";
 import crypto from "node:crypto";
 import { db } from "./db";
 import bcrypt from "bcryptjs";
-import rateLimit from "express-rate-limit";
+import expressRateLimit from "express-rate-limit";
 import { z } from "zod";
 import { registerSubscriptionRoutes } from "./subscription-routes";
 import { registerCoupleFeatureRoutes } from "./couple-feature-routes";
@@ -17,7 +18,7 @@ import {
   refreshYouTubeAccessToken,
 } from "./music-matcher";
 import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetSettings, coupleBudgetItems, createBudgetItemSchema, coupleVendorFavorites, insertCoupleVendorFavoriteSchema, coupleVendorSearches, vendorMatchScores, coupleMusicPreferences, coupleMusicPerformances, coupleMusicSetlists, musicMoments, musicSongs, musicSets, musicSetItems, coupleMusicVendorPermissions, coupleYoutubeConnections, musicExportJobs } from "@shared/schema";
-import { eq, and, desc, sql, inArray, or, asc } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, or, asc, gte, lte } from "drizzle-orm";
 
 function generateAccessCode(): string {
   return crypto.randomBytes(8).toString("hex").toUpperCase();
@@ -302,7 +303,7 @@ async function fetchBrregEntities(rawQuery: string): Promise<any[]> {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  const weatherRateLimit = rateLimit({
+  const weatherRateLimit = expressRateLimit({
     windowMs: 60 * 1000,
     max: 120,
     standardHeaders: true,
@@ -310,7 +311,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     message: { error: "For mange værforespørsler. Prøv igjen om ett minutt." },
   });
 
-  const brregRateLimit = rateLimit({
+  const brregRateLimit = expressRateLimit({
     windowMs: 60 * 1000,
     max: 40,
     standardHeaders: true,
@@ -318,7 +319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     message: { error: "For mange Brreg-søk. Prøv igjen om ett minutt." },
   });
 
-  const typingRateLimit = rateLimit({
+  const typingRateLimit = expressRateLimit({
     windowMs: 60 * 1000,
     max: 120,
     standardHeaders: true,
@@ -545,7 +546,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Public endpoint to get subscription tiers (for vendor registration)
   app.get("/api/subscription/tiers", async (_req: Request, res: Response) => {
     try {
-      const { subscriptionTiers } = await import("@shared/schema");
       const tiers = await db.select()
         .from(subscriptionTiers)
         .where(eq(subscriptionTiers.isActive, true))
@@ -562,7 +562,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!checkAdminAuth(req, res)) return;
     
     try {
-      const { vendorSubscriptions } = await import("@shared/schema");
       const now = new Date();
       
       // Find all trialing subscriptions that have expired
@@ -626,7 +625,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!checkAdminAuth(req, res)) return;
     
     try {
-      const { vendorSubscriptions, subscriptionTiers } = await import("@shared/schema");
       const now = new Date();
       const reminderDays = [7, 3, 1]; // Days before expiry to send reminders
       
@@ -649,7 +647,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(
           and(
             eq(vendorSubscriptions.status, "trialing"),
-            sql`${vendorSubscriptions.currentPeriodEnd}::date = ${startOfDay}::date`
+            gte(vendorSubscriptions.currentPeriodEnd, startOfDay),
+            lte(vendorSubscriptions.currentPeriodEnd, endOfDay)
           )
         );
 
@@ -669,14 +668,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             body = `I morgen går du glipp av potensielle kunder!\n\nSikre tilgang nå for ${tier.priceNok} NOK/mnd og fortsett å motta henvendelser.`;
           }
 
-          await db.insert(notifications).values({
-            recipientType: "vendor",
-            recipientId: vendor.id,
-            type: "trial_reminder",
-            title,
-            body,
-            sentVia: "in_app",
-          });
+	          await db.insert(notifications).values({
+	            recipientType: "vendor",
+	            recipientId: vendor.id,
+	            type: "trial_reminder",
+	            title,
+	            body: `${body}\n\nUtløper: ${subscription.currentPeriodEnd.toISOString().slice(0, 10)}`,
+	            sentVia: "in_app",
+	          });
 
           // TODO: Send email
           console.log(`Sent ${days}-day reminder to ${vendor.email}`);
@@ -838,11 +837,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // New vendor - create account with pending status
+      const oauthSecretSeed = googleId ? `${googleId}:${generateSessionToken()}` : generateSessionToken();
+      const hashedOAuthPassword = await hashPassword(oauthSecretSeed);
       const newVendorId = generateSessionToken().substring(0, 21); // Use part of token as ID
       const [newVendor] = await db.insert(vendors).values({
         id: newVendorId,
         email: googleEmail,
-        password: generateSessionToken(), // Random password since using OAuth
+        password: hashedOAuthPassword,
         businessName: googleName || "Min Bedrift",
         status: "pending",
         createdAt: new Date(),
@@ -899,6 +900,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ valid: true, vendorId, businessName: vendor?.businessName });
     } catch (error) {
+      console.error("Error validating vendor session:", error?.message || String(error));
       res.status(500).json({ valid: false, error: "Serverfeil" });
     }
   });
@@ -935,8 +937,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Smart vendor matching endpoint for couples
   app.get("/api/vendors/matching", async (req: Request, res: Response) => {
     try {
-      const { category, guestCount, location } = req.query;
+      const { category, guestCount, location, coupleId, searchQuery } = req.query;
       const guestCountNum = guestCount ? parseInt(guestCount as string) : undefined;
+      const categoryFilter = typeof category === "string" ? category : undefined;
+      const locationFilter = typeof location === "string" ? location : undefined;
+      const coupleIdFilter = typeof coupleId === "string" ? coupleId : undefined;
+      const effectiveSearchQuery =
+        typeof searchQuery === "string" && searchQuery.trim().length > 0
+          ? searchQuery.trim()
+          : [categoryFilter, locationFilter, guestCountNum ? `guest:${guestCountNum}` : null]
+              .filter(Boolean)
+              .join(" ")
+              .trim() || "vendor matching";
 
       // Fetch approved vendors with their category details
       const approvedVendors = await db.select({
@@ -952,8 +964,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).from(vendors).where(eq(vendors.status, "approved"));
 
       // Filter by category if specified
-      let filtered = category 
-        ? approvedVendors.filter(v => v.categoryId === category)
+      let filtered = categoryFilter
+        ? approvedVendors.filter(v => v.categoryId === categoryFilter)
         : approvedVendors;
 
       // Fetch category details for capacity matching
@@ -980,7 +992,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Filter by capacity if guest count is specified and category supports it
       let result = vendorsWithDetails;
-      if (guestCountNum && category === "venue") {
+      if (guestCountNum && categoryFilter === "venue") {
         result = result.filter(v => {
           // Include vendors without capacity info (show all), or those that fit
           if (!v.venueCapacityMin && !v.venueCapacityMax) return true;
@@ -990,7 +1002,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return true;
         });
       }
-      if (guestCountNum && category === "catering") {
+      if (guestCountNum && categoryFilter === "catering") {
         result = result.filter(v => {
           if (!v.cateringMinGuests && !v.cateringMaxGuests) return true;
           if (v.cateringMaxGuests && guestCountNum > v.cateringMaxGuests) return false;
@@ -1000,12 +1012,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Filter by location if specified
-      if (location && typeof location === "string") {
-        const locationLower = location.toLowerCase();
+      if (locationFilter) {
+        const locationLower = locationFilter.toLowerCase();
         result = result.filter(v => 
           v.location?.toLowerCase().includes(locationLower) ||
           v.venueLocation?.toLowerCase().includes(locationLower)
         );
+      }
+
+      if (coupleIdFilter) {
+        const [couple] = await db
+          .select({
+            id: coupleProfiles.id,
+            eventType: coupleProfiles.eventType,
+          })
+          .from(coupleProfiles)
+          .where(eq(coupleProfiles.id, coupleIdFilter))
+          .limit(1);
+
+        if (couple) {
+          await db.insert(coupleVendorSearches).values({
+            coupleId: couple.id,
+            searchQuery: effectiveSearchQuery,
+            eventType: couple.eventType || null,
+            vendorCategory: categoryFilter || null,
+            resultsCount: result.length,
+          });
+
+          if (result.length > 0) {
+            const resultVendorIds = result.map((vendor) => vendor.id);
+            const reviewRows = await db
+              .select({
+                vendorId: vendorReviews.vendorId,
+                average: sql<number>`coalesce(avg(${vendorReviews.rating}), 0)`,
+              })
+              .from(vendorReviews)
+              .where(
+                and(
+                  inArray(vendorReviews.vendorId, resultVendorIds),
+                  eq(vendorReviews.isApproved, true),
+                ),
+              )
+              .groupBy(vendorReviews.vendorId);
+
+            const reviewScoreMap = new Map(
+              reviewRows.map((row) => [row.vendorId, Math.round(Math.max(0, Number(row.average) * 20))]),
+            );
+
+            await db
+              .delete(vendorMatchScores)
+              .where(
+                and(
+                  eq(vendorMatchScores.coupleId, couple.id),
+                  inArray(vendorMatchScores.vendorId, resultVendorIds),
+                ),
+              );
+
+            const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+            await db.insert(vendorMatchScores).values(
+              result.map((vendor) => {
+                const eventTypeMatch = categoryFilter ? (vendor.categoryId === categoryFilter ? 100 : 50) : 70;
+                const capacityMatch =
+                  guestCountNum == null
+                    ? 70
+                    : categoryFilter === "venue"
+                      ? (() => {
+                          if (!vendor.venueCapacityMin && !vendor.venueCapacityMax) return 70;
+                          if (vendor.venueCapacityMax && guestCountNum > vendor.venueCapacityMax) return 10;
+                          if (vendor.venueCapacityMin && guestCountNum < vendor.venueCapacityMin) return 40;
+                          return 95;
+                        })()
+                      : categoryFilter === "catering"
+                        ? (() => {
+                            if (!vendor.cateringMinGuests && !vendor.cateringMaxGuests) return 70;
+                            if (vendor.cateringMaxGuests && guestCountNum > vendor.cateringMaxGuests) return 10;
+                            if (vendor.cateringMinGuests && guestCountNum < vendor.cateringMinGuests) return 40;
+                            return 95;
+                          })()
+                        : 70;
+                const locationMatch = locationFilter
+                  ? (vendor.location?.toLowerCase().includes(locationFilter.toLowerCase()) ||
+                      vendor.venueLocation?.toLowerCase().includes(locationFilter.toLowerCase())
+                      ? 100
+                      : 45)
+                  : 70;
+                const budgetMatch = 60;
+                const vibeMatch = 65;
+                const reviewScore = reviewScoreMap.get(vendor.id) ?? 0;
+                const overallScore = Math.round(
+                  eventTypeMatch * 0.3 +
+                    capacityMatch * 0.2 +
+                    locationMatch * 0.2 +
+                    budgetMatch * 0.1 +
+                    vibeMatch * 0.05 +
+                    reviewScore * 0.15,
+                );
+
+                return {
+                  vendorId: vendor.id,
+                  coupleId: couple.id,
+                  eventTypeMatch,
+                  budgetMatch,
+                  capacityMatch,
+                  locationMatch,
+                  vibeMatch,
+                  reviewScore,
+                  overallScore,
+                  lastCalculatedAt: new Date(),
+                  expiresAt,
+                };
+              }),
+            );
+          }
+        }
       }
 
       res.json(result);
@@ -1071,7 +1190,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(vendors.id, id));
 
       // Check if vendor already has a trial subscription
-      const { vendorSubscriptions } = await import("@shared/schema");
       const [existingSubscription] = await db.select()
         .from(vendorSubscriptions)
         .where(eq(vendorSubscriptions.vendorId, id))
@@ -1153,8 +1271,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Check if vendor has active subscription (not paused)
   const checkVendorSubscriptionAccess = async (vendorId: string, res: Response): Promise<boolean> => {
     try {
-      const { vendorSubscriptions } = await import("@shared/schema");
-      
       const [subscription] = await db.select()
         .from(vendorSubscriptions)
         .where(eq(vendorSubscriptions.vendorId, vendorId))
@@ -1253,8 +1369,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!vendorId) return;
 
     try {
-      const { vendorSubscriptions, subscriptionTiers } = await import("@shared/schema");
-      
       const [subscription] = await db.select({
         id: vendorSubscriptions.id,
         status: vendorSubscriptions.status,
@@ -2929,7 +3043,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin typing indicator for vendor-admin chat
-  app.post("/api/admin/vendor-admin-conversations/:id/typing", typingRateLimit, async (req: Request, res: Response) => {
+	  app.post("/api/admin/vendor-admin-conversations/:id/typing", typingRateLimit, async (req: Request, res: Response) => {
     if (!checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
@@ -2938,13 +3052,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ success: true, throttled: true });
       }
 
-      const typingAt = new Date().toISOString();
-      broadcastAdminConv(id, { type: "typing", payload: { sender: "admin", at: typingAt } });
-      res.json({ success: true, throttled: false });
-    } catch (error) {
-      res.status(500).json({ error: "Kunne ikke sende skrive-status" });
-    }
-  });
+	      const typingAt = new Date().toISOString();
+	      broadcastAdminConv(id, { type: "typing", payload: { sender: "admin", at: typingAt } });
+	      res.json({ success: true, throttled: false });
+	    } catch (error) {
+	      console.error("Error sending admin typing indicator:", error?.message || String(error));
+	      res.status(500).json({ error: "Kunne ikke sende skrive-status" });
+	    }
+	  });
 
   // Update conversation status (resolve/reopen)
   app.patch("/api/admin/vendor-admin-conversations/:id/status", async (req: Request, res: Response) => {
@@ -8822,8 +8937,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .returning();
       } else {
         // Create if doesn't exist
+        const createParsed = insertAppSettingSchema.parse({ key, value: parsed.value });
         [setting] = await db.insert(appSettings)
-          .values({ key, value: parsed.value })
+          .values(createParsed)
           .returning();
       }
 
@@ -9340,9 +9456,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     res.json({ ok: true, id: run.id });
 
-    // Spawn Playwright in the background
-    const { spawn } = require("child_process");
-    const args = ["playwright", "test", "--reporter=json"];
+	    // Spawn Playwright in the background
+	    const args = ["playwright", "test", "--reporter=json"];
     if (projectFilter) {
       args.push("--project", projectFilter);
     }
@@ -9595,10 +9710,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * POST /api/vendor/:vendorId/contact
    * Send contact request to a vendor
    */
-  app.post("/api/vendor/:vendorId/contact", async (req: Request, res: Response) => {
-    try {
-      const { vendorId } = req.params;
-      const { coupleId, message } = req.body;
+	  app.post("/api/vendor/:vendorId/contact", async (req: Request, res: Response) => {
+	    try {
+	      const { vendorId } = req.params;
+	      const { coupleId, message } = req.body;
 
       if (!coupleId || !message) {
         return res.status(400).json({
@@ -9614,23 +9729,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(vendors.id, vendorId))
         .limit(1);
 
-      if (vendorResult.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: "Vendor not found",
-        });
-      }
+	      if (vendorResult.length === 0) {
+	        return res.status(404).json({
+	          success: false,
+	          error: "Vendor not found",
+	        });
+	      }
 
-      // For now, just return success (in production, would create a message/contact record)
-      res.json({
-        success: true,
-        message: "Contact request sent to vendor",
-        vendorId,
-        coupleId,
-      });
-    } catch (error) {
-      console.error("Error sending contact request:", error);
-      res.status(500).json({
+	      const coupleResult = await db
+	        .select()
+	        .from(coupleProfiles)
+	        .where(eq(coupleProfiles.id, coupleId))
+	        .limit(1);
+
+	      if (coupleResult.length === 0) {
+	        return res.status(404).json({
+	          success: false,
+	          error: "Couple not found",
+	        });
+	      }
+
+	      let [conversation] = await db
+	        .select()
+	        .from(conversations)
+	        .where(and(eq(conversations.coupleId, coupleId), eq(conversations.vendorId, vendorId)))
+	        .limit(1);
+
+	      if (!conversation) {
+	        [conversation] = await db
+	          .insert(conversations)
+	          .values({
+	            coupleId,
+	            vendorId,
+	            status: "active",
+	            lastMessageAt: new Date(),
+	          })
+	          .returning();
+	      }
+
+	      const [createdMessage] = await db
+	        .insert(messages)
+	        .values({
+	          conversationId: conversation.id,
+	          senderType: "couple",
+	          senderId: coupleId,
+	          body: message,
+	        })
+	        .returning();
+
+	      await db
+	        .update(conversations)
+	        .set({
+	          lastMessageAt: createdMessage.createdAt || new Date(),
+	          vendorUnreadCount: (conversation.vendorUnreadCount || 0) + 1,
+	        })
+	        .where(eq(conversations.id, conversation.id));
+
+	      res.json({
+	        success: true,
+	        message: "Contact request sent to vendor",
+	        vendorId,
+	        coupleId,
+	        conversationId: conversation.id,
+	        messageId: createdMessage.id,
+	      });
+	    } catch (error) {
+	      console.error("Error sending contact request:", error);
+	      res.status(500).json({
         success: false,
         error:
           error instanceof Error
@@ -9644,14 +9809,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * POST /api/couple/:coupleId/favorites/add
    * Add vendor to couple's favorites
    */
-  app.post("/api/couple/:coupleId/favorites/add", async (req: Request, res: Response) => {
-    try {
-      const { coupleId } = req.params;
-      const { vendorId, notes } = req.body;
+	  app.post("/api/couple/:coupleId/favorites/add", async (req: Request, res: Response) => {
+	    try {
+	      const { coupleId } = req.params;
+	      const parsedPayload = insertCoupleVendorFavoriteSchema.safeParse({
+	        coupleId,
+	        vendorId: req.body?.vendorId,
+	        notes: req.body?.notes,
+	      });
 
-      if (!vendorId) {
-        return res.status(400).json({
-          success: false,
+	      if (!parsedPayload.success) {
+	        return res.status(400).json({
+	          success: false,
+	          error: "Ugyldig favorittdata",
+	          details: parsedPayload.error.flatten(),
+	        });
+	      }
+
+	      const { vendorId, notes } = parsedPayload.data;
+
+	      if (!vendorId) {
+	        return res.status(400).json({
+	          success: false,
           error: "vendorId is required",
         });
       }
@@ -9815,36 +9994,148 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * POST /api/vendor/:vendorId/review
    * Submit a review for a vendor
    */
-  app.post("/api/vendor/:vendorId/review", async (req: Request, res: Response) => {
-    try {
-      const { vendorId } = req.params;
-      const { coupleId, rating, title, description } = req.body;
+	  app.post("/api/vendor/:vendorId/review", async (req: Request, res: Response) => {
+	    try {
+	      const { vendorId } = req.params;
+	      const { coupleId, rating, title, description, isAnonymous } = req.body;
+	      const normalizedRating = Number(rating);
+	      const normalizedTitle = typeof title === "string" ? title.trim() : "";
+	      const normalizedBody = typeof description === "string" ? description.trim() : "";
 
-      if (!coupleId || !rating || !title || !description) {
-        return res.status(400).json({
-          success: false,
-          error: "coupleId, rating, title, and description are required",
-        });
-      }
+	      if (!coupleId || !normalizedRating || !normalizedTitle || !normalizedBody) {
+	        return res.status(400).json({
+	          success: false,
+	          error: "coupleId, rating, title, and description are required",
+	        });
+	      }
 
-      if (rating < 1 || rating > 5) {
-        return res.status(400).json({
-          success: false,
-          error: "Rating must be between 1 and 5",
-        });
-      }
+	      if (!Number.isFinite(normalizedRating) || normalizedRating < 1 || normalizedRating > 5) {
+	        return res.status(400).json({
+	          success: false,
+	          error: "Rating must be between 1 and 5",
+	        });
+	      }
 
-      // For now, just return success (in production, would save to reviews table)
-      res.json({
-        success: true,
-        message: "Review submitted successfully",
-        vendorId,
-        coupleId,
-        rating,
-      });
-    } catch (error) {
-      console.error("Error submitting review:", error);
-      res.status(500).json({
+	      const [vendor] = await db
+	        .select({ id: vendors.id })
+	        .from(vendors)
+	        .where(eq(vendors.id, vendorId))
+	        .limit(1);
+
+	      if (!vendor) {
+	        return res.status(404).json({
+	          success: false,
+	          error: "Vendor not found",
+	        });
+	      }
+
+	      const [couple] = await db
+	        .select({ id: coupleProfiles.id })
+	        .from(coupleProfiles)
+	        .where(eq(coupleProfiles.id, coupleId))
+	        .limit(1);
+
+	      if (!couple) {
+	        return res.status(404).json({
+	          success: false,
+	          error: "Couple not found",
+	        });
+	      }
+
+	      const [contract] = await db
+	        .select({
+	          id: coupleVendorContracts.id,
+	          status: coupleVendorContracts.status,
+	        })
+	        .from(coupleVendorContracts)
+	        .where(
+	          and(
+	            eq(coupleVendorContracts.coupleId, coupleId),
+	            eq(coupleVendorContracts.vendorId, vendorId),
+	            or(
+	              eq(coupleVendorContracts.status, "active"),
+	              eq(coupleVendorContracts.status, "completed"),
+	            ),
+	          ),
+	        )
+	        .orderBy(desc(coupleVendorContracts.updatedAt))
+	        .limit(1);
+
+	      if (!contract) {
+	        return res.status(403).json({
+	          success: false,
+	          error: "Review requires an active or completed contract",
+	        });
+	      }
+
+	      const [existingReview] = await db
+	        .select()
+	        .from(vendorReviews)
+	        .where(
+	          and(
+	            eq(vendorReviews.contractId, contract.id),
+	            eq(vendorReviews.coupleId, coupleId),
+	            eq(vendorReviews.vendorId, vendorId),
+	          ),
+	        )
+	        .limit(1);
+
+	      const editableUntil = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+	      const now = new Date();
+	      let savedReview;
+
+	      if (existingReview) {
+	        if (existingReview.editableUntil && existingReview.editableUntil < now) {
+	          return res.status(403).json({
+	            success: false,
+	            error: "Review can no longer be edited",
+	          });
+	        }
+
+	        [savedReview] = await db
+	          .update(vendorReviews)
+	          .set({
+	            rating: normalizedRating,
+	            title: normalizedTitle,
+	            body: normalizedBody,
+	            isAnonymous: Boolean(isAnonymous),
+	            isApproved: true,
+	            approvedAt: now,
+	            approvedBy: "system",
+	            updatedAt: now,
+	          })
+	          .where(eq(vendorReviews.id, existingReview.id))
+	          .returning();
+	      } else {
+	        [savedReview] = await db
+	          .insert(vendorReviews)
+	          .values({
+	            contractId: contract.id,
+	            coupleId,
+	            vendorId,
+	            rating: normalizedRating,
+	            title: normalizedTitle,
+	            body: normalizedBody,
+	            isAnonymous: Boolean(isAnonymous),
+	            isApproved: true,
+	            approvedAt: now,
+	            approvedBy: "system",
+	            editableUntil,
+	          })
+	          .returning();
+	      }
+
+	      res.status(existingReview ? 200 : 201).json({
+	        success: true,
+	        message: existingReview ? "Review updated successfully" : "Review submitted successfully",
+	        vendorId,
+	        coupleId,
+	        rating: normalizedRating,
+	        review: savedReview,
+	      });
+	    } catch (error) {
+	      console.error("Error submitting review:", error);
+	      res.status(500).json({
         success: false,
         error:
           error instanceof Error
@@ -9858,18 +10149,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * GET /api/vendor/:vendorId/reviews
    * Get all reviews for a vendor
    */
-  app.get("/api/vendor/:vendorId/reviews", async (req: Request, res: Response) => {
-    try {
-      const { vendorId } = req.params;
+	  app.get("/api/vendor/:vendorId/reviews", async (req: Request, res: Response) => {
+	    try {
+	      const { vendorId } = req.params;
+	      const includeUnapproved = req.query.includeUnapproved === "true";
+	      const reviewConditions = [eq(vendorReviews.vendorId, vendorId)];
+	      if (!includeUnapproved) {
+	        reviewConditions.push(eq(vendorReviews.isApproved, true));
+	      }
 
-      // For now, return empty list (in production, would fetch from reviews table)
-      res.json({
-        success: true,
-        data: [],
-        count: 0,
-      });
-    } catch (error) {
-      console.error("Error fetching reviews:", error);
+	      const rows = await db
+	        .select({
+	          review: vendorReviews,
+	          couple: {
+	            id: coupleProfiles.id,
+	            displayName: coupleProfiles.displayName,
+	          },
+	          response: {
+	            id: vendorReviewResponses.id,
+	            body: vendorReviewResponses.body,
+	            createdAt: vendorReviewResponses.createdAt,
+	            updatedAt: vendorReviewResponses.updatedAt,
+	          },
+	        })
+	        .from(vendorReviews)
+	        .leftJoin(coupleProfiles, eq(coupleProfiles.id, vendorReviews.coupleId))
+	        .leftJoin(vendorReviewResponses, eq(vendorReviewResponses.reviewId, vendorReviews.id))
+	        .where(and(...reviewConditions))
+	        .orderBy(desc(vendorReviews.createdAt), desc(vendorReviewResponses.createdAt));
+
+	      type ReviewRowPayload = {
+	        id: string;
+	        rating: number;
+	        title: string | null;
+	        body: string | null;
+	        isAnonymous: boolean;
+	        isApproved: boolean;
+	        approvedAt: Date | null;
+	        approvedBy: string | null;
+	        editableUntil: Date | null;
+	        contractId: string;
+	        coupleId: string;
+	        vendorId: string;
+	        createdAt: Date | null;
+	        updatedAt: Date | null;
+	        couple: { id: string | null; displayName: string } | null;
+	        response: {
+	          id: string;
+	          body: string;
+	          createdAt: Date | null;
+	          updatedAt: Date | null;
+	        } | null;
+	      };
+	      const reviewMap = new Map<string, ReviewRowPayload>();
+	      for (const row of rows) {
+	        const existing = reviewMap.get(row.review.id);
+	        const responsePayload = row.response?.id ? row.response : null;
+	        if (!existing) {
+	          reviewMap.set(row.review.id, {
+	            ...row.review,
+	            couple: row.review.isAnonymous
+	              ? null
+	              : {
+	                  id: row.couple?.id || null,
+	                  displayName: row.couple?.displayName || "Brudepar",
+	                },
+	            response: responsePayload,
+	          });
+	          continue;
+	        }
+	        if (responsePayload && !existing.response) {
+	          existing.response = responsePayload;
+	        }
+	      }
+
+	      const data = Array.from(reviewMap.values());
+	      res.json({
+	        success: true,
+	        data,
+	        count: data.length,
+	      });
+	    } catch (error) {
+	      console.error("Error fetching reviews:", error);
       res.status(500).json({
         success: false,
         error:
@@ -9884,24 +10245,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * GET /api/vendor/:vendorId/review-stats
    * Get rating statistics for a vendor
    */
-  app.get("/api/vendor/:vendorId/review-stats", async (req: Request, res: Response) => {
-    try {
-      const { vendorId } = req.params;
+	  app.get("/api/vendor/:vendorId/review-stats", async (req: Request, res: Response) => {
+	    try {
+	      const { vendorId } = req.params;
+	      const rows = await db
+	        .select({
+	          rating: vendorReviews.rating,
+	        })
+	        .from(vendorReviews)
+	        .where(
+	          and(
+	            eq(vendorReviews.vendorId, vendorId),
+	            eq(vendorReviews.isApproved, true),
+	          ),
+	        );
 
-      // For now, return default stats (in production, would calculate from reviews)
-      res.json({
-        average: 0,
-        total: 0,
-        distribution: {
-          5: 0,
-          4: 0,
-          3: 0,
-          2: 0,
-          1: 0,
-        },
-      });
-    } catch (error) {
-      console.error("Error fetching review stats:", error);
+	      const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 } as Record<1 | 2 | 3 | 4 | 5, number>;
+	      let totalScore = 0;
+	      for (const row of rows) {
+	        const ratingValue = row.rating as 1 | 2 | 3 | 4 | 5;
+	        if (distribution[ratingValue] !== undefined) {
+	          distribution[ratingValue] += 1;
+	          totalScore += ratingValue;
+	        }
+	      }
+
+	      const total = rows.length;
+	      const average = total > 0 ? Math.round((totalScore / total) * 10) / 10 : 0;
+	      res.json({
+	        vendorId,
+	        total,
+	        average,
+	        distribution,
+	      });
+	    } catch (error) {
+	      console.error("Error fetching review stats:", error);
       res.status(500).json({
         success: false,
         error:
@@ -9981,22 +10359,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * POST /api/conversation/:conversationId/message
    * Send a message in a conversation
    */
-  app.post(
-    "/api/conversation/:conversationId/message",
-    async (req: Request, res: Response) => {
-      try {
-        const { conversationId } = req.params;
-        const { body, senderType } = req.body;
+	  app.post(
+	    "/api/conversation/:conversationId/message",
+	    async (req: Request, res: Response) => {
+	      try {
+	        const { conversationId } = req.params;
+	        const { body, senderType } = req.body;
+	        const normalizedBody = typeof body === "string" ? body.trim() : "";
 
-        if (!body || !senderType) {
-          return res.status(400).json({
-            success: false,
-            error: "body and senderType are required",
-          });
-        }
+	        if (!normalizedBody || !senderType) {
+	          return res.status(400).json({
+	            success: false,
+	            error: "body and senderType are required",
+	          });
+	        }
+	        if (!["couple", "vendor"].includes(senderType)) {
+	          return res.status(400).json({
+	            success: false,
+	            error: "senderType must be 'couple' or 'vendor'",
+	          });
+	        }
 
-        // Get conversation to verify it exists
-        const convResult = await db
+	        // Get conversation to verify it exists
+	        const convResult = await db
           .select()
           .from(conversations)
           .where(eq(conversations.id, conversationId))
@@ -10005,20 +10390,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (convResult.length === 0) {
           return res.status(404).json({
             success: false,
-            error: "Conversation not found",
-          });
-        }
+	            error: "Conversation not found",
+	          });
+	        }
 
-        // For now, just return success (in production, would save message)
-        res.json({
-          success: true,
-          message: "Message sent successfully",
-          conversationId,
-          body,
-          senderType,
-        });
-      } catch (error) {
-        console.error("Error sending message:", error);
+	        const conversation = convResult[0];
+	        const senderId = senderType === "couple" ? conversation.coupleId : conversation.vendorId;
+	        const [createdMessage] = await db
+	          .insert(messages)
+	          .values({
+	            conversationId,
+	            senderType,
+	            senderId,
+	            body: normalizedBody,
+	          })
+	          .returning();
+
+	        if (senderType === "couple") {
+	          await db
+	            .update(conversations)
+	            .set({
+	              lastMessageAt: createdMessage.createdAt || new Date(),
+	              vendorUnreadCount: (conversation.vendorUnreadCount || 0) + 1,
+	            })
+	            .where(eq(conversations.id, conversationId));
+	        } else {
+	          await db
+	            .update(conversations)
+	            .set({
+	              lastMessageAt: createdMessage.createdAt || new Date(),
+	              coupleUnreadCount: (conversation.coupleUnreadCount || 0) + 1,
+	            })
+	            .where(eq(conversations.id, conversationId));
+	        }
+
+	        broadcastConversation(conversationId, { type: "message", payload: createdMessage });
+
+	        res.json({
+	          success: true,
+	          message: "Message sent successfully",
+	          data: createdMessage,
+	        });
+	      } catch (error) {
+	        console.error("Error sending message:", error);
         res.status(500).json({
           success: false,
           error:

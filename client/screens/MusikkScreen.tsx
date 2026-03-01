@@ -47,7 +47,7 @@ import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
 import { getSpeeches } from '@/lib/storage';
 import { Speech } from '@/lib/types';
 import { showToast } from '@/lib/toast';
-import PersistentTextInput from '@/components/PersistentTextInput';
+import { PersistentTextInput } from '@/components/PersistentTextInput';
 import { MusicRecommendationCard } from '@/components/music/MusicRecommendationCard';
 import { MusicYouTubePreviewModal } from '@/components/music/MusicYouTubePreviewModal';
 
@@ -159,7 +159,7 @@ export function MusikkScreen() {
     setId: string;
     setTitle: string;
     totalLinks: number;
-    links: Array<{
+    links: {
       itemId: string;
       title: string;
       artist?: string | null;
@@ -167,7 +167,7 @@ export function MusikkScreen() {
       url: string;
       momentKey?: string | null;
       dropMarkerSeconds?: number | null;
-    }>;
+    }[];
   }>(null);
   const [latestExportJob, setLatestExportJob] = useState<null | {
     youtubePlaylistUrl?: string | null;
@@ -242,7 +242,7 @@ export function MusikkScreen() {
     budget: 0,
   };
 
-  const musicSets = setsQuery.data ?? [];
+  const musicSets = useMemo<MusicSet[]>(() => setsQuery.data ?? [], [setsQuery.data]);
   const selectedSet = useMemo(
     () => musicSets.find((set) => set.id === selectedSetId) || null,
     [musicSets, selectedSetId]
@@ -1270,6 +1270,14 @@ export function MusikkScreen() {
               <View style={[styles.permissionCard, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}> 
                 <ThemedText style={[styles.exportResultTitle, { color: theme.text }]}>Samtykke for vendor-eksport</ThemedText>
                 <ThemedText style={[styles.helperText, { color: theme.textMuted }]}>Aktiver per akseptert tilbud.</ThemedText>
+                {acceptedOffers.length > 0 ? (
+                  <Button
+                    onPress={() => navigation.navigate('CoupleOffers')}
+                    style={styles.inlineButton}
+                  >
+                    Åpne tilbud
+                  </Button>
+                ) : null}
 
                 {acceptedOffers.length === 0 ? (
                   <ThemedText style={[styles.helperText, { color: theme.textMuted }]}>Ingen aksepterte tilbud funnet.</ThemedText>

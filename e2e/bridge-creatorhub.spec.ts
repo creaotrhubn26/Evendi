@@ -24,7 +24,7 @@ function bridgeApiHeaders() {
 test.describe('CreatorHub Bridge — Projects', () => {
   test('GET /api/creatorhub/projects returns array', async ({ request }) => {
     const res = await request.get(`${BASE}/api/creatorhub/projects`, {
-      headers: { 'x-admin-secret': ADMIN_SECRET },
+      headers: { ...adminHeaders(), 'x-admin-secret': ADMIN_SECRET },
     });
     expect(res.status()).toBe(200);
     const body = await res.json();

@@ -67,6 +67,43 @@ function generateInviteToken(): string {
   return crypto.randomBytes(24).toString("base64url");
 }
 
+function creatorhubInternalError(res: Response, message: string, error: unknown) {
+  console.error(`[CreatorHub] ${message}:`, error);
+  return res.status(500).json({ error: message });
+}
+
+async function findPendingInvitationByToken(token: string) {
+  // Backward-compatible lookup:
+  // 1) direct token match for legacy/plain tokens
+  // 2) bcrypt compare for hashed tokens
+  const [directMatch] = await db
+    .select()
+    .from(creatorhubInvitations)
+    .where(and(eq(creatorhubInvitations.token, token), eq(creatorhubInvitations.status, "pending")))
+    .limit(1);
+
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const pendingInvitations = await db
+    .select()
+    .from(creatorhubInvitations)
+    .where(eq(creatorhubInvitations.status, "pending"))
+    .orderBy(desc(creatorhubInvitations.createdAt))
+    .limit(200);
+
+  for (const invitation of pendingInvitations) {
+    if (!invitation.token.startsWith("$2")) continue;
+    const isMatch = await bcrypt.compare(token, invitation.token);
+    if (isMatch) {
+      return invitation;
+    }
+  }
+
+  return null;
+}
+
 // ========== Middleware ==========
 
 /**
@@ -92,8 +129,8 @@ async function authenticateApiKey(req: CreatorhubRequest, res: Response, next: N
 
     req.project = project;
     next();
-  } catch (err) {
-    console.error("[CreatorHub] Auth error:", err);
+  } catch (error) {
+    console.error("[CreatorHub] Auth error:", error);
     return res.status(500).json({ error: "Authentication error" });
   }
 }
@@ -131,7 +168,7 @@ async function auditLog(req: CreatorhubRequest, res: Response, next: NextFunctio
           ipAddress: req.ip || req.socket.remoteAddress || null,
           userAgent: req.header("User-Agent") || null,
         })
-        .catch((err) => console.error("[CreatorHub] Audit log error:", err));
+        .catch((error) => console.error("[CreatorHub] Audit log error:", error));
     }
 
     return originalEnd(...args);
@@ -212,8 +249,8 @@ export function registerCreatorhubRoutes(app: Express) {
         apiKey, // Show ONCE - store this!
         webhookSecret, // Show ONCE - store this!
       });
-    } catch (err: any) {
-      console.error("[CreatorHub] Create project error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] Create project error:", error);
       return res.status(500).json({ error: "Failed to create project" });
     }
   });
@@ -239,8 +276,8 @@ export function registerCreatorhubRoutes(app: Express) {
       }).from(creatorhubProjects).orderBy(desc(creatorhubProjects.createdAt));
 
       return res.json(projects);
-    } catch (err: any) {
-      console.error("[CreatorHub] List projects error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] List projects error:", error);
       return res.status(500).json({ error: "Failed to list projects" });
     }
   });
@@ -272,8 +309,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .where(eq(creatorhubUsers.projectId, req.project!.id))
         .orderBy(desc(creatorhubUsers.createdAt));
       return res.json(users);
-    } catch (err: any) {
-      console.error("[CreatorHub] List users error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] List users error:", error);
       return res.status(500).json({ error: "Failed to list users" });
     }
   });
@@ -291,8 +328,8 @@ export function registerCreatorhubRoutes(app: Express) {
         ));
       if (!user) return res.status(404).json({ error: "User not found" });
       return res.json(user);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to get user" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to get user", error);
     }
   });
 
@@ -320,8 +357,8 @@ export function registerCreatorhubRoutes(app: Express) {
 
       if (!updated) return res.status(404).json({ error: "User not found" });
       return res.json(updated);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to update user" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to update user", error);
     }
   });
 
@@ -366,6 +403,7 @@ export function registerCreatorhubRoutes(app: Express) {
       }
 
       const token = generateInviteToken();
+      const hashedToken = await bcrypt.hash(token, 10);
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
       const [invitation] = await db.insert(creatorhubInvitations).values({
@@ -373,7 +411,7 @@ export function registerCreatorhubRoutes(app: Express) {
         invitedBy,
         email: parsed.data.email,
         role: parsed.data.role,
-        token,
+        token: hashedToken,
         message: parsed.data.message,
         expiresAt,
       }).returning();
@@ -387,12 +425,13 @@ export function registerCreatorhubRoutes(app: Express) {
         source: "api",
       });
 
+      const { token: _, ...invitationWithoutToken } = invitation;
       return res.status(201).json({
-        ...invitation,
+        ...invitationWithoutToken,
         inviteUrl: `${process.env.APP_URL || "https://evendi.no"}/creatorhub/invite/${token}`,
       });
-    } catch (err: any) {
-      console.error("[CreatorHub] Create invitation error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] Create invitation error:", error);
       return res.status(500).json({ error: "Failed to create invitation" });
     }
   });
@@ -411,9 +450,11 @@ export function registerCreatorhubRoutes(app: Express) {
         .where(and(...conditions))
         .orderBy(desc(creatorhubInvitations.createdAt));
 
-      return res.json(invitations);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to list invitations" });
+      return res.json(
+        invitations.map(({ token: _, ...invitation }) => invitation),
+      );
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to list invitations", error);
     }
   });
 
@@ -426,8 +467,7 @@ export function registerCreatorhubRoutes(app: Express) {
       const { token } = req.params;
       const { displayName, vendorId } = req.body;
 
-      const [invitation] = await db.select().from(creatorhubInvitations)
-        .where(eq(creatorhubInvitations.token, token));
+      const invitation = await findPendingInvitationByToken(token);
 
       if (!invitation) {
         return res.status(404).json({ error: "Invitation not found" });
@@ -466,8 +506,8 @@ export function registerCreatorhubRoutes(app: Express) {
       });
 
       return res.json({ user, projectId: invitation.projectId });
-    } catch (err: any) {
-      console.error("[CreatorHub] Accept invitation error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] Accept invitation error:", error);
       return res.status(500).json({ error: "Failed to accept invitation" });
     }
   });
@@ -489,8 +529,8 @@ export function registerCreatorhubRoutes(app: Express) {
 
       if (!updated) return res.status(404).json({ error: "Pending invitation not found" });
       return res.json({ success: true });
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to revoke invitation" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to revoke invitation", error);
     }
   });
 
@@ -515,8 +555,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .orderBy(desc(creatorhubBookings.eventDate));
 
       return res.json(bookings);
-    } catch (err: any) {
-      console.error("[CreatorHub] List bookings error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] List bookings error:", error);
       return res.status(500).json({ error: "Failed to list bookings" });
     }
   });
@@ -555,8 +595,8 @@ export function registerCreatorhubRoutes(app: Express) {
       }
 
       return res.json({ ...booking, evendi: evendiData });
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to get booking" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to get booking", error);
     }
   });
 
@@ -602,8 +642,8 @@ export function registerCreatorhubRoutes(app: Express) {
       });
 
       return res.status(201).json(booking);
-    } catch (err: any) {
-      console.error("[CreatorHub] Create booking error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] Create booking error:", error);
       return res.status(500).json({ error: "Failed to create booking" });
     }
   });
@@ -652,8 +692,8 @@ export function registerCreatorhubRoutes(app: Express) {
       }
 
       return res.json(updated);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to update booking" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to update booking", error);
     }
   });
 
@@ -672,8 +712,8 @@ export function registerCreatorhubRoutes(app: Express) {
 
       if (!deleted) return res.status(404).json({ error: "Booking not found" });
       return res.json({ success: true });
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to delete booking" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to delete booking", error);
     }
   });
 
@@ -697,8 +737,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .orderBy(desc(creatorhubCrmNotes.createdAt));
 
       return res.json(notes);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to list CRM notes" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to list CRM notes", error);
     }
   });
 
@@ -725,8 +765,8 @@ export function registerCreatorhubRoutes(app: Express) {
       }).returning();
 
       return res.status(201).json(note);
-    } catch (err: any) {
-      console.error("[CreatorHub] Create CRM note error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] Create CRM note error:", error);
       return res.status(500).json({ error: "Failed to create CRM note" });
     }
   });
@@ -756,8 +796,8 @@ export function registerCreatorhubRoutes(app: Express) {
 
       if (!updated) return res.status(404).json({ error: "CRM note not found" });
       return res.json(updated);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to update CRM note" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to update CRM note", error);
     }
   });
 
@@ -775,8 +815,8 @@ export function registerCreatorhubRoutes(app: Express) {
 
       if (!deleted) return res.status(404).json({ error: "CRM note not found" });
       return res.json({ success: true });
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to delete CRM note" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to delete CRM note", error);
     }
   });
 
@@ -808,8 +848,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .orderBy(desc(conversations.lastMessageAt));
 
       return res.json(convos);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to list conversations" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to list conversations", error);
     }
   });
 
@@ -837,8 +877,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .orderBy(desc(messages.createdAt));
 
       return res.json(msgs);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to get messages" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to get messages", error);
     }
   });
 
@@ -868,8 +908,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .orderBy(desc(vendorOffers.createdAt));
 
       return res.json(offers);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to list offers" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to list offers", error);
     }
   });
 
@@ -879,20 +919,27 @@ export function registerCreatorhubRoutes(app: Express) {
    * GET /api/creatorhub/analytics/summary
    * Get analytics summary for the project
    */
-  app.get("/api/creatorhub/analytics/summary", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
-    try {
-      const { from, to } = req.query;
+	  app.get("/api/creatorhub/analytics/summary", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
+	    try {
+	      const { from, to } = req.query;
+	      const fromDate = typeof from === "string" ? from : null;
+	      const toDate = typeof to === "string" ? to : null;
+	      const fromDateTime = fromDate && !Number.isNaN(Date.parse(fromDate)) ? new Date(fromDate) : null;
+	      const toDateTime = toDate && !Number.isNaN(Date.parse(toDate)) ? new Date(toDate) : null;
+	      const bookingConditions = [eq(creatorhubBookings.projectId, req.project!.id)];
+	      if (fromDate) bookingConditions.push(gte(creatorhubBookings.eventDate, fromDate));
+	      if (toDate) bookingConditions.push(lte(creatorhubBookings.eventDate, toDate));
 
-      // Booking stats
-      const bookingStats = await db.select({
-        total: sql<number>`count(*)::int`,
+	      // Booking stats
+	      const bookingStats = await db.select({
+	        total: sql<number>`count(*)::int`,
         confirmed: sql<number>`count(*) filter (where status = 'confirmed')::int`,
         completed: sql<number>`count(*) filter (where status = 'completed')::int`,
         cancelled: sql<number>`count(*) filter (where status = 'cancelled')::int`,
         totalRevenue: sql<number>`coalesce(sum(total_amount) filter (where status in ('confirmed', 'completed')), 0)::int`,
         avgBookingValue: sql<number>`coalesce(avg(total_amount) filter (where total_amount > 0), 0)::int`,
-      }).from(creatorhubBookings)
-        .where(eq(creatorhubBookings.projectId, req.project!.id));
+	      }).from(creatorhubBookings)
+	        .where(and(...bookingConditions));
 
       // User stats
       const userStats = await db.select({
@@ -909,23 +956,61 @@ export function registerCreatorhubRoutes(app: Express) {
       }).from(creatorhubInvitations)
         .where(eq(creatorhubInvitations.projectId, req.project!.id));
 
-      // Recent events count
-      const recentEventCount = await db.select({
-        count: sql<number>`count(*)::int`,
-      }).from(creatorhubAnalyticsEvents)
-        .where(and(
-          eq(creatorhubAnalyticsEvents.projectId, req.project!.id),
-          gte(creatorhubAnalyticsEvents.createdAt, sql`now() - interval '30 days'`)
-        ));
+	      // Recent events count
+	      const recentEventConditions = [eq(creatorhubAnalyticsEvents.projectId, req.project!.id)];
+	      if (fromDateTime) recentEventConditions.push(gte(creatorhubAnalyticsEvents.createdAt, fromDateTime));
+	      if (toDateTime) recentEventConditions.push(lte(creatorhubAnalyticsEvents.createdAt, toDateTime));
+	      if (!fromDateTime && !toDateTime) {
+	        recentEventConditions.push(gte(creatorhubAnalyticsEvents.createdAt, sql`now() - interval '30 days'`));
+	      }
 
-      return res.json({
-        bookings: bookingStats[0] || {},
-        users: userStats[0] || {},
-        invitations: inviteStats[0] || {},
-        recentEventsLast30Days: recentEventCount[0]?.count || 0,
-      });
-    } catch (err: any) {
-      console.error("[CreatorHub] Analytics summary error:", err);
+	      const recentEventCount = await db.select({
+	        count: sql<number>`count(*)::int`,
+	      }).from(creatorhubAnalyticsEvents)
+	        .where(and(...recentEventConditions));
+
+	      // Contract stats for vendors linked to this project
+	      const projectVendors = await db
+	        .select({ vendorId: creatorhubUsers.vendorId })
+	        .from(creatorhubUsers)
+	        .where(and(
+	          eq(creatorhubUsers.projectId, req.project!.id),
+	          sql`${creatorhubUsers.vendorId} is not null`,
+	        ));
+	      const projectVendorIds = projectVendors
+	        .map((row) => row.vendorId)
+	        .filter((id): id is string => Boolean(id));
+
+	      let contractStats = { total: 0, active: 0, completed: 0, cancelled: 0 };
+	      if (projectVendorIds.length > 0) {
+	        const [contractRow] = await db
+	          .select({
+	            total: sql<number>`count(*)::int`,
+	            active: sql<number>`count(*) filter (where ${coupleVendorContracts.status} = 'active')::int`,
+	            completed: sql<number>`count(*) filter (where ${coupleVendorContracts.status} = 'completed')::int`,
+	            cancelled: sql<number>`count(*) filter (where ${coupleVendorContracts.status} = 'cancelled')::int`,
+	          })
+	          .from(coupleVendorContracts)
+	          .where(and(
+	            inArray(coupleVendorContracts.vendorId, projectVendorIds),
+	            or(
+	              eq(coupleVendorContracts.status, "active"),
+	              eq(coupleVendorContracts.status, "completed"),
+	              eq(coupleVendorContracts.status, "cancelled"),
+	            ),
+	          ));
+	        contractStats = contractRow || contractStats;
+	      }
+
+	      return res.json({
+	        bookings: bookingStats[0] || {},
+	        users: userStats[0] || {},
+	        invitations: inviteStats[0] || {},
+	        contracts: contractStats,
+	        recentEventsLast30Days: recentEventCount[0]?.count || 0,
+	      });
+    } catch (error) {
+      console.error("[CreatorHub] Analytics summary error:", error);
       return res.status(500).json({ error: "Failed to get analytics summary" });
     }
   });
@@ -949,8 +1034,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .limit(Math.min(parseInt(limit as string) || 100, 500));
 
       return res.json(events);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to list analytics events" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to list analytics events", error);
     }
   });
 
@@ -975,8 +1060,8 @@ export function registerCreatorhubRoutes(app: Express) {
       }).returning();
 
       return res.status(201).json(event);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to track event" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to track event", error);
     }
   });
 
@@ -1000,8 +1085,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .limit(Math.min(parseInt(limit as string) || 50, 200));
 
       return res.json(logs);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to get audit log" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to get audit log", error);
     }
   });
 
@@ -1055,8 +1140,8 @@ export function registerCreatorhubRoutes(app: Express) {
         },
         usage: 'Use as "Authorization: Bearer <sessionToken>" on /api/couples/* endpoints',
       });
-    } catch (err: any) {
-      console.error("[CreatorHub] Impersonate couple error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] Impersonate couple error:", error);
       return res.status(500).json({ error: "Failed to impersonate couple" });
     }
   });
@@ -1104,8 +1189,8 @@ export function registerCreatorhubRoutes(app: Express) {
         },
         usage: 'Use as "Authorization: Bearer <sessionToken>" on /api/vendors/* endpoints',
       });
-    } catch (err: any) {
-      console.error("[CreatorHub] Impersonate vendor error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] Impersonate vendor error:", error);
       return res.status(500).json({ error: "Failed to impersonate vendor" });
     }
   });
@@ -1128,8 +1213,8 @@ export function registerCreatorhubRoutes(app: Express) {
         createdAt: coupleProfiles.createdAt,
       }).from(coupleProfiles).orderBy(desc(coupleProfiles.createdAt));
       return res.json(allCouples);
-    } catch (err: any) {
-      console.error("[CreatorHub] List couples error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] List couples error:", error);
       return res.status(500).json({ error: "Failed to list couples" });
     }
   });
@@ -1150,8 +1235,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .orderBy(desc(conversations.lastMessageAt));
 
       return res.json({ ...couple, password: undefined, conversations: coupleConversations });
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to get couple" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to get couple", error);
     }
   });
 
@@ -1174,8 +1259,8 @@ export function registerCreatorhubRoutes(app: Express) {
 
       if (!updated) return res.status(404).json({ error: "Couple not found" });
       return res.json({ ...updated, password: undefined });
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to update couple" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to update couple", error);
     }
   });
 
@@ -1205,8 +1290,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .orderBy(desc(vendors.createdAt));
 
       return res.json(allVendors);
-    } catch (err: any) {
-      console.error("[CreatorHub] List vendors error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] List vendors error:", error);
       return res.status(500).json({ error: "Failed to list vendors" });
     }
   });
@@ -1238,8 +1323,8 @@ export function registerCreatorhubRoutes(app: Express) {
         offers,
         conversations: vendorConversations,
       });
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to get vendor" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to get vendor", error);
     }
   });
 
@@ -1265,8 +1350,8 @@ export function registerCreatorhubRoutes(app: Express) {
 
       if (!updated) return res.status(404).json({ error: "Vendor not found" });
       return res.json({ ...updated, password: undefined });
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to update vendor" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to update vendor", error);
     }
   });
 
@@ -1282,8 +1367,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .returning();
       if (!updated) return res.status(404).json({ error: "Vendor not found" });
       return res.json({ ...updated, password: undefined });
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to approve vendor" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to approve vendor", error);
     }
   });
 
@@ -1299,8 +1384,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .returning();
       if (!updated) return res.status(404).json({ error: "Vendor not found" });
       return res.json({ ...updated, password: undefined });
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to reject vendor" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to reject vendor", error);
     }
   });
 
@@ -1314,8 +1399,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .orderBy(desc(conversations.lastMessageAt))
         .limit(parseInt(req.query.limit as string) || 50);
       return res.json(allConvos);
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to list conversations" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to list conversations", error);
     }
   });
 
@@ -1353,8 +1438,8 @@ export function registerCreatorhubRoutes(app: Express) {
         .where(eq(conversations.id, conversationId));
 
       return res.status(201).json(message);
-    } catch (err: any) {
-      console.error("[CreatorHub] Send message error:", err);
+    } catch (error) {
+      console.error("[CreatorHub] Send message error:", error);
       return res.status(500).json({ error: "Failed to send message" });
     }
   });
@@ -1382,8 +1467,8 @@ export function registerCreatorhubRoutes(app: Express) {
         conversations: Number(convoCount.count),
         messages: Number(msgCount.count),
       });
-    } catch (err: any) {
-      return res.status(500).json({ error: "Failed to get statistics" });
+    } catch (error) {
+      return creatorhubInternalError(res, "Failed to get statistics", error);
     }
   });
 
@@ -1426,8 +1511,8 @@ export function registerCreatorhubRoutes(app: Express) {
         eventType: organizer.eventType || "wedding",
         organizerName: organizer.displayName,
       });
-    } catch (err: any) {
-      console.error("CreatorHub speeches bridge error:", err);
+    } catch (error) {
+      console.error("CreatorHub speeches bridge error:", error);
       return res.status(500).json({ error: "Failed to fetch speeches" });
     }
   });
@@ -1515,8 +1600,8 @@ export function registerCreatorhubRoutes(app: Express) {
         totalSeats: tables.reduce((sum, t) => sum + t.seats, 0),
         assignedGuests: assignments.length,
       });
-    } catch (err: any) {
-      console.error("CreatorHub tables bridge error:", err);
+    } catch (error) {
+      console.error("CreatorHub tables bridge error:", error);
       return res.status(500).json({ error: "Failed to fetch tables" });
     }
   });
@@ -1605,8 +1690,8 @@ export function registerCreatorhubRoutes(app: Express) {
         totalPerformances: performances.length,
         totalSetlists: setlists.length,
       });
-    } catch (err: any) {
-      console.error("CreatorHub music bridge error:", err);
+    } catch (error) {
+      console.error("CreatorHub music bridge error:", error);
       return res.status(500).json({ error: "Failed to fetch music data" });
     }
   });
@@ -1661,8 +1746,8 @@ export function registerCreatorhubRoutes(app: Express) {
         organizerName: organizer.displayName,
         totalCoordinators: invitations.length,
       });
-    } catch (err: any) {
-      console.error("CreatorHub coordinators bridge error:", err);
+    } catch (error) {
+      console.error("CreatorHub coordinators bridge error:", error);
       return res.status(500).json({ error: "Failed to fetch coordinators" });
     }
   });
@@ -1728,8 +1813,8 @@ export function registerCreatorhubRoutes(app: Express) {
         totalReviews: reviews.length,
         averageRating: Math.round(avgRating * 10) / 10,
       });
-    } catch (err: any) {
-      console.error("CreatorHub reviews bridge error:", err);
+    } catch (error) {
+      console.error("CreatorHub reviews bridge error:", error);
       return res.status(500).json({ error: "Failed to fetch reviews" });
     }
   });
