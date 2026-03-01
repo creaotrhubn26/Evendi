@@ -33,7 +33,10 @@ function adjustHexColor(hex: string, amount: number): string {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
 
-function getGradientStops(background: string, isDark: boolean): [string, string, string] {
+function getGradientStops(
+  background: string,
+  isDark: boolean,
+): [string, string, string] {
   const base = background || (isDark ? "#0f1624" : "#f8f9fc");
   if (!/^#[0-9a-fA-F]{6}$/.test(base)) {
     return isDark
@@ -50,27 +53,45 @@ export default function SplashScreen() {
   const systemColorScheme = useColorScheme();
   const { settings } = useDesignSettings();
   const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
-  
+
   // Use design settings darkMode if available, otherwise fall back to system
-  const isDark = settings?.darkMode ?? (systemColorScheme === "dark");
+  const isDark = settings?.darkMode ?? systemColorScheme === "dark";
   const colorScheme = isDark ? "dark" : "light";
   const colors = Colors[colorScheme];
   const primaryColor = settings?.primaryColor ?? colors.accent;
   const backgroundColor = settings?.backgroundColor ?? colors.backgroundRoot;
   const appName = settings?.appName ?? "Evendi";
-  const tagline = appLanguage === "en"
-    ? settings?.appTaglineEn ?? "Your Event. Perfectly Matched."
-    : settings?.appTagline ?? "Ditt arrangement. Perfekt Match.";
+  const tagline =
+    appLanguage === "en"
+      ? (settings?.appTaglineEn ?? "Your Event. Perfectly Matched.")
+      : (settings?.appTagline ?? "Ditt arrangement. Perfekt Match.");
   const logoSource = settings?.logoUrl
     ? { uri: settings.logoUrl }
     : FALLBACK_LOGO;
   const isRemoteLogo = !!settings?.logoUrl;
   const showLogo = settings?.logoUseSplash ?? true;
   const gradientStops = getGradientStops(backgroundColor, isDark);
-  
+  const animationDelays = useMemo(
+    () => ({
+      line: 1200,
+      subtitle: isRemoteLogo ? 1800 : 2000,
+      dolly: 3000,
+      fade: 5500,
+    }),
+    [isRemoteLogo],
+  );
+  const mountedRef = useRef(true);
+
   // Debug: log the color scheme
-  console.log("SplashScreen - isDark:", isDark, "darkMode setting:", settings?.darkMode, "system:", systemColorScheme);
-  
+  console.log(
+    "SplashScreen - isDark:",
+    isDark,
+    "darkMode setting:",
+    settings?.darkMode,
+    "system:",
+    systemColorScheme,
+  );
+
   // Logo fade and scale animations
   const logoOpacity = useSharedValue(0);
   const logoScale = useSharedValue(0.8);
@@ -89,8 +110,9 @@ export default function SplashScreen() {
   const fadeOutOpacity = useSharedValue(1);
 
   useEffect(() => {
+    mountedRef.current = true;
     getAppLanguage().then((lang) => {
-      if (lang) setAppLanguage(lang);
+      if (lang && mountedRef.current) setAppLanguage(lang);
     });
 
     // Logo animation: fade in and scale (0-1200ms)
@@ -106,51 +128,88 @@ export default function SplashScreen() {
 
     // Accent line animation (1200-2000ms)
     lineScale.value = withDelay(
-      1200,
-      withTiming(1, {
-        duration: 1200,
-        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-      })
+      animationDelays.line,
+      withSequence(
+        withTiming(1, {
+          duration: 1200,
+          easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+        }),
+        withRepeat(
+          withSequence(
+            withTiming(1.06, {
+              duration: 500,
+              easing: Easing.bezier(0.22, 1, 0.36, 1),
+            }),
+            withTiming(0.98, {
+              duration: 500,
+              easing: Easing.bezier(0.22, 1, 0.36, 1),
+            }),
+          ),
+          2,
+          true,
+        ),
+        withTiming(1, { duration: 300 }),
+      ),
     );
 
     // Subtitle animation (2000-2800ms)
     subtitleOpacity.value = withDelay(
-      2000,
+      animationDelays.subtitle,
       withTiming(1, {
         duration: 1200,
         easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-      })
+      }),
     );
 
     subtitleTranslateY.value = withDelay(
-      2000,
+      animationDelays.subtitle,
       withTiming(0, {
         duration: 1200,
         easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-      })
+      }),
     );
 
     // Dolly zoom starting at 3000ms (cinematic push-in, scale only for React Native)
     contentScale.value = withDelay(
-      3000,
+      animationDelays.dolly,
       withTiming(1.08, {
         duration: 4500,
         easing: Easing.bezier(0.22, 1, 0.36, 1),
-      })
+      }),
     );
 
     // Cinematic fade out (5500-6800ms)
     fadeOutOpacity.value = withDelay(
-      5500,
+      animationDelays.fade,
       withTiming(0, {
         duration: 1300,
         easing: Easing.bezier(0.33, 0, 0.67, 1),
-      })
+      }),
     );
 
     return () => {
+      mountedRef.current = false;
+      const resetAnimationValue = (value: SharedValue<number>, target = 0) => {
+        value.value = target;
+      };
+      resetAnimationValue(logoOpacity);
+      resetAnimationValue(logoScale, 0.8);
+      resetAnimationValue(contentScale, 1);
+      resetAnimationValue(subtitleOpacity);
+      resetAnimationValue(subtitleTranslateY, 20);
+      resetAnimationValue(lineScale);
+      resetAnimationValue(fadeOutOpacity, 1);
     };
-  }, [contentScale, fadeOutOpacity, lineScale, logoOpacity, logoScale, subtitleOpacity, subtitleTranslateY]);
+  }, [
+    animationDelays,
+    contentScale,
+    fadeOutOpacity,
+    lineScale,
+    logoOpacity,
+    logoScale,
+    subtitleOpacity,
+    subtitleTranslateY,
+  ]);
 
   const logoAnimatedStyle = useAnimatedStyle(() => ({
     opacity: logoOpacity.value,
@@ -171,9 +230,7 @@ export default function SplashScreen() {
   }));
 
   const dollyZoomStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: contentScale.value },
-    ],
+    transform: [{ scale: contentScale.value }],
   }));
 
   return (
@@ -201,10 +258,17 @@ export default function SplashScreen() {
           {showLogo ? (
             <View>
               {isDark && <View style={styles.logoGlow} />}
-              <Image 
-                source={logoSource} 
-                style={[styles.logo, isDark && styles.logoDark]} 
-                resizeMode="contain" 
+              {isRemoteLogo && (
+                <View style={styles.remoteBadge}>
+                  <ThemedText style={styles.remoteBadgeText}>
+                    Custom logo
+                  </ThemedText>
+                </View>
+              )}
+              <Image
+                source={logoSource}
+                style={[styles.logo, isDark && styles.logoDark]}
+                resizeMode="contain"
               />
             </View>
           ) : (
@@ -229,11 +293,12 @@ export default function SplashScreen() {
             {tagline}
           </ThemedText>
         </Animated.View>
-
       </Animated.View>
 
       {/* Subtle bottom accent */}
-      <View style={[styles.bottomAccent, { backgroundColor: `${primaryColor}20` }]} />
+      <View
+        style={[styles.bottomAccent, { backgroundColor: `${primaryColor}20` }]}
+      />
     </Animated.View>
   );
 }
@@ -264,6 +329,22 @@ const styles = StyleSheet.create({
     top: -20,
     left: -20,
     zIndex: -1,
+  },
+  remoteBadge: {
+    position: "absolute",
+    top: 14,
+    right: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: "rgba(30,107,255,0.16)",
+    borderRadius: 999,
+    zIndex: 2,
+  },
+  remoteBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#1E6BFF",
+    letterSpacing: 0.2,
   },
   accentLine: {
     width: 60,

@@ -179,7 +179,9 @@ export default function VendorFotografScreen() {
       {/* Header */}
       <View style={{ padding: Spacing.lg, paddingTop: insets.top + Spacing.md }}>
         <ThemedText style={[styles.title, { color: theme.text }]}>Fotograf dashboard</ThemedText>
-        <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Event-oversikt og pakkeadministrasjon</ThemedText>
+        <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
+          {vendorConfig.categoryName}: event-oversikt og pakkeadministrasjon
+        </ThemedText>
       </View>
       {/* Tab Navigation */}
       <View style={[styles.tabContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>

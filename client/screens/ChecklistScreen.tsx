@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { ScrollView, StyleSheet, View, Pressable, TextInput, Modal, Alert } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, Modal, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -285,7 +285,8 @@ export default function ChecklistScreen() {
               queryClient.invalidateQueries({ queryKey: ["checklist"] });
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (e) {
-              Alert.alert("Feil", "Kunne ikke legge til tradisjonsoppgaver");
+              const message = e instanceof Error ? e.message : "Kunne ikke legge til tradisjonsoppgaver";
+              Alert.alert("Feil", message);
             }
           },
         },

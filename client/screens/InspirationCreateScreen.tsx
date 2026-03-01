@@ -31,7 +31,7 @@ import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { showToast } from "@/lib/toast";
 import { showConfirm, showOptions } from "@/lib/dialogs";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
@@ -122,7 +122,14 @@ export default function InspirationCreateScreen() {
       const response = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${session.sessionToken}` },
       });
-      if (!response.ok) throw new Error("Kunne ikke hente kategorier");
+      if (!response.ok) {
+        try {
+          const fallback = await apiRequest("GET", "/api/vendor/allowed-categories");
+          return fallback.json();
+        } catch {
+          throw new Error("Kunne ikke hente kategorier");
+        }
+      }
       return response.json();
     },
   });
@@ -272,7 +279,8 @@ export default function InspirationCreateScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        showToast("Last opp bildet til Google Drive eller imgbb.com, og lim inn lenken i URL-feltet.");
+        handleUpdateMedia(index, "url", result.assets[0].uri);
+        showToast("Bildet er valgt. Du kan bytte til en ekstern URL senere om ønskelig.");
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -366,7 +374,7 @@ export default function InspirationCreateScreen() {
       <KeyboardAwareScrollViewCompat
         style={{ flex: 1, zIndex: 1 }}
         contentContainerStyle={{
-          paddingTop: Spacing.lg,
+          paddingTop: Math.max(Spacing.md, headerHeight * 0.08),
           paddingBottom: insets.bottom + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
@@ -511,15 +519,14 @@ export default function InspirationCreateScreen() {
                   {mediaItems.length > 1 ? (
                     <Pressable 
                       onPress={() => handleRemoveMedia(index)}
-                      style={[styles.removeMediaBtn, { backgroundColor: "#EF535015" }]}
+                      style={[styles.removeMediaBtn, { backgroundColor: `${Colors.light.error}15` }]}
                     >
-                      <EvendiIcon name="trash-2" size={16} color="#EF5350" />
+                      <EvendiIcon name="trash-2" size={16} color={Colors.light.error} />
                     </Pressable>
                   ) : null}
                 </View>
               </View>
-              <PersistentTextInput
-                draftKey="InspirationCreateScreen-input-3"
+              <TextInput
                 style={[styles.mediaInput, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
                 value={item.url}
                 onChangeText={(val) => handleUpdateMedia(index, "url", val)}

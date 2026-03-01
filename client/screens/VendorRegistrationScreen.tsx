@@ -2,7 +2,6 @@ import React, { useState, useCallback, useRef, useMemo } from "react";
 import {
   StyleSheet,
   View,
-  TextInput,
   Pressable,
   ActivityIndicator,
   ScrollView,
@@ -224,6 +223,9 @@ export default function VendorRegistrationScreen() {
   const registerMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const { confirmPassword, ...submitData } = data;
+      if (confirmPassword !== submitData.password) {
+        throw new Error("Passordene matcher ikke");
+      }
       return apiRequest("POST", "/api/vendors/register", {
         ...submitData,
         organizationNumber: submitData.organizationNumber || undefined,

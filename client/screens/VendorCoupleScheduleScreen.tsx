@@ -5,7 +5,6 @@ import {
   FlatList,
   Pressable,
   Modal,
-  TextInput,
   RefreshControl,
   ActivityIndicator,
 } from "react-native";

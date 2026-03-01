@@ -143,7 +143,8 @@ export default function AboutScreen() {
       }
       await Linking.openURL(url);
     } catch (error) {
-      showToast("Kunne ikke apne lenken akkurat na.");
+      const message = error instanceof Error ? error.message : "Kunne ikke apne lenken akkurat na.";
+      showToast(message);
     }
   };
 

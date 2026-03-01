@@ -16,6 +16,9 @@ interface TraditionHintBannerProps {
 export function TraditionHintBanner({ traditions, category }: TraditionHintBannerProps) {
   const { theme } = useTheme();
   const hints = getTraditionHints(traditions, category);
+  const cultureLabel = traditions
+    .map((tradition) => CULTURAL_LABELS[tradition] || tradition)
+    .join(" • ");
 
   if (hints.length === 0) return null;
 
@@ -34,7 +37,7 @@ export function TraditionHintBanner({ traditions, category }: TraditionHintBanne
         <View style={styles.headerRow}>
           <EvendiIcon name="info" size={16} color="#FFB300" />
           <ThemedText style={[styles.headerText, { color: "#FFB300" }]}>
-            Kulturelle tips
+            Kulturelle tips {cultureLabel ? `(${cultureLabel})` : ""}
           </ThemedText>
         </View>
         {hints.map((hint, i) => (

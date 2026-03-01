@@ -89,6 +89,7 @@ export default function MatchDetailsScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation();
   const route = useRoute<any>();
+  const screenWidth = Dimensions.get("window").width;
 
   const { vendorId, match } = route.params || {};
 
@@ -98,14 +99,22 @@ export default function MatchDetailsScreen() {
 
   // Animation shared values
   const scoreRingScale = useSharedValue(0);
+  const contentOpacity = useSharedValue(0);
 
   // Animate score ring on mount
   useEffect(() => {
     scoreRingScale.value = withSpring(1, { damping: 12, mass: 1 });
+    contentOpacity.value = withTiming(1, {
+      duration: 500,
+      easing: Easing.out(Easing.cubic),
+    });
   }, []);
 
   const scoreRingAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scoreRingScale.value }],
+  }));
+  const contentAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: contentOpacity.value,
   }));
 
   // Load couple session
@@ -126,7 +135,7 @@ export default function MatchDetailsScreen() {
   }, []);
 
   // Fetch match details
-  const { data: details, isLoading, error } = useQuery<MatchDetail>({
+  const { data: fetchedDetails, isLoading, error } = useQuery<MatchDetail>({
     queryKey: ["/api/vendor/match-details", vendorId, coupleId],
     queryFn: async () => {
       if (!vendorId || !coupleId) return null;
@@ -258,7 +267,9 @@ export default function MatchDetailsScreen() {
     );
   };
 
-  if (error) {
+  const details = fetchedDetails ?? (match as MatchDetail | null);
+
+  if (error && !details) {
     return (
       <View
         style={[
@@ -273,7 +284,7 @@ export default function MatchDetailsScreen() {
     );
   }
 
-  if (isLoading) {
+  if (isLoading && !details) {
     return (
       <View
         style={[
@@ -290,6 +301,7 @@ export default function MatchDetailsScreen() {
   if (!details) return null;
 
   const overallScore = details.matchAnalysis.overallScore || 0;
+  const scoreCircleSize = Math.max(112, Math.min(144, screenWidth * 0.3));
   let scoreColor = theme.error;
   if (overallScore >= 75) scoreColor = theme.success;
   else if (overallScore >= 50) scoreColor = theme.warning;
@@ -385,9 +397,12 @@ export default function MatchDetailsScreen() {
           <View
             style={[
               styles.scoreCircle,
-              {
+            {
                 backgroundColor: scoreColor + "20",
                 borderColor: scoreColor,
+                width: scoreCircleSize,
+                height: scoreCircleSize,
+                borderRadius: scoreCircleSize / 2,
               },
             ]}
           >
@@ -408,6 +423,7 @@ export default function MatchDetailsScreen() {
 
         {/* Match breakdown */}
         <View style={styles.breakdownSection}>
+          <Animated.View style={contentAnimatedStyle}>
           <ThemedText style={styles.sectionTitle}>Detaljer om Match</ThemedText>
 
           {renderScoreBar(
@@ -471,6 +487,7 @@ export default function MatchDetailsScreen() {
               </ThemedText>
             </>
           )}
+          </Animated.View>
         </View>
 
         {/* Recommendations */}

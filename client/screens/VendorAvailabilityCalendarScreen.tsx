@@ -37,7 +37,9 @@ export default function VendorAvailabilityCalendarScreen() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [vendorId, setVendorId] = useState<string | null>(null);
-  const [availableDates, setAvailableDates] = useState<Map<string, boolean>>(new Map());
+  const [availableDates, setAvailableDates] = useState<Map<string, boolean>>(
+    new Map(),
+  );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showDateModal, setShowDateModal] = useState(false);
 
@@ -63,13 +65,12 @@ export default function VendorAvailabilityCalendarScreen() {
     queryKey: ["/api/vendor/availability", vendorId],
     queryFn: async () => {
       const response = await fetch(
-        new URL(
-          `/api/vendor/availability/${vendorId}`,
-          getApiUrl()
-        ).toString(),
+        new URL(`/api/vendor/availability/${vendorId}`, getApiUrl()).toString(),
         {
-          headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
-        }
+          headers: sessionToken
+            ? { Authorization: `Bearer ${sessionToken}` }
+            : {},
+        },
       );
 
       if (response.ok) {
@@ -89,16 +90,15 @@ export default function VendorAvailabilityCalendarScreen() {
   // Save availability mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const dates = Array.from(availableDates.entries()).map(([date, isAvailable]) => ({
-        date,
-        isAvailable,
-      }));
+      const dates = Array.from(availableDates.entries()).map(
+        ([date, isAvailable]) => ({
+          date,
+          isAvailable,
+        }),
+      );
 
       const response = await fetch(
-        new URL(
-          `/api/vendor/availability`,
-          getApiUrl()
-        ).toString(),
+        new URL(`/api/vendor/availability`, getApiUrl()).toString(),
         {
           method: "PUT",
           headers: {
@@ -109,7 +109,7 @@ export default function VendorAvailabilityCalendarScreen() {
             vendorId,
             dates,
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -123,9 +123,7 @@ export default function VendorAvailabilityCalendarScreen() {
       showToast("Tilgjengelighet lagret!");
     },
     onError: (error) => {
-      showToast(
-        error instanceof Error ? error.message : "Feil ved lagring"
-      );
+      showToast(error instanceof Error ? error.message : "Feil ved lagring");
     },
   });
 
@@ -146,23 +144,37 @@ export default function VendorAvailabilityCalendarScreen() {
     const dateStr = formatDateString(
       currentDate.getFullYear(),
       currentDate.getMonth(),
-      day
+      day,
     );
     const isAvailable = availableDates.get(dateStr) ?? false;
     setAvailableDates(new Map(availableDates).set(dateStr, !isAvailable));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
+  const selectedAvailability =
+    availability?.find((item) => item.date === selectedDate) || null;
+  const monthPrefix = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}-`;
+  const monthAvailability = (availability || []).filter((item) =>
+    item.date.startsWith(monthPrefix),
+  );
 
   const toggleAllMonth = () => {
     const daysInMonth = getDaysInMonth(currentDate);
     const newMap = new Map(availableDates);
     const allAvailable = Array.from({ length: daysInMonth }, (_, i) => {
-      const dateStr = formatDateString(currentDate.getFullYear(), currentDate.getMonth(), i + 1);
+      const dateStr = formatDateString(
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        i + 1,
+      );
       return availableDates.get(dateStr) ?? false;
     }).every((v) => v);
 
     for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = formatDateString(currentDate.getFullYear(), currentDate.getMonth(), day);
+      const dateStr = formatDateString(
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        day,
+      );
       newMap.set(dateStr, !allAvailable);
     }
     setAvailableDates(newMap);
@@ -170,11 +182,15 @@ export default function VendorAvailabilityCalendarScreen() {
   };
 
   const handlePrevMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+    setCurrentDate(
+      new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1),
+    );
   };
 
   const handleNextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+    setCurrentDate(
+      new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1),
+    );
   };
 
   // Calendar grid
@@ -190,10 +206,19 @@ export default function VendorAvailabilityCalendarScreen() {
 
     // Days of month
     for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = formatDateString(currentDate.getFullYear(), currentDate.getMonth(), day);
+      const dateStr = formatDateString(
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        day,
+      );
       const isAvailable = availableDates.get(dateStr) ?? false;
       const isToday =
-        new Date().toDateString() === new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toDateString();
+        new Date().toDateString() ===
+        new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth(),
+          day,
+        ).toDateString();
 
       days.push(
         <Pressable
@@ -207,6 +232,11 @@ export default function VendorAvailabilityCalendarScreen() {
             },
           ]}
           onPress={() => toggleDate(day)}
+          onLongPress={() => {
+            setSelectedDate(dateStr);
+            setShowDateModal(true);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          }}
         >
           <ThemedText
             style={[
@@ -220,9 +250,14 @@ export default function VendorAvailabilityCalendarScreen() {
             {day}
           </ThemedText>
           {isAvailable && (
-            <Feather name="check" size={12} color="white" style={styles.checkmark} />
+            <Feather
+              name="check"
+              size={12}
+              color="white"
+              style={styles.checkmark}
+            />
           )}
-        </Pressable>
+        </Pressable>,
       );
     }
 
@@ -248,7 +283,10 @@ export default function VendorAvailabilityCalendarScreen() {
       <View
         style={[
           styles.header,
-          { paddingTop: insets.top + Spacing.md, backgroundColor: theme.primary },
+          {
+            paddingTop: insets.top + Spacing.md,
+            backgroundColor: theme.primary,
+          },
         ]}
       >
         <Pressable
@@ -270,12 +308,16 @@ export default function VendorAvailabilityCalendarScreen() {
         <View
           style={[
             styles.infoBox,
-            { backgroundColor: theme.primary + "10", borderColor: theme.primary },
+            {
+              backgroundColor: theme.primary + "10",
+              borderColor: theme.primary,
+            },
           ]}
         >
           <Feather name="info" size={16} color={theme.primary} />
           <ThemedText style={styles.infoText}>
-            Trykk på datoer for å markere deg som tilgjengelig eller utilgjengelig
+            Trykk på datoer for å markere deg som tilgjengelig eller
+            utilgjengelig
           </ThemedText>
         </View>
 
@@ -283,7 +325,10 @@ export default function VendorAvailabilityCalendarScreen() {
         <View
           style={[
             styles.monthHeader,
-            { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border,
+            },
           ]}
         >
           <Pressable onPress={handlePrevMonth} hitSlop={10}>
@@ -306,7 +351,10 @@ export default function VendorAvailabilityCalendarScreen() {
         <View
           style={[
             styles.weekdayRow,
-            { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border },
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderBottomColor: theme.border,
+            },
           ]}
         >
           {["Ma", "Ti", "On", "To", "Fr", "Lø", "Sø"].map((day) => (
@@ -317,7 +365,12 @@ export default function VendorAvailabilityCalendarScreen() {
         </View>
 
         {/* Calendar Grid */}
-        <View style={[styles.calendar, { backgroundColor: theme.backgroundDefault }]}>
+        <View
+          style={[
+            styles.calendar,
+            { backgroundColor: theme.backgroundDefault },
+          ]}
+        >
           {renderCalendar()}
         </View>
 
@@ -335,12 +388,12 @@ export default function VendorAvailabilityCalendarScreen() {
                 const dateStr = formatDateString(
                   currentDate.getFullYear(),
                   currentDate.getMonth(),
-                  day
+                  day,
                 );
                 newMap.set(dateStr, false);
               }
               setAvailableDates(newMap);
-                showToast("Alle datoer for måneden er nå utilgjengelige");
+              showToast("Alle datoer for måneden er nå utilgjengelige");
             }}
           >
             <Feather name="x" size={16} color={theme.primary} />
@@ -348,10 +401,7 @@ export default function VendorAvailabilityCalendarScreen() {
           </Pressable>
 
           <Pressable
-            style={[
-              styles.actionButton,
-              { backgroundColor: theme.success },
-            ]}
+            style={[styles.actionButton, { backgroundColor: theme.success }]}
             onPress={toggleAllMonth}
           >
             <Feather name="check-square" size={16} color="white" />
@@ -370,10 +420,7 @@ export default function VendorAvailabilityCalendarScreen() {
         >
           <View style={styles.legendItem}>
             <View
-              style={[
-                styles.legendBox,
-                { backgroundColor: theme.success },
-              ]}
+              style={[styles.legendBox, { backgroundColor: theme.success }]}
             />
             <ThemedText style={styles.legendLabel}>Tilgjengelig</ThemedText>
           </View>
@@ -381,7 +428,11 @@ export default function VendorAvailabilityCalendarScreen() {
             <View
               style={[
                 styles.legendBox,
-                { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 },
+                {
+                  backgroundColor: theme.background,
+                  borderColor: theme.border,
+                  borderWidth: 1,
+                },
               ]}
             />
             <ThemedText style={styles.legendLabel}>Utilgjengelig</ThemedText>
@@ -402,26 +453,176 @@ export default function VendorAvailabilityCalendarScreen() {
         <View
           style={[
             styles.statsCard,
-            { backgroundColor: theme.primary + "10", borderColor: theme.primary },
+            {
+              backgroundColor: theme.primary + "10",
+              borderColor: theme.primary,
+            },
           ]}
         >
           <Feather name="activity" size={18} color={theme.primary} />
           <View style={styles.statsContent}>
-            <ThemedText style={styles.statsLabel}>Tilgjengelighetsstatus</ThemedText>
+            <ThemedText style={styles.statsLabel}>
+              Tilgjengelighetsstatus
+            </ThemedText>
             <ThemedText style={styles.statsValue}>
               {availableDates.size} datoer registrert
-              {Array.from(availableDates.values()).filter((v) => v).length > 0 &&
+              {Array.from(availableDates.values()).filter((v) => v).length >
+                0 &&
                 ` • ${Array.from(availableDates.values()).filter((v) => v).length} tilgjengelig`}
             </ThemedText>
           </View>
         </View>
+
+        <View
+          style={[
+            styles.summaryCard,
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border,
+            },
+          ]}
+        >
+          <ThemedText style={styles.summaryTitle}>
+            Datoer denne måneden
+          </ThemedText>
+          {monthAvailability.length === 0 ? (
+            <ThemedText
+              style={[styles.summaryEmpty, { color: theme.textSecondary }]}
+            >
+              Ingen lagrede datoer i valgt måned.
+            </ThemedText>
+          ) : (
+            <FlatList
+              data={monthAvailability}
+              keyExtractor={(item) => item.date}
+              scrollEnabled={false}
+              contentContainerStyle={{ gap: Spacing.sm }}
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => {
+                    setSelectedDate(item.date);
+                    setShowDateModal(true);
+                  }}
+                  style={[
+                    styles.summaryRow,
+                    {
+                      borderColor: theme.border,
+                      backgroundColor: theme.background,
+                    },
+                  ]}
+                >
+                  <ThemedText style={{ color: theme.text, fontWeight: "600" }}>
+                    {item.date}
+                  </ThemedText>
+                  <View
+                    style={[
+                      styles.statusPill,
+                      {
+                        backgroundColor:
+                          (item.isAvailable
+                            ? theme.success
+                            : theme.textSecondary) + "20",
+                      },
+                    ]}
+                  >
+                    <ThemedText
+                      style={{
+                        color: item.isAvailable
+                          ? theme.success
+                          : theme.textSecondary,
+                      }}
+                    >
+                      {item.isAvailable ? "Åpen" : "Lukket"}
+                    </ThemedText>
+                  </View>
+                </Pressable>
+              )}
+            />
+          )}
+        </View>
       </ScrollView>
+
+      <Modal
+        visible={showDateModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowDateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalCard,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <ThemedText style={styles.modalTitle}>Datoinformasjon</ThemedText>
+            <ThemedText style={[styles.modalDate, { color: theme.text }]}>
+              {selectedDate || "Ingen dato valgt"}
+            </ThemedText>
+            <ThemedText
+              style={{ color: theme.textSecondary, marginBottom: Spacing.md }}
+            >
+              Status:{" "}
+              {selectedAvailability?.isAvailable
+                ? "Tilgjengelig"
+                : "Utilgjengelig"}
+            </ThemedText>
+            {selectedAvailability?.eventTypes?.length ? (
+              <ThemedText
+                style={{ color: theme.textSecondary, marginBottom: Spacing.md }}
+              >
+                Eventtyper: {selectedAvailability.eventTypes.join(", ")}
+              </ThemedText>
+            ) : null}
+            <View style={styles.modalActions}>
+              <Pressable
+                style={[styles.modalButton, { borderColor: theme.border }]}
+                onPress={() => setShowDateModal(false)}
+              >
+                <ThemedText style={{ color: theme.textSecondary }}>
+                  Lukk
+                </ThemedText>
+              </Pressable>
+              {selectedDate ? (
+                <Pressable
+                  style={[
+                    styles.modalButton,
+                    { backgroundColor: theme.primary },
+                  ]}
+                  onPress={() => {
+                    const current =
+                      availableDates.get(selectedDate) ??
+                      selectedAvailability?.isAvailable ??
+                      false;
+                    setAvailableDates(
+                      new Map(availableDates).set(selectedDate, !current),
+                    );
+                    setShowDateModal(false);
+                  }}
+                >
+                  <ThemedText style={{ color: "#fff" }}>
+                    {selectedAvailability?.isAvailable
+                      ? "Sett utilgjengelig"
+                      : "Sett tilgjengelig"}
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Action Bar */}
       <View
         style={[
           styles.actionBar,
-          { backgroundColor: theme.backgroundDefault, paddingBottom: insets.bottom + Spacing.md },
+          {
+            backgroundColor: theme.backgroundDefault,
+            paddingBottom: insets.bottom + Spacing.md,
+          },
         ]}
       >
         <Pressable
@@ -615,6 +816,66 @@ const styles = StyleSheet.create({
   },
   statsValue: {
     fontSize: 12,
+  },
+  summaryCard: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  summaryTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: Spacing.sm,
+  },
+  summaryEmpty: {
+    fontSize: 13,
+  },
+  summaryRow: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  statusPill: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  modalCard: {
+    borderWidth: 1,
+    borderTopLeftRadius: BorderRadius.lg,
+    borderTopRightRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: Spacing.xs,
+  },
+  modalDate: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: Spacing.xs,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  modalButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
   },
   actionBar: {
     paddingHorizontal: Spacing.md,

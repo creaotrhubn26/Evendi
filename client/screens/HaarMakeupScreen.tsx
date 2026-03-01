@@ -39,7 +39,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import { showToast } from "@/lib/toast";
 import { showConfirm, showOptions } from "@/lib/dialogs";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 import {
   getHairMakeupData,
   createHairMakeupAppointment,
@@ -73,17 +73,19 @@ export default function HaarMakeupScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const { getSetting } = useAppSettings();
+  const { config: eventConfig } = useEventType();
   const navigation = useNavigation<NavigationProp>();
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<"appointments" | "looks" | "timeline">("appointments");
   const [refreshing, setRefreshing] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [lookSearch, setLookSearch] = useState("");
 
   const COUPLE_STORAGE_KEY = 'evendi_couple_session';
 
   // Load session token on mount
-  React.useEffect(() => {
+  useEffect(() => {
     const loadSession = async () => {
       const data = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
       if (!data) return;
@@ -140,6 +142,15 @@ export default function HaarMakeupScreen() {
   });
 
   const looks = hairMakeupData?.looks ?? [];
+  const filteredLooks = looks.filter((look) => {
+    const query = lookSearch.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      look.name.toLowerCase().includes(query) ||
+      (look.lookType || "").toLowerCase().includes(query) ||
+      (look.notes || "").toLowerCase().includes(query)
+    );
+  });
   const timeline = hairMakeupData?.timeline ?? {
     consultationBooked: false,
     trialBooked: false,
@@ -148,6 +159,12 @@ export default function HaarMakeupScreen() {
     budget: 0,
   };
   const budget = timeline?.budget ?? 0;
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.trim().length > 0) {
+      return error.message;
+    }
+    return fallback;
+  };
 
   // Appointment modal state
   // Vendor search for stylist/salon autocomplete
@@ -301,8 +318,8 @@ export default function HaarMakeupScreen() {
       }
       setShowAppointmentModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke lagre avtale");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre avtale"));
     } finally {
       setIsSavingAppointment(false);
     }
@@ -344,8 +361,8 @@ export default function HaarMakeupScreen() {
         completed: false,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke duplisere avtale");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke duplisere avtale"));
     }
   };
 
@@ -418,8 +435,8 @@ export default function HaarMakeupScreen() {
       }
       setShowLookModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke lagre look");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre look"));
     } finally {
       setIsSavingLook(false);
     }
@@ -490,8 +507,8 @@ export default function HaarMakeupScreen() {
         isSelected: false,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke duplisere look");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke duplisere look"));
     }
   };
 
@@ -515,8 +532,8 @@ export default function HaarMakeupScreen() {
       await updateTimelineMutation.mutateAsync({ budget: newBudget });
       setShowBudgetModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke lagre budsjett");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre budsjett"));
     } finally {
       setIsSavingBudget(false);
     }
@@ -547,6 +564,9 @@ export default function HaarMakeupScreen() {
           <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary, fontSize: 15 }]}>
             La oss finne den perfekte looken sammen.
           </ThemedText>
+          <Button onPress={() => openAppointmentModal()} style={styles.emptyCtaButton}>
+            Legg til første avtale
+          </Button>
         </View>
       ) : (
         appointments.map((appointment, index) => (
@@ -623,19 +643,40 @@ export default function HaarMakeupScreen() {
         </Pressable>
       </View>
 
-      {looks.length === 0 ? (
+      <View style={[styles.searchBox, { borderColor: theme.border, backgroundColor: theme.backgroundDefault }]}>
+        <EvendiIcon name="search" size={16} color={theme.textSecondary} />
+        <TextInput
+          value={lookSearch}
+          onChangeText={setLookSearch}
+          placeholder="Søk i looks"
+          placeholderTextColor={theme.textSecondary}
+          style={[styles.searchInput, { color: theme.text }]}
+        />
+        {lookSearch.length > 0 ? (
+          <Pressable onPress={() => setLookSearch("")}>
+            <EvendiIcon name="x" size={16} color={theme.textSecondary} />
+          </Pressable>
+        ) : null}
+      </View>
+
+      {filteredLooks.length === 0 ? (
         <View style={[styles.emptyState, { backgroundColor: theme.backgroundDefault }]}>
           <EvendiIcon name="heart" size={48} color={theme.primary} style={{ opacity: 0.6 }} />
           <ThemedText style={[styles.emptyText, { color: theme.text, fontWeight: '600', fontSize: 18 }]}>
-            Hvordan vil dere se ut?
+            {looks.length === 0 ? 'Hvordan vil dere se ut?' : 'Ingen looks matcher søket'}
           </ThemedText>
           <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary, fontSize: 15 }]}>
-            Lagre inspirasjon for hår og makeup.
+            {looks.length === 0 ? 'Lagre inspirasjon for hår og makeup.' : 'Prøv et annet søkeord.'}
           </ThemedText>
+          {looks.length === 0 ? (
+            <Button onPress={() => openLookModal()} style={styles.emptyCtaButton}>
+              Legg til første look
+            </Button>
+          ) : null}
         </View>
       ) : (
         <View style={styles.looksGrid}>
-          {looks.map((look, index) => (
+          {filteredLooks.map((look, index) => (
             <Animated.View key={look.id} entering={FadeInRight.delay(index * 50)} style={styles.lookCardWrapper}>
               <Pressable
                 onPress={() => openLookModal(look)}
@@ -727,7 +768,7 @@ export default function HaarMakeupScreen() {
         style={[styles.findVendorsButton, { backgroundColor: theme.primary }]}
       >
         <EvendiIcon name="search" size={18} color="#FFFFFF" />
-        <ThemedText style={styles.findVendorsText}>Finn hår & makeup-artister</ThemedText>
+        <ThemedText style={styles.findVendorsText}>Finn stylister for {eventConfig.labelNo.toLowerCase()}</ThemedText>
         <EvendiIcon name="arrow-right" size={18} color="#FFFFFF" />
       </Pressable>
 
@@ -754,7 +795,7 @@ export default function HaarMakeupScreen() {
           const isCompleted = timeline[step.key as keyof HairMakeupTimeline];
           return (
             <Pressable
-              key={step.key}
+              key={`${step.key}-${index}`}
               onPress={() => toggleTimelineStep(step.key)}
               style={styles.timelineStep}
             >
@@ -786,17 +827,17 @@ export default function HaarMakeupScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Tab Bar */}
       <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        {[
-          { key: "appointments", label: "Avtaler", icon: "calendar" },
-          { key: "looks", label: "Looks", icon: "image" },
-          { key: "timeline", label: "Tidslinje", icon: "list" },
-        ].map((tab) => (
+        {([
+          { key: "appointments", label: "Avtaler", icon: "calendar" as const },
+          { key: "looks", label: "Looks", icon: "image" as const },
+          { key: "timeline", label: "Tidslinje", icon: "list" as const },
+        ] as const).map((tab) => (
           <Pressable
             key={tab.key}
-            onPress={() => setActiveTab(tab.key as any)}
+            onPress={() => setActiveTab(tab.key)}
             style={[styles.tab, activeTab === tab.key && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
           >
-            <EvendiIcon name={tab.icon as any} size={18} color={activeTab === tab.key ? theme.primary : theme.textSecondary} />
+            <EvendiIcon name={tab.icon} size={18} color={activeTab === tab.key ? theme.primary : theme.textSecondary} />
             <ThemedText style={[styles.tabLabel, { color: activeTab === tab.key ? theme.primary : theme.textSecondary }]}>
               {tab.label}
             </ThemedText>
@@ -806,7 +847,14 @@ export default function HaarMakeupScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + Spacing.xl }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: Math.max(Spacing.sm, headerHeight > 0 ? Spacing.sm : insets.top * 0.25),
+            paddingBottom: tabBarHeight + insets.bottom + Spacing.xl,
+          },
+        ]}
+        scrollIndicatorInsets={{ bottom: insets.bottom }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         {/* Marketplace hero + search + vendor cards */}
@@ -814,7 +862,7 @@ export default function HaarMakeupScreen() {
           category="beauty"
           categoryName="Hår & Makeup"
           icon="scissors"
-          subtitle="Profesjonell styling for den store dagen"
+          subtitle={`Profesjonell styling for ${eventConfig.labelNo.toLowerCase()}`}
           selectedTraditions={coupleProfile?.selectedTraditions}
         />
 
@@ -1187,6 +1235,20 @@ const styles = StyleSheet.create({
   tabContent: {
     gap: Spacing.md,
   },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1218,6 +1280,9 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     textAlign: "center",
+  },
+  emptyCtaButton: {
+    marginTop: Spacing.md,
   },
   appointmentCard: {
     flexDirection: "row",

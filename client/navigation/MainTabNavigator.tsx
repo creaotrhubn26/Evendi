@@ -1,21 +1,22 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import type { NavigatorScreenParams } from "@react-navigation/native";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import { BlurView } from "expo-blur";
 import { Platform, StyleSheet } from "react-native";
 
-import PlanningStackNavigator from "@/navigation/PlanningStackNavigator";
-import InspirationStackNavigator from "@/navigation/InspirationStackNavigator";
-import GuestsStackNavigator from "@/navigation/GuestsStackNavigator";
-import ProfileStackNavigator from "@/navigation/ProfileStackNavigator";
+import PlanningStackNavigator, { type PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
+import InspirationStackNavigator, { type InspirationStackParamList } from "@/navigation/InspirationStackNavigator";
+import GuestsStackNavigator, { type GuestsStackParamList } from "@/navigation/GuestsStackNavigator";
+import ProfileStackNavigator, { type ProfileStackParamList } from "@/navigation/ProfileStackNavigator";
 import { useTheme } from "@/hooks/useTheme";
 import { Colors } from "@/constants/theme";
 
 export type MainTabParamList = {
-  PlanningTab: undefined;
-  InspirationTab: undefined;
-  GuestsTab: undefined;
-  ProfileTab: undefined;
+  PlanningTab: NavigatorScreenParams<PlanningStackParamList> | undefined;
+  InspirationTab: NavigatorScreenParams<InspirationStackParamList> | undefined;
+  GuestsTab: NavigatorScreenParams<GuestsStackParamList> | undefined;
+  ProfileTab: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();

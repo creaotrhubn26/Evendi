@@ -19,10 +19,11 @@ import { getVendorConfig } from "@/lib/vendor-adapter";
 import { useVendorProfile } from "@/hooks/useVendorProfile";
 import { showToast } from "@/lib/toast";
 import { showConfirm, showOptions } from "@/lib/dialogs";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 type Navigation = NativeStackNavigationProp<any>;
 type TabType = 'bookings' | 'seating' | 'timeline';
+type BookingStatus = 'considering' | 'booked' | 'confirmed';
 type VendorProduct = {
   id: string;
   title: string;
@@ -47,7 +48,7 @@ type VendorVenueBooking = {
   location?: string;
   capacity?: number;
   notes?: string;
-  status?: 'considering' | 'booked' | 'confirmed';
+  status?: BookingStatus;
   // Decision-making fields
   address?: string;
   maxGuests?: number;
@@ -76,6 +77,9 @@ export default function VendorVenueScreen() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('bookings');
+  const [productSearch, setProductSearch] = useState("");
+  const [offerSearch, setOfferSearch] = useState("");
+  const [bookingSearch, setBookingSearch] = useState("");
   // Planner state
   const [bookings, setBookings] = useState<VendorVenueBooking[]>([]);
   const [availability, setAvailability] = useState<VendorAvailability[]>([]);
@@ -93,7 +97,7 @@ export default function VendorVenueScreen() {
   const [bookingLocation, setBookingLocation] = useState("");
   const [bookingCapacity, setBookingCapacity] = useState("");
   const [bookingNotes, setBookingNotes] = useState("");
-  const [bookingStatus, setBookingStatus] = useState<'considering' | 'booked' | 'confirmed'>("considering");
+  const [bookingStatus, setBookingStatus] = useState<BookingStatus>("considering");
   // Decision-making fields
   const [bookingAddress, setBookingAddress] = useState("");
   const [bookingMaxGuests, setBookingMaxGuests] = useState("");
@@ -146,6 +150,25 @@ export default function VendorVenueScreen() {
       return res.json();
     },
     enabled: !!sessionToken,
+  });
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.trim().length > 0) {
+      return error.message;
+    }
+    return fallback;
+  };
+  const filteredProducts = products.filter((product) => {
+    const query = productSearch.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      product.title.toLowerCase().includes(query) ||
+      (product.description || "").toLowerCase().includes(query)
+    );
+  });
+  const filteredOffers = offers.filter((offer) => {
+    const query = offerSearch.trim().toLowerCase();
+    if (!query) return true;
+    return offer.title.toLowerCase().includes(query) || offer.status.toLowerCase().includes(query);
   });
   const bookingsQuery = useQuery<VendorVenueBooking[]>({
     queryKey: ["/api/vendor/venue/bookings", sessionToken],
@@ -213,7 +236,7 @@ export default function VendorVenueScreen() {
     }
   }, [seatingQuery.data]);
   const plannerMutation = useMutation({
-    mutationFn: async ({ kind, payload }: { kind: "bookings" | "availability" | "timeline"; payload: any }) => {
+    mutationFn: async ({ kind, payload }: { kind: "bookings" | "availability" | "timeline"; payload: unknown }) => {
       if (!sessionToken) return;
       await fetch(new URL(`/api/vendor/venue/${kind}`, getApiUrl()).toString(), {
         method: "POST",
@@ -225,7 +248,7 @@ export default function VendorVenueScreen() {
       });
     },
   });
-  const persistAndCache = (kind: "bookings" | "availability" | "timeline", payload: any) => {
+  const persistAndCache = (kind: "bookings" | "availability" | "timeline", payload: unknown) => {
     if (!sessionToken) return;
     const key = [`/api/vendor/venue/${kind}`, sessionToken];
     queryClient.setQueryData(key, payload);
@@ -284,7 +307,29 @@ export default function VendorVenueScreen() {
       destructive: true,
     });
     if (!confirmed) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (!sessionToken) {
+      showToast("Ingen aktiv vendorsesjon");
+      return;
+    }
+    try {
+      const endpoint = type === "product" ? `/api/vendor/products/${id}` : `/api/vendor/offers/${id}`;
+      const response = await fetch(new URL(endpoint, getApiUrl()).toString(), {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      if (!response.ok) {
+        throw new Error(type === "product" ? "Kunne ikke slette produkt" : "Kunne ikke slette tilbud");
+      }
+      if (type === "product") {
+        await refetchProducts();
+      } else {
+        await refetchOffers();
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(type === "product" ? "Produkt slettet" : "Tilbud slettet");
+    } catch (error) {
+      showToast(getErrorMessage(error, type === "product" ? "Kunne ikke slette produkt" : "Kunne ikke slette tilbud"));
+    }
   };
   const openBookingModal = (booking?: VendorVenueBooking) => {
     if (booking) {
@@ -360,7 +405,7 @@ export default function VendorVenueScreen() {
     persistAndCache("bookings", next);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
-  const updateBookingStatus = (id: string, newStatus: 'considering' | 'booked' | 'confirmed') => {
+  const updateBookingStatus = (id: string, newStatus: BookingStatus) => {
     const next = bookings.map(b => b.id === id ? { ...b, status: newStatus } : b);
     setBookings(next);
     persistAndCache('bookings', next);
@@ -450,6 +495,15 @@ export default function VendorVenueScreen() {
     persistAndCache("timeline", next);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
+  const filteredBookings = bookings.filter((booking) => {
+    const query = bookingSearch.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      booking.coupleName.toLowerCase().includes(query) ||
+      booking.date.toLowerCase().includes(query) ||
+      (booking.location || "").toLowerCase().includes(query)
+    );
+  });
   const renderBookingsTab = () => (
     <View style={styles.tabContent}>
       <View style={[styles.infoBox, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
@@ -458,23 +512,115 @@ export default function VendorVenueScreen() {
       </View>
       <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
         <View style={styles.sectionHeaderRow}>
+          <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Produkter og tilbud</ThemedText>
+          <View style={styles.inlineActions}>
+            <Pressable onPress={goToProducts} style={styles.addIconBtn}>
+              <EvendiIcon name="shopping-bag" size={16} color={theme.text} />
+            </Pressable>
+            <Pressable onPress={goToOffers} style={styles.addIconBtn}>
+              <EvendiIcon name="file-text" size={16} color={theme.text} />
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={[styles.searchBox, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+          <EvendiIcon name="search" size={16} color={theme.textSecondary} />
+          <TextInput
+            value={productSearch}
+            onChangeText={setProductSearch}
+            placeholder="Søk produkter"
+            placeholderTextColor={theme.textSecondary}
+            style={[styles.searchInput, { color: theme.text }]}
+          />
+          {productSearch.length > 0 ? (
+            <Pressable onPress={() => setProductSearch("")}>
+              <EvendiIcon name="x" size={16} color={theme.textSecondary} />
+            </Pressable>
+          ) : null}
+        </View>
+        {productsLoading ? <ActivityIndicator color={theme.accent} style={{ marginBottom: Spacing.sm }} /> : null}
+        {filteredProducts.slice(0, 2).map((product) => (
+          <View key={product.id} style={[styles.subRow, { borderBottomColor: theme.border }]}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={{ color: theme.text, fontWeight: "600" }}>{product.title}</ThemedText>
+              <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                {product.unitPrice} kr / {product.unitType}
+              </ThemedText>
+            </View>
+            <Pressable onPress={() => handleDelete(product.id, "product")} style={styles.quickActionButton}>
+              <EvendiIcon name="trash-2" size={16} color={theme.error} />
+            </Pressable>
+          </View>
+        ))}
+
+        <View style={[styles.searchBox, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary, marginTop: Spacing.sm }]}>
+          <EvendiIcon name="search" size={16} color={theme.textSecondary} />
+          <TextInput
+            value={offerSearch}
+            onChangeText={setOfferSearch}
+            placeholder="Søk tilbud"
+            placeholderTextColor={theme.textSecondary}
+            style={[styles.searchInput, { color: theme.text }]}
+          />
+          {offerSearch.length > 0 ? (
+            <Pressable onPress={() => setOfferSearch("")}>
+              <EvendiIcon name="x" size={16} color={theme.textSecondary} />
+            </Pressable>
+          ) : null}
+        </View>
+        {offersLoading ? <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.sm }} /> : null}
+        {filteredOffers.slice(0, 2).map((offer) => (
+          <View key={offer.id} style={[styles.subRow, { borderBottomColor: theme.border }]}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={{ color: theme.text, fontWeight: "600" }}>{offer.title}</ThemedText>
+              <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                {offer.status} • {offer.totalAmount} {offer.currency || "NOK"}
+              </ThemedText>
+            </View>
+            <Pressable onPress={() => handleDelete(offer.id, "offer")} style={styles.quickActionButton}>
+              <EvendiIcon name="trash-2" size={16} color={theme.error} />
+            </Pressable>
+          </View>
+        ))}
+      </View>
+      <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        <View style={styles.sectionHeaderRow}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>Bookingforespørsler</ThemedText>
           <Pressable onPress={() => openBookingModal()} style={styles.addIconBtn}>
             <EvendiIcon name="plus" size={18} color={theme.text} />
           </Pressable>
         </View>
+        <View style={[styles.searchBox, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+          <EvendiIcon name="search" size={16} color={theme.textSecondary} />
+          <TextInput
+            value={bookingSearch}
+            onChangeText={setBookingSearch}
+            placeholder="Søk bookinger"
+            placeholderTextColor={theme.textSecondary}
+            style={[styles.searchInput, { color: theme.text }]}
+          />
+          {bookingSearch.length > 0 ? (
+            <Pressable onPress={() => setBookingSearch("")}>
+              <EvendiIcon name="x" size={16} color={theme.textSecondary} />
+            </Pressable>
+          ) : null}
+        </View>
         {bookingsQuery.isLoading ? <ActivityIndicator color={theme.accent} /> : null}
-        {bookings.length === 0 ? (
+        {filteredBookings.length === 0 ? (
           <View style={styles.emptyRow}>
             <EvendiIcon name="home" size={18} color={theme.accent} />
             <View style={{ flex: 1 }}>
-              <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen bookinger ennå</ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Legg til manuelle bookinger eller importér</ThemedText>
+              <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>
+                {bookings.length === 0 ? 'Ingen bookinger ennå' : 'Ingen bookinger matcher søket'}
+              </ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
+                {bookings.length === 0 ? 'Legg til manuelle bookinger eller importér' : 'Prøv et annet søkeord'}
+              </ThemedText>
             </View>
             <Button onPress={() => openBookingModal()}>Legg til</Button>
           </View>
         ) : (
-          bookings.map((b, idx) => (
+          filteredBookings.map((b, idx) => (
             <Animated.View key={b.id} entering={FadeInDown.delay(idx * 30)}>
               <SwipeableRow onDelete={() => deleteBooking(b.id)}>
                 <Pressable
@@ -494,9 +640,9 @@ export default function VendorVenueScreen() {
                   }}
                   style={[styles.listRow, { borderBottomColor: theme.border }]}
                 >
-                  <Pressable
-                    onPress={() => {
-                      const statuses: Array<'considering' | 'booked' | 'confirmed'> = ['considering', 'booked', 'confirmed'];
+                <Pressable
+                  onPress={() => {
+                      const statuses: BookingStatus[] = ['considering', 'booked', 'confirmed'];
                       const currentIndex = statuses.indexOf(b.status || 'considering');
                       const nextStatus = statuses[(currentIndex + 1) % statuses.length];
                       updateBookingStatus(b.id, nextStatus);
@@ -614,9 +760,9 @@ export default function VendorVenueScreen() {
             <EvendiIcon name="home" size={24} color={theme.accent} />
           </View>
           <View style={styles.headerText}>
-            <ThemedText style={styles.headerTitle}>Lokale</ThemedText>
+            <ThemedText style={styles.headerTitle}>{vendorConfig.categoryName}</ThemedText>
             <ThemedText style={[styles.headerSubtitle, { color: theme.textMuted }]}>
-              Bookinger, kapasitet og pakker
+              {vendorConfig.features.products ? "Bookinger, kapasitet og pakker" : "Bookinger og kapasitet"}
             </ThemedText>
           </View>
         </View>
@@ -643,7 +789,8 @@ export default function VendorVenueScreen() {
       ) : (
         <ScrollView
           style={styles.content}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: Spacing.lg + insets.bottom }]}
+          scrollIndicatorInsets={{ bottom: insets.bottom }}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -668,7 +815,7 @@ export default function VendorVenueScreen() {
               <ThemedText style={[styles.modalSave, { color: theme.primary }]}>Lagre</ThemedText>
             </Pressable>
           </View>
-          <ScrollView style={styles.modalContent}>
+          <ScrollView style={styles.modalContent} contentContainerStyle={{ paddingBottom: insets.bottom + Spacing.lg }}>
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Kundenavn *</ThemedText>
               <PersistentTextInput
@@ -731,14 +878,14 @@ export default function VendorVenueScreen() {
               <ThemedText style={styles.formLabel}>Status</ThemedText>
               <View style={styles.statusContainer}>
                 {[
-                  { value: 'considering', label: 'Vurderes', icon: 'search', color: theme.textSecondary },
-                  { value: 'booked', label: 'Booket', icon: 'calendar', color: theme.warning },
-                  { value: 'confirmed', label: 'Bekreftet', icon: 'check-circle', color: theme.success },
+                  { value: 'considering' as const, label: 'Vurderes', icon: 'search' as const, color: theme.textSecondary },
+                  { value: 'booked' as const, label: 'Booket', icon: 'calendar' as const, color: theme.warning },
+                  { value: 'confirmed' as const, label: 'Bekreftet', icon: 'check-circle' as const, color: theme.success },
                 ].map((statusOption) => (
                   <Pressable
                     key={statusOption.value}
                     onPress={() => {
-                      setBookingStatus(statusOption.value as any);
+                      setBookingStatus(statusOption.value);
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     style={[
@@ -750,8 +897,8 @@ export default function VendorVenueScreen() {
                       },
                     ]}
                   >
-                    <EvendiIcon 
-                      name={statusOption.icon as any} 
+                    <EvendiIcon
+                      name={statusOption.icon}
                       size={16} 
                       color={bookingStatus === statusOption.value ? statusOption.color : theme.textSecondary} 
                     />
@@ -795,7 +942,7 @@ export default function VendorVenueScreen() {
               <ThemedText style={[styles.modalSave, { color: theme.primary }]}>Lagre</ThemedText>
             </Pressable>
           </View>
-          <ScrollView style={styles.modalContent}>
+          <ScrollView style={styles.modalContent} contentContainerStyle={{ paddingBottom: insets.bottom + Spacing.lg }}>
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Dato *</ThemedText>
               <PersistentTextInput
@@ -910,7 +1057,30 @@ const styles = StyleSheet.create({
   infoText: { flex: 1, fontSize: 13 },
   sectionCard: { padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
+  inlineActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
   cardTitle: { fontSize: 16, fontWeight: '600' },
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    paddingVertical: Spacing.sm,
+  },
   emptyRow: { flexDirection: 'row', gap: Spacing.md, alignItems: 'center', paddingVertical: Spacing.md },
   emptyTitle: { fontSize: 14, fontWeight: '600' },
   emptySubtitle: { fontSize: 12, marginTop: 2 },

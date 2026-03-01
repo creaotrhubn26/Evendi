@@ -36,6 +36,7 @@ export default function CoordinatorTimelineScreen() {
   const [weddingDate, setWeddingDate] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
+  const [eventFilter, setEventFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingSchedule, setLoadingSchedule] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +105,10 @@ export default function CoordinatorTimelineScreen() {
       // Map to local interface with type safety
       const mappedEvents: ScheduleEvent[] = schedule.map((evt) => ({
         ...evt,
-        icon: (evt.icon as string) || undefined,
+        icon:
+          typeof evt.icon === "string" && evt.icon in EvendiIconGlyphMap
+            ? (evt.icon as EvendiIconName)
+            : undefined,
       }));
       setEvents(sortEventsByTime(mappedEvents));
       setSeatingData(seating || { tables: [], guests: [] });
@@ -211,8 +215,17 @@ export default function CoordinatorTimelineScreen() {
     </View>
   );
 
+  const filteredEvents =
+    eventFilter.trim().length === 0
+      ? events
+      : events.filter((event) =>
+          `${event.title} ${event.location || ""} ${event.notes || ""}`
+            .toLowerCase()
+            .includes(eventFilter.trim().toLowerCase()),
+        );
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.backgroundRoot, paddingBottom: insets.bottom + Spacing.lg }] }>
+    <ThemedView style={[styles.container, { paddingBottom: insets.bottom + Spacing.lg }] }>
       <View style={[styles.headerCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }] }>
         <EvendiIcon name="calendar" size={20} color={theme.accent} />
         <ThemedText style={styles.headerTitle}>Toastmaster – oversikt</ThemedText>
@@ -285,15 +298,33 @@ export default function CoordinatorTimelineScreen() {
           {loadingSchedule ? (
             renderSkeleton()
           ) : activeTab === 'timeline' ? (
-            events.length === 0 ? (
+            filteredEvents.length === 0 ? (
               renderEmpty()
             ) : (
-              <FlatList
-                data={events}
-                keyExtractor={(e) => e.id}
-                renderItem={renderItem}
-                contentContainerStyle={{ paddingHorizontal: Spacing.lg }}
-              />
+              <>
+                <View style={{ paddingHorizontal: Spacing.lg, marginBottom: Spacing.sm }}>
+                  <TextInput
+                    value={eventFilter}
+                    onChangeText={setEventFilter}
+                    placeholder="Filtrer tidslinje..."
+                    placeholderTextColor={theme.textMuted}
+                    style={[
+                      styles.input,
+                      {
+                        borderColor: theme.border,
+                        color: theme.text,
+                        backgroundColor: theme.backgroundDefault,
+                      },
+                    ]}
+                  />
+                </View>
+                <FlatList
+                  data={filteredEvents}
+                  keyExtractor={(e) => e.id}
+                  renderItem={renderItem}
+                  contentContainerStyle={{ paddingHorizontal: Spacing.lg }}
+                />
+              </>
             )
           ) : activeTab === 'speeches' ? (
             <ScrollView contentContainerStyle={{ paddingHorizontal: Spacing.lg }}>
@@ -389,7 +420,7 @@ export default function CoordinatorTimelineScreen() {
           ) : null}
         </>
       )}
-    </View>
+    </ThemedView>
   );
 }
 
@@ -403,7 +434,7 @@ const styles = StyleSheet.create({
   accessLabel: { fontSize: 12 },
   input: { borderWidth: 1, borderRadius: BorderRadius.sm, padding: Spacing.md },
   errorContainer: { flexDirection: "row", alignItems: "center", gap: Spacing.xs, marginTop: Spacing.xs },
-  errorText: { fontSize: 13, color: "#FF3B30", flex: 1 },
+  errorText: { fontSize: 13, color: Colors.light.error, flex: 1 },
   timelineItem: { flexDirection: "row", marginBottom: Spacing.sm },
   timeColumn: { width: 50, alignItems: "flex-end", paddingRight: Spacing.md },
   time: { fontSize: 14, fontWeight: "600" },

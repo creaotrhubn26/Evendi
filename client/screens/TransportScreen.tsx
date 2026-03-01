@@ -20,7 +20,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
 import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
@@ -58,6 +58,15 @@ const TIMELINE_STEPS = [
   { key: "guestShuttleBooked", label: "Gjesteshuttle booket", icon: "users" as const },
   { key: "getawayCarBooked", label: "Getaway-bil booket", icon: "star" as const },
   { key: "allConfirmed", label: "Alt bekreftet", icon: "check-circle" as const },
+];
+
+const TRANSPORT_TABS: {
+  key: "bookings" | "timeline";
+  label: string;
+  icon: string;
+}[] = [
+  { key: "bookings", label: "Bookinger", icon: "truck" },
+  { key: "timeline", label: "Tidslinje", icon: "list" },
 ];
 
 export default function TransportScreen() {
@@ -232,7 +241,11 @@ export default function TransportScreen() {
       setShowBookingModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      showToast("Kunne ikke lagre booking");
+      const message =
+        e instanceof Error && e.message
+          ? e.message
+          : "Kunne ikke lagre booking";
+      showToast(message);
     } finally {
       setIsSavingBooking(false);
     }
@@ -290,7 +303,11 @@ export default function TransportScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      showToast("Kunne ikke duplisere booking");
+      const message =
+        e instanceof Error && e.message
+          ? e.message
+          : "Kunne ikke duplisere booking";
+      showToast(message);
     }
   };
 
@@ -530,7 +547,7 @@ export default function TransportScreen() {
       {/* Timeline Steps */}
       <View style={[styles.timelineCard, { backgroundColor: theme.backgroundDefault }]}>
         <ThemedText style={styles.timelineTitle}>Sjekkliste</ThemedText>
-        {TIMELINE_STEPS.map((step, index) => {
+        {TIMELINE_STEPS.map((step) => {
           const isCompleted = timeline[step.key as keyof TransportTimeline];
           return (
             <Pressable
@@ -566,16 +583,13 @@ export default function TransportScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Tab Bar */}
       <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        {[
-          { key: "bookings", label: "Bookinger", icon: "truck" },
-          { key: "timeline", label: "Tidslinje", icon: "list" },
-        ].map((tab) => (
+        {TRANSPORT_TABS.map((tab) => (
           <Pressable
             key={tab.key}
-            onPress={() => setActiveTab(tab.key as any)}
+            onPress={() => setActiveTab(tab.key)}
             style={[styles.tab, activeTab === tab.key && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
           >
-            <EvendiIcon name={tab.icon as any} size={18} color={activeTab === tab.key ? theme.primary : theme.textSecondary} />
+            <EvendiIcon name={tab.icon} size={18} color={activeTab === tab.key ? theme.primary : theme.textSecondary} />
             <ThemedText style={[styles.tabLabel, { color: activeTab === tab.key ? theme.primary : theme.textSecondary }]}>
               {tab.label}
             </ThemedText>
@@ -608,12 +622,9 @@ export default function TransportScreen() {
             <ThemedText style={[styles.errorSubtext, { color: theme.textSecondary }]}>
               {error instanceof Error ? error.message : 'Ukjent feil'}
             </ThemedText>
-            <Pressable
-              style={[styles.retryButton, { backgroundColor: theme.primary }]}
-              onPress={() => refetch()}
-            >
-              <ThemedText style={styles.retryButtonText}>Prøv igjen</ThemedText>
-            </Pressable>
+            <Button style={styles.retryButton} onPress={() => refetch()}>
+              Prøv igjen
+            </Button>
           </View>
         ) : (
           <>
@@ -839,8 +850,7 @@ export default function TransportScreen() {
         <View style={styles.budgetModalOverlay}>
           <View style={[styles.budgetModalContent, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText style={styles.budgetModalTitle}>Budsjett for Transport</ThemedText>
-            <PersistentTextInput
-              draftKey="TransportScreen-input-11"
+            <TextInput
               style={[styles.budgetInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
               value={budgetInput}
               onChangeText={setBudgetInput}

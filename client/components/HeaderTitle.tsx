@@ -30,7 +30,7 @@ export function HeaderTitle({ title }: HeaderTitleProps) {
       {isDark && <View style={styles.logoGlow} />}
       <Image 
         source={logoSource} 
-        style={[styles.logo, isDark && styles.logoDark]} 
+        style={[styles.logo, isRemoteLogo ? styles.remoteLogo : styles.localLogo, isDark && styles.logoDark]} 
         resizeMode="contain" 
       />
     </View>
@@ -45,6 +45,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   logo: {
+    width: 300,
+    height: 80,
+  },
+  remoteLogo: {
+    width: 260,
+    height: 72,
+  },
+  localLogo: {
     width: 300,
     height: 80,
   },

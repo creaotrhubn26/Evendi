@@ -30,7 +30,12 @@ import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { getWeddingDetails, getSpeeches, getAppLanguage, type AppLanguage } from "@/lib/storage";
+import {
+  getWeddingDetails,
+  getSpeeches,
+  getAppLanguage,
+  type AppLanguage,
+} from "@/lib/storage";
 import { useSession } from "@/hooks/useSession";
 import {
   getScheduleEvents,
@@ -42,8 +47,9 @@ import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 import type { ScheduleEvent } from "@shared/schema";
 import { Speech } from "@/lib/types";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
+import { getEventTypeImage } from "@/lib/event-type-icons";
 
 const ICON_OPTIONS = [
   "heart",
@@ -54,13 +60,15 @@ const ICON_OPTIONS = [
   "sun",
   "moon",
   "star",
- ] as const;
+] as const;
 
-type IconName = typeof ICON_OPTIONS[number];
+type IconName = (typeof ICON_OPTIONS)[number];
 
 const resolveIcon = (icon?: string | null): IconName => {
   if (!icon) return "heart";
-  return (ICON_OPTIONS as readonly string[]).includes(icon) ? (icon as IconName) : "heart";
+  return (ICON_OPTIONS as readonly string[]).includes(icon)
+    ? (icon as IconName)
+    : "heart";
 };
 
 const SWIPE_THRESHOLD = -80;
@@ -75,7 +83,14 @@ interface SwipeableEventItemProps {
   onDelete: () => void;
 }
 
-function SwipeableEventItem({ event, index, theme, t, onEdit, onDelete }: SwipeableEventItemProps) {
+function SwipeableEventItem({
+  event,
+  index,
+  theme,
+  t,
+  onEdit,
+  onDelete,
+}: SwipeableEventItemProps) {
   const translateX = useSharedValue(0);
   const isOpen = useSharedValue(false);
 
@@ -83,15 +98,20 @@ function SwipeableEventItem({ event, index, theme, t, onEdit, onDelete }: Swipea
     .activeOffsetX([-10, 10])
     .onUpdate((e) => {
       if (isOpen.value) {
-        translateX.value = Math.max(-ACTION_WIDTH, Math.min(0, e.translationX - ACTION_WIDTH));
+        translateX.value = Math.max(
+          -ACTION_WIDTH,
+          Math.min(0, e.translationX - ACTION_WIDTH),
+        );
       } else {
         translateX.value = Math.max(-ACTION_WIDTH, Math.min(0, e.translationX));
       }
     })
     .onEnd((e) => {
-      if (translateX.value < SWIPE_THRESHOLD) {
+      const shouldOpen = translateX.value < SWIPE_THRESHOLD || e.velocityX < -350;
+      if (shouldOpen) {
         translateX.value = withSpring(-ACTION_WIDTH, { damping: 20 });
         isOpen.value = true;
+        runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
       } else {
         translateX.value = withSpring(0, { damping: 20 });
         isOpen.value = false;
@@ -123,31 +143,49 @@ function SwipeableEventItem({ event, index, theme, t, onEdit, onDelete }: Swipea
             onPress={handleEdit}
           >
             <EvendiIcon name="edit-2" size={18} color="#FFF" />
-            <ThemedText style={styles.actionText}>{t("Endre", "Edit")}</ThemedText>
+            <ThemedText style={styles.actionText}>
+              {t("Endre", "Edit")}
+            </ThemedText>
           </Pressable>
           <Pressable
             style={[styles.actionButton, styles.deleteButton]}
             onPress={handleDelete}
           >
             <EvendiIcon name="trash-2" size={18} color="#FFF" />
-            <ThemedText style={styles.actionText}>{t("Slett", "Delete")}</ThemedText>
+            <ThemedText style={styles.actionText}>
+              {t("Slett", "Delete")}
+            </ThemedText>
           </Pressable>
         </View>
         <GestureDetector gesture={panGesture}>
           <Animated.View
             style={[
               styles.eventItem,
-              { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+              },
               animatedStyle,
             ]}
           >
             <View style={styles.timeContainer}>
-              <ThemedText style={[styles.eventTime, { color: Colors.dark.accent }]}>
+              <ThemedText
+                style={[styles.eventTime, { color: Colors.dark.accent }]}
+              >
                 {event.time}
               </ThemedText>
             </View>
-            <View style={[styles.eventIcon, { backgroundColor: theme.backgroundSecondary }]}>
-              <EvendiIcon name={resolveIcon(event.icon)} size={18} color={Colors.dark.accent} />
+            <View
+              style={[
+                styles.eventIcon,
+                { backgroundColor: theme.backgroundSecondary },
+              ]}
+            >
+              <EvendiIcon
+                name={resolveIcon(event.icon)}
+                size={18}
+                color={Colors.dark.accent}
+              />
             </View>
             <ThemedText style={styles.eventTitle}>{event.title}</ThemedText>
           </Animated.View>
@@ -163,18 +201,28 @@ export default function ScheduleScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<any>();
   const { theme } = useTheme();
-  const { isWedding } = useEventType();
+  const { isWedding, eventType, config } = useEventType();
   const { session } = useSession();
   const queryClient = useQueryClient();
+  const eventTypeImage = getEventTypeImage(eventType);
 
   const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
-  const t = useCallback((nb: string, en: string) => (appLanguage === "en" ? en : nb), [appLanguage]);
+  const t = useCallback(
+    (nb: string, en: string) => (appLanguage === "en" ? en : nb),
+    [appLanguage],
+  );
   const locale = appLanguage === "en" ? "en-US" : "nb-NO";
 
   // Query for schedule events from server - only if we have a valid token
-  const { data: eventsData, isLoading: loadingEvents, refetch, error: queryError } = useQuery({
+  const {
+    data: eventsData,
+    isLoading: loadingEvents,
+    refetch,
+    error: queryError,
+  } = useQuery({
     queryKey: ["schedule-events", session?.token],
-    queryFn: () => (session?.token ? getScheduleEvents(session.token) : Promise.resolve([])),
+    queryFn: () =>
+      session?.token ? getScheduleEvents(session.token) : Promise.resolve([]),
     enabled: !!session?.token,
     retry: false,
   });
@@ -194,16 +242,24 @@ export default function ScheduleScreen() {
       if (!token) throw new Error("No session token available");
       return createScheduleEvent(token, data);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedule-events"] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["schedule-events"] }),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<ScheduleEvent> }) => {
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: Partial<ScheduleEvent>;
+    }) => {
       const token = getToken();
       if (!token) throw new Error("No session token available");
       return updateScheduleEvent(token, id, data);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedule-events"] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["schedule-events"] }),
   });
 
   const deleteMutation = useMutation({
@@ -212,7 +268,8 @@ export default function ScheduleScreen() {
       if (!token) throw new Error("No session token available");
       return deleteScheduleEvent(token, id);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedule-events"] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["schedule-events"] }),
   });
 
   // Refresh handler
@@ -228,8 +285,14 @@ export default function ScheduleScreen() {
   const [newTime, setNewTime] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [selectedIcon, setSelectedIcon] = useState<IconName>("heart");
+  const [eventSearch, setEventSearch] = useState("");
   const [weddingDate, setWeddingDate] = useState("");
   const [showSpeeches, setShowSpeeches] = useState(true);
+  const filteredEvents = events.filter((event) => {
+    const needle = eventSearch.trim().toLowerCase();
+    if (!needle) return true;
+    return `${event.time} ${event.title}`.toLowerCase().includes(needle);
+  });
 
   React.useEffect(() => {
     async function loadLanguage() {
@@ -255,17 +318,19 @@ export default function ScheduleScreen() {
             day: "numeric",
             month: "long",
             year: "numeric",
-          })
+          }),
         );
       }
       setLoadingOther(false);
     }
     loadOtherData();
-  }, []);
+  }, [locale]);
 
   const handleAddEvent = async () => {
     if (!newTime.trim() || !newTitle.trim()) {
-      showToast(t("Vennligst fyll ut tid og tittel", "Please fill in time and title"));
+      showToast(
+        t("Vennligst fyll ut tid og tittel", "Please fill in time and title"),
+      );
       return;
     }
 
@@ -273,7 +338,11 @@ export default function ScheduleScreen() {
       if (editingEvent) {
         await updateMutation.mutateAsync({
           id: editingEvent.id.toString(),
-          data: { time: newTime.trim(), title: newTitle.trim(), icon: selectedIcon },
+          data: {
+            time: newTime.trim(),
+            title: newTitle.trim(),
+            icon: selectedIcon,
+          },
         });
       } else {
         await createMutation.mutateAsync({
@@ -289,8 +358,12 @@ export default function ScheduleScreen() {
       setEditingEvent(null);
       setShowForm(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast(t("Kunne ikke lagre hendelse", "Could not save event"));
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t("Kunne ikke lagre hendelse", "Could not save event"),
+      );
     }
   };
 
@@ -306,7 +379,10 @@ export default function ScheduleScreen() {
   const handleDeleteEvent = async (id: string) => {
     const confirmed = await showConfirm({
       title: t("Slett hendelse", "Delete event"),
-      message: t("Er du sikker på at du vil slette denne?", "Are you sure you want to delete this?"),
+      message: t(
+        "Er du sikker på at du vil slette denne?",
+        "Are you sure you want to delete this?",
+      ),
       confirmLabel: t("Slett", "Delete"),
       cancelLabel: t("Avbryt", "Cancel"),
       destructive: true,
@@ -315,8 +391,12 @@ export default function ScheduleScreen() {
     try {
       await deleteMutation.mutateAsync(id);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch (e) {
-      showToast(t("Kunne ikke slette hendelse", "Could not delete event"));
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t("Kunne ikke slette hendelse", "Could not delete event"),
+      );
     }
   };
 
@@ -329,7 +409,9 @@ export default function ScheduleScreen() {
           { backgroundColor: theme.backgroundRoot },
         ]}
       >
-        <ThemedText style={{ color: theme.textSecondary }}>{t("Laster...", "Loading...")}</ThemedText>
+        <ThemedText style={{ color: theme.textSecondary }}>
+          {t("Laster...", "Loading...")}
+        </ThemedText>
       </View>
     );
   }
@@ -344,30 +426,93 @@ export default function ScheduleScreen() {
         flexGrow: 1,
       }}
       scrollIndicatorInsets={{ bottom: insets.bottom }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.dark.accent} />}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={Colors.dark.accent}
+        />
+      }
     >
       {queryError && (
-        <View style={[styles.errorBanner, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}> 
-          <EvendiIcon name="alert-triangle" size={16} color={theme.textSecondary} />
+        <View
+          style={[
+            styles.errorBanner,
+            {
+              backgroundColor: theme.backgroundSecondary,
+              borderColor: theme.border,
+            },
+          ]}
+        >
+          <EvendiIcon
+            name="alert-triangle"
+            size={16}
+            color={theme.textSecondary}
+          />
           <View style={{ flex: 1 }}>
-            <ThemedText style={[styles.errorBannerText, { color: theme.textSecondary }]}> 
-              {queryError instanceof Error ? queryError.message : t("Kunne ikke laste tidsplan", "Could not load schedule")}
+            <ThemedText
+              style={[styles.errorBannerText, { color: theme.textSecondary }]}
+            >
+              {queryError instanceof Error
+                ? queryError.message
+                : t("Kunne ikke laste tidsplan", "Could not load schedule")}
             </ThemedText>
           </View>
           <Pressable onPress={() => refetch()}>
-            <ThemedText style={{ color: Colors.dark.accent, fontWeight: "600" }}>
+            <ThemedText
+              style={{ color: Colors.dark.accent, fontWeight: "600" }}
+            >
               {t("Prøv igjen", "Try again")}
             </ThemedText>
           </Pressable>
         </View>
       )}
       {weddingDate ? (
-        <ThemedText
-          style={[styles.dateHeader, { color: theme.textSecondary }]}
-        >
+        <ThemedText style={[styles.dateHeader, { color: theme.textSecondary }]}>
           {weddingDate}
         </ThemedText>
       ) : null}
+      <View
+        style={[
+          styles.eventTypeCard,
+          {
+            backgroundColor: theme.backgroundDefault,
+            borderColor: theme.border,
+          },
+        ]}
+      >
+        {eventTypeImage ? (
+          <Image
+            source={eventTypeImage}
+            style={styles.eventTypeImage}
+            resizeMode="contain"
+          />
+        ) : (
+          <View
+            style={[
+              styles.eventTypeFallback,
+              { backgroundColor: theme.backgroundSecondary },
+            ]}
+          >
+            <EvendiIcon
+              name={resolveIcon(config.icon)}
+              size={16}
+              color={Colors.dark.accent}
+            />
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <ThemedText style={styles.eventTypeTitle}>
+            {t("Program for", "Schedule for")}{" "}
+            {t(config.labelNo, config.labelEn)}
+          </ThemedText>
+          <ThemedText
+            style={[styles.eventTypeSubtitle, { color: theme.textSecondary }]}
+          >
+            {t("Tilpasset dagens flyt", "Tailored to your event flow")}
+          </ThemedText>
+        </View>
+      </View>
 
       {/* Speech Section */}
       <Pressable
@@ -377,18 +522,30 @@ export default function ScheduleScreen() {
         }}
         style={[
           styles.speechHeader,
-          { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+          {
+            backgroundColor: theme.backgroundDefault,
+            borderColor: theme.border,
+          },
         ]}
       >
-        <View style={[styles.speechIconContainer, { backgroundColor: Colors.dark.accent + "20" }]}>
+        <View
+          style={[
+            styles.speechIconContainer,
+            { backgroundColor: Colors.dark.accent + "20" },
+          ]}
+        >
           <EvendiIcon name="mic" size={18} color={Colors.dark.accent} />
         </View>
         <View style={styles.speechHeaderContent}>
-          <ThemedText style={styles.speechTitle}>{t("Taleliste", "Speech list")}</ThemedText>
-          <ThemedText style={[styles.speechCount, { color: theme.textSecondary }]}>
+          <ThemedText style={styles.speechTitle}>
+            {t("Taleliste", "Speech list")}
+          </ThemedText>
+          <ThemedText
+            style={[styles.speechCount, { color: theme.textSecondary }]}
+          >
             {t(
               `${speeches.length} taler - ${speeches.reduce((sum, s) => sum + (s.durationMinutes || 5), 0)} min totalt`,
-              `${speeches.length} speeches - ${speeches.reduce((sum, s) => sum + (s.durationMinutes || 5), 0)} min total`
+              `${speeches.length} speeches - ${speeches.reduce((sum, s) => sum + (s.durationMinutes || 5), 0)} min total`,
             )}
           </ThemedText>
         </View>
@@ -400,26 +557,43 @@ export default function ScheduleScreen() {
       </Pressable>
 
       {showSpeeches && speeches.length > 0 ? (
-        <Animated.View entering={FadeInDown.duration(200)} style={styles.speechList}>
+        <Animated.View
+          entering={FadeInDown.duration(200)}
+          style={styles.speechList}
+        >
           {speeches.slice(0, 3).map((speech, index) => (
             <View
-              key={speech.id}
+              key={`${speech.id}-${index}`}
               style={[
                 styles.speechItem,
-                { backgroundColor: theme.backgroundSecondary, borderColor: theme.border },
+                {
+                  backgroundColor: theme.backgroundSecondary,
+                  borderColor: theme.border,
+                },
               ]}
             >
-              <ThemedText style={[styles.speechOrder, { color: Colors.dark.accent }]}>
+              <ThemedText
+                style={[styles.speechOrder, { color: Colors.dark.accent }]}
+              >
                 {speech.order}
               </ThemedText>
               <View style={styles.speechInfo}>
-                <ThemedText style={styles.speechName}>{speech.speakerName}</ThemedText>
-                <ThemedText style={[styles.speechRole, { color: theme.textMuted }]}>
+                <ThemedText style={styles.speechName}>
+                  {speech.speakerName}
+                </ThemedText>
+                <ThemedText
+                  style={[styles.speechRole, { color: theme.textMuted }]}
+                >
                   {speech.role}
                 </ThemedText>
               </View>
-              <ThemedText style={[styles.speechDuration, { color: theme.textSecondary }]}>
-                {t(`${speech.durationMinutes || 5} min`, `${speech.durationMinutes || 5} min`)}
+              <ThemedText
+                style={[styles.speechDuration, { color: theme.textSecondary }]}
+              >
+                {t(
+                  `${speech.durationMinutes || 5} min`,
+                  `${speech.durationMinutes || 5} min`,
+                )}
               </ThemedText>
             </View>
           ))}
@@ -428,17 +602,28 @@ export default function ScheduleScreen() {
               onPress={() => navigation.navigate("SpeechList")}
               style={styles.viewAllButton}
             >
-              <ThemedText style={[styles.viewAllText, { color: Colors.dark.accent }]}>
-                {t(`Se alle ${speeches.length} taler`, `View all ${speeches.length} speeches`)}
+              <ThemedText
+                style={[styles.viewAllText, { color: Colors.dark.accent }]}
+              >
+                {t(
+                  `Se alle ${speeches.length} taler`,
+                  `View all ${speeches.length} speeches`,
+                )}
               </ThemedText>
-              <EvendiIcon name="arrow-right" size={16} color={Colors.dark.accent} />
+              <EvendiIcon
+                name="arrow-right"
+                size={16}
+                color={Colors.dark.accent}
+              />
             </Pressable>
           ) : (
             <Pressable
               onPress={() => navigation.navigate("SpeechList")}
               style={styles.viewAllButton}
             >
-              <ThemedText style={[styles.viewAllText, { color: Colors.dark.accent }]}>
+              <ThemedText
+                style={[styles.viewAllText, { color: Colors.dark.accent }]}
+              >
                 {t("Rediger taleliste", "Edit speech list")}
               </ThemedText>
               <EvendiIcon name="edit-2" size={14} color={Colors.dark.accent} />
@@ -451,7 +636,9 @@ export default function ScheduleScreen() {
           style={[styles.addSpeechButton, { borderColor: Colors.dark.accent }]}
         >
           <EvendiIcon name="plus" size={16} color={Colors.dark.accent} />
-          <ThemedText style={[styles.addSpeechText, { color: Colors.dark.accent }]}>
+          <ThemedText
+            style={[styles.addSpeechText, { color: Colors.dark.accent }]}
+          >
             {t("Legg til taler", "Add speeches")}
           </ThemedText>
         </Pressable>
@@ -460,13 +647,26 @@ export default function ScheduleScreen() {
       {/* Share with Coordinator Button */}
       <Pressable
         onPress={() => navigation.navigate("CoordinatorSharing")}
-        style={[styles.shareButton, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+        style={[
+          styles.shareButton,
+          {
+            backgroundColor: theme.backgroundDefault,
+            borderColor: theme.border,
+          },
+        ]}
       >
         <EvendiIcon name="share-2" size={18} color={Colors.dark.accent} />
         <View style={styles.shareButtonContent}>
-          <ThemedText style={styles.shareButtonTitle}>{t("Del med toastmaster", "Share with toastmaster")}</ThemedText>
-          <ThemedText style={[styles.shareButtonSubtitle, { color: theme.textMuted }]}>
-            {t("Gi koordinatorer tilgang til taler og program", "Give coordinators access to speeches and schedule")}
+          <ThemedText style={styles.shareButtonTitle}>
+            {t("Del med toastmaster", "Share with toastmaster")}
+          </ThemedText>
+          <ThemedText
+            style={[styles.shareButtonSubtitle, { color: theme.textMuted }]}
+          >
+            {t(
+              "Gi koordinatorer tilgang til taler og program",
+              "Give coordinators access to speeches and schedule",
+            )}
           </ThemedText>
         </View>
         <EvendiIcon name="chevron-right" size={18} color={theme.textMuted} />
@@ -480,18 +680,45 @@ export default function ScheduleScreen() {
           >
             {t("Ingen hendelser lagt til ennå", "No events added yet")}
           </ThemedText>
-          <ThemedText
-            style={[styles.emptySubtext, { color: theme.textMuted }]}
-          >
-            {t("Legg til din første hendelse for dagen", "Add your first event for the day")}
+          <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
+            {t(
+              "Legg til din første hendelse for dagen",
+              "Add your first event for the day",
+            )}
           </ThemedText>
         </View>
       ) : (
         <View style={styles.timeline}>
+          <View
+            style={[
+              styles.searchRow,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <EvendiIcon name="search" size={14} color={theme.textMuted} />
+            <TextInput
+              value={eventSearch}
+              onChangeText={setEventSearch}
+              placeholder={t("Søk i hendelser", "Search events")}
+              placeholderTextColor={theme.textMuted}
+              style={[styles.searchInput, { color: theme.text }]}
+            />
+            {eventSearch.trim().length > 0 ? (
+              <Pressable onPress={() => setEventSearch("")}>
+                <EvendiIcon name="x" size={14} color={theme.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
           <ThemedText style={[styles.swipeHint, { color: theme.textMuted }]}>
-            {t("Sveip til venstre for å endre eller slette", "Swipe left to edit or delete")}
+            {t(
+              "Sveip til venstre for å endre eller slette",
+              "Swipe left to edit or delete",
+            )}
           </ThemedText>
-          {events.map((event, index) => (
+          {filteredEvents.map((event, index) => (
             <SwipeableEventItem
               key={event.id}
               event={event}
@@ -502,6 +729,15 @@ export default function ScheduleScreen() {
               onDelete={() => handleDeleteEvent(event.id)}
             />
           ))}
+          {filteredEvents.length === 0 && (
+            <View
+              style={[styles.searchEmptyCard, { borderColor: theme.border }]}
+            >
+              <ThemedText style={{ color: theme.textSecondary }}>
+                {t("Ingen treff i søket", "No matching events")}
+              </ThemedText>
+            </View>
+          )}
         </View>
       )}
 
@@ -510,11 +746,16 @@ export default function ScheduleScreen() {
           entering={FadeInDown.duration(300)}
           style={[
             styles.formCard,
-            { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border,
+            },
           ]}
         >
           <ThemedText type="h3" style={styles.formTitle}>
-            {editingEvent ? t("Endre hendelse", "Edit event") : t("Legg til hendelse", "Add event")}
+            {editingEvent
+              ? t("Endre hendelse", "Edit event")
+              : t("Legg til hendelse", "Add event")}
           </ThemedText>
 
           <View style={styles.inputRow}>
@@ -544,7 +785,12 @@ export default function ScheduleScreen() {
                   borderColor: theme.border,
                 },
               ]}
-              placeholder={t(isWedding ? "F.eks. Fotografering av brudepar" : "F.eks. Fotografering", isWedding ? "e.g. Couple photos" : "e.g. Photo session")}
+              placeholder={t(
+                isWedding
+                  ? "F.eks. Fotografering av brudepar"
+                  : "F.eks. Fotografering",
+                isWedding ? "e.g. Couple photos" : "e.g. Photo session",
+              )}
               placeholderTextColor={theme.textMuted}
               value={newTitle}
               onChangeText={setNewTitle}
@@ -554,7 +800,7 @@ export default function ScheduleScreen() {
           <ThemedText style={[styles.helpText, { color: theme.textMuted }]}>
             {t(
               "Tips: Bruk kamera-ikon for foto/video, så finner Foto & Video Tidsplan det automatisk",
-              "Tip: Use the camera icon for photo/video so the Photo & Video Timeline finds it automatically"
+              "Tip: Use the camera icon for photo/video so the Photo & Video Timeline finds it automatically",
             )}
           </ThemedText>
 
@@ -576,7 +822,9 @@ export default function ScheduleScreen() {
                 <EvendiIcon
                   name={icon}
                   size={18}
-                  color={selectedIcon === icon ? "#1A1A1A" : theme.textSecondary}
+                  color={
+                    selectedIcon === icon ? "#1A1A1A" : theme.textSecondary
+                  }
                 />
               </Pressable>
             ))}
@@ -593,7 +841,9 @@ export default function ScheduleScreen() {
               }}
               style={[styles.cancelButton, { borderColor: theme.border }]}
             >
-              <ThemedText style={{ color: theme.textSecondary }}>{t("Avbryt", "Cancel")}</ThemedText>
+              <ThemedText style={{ color: theme.textSecondary }}>
+                {t("Avbryt", "Cancel")}
+              </ThemedText>
             </Pressable>
             <Button onPress={handleAddEvent} style={styles.saveButton}>
               {editingEvent ? t("Oppdater", "Update") : t("Lagre", "Save")}
@@ -609,7 +859,9 @@ export default function ScheduleScreen() {
           style={[styles.addButton, { borderColor: Colors.dark.accent }]}
         >
           <EvendiIcon name="plus" size={20} color={Colors.dark.accent} />
-          <ThemedText style={[styles.addButtonText, { color: Colors.dark.accent }]}>
+          <ThemedText
+            style={[styles.addButtonText, { color: Colors.dark.accent }]}
+          >
             {t("Legg til hendelse", "Add event")}
           </ThemedText>
         </Pressable>
@@ -630,6 +882,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: Spacing.xl,
     textTransform: "capitalize",
+  },
+  eventTypeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  eventTypeImage: {
+    width: 36,
+    height: 36,
+  },
+  eventTypeFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  eventTypeTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  eventTypeSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
   },
   emptyState: {
     flex: 1,
@@ -655,6 +935,27 @@ const styles = StyleSheet.create({
   timeline: {
     gap: Spacing.md,
     marginBottom: Spacing.xl,
+  },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    paddingVertical: 0,
+  },
+  searchEmptyCard: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    alignItems: "center",
+    borderStyle: "dashed",
   },
   swipeHint: {
     fontSize: 12,

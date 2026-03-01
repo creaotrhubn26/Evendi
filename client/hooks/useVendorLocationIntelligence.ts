@@ -199,7 +199,7 @@ async function resolveVendorCoordinates(
 
   // Fall back to Kartverket address search
   try {
-    const results = await searchAddress(locationText);
+    const results: KartverketSearchResult[] = await searchAddress(locationText);
     if (results.length > 0) {
       const coords = results[0].coordinates;
       await setCachedCoords(locationText, coords);
@@ -240,7 +240,7 @@ export function useVendorLocationIntelligence(): VendorLocationIntelligence {
         setCoupleId(id);
 
         // Fetch venue data from bridge
-        const bridgeData = await getWeatherLocationData(id);
+        const bridgeData: WeatherLocationData = await getWeatherLocationData(id);
         if (!mounted) return;
 
         if (bridgeData.venue?.coordinates) {
@@ -467,19 +467,36 @@ export function useVendorLocationIntelligence(): VendorLocationIntelligence {
     [vendorTravelMap]
   );
 
-  return {
-    venueCoordinates,
-    venueName,
-    isLoadingVenue,
-    vendorTravelMap,
-    calculateVendorTravel,
-    calculateBatchTravel,
-    openDirections,
-    openVendorOnMap,
-    getTravelBadge,
-    getVendorTravel,
-    sortByDistance,
-    geocodeVendorLocation,
-    coupleId,
-  };
+  return useMemo(
+    () => ({
+      venueCoordinates,
+      venueName,
+      isLoadingVenue,
+      vendorTravelMap,
+      calculateVendorTravel,
+      calculateBatchTravel,
+      openDirections,
+      openVendorOnMap,
+      getTravelBadge,
+      getVendorTravel,
+      sortByDistance,
+      geocodeVendorLocation,
+      coupleId,
+    }),
+    [
+      venueCoordinates,
+      venueName,
+      isLoadingVenue,
+      vendorTravelMap,
+      calculateVendorTravel,
+      calculateBatchTravel,
+      openDirections,
+      openVendorOnMap,
+      getTravelBadge,
+      getVendorTravel,
+      sortByDistance,
+      geocodeVendorLocation,
+      coupleId,
+    ]
+  );
 }

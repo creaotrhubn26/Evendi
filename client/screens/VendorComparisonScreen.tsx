@@ -5,7 +5,6 @@ import {
   ScrollView,
   Pressable,
   Dimensions,
-  FlatList,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -281,7 +280,7 @@ export default function VendorComparisonScreen() {
                 />
                 {vendors.map((vendor, index) => (
                   <View
-                    key={vendor.vendorId}
+                    key={`${vendor.vendorId}-${index}`}
                     style={[styles.valueColumn, { width: columnWidth }]}
                   >
                     <Pressable

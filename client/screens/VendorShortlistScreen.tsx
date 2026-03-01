@@ -262,6 +262,7 @@ export default function VendorShortlistScreen() {
                   style={[
                     styles.vendorCard,
                     {
+                      maxWidth: width - Spacing.lg * 2,
                       backgroundColor: theme.backgroundDefault,
                       borderColor: isSelected ? theme.primary : theme.border,
                       borderWidth: isSelected ? 2 : 1,

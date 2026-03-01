@@ -29,10 +29,10 @@
  * ```
  */
 import React, { useEffect, useMemo } from "react";
-import { View, TextInput, StyleSheet, Alert } from "react-native";
+import { View, StyleSheet, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { EvendiIcon, type EvendiIconName } from "@/components/EvendiIcon";
+import { type EvendiIconName } from "@/components/EvendiIcon";
 
 import { ThemedText } from "@/components/ThemedText";
 import { VendorSuggestions } from "@/components/VendorSuggestions";
@@ -172,9 +172,10 @@ export function VendorSearchField({
     if (!vendorSearch.selectedVendor) return;
     const travel = locationIntel.getVendorTravel(vendorSearch.selectedVendor.id);
     const badge = locationIntel.getTravelBadge(vendorSearch.selectedVendor.id);
+    const eta = travel?.travel ? ` (${Math.round(travel.travel.drivingMinutes)} min kjøretid)` : "";
     Alert.alert(
       "Lagt til i tidslinje",
-      `Reisetid til ${vendorSearch.selectedVendor.businessName}${badge ? ` (${badge})` : ''} er lagt til i bryllupstidslinjen din.`,
+      `Reisetid til ${vendorSearch.selectedVendor.businessName}${badge ? ` (${badge})` : ""}${eta} er lagt til i bryllupstidslinjen din.`,
       [{ text: "OK" }]
     );
   };

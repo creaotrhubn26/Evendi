@@ -29,24 +29,44 @@ import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp, ParamListBase } from "@react-navigation/native";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 
 interface DeliveryItemInput {
   id: string; // Stable ID for lists
-  type: "gallery" | "video" | "website" | "download" | "contract" | "document" | "other";
+  type:
+    | "gallery"
+    | "video"
+    | "website"
+    | "download"
+    | "contract"
+    | "document"
+    | "other";
   label: string;
   url: string;
   description: string;
   urlError?: string; // Validation error state
 }
 
-type DeliveryCreateRouteParams = { delivery?: any; coupleId?: string; projectId?: string; timelineId?: string; coupleName?: string; coupleEmail?: string; weddingDate?: string } | undefined;
+type DeliveryCreateRouteParams =
+  | {
+      delivery?: any;
+      coupleId?: string;
+      projectId?: string;
+      timelineId?: string;
+      coupleName?: string;
+      coupleEmail?: string;
+      weddingDate?: string;
+    }
+  | undefined;
 
 interface Props {
   navigation: NativeStackNavigationProp<ParamListBase>;
-  route: RouteProp<{ DeliveryCreate: DeliveryCreateRouteParams }, "DeliveryCreate">;
+  route: RouteProp<
+    { DeliveryCreate: DeliveryCreateRouteParams },
+    "DeliveryCreate"
+  >;
 }
 
 const ITEM_TYPES = [
@@ -65,12 +85,13 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
 
-  const driveAppHint = Platform.OS === "ios"
-    ? "Åpne Google Drive-appen på iPhone eller iPad"
-    : Platform.OS === "android"
-      ? "Åpne Google Drive-appen på Android"
-      : "Åpne Google Drive i nettleseren";
-  
+  const driveAppHint =
+    Platform.OS === "ios"
+      ? "Åpne Google Drive-appen på iPhone eller iPad"
+      : Platform.OS === "android"
+        ? "Åpne Google Drive-appen på Android"
+        : "Åpne Google Drive i nettleseren";
+
   const editingDelivery = route.params?.delivery;
   const isEditMode = !!editingDelivery;
 
@@ -81,20 +102,37 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [coupleName, setCoupleName] = useState(route.params?.coupleName || "");
-  const [coupleEmail, setCoupleEmail] = useState(route.params?.coupleEmail || "");
+  const [coupleEmail, setCoupleEmail] = useState(
+    route.params?.coupleEmail || "",
+  );
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [weddingDate, setWeddingDate] = useState(route.params?.weddingDate || "");
-  const [linkedProject, setLinkedProject] = useState<string | null>(bridgeProjectId || null);
-  const [linkedTimeline, setLinkedTimeline] = useState<string | null>(bridgeTimelineId || null);
-  const [linkedCouple, setLinkedCouple] = useState<string | null>(bridgeCoupleId || null);
+  const [weddingDate, setWeddingDate] = useState(
+    route.params?.weddingDate || "",
+  );
+  const [linkedProject, setLinkedProject] = useState<string | null>(
+    bridgeProjectId || null,
+  );
+  const [linkedTimeline, setLinkedTimeline] = useState<string | null>(
+    bridgeTimelineId || null,
+  );
+  const [linkedCouple, setLinkedCouple] = useState<string | null>(
+    bridgeCoupleId || null,
+  );
   const [items, setItems] = useState<DeliveryItemInput[]>([
-    { id: `item-${Date.now()}`, type: "gallery", label: "", url: "", description: "" },
+    {
+      id: `item-${Date.now()}`,
+      type: "gallery",
+      label: "",
+      url: "",
+      description: "",
+    },
   ]);
   const [showGoogleDriveHelp, setShowGoogleDriveHelp] = useState(false);
   const [showSuccessSheet, setShowSuccessSheet] = useState(false);
   const [accessCode, setAccessCode] = useState("");
   const [showTemplates, setShowTemplates] = useState(!isEditMode);
+  const [itemSearch, setItemSearch] = useState("");
 
   // Delivery templates
   const getDeliveryTemplates = () => {
@@ -103,23 +141,43 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
         title: "Fotogalleri",
         description: "Del alle dine profesjonelle bryllupsbilder",
         items: [
-          { type: "gallery" as const, label: "Bryllupsbilder", description: "Høyoppløselige bilder fra dagen" },
+          {
+            type: "gallery" as const,
+            label: "Bryllupsbilder",
+            description: "Høyoppløselige bilder fra dagen",
+          },
         ],
       },
       {
         title: "Video + Bilder",
         description: "Komplett multimedia-pakke",
         items: [
-          { type: "gallery" as const, label: "Bryllupsbilder", description: "Høyoppløselige bilder" },
-          { type: "video" as const, label: "Bryllupsvideo", description: "Full lengde video" },
+          {
+            type: "gallery" as const,
+            label: "Bryllupsbilder",
+            description: "Høyoppløselige bilder",
+          },
+          {
+            type: "video" as const,
+            label: "Bryllupsvideo",
+            description: "Full lengde video",
+          },
         ],
       },
       {
         title: "Kontrakt + Dokumenter",
         description: "Alle juridiske dokumenter og kontrakter",
         items: [
-          { type: "contract" as const, label: "Signert kontrakt", description: "Avtale og betingelser" },
-          { type: "document" as const, label: "Faktura", description: "Betalingsdokumenter" },
+          {
+            type: "contract" as const,
+            label: "Signert kontrakt",
+            description: "Avtale og betingelser",
+          },
+          {
+            type: "document" as const,
+            label: "Faktura",
+            description: "Betalingsdokumenter",
+          },
         ],
       },
     ];
@@ -128,13 +186,15 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
   const applyDeliveryTemplate = (template: any) => {
     setTitle(template.title);
     setDescription(template.description);
-    setItems(template.items.map((item: any, idx: number) => ({
-      id: `item-${Date.now()}-${idx}`,
-      type: item.type,
-      label: item.label,
-      url: "",
-      description: item.description,
-    })));
+    setItems(
+      template.items.map((item: any, idx: number) => ({
+        id: `item-${Date.now()}-${idx}`,
+        type: item.type,
+        label: item.label,
+        url: "",
+        description: item.description,
+      })),
+    );
     setShowTemplates(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
@@ -177,8 +237,12 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
 
   // Convert Google Drive share links to direct image URLs
   const convertGoogleDriveUrl = (url: string): string => {
-    const fileMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-    const openMatch = url.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/);
+    const fileMatch = url.match(
+      /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/,
+    );
+    const openMatch = url.match(
+      /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/,
+    );
     const fileId = fileMatch?.[1] || openMatch?.[1];
     if (fileId) {
       return `https://drive.google.com/uc?export=view&id=${fileId}`;
@@ -199,13 +263,15 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
       setDescription(editingDelivery.description || "");
       setWeddingDate(editingDelivery.weddingDate || "");
       if (editingDelivery.items && editingDelivery.items.length > 0) {
-        setItems(editingDelivery.items.map((item: any, idx: number) => ({
-          id: item.id || `item-${idx}`,
-          type: item.type || "gallery",
-          label: item.label || "",
-          url: item.url || "",
-          description: item.description || "",
-        })));
+        setItems(
+          editingDelivery.items.map((item: any, idx: number) => ({
+            id: item.id || `item-${idx}`,
+            type: item.type || "gallery",
+            label: item.label || "",
+            url: item.url || "",
+            description: item.description || "",
+          })),
+        );
       }
     }
   }, [editingDelivery]);
@@ -215,9 +281,12 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
       if (!sessionToken) {
         throw new Error("Vennligst logg inn på nytt");
       }
-      
-      const url = isEditMode 
-        ? new URL(`/api/vendor/deliveries/${editingDelivery.id}`, getApiUrl()).toString()
+
+      const url = isEditMode
+        ? new URL(
+            `/api/vendor/deliveries/${editingDelivery.id}`,
+            getApiUrl(),
+          ).toString()
         : new URL("/api/vendor/deliveries", getApiUrl()).toString();
       const response = await fetch(url, {
         method: isEditMode ? "PATCH" : "POST",
@@ -234,7 +303,9 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           projectId: linkedProject || undefined,
           timelineId: linkedTimeline || undefined,
           coupleId: linkedCouple || undefined,
-          items: items.filter((i) => i.label && i.url).map(({ id, ...rest }) => rest),
+          items: items
+            .filter((i) => i.label && i.url)
+            .map(({ id, ...rest }) => ({ ...rest, clientId: id })),
         }),
       });
       if (!response.ok) {
@@ -242,7 +313,12 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           throw new Error("401:Autentisering kreves");
         }
         const error = await response.json();
-        throw new Error(error.error || (isEditMode ? "Kunne ikke oppdatere leveranse" : "Kunne ikke opprette leveranse"));
+        throw new Error(
+          error.error ||
+            (isEditMode
+              ? "Kunne ikke oppdatere leveranse"
+              : "Kunne ikke opprette leveranse"),
+        );
       }
       return response.json();
     },
@@ -284,13 +360,16 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
       if (!sessionToken) throw new Error("Ikke innlogget");
 
       const response = await fetch(
-        new URL(`/api/vendor/deliveries/${editingDelivery.id}`, getApiUrl()).toString(),
+        new URL(
+          `/api/vendor/deliveries/${editingDelivery.id}`,
+          getApiUrl(),
+        ).toString(),
         {
           method: "DELETE",
           headers: {
             Authorization: `Bearer ${sessionToken}`,
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -324,7 +403,10 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
 
   const addItem = () => {
     const newId = `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    setItems([...items, { id: newId, type: "gallery", label: "", url: "", description: "" }]);
+    setItems([
+      ...items,
+      { id: newId, type: "gallery", label: "", url: "", description: "" },
+    ]);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -335,7 +417,11 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
     }
   };
 
-  const updateItem = (index: number, field: keyof DeliveryItemInput, value: string) => {
+  const updateItem = (
+    index: number,
+    field: keyof DeliveryItemInput,
+    value: string,
+  ) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     // Clear URL error when user edits
@@ -345,45 +431,53 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
     setItems(newItems);
   };
 
-  const handleUrlBlur = useCallback((index: number) => {
-    const item = items[index];
-    if (!item.url) return; // Empty URLs are OK
+  const handleUrlBlur = useCallback(
+    (index: number) => {
+      const item = items[index];
+      if (!item.url) return; // Empty URLs are OK
 
-    let convertedUrl = item.url;
-    if (item.type === "gallery" && item.url.includes("drive.google.com")) {
-      convertedUrl = convertGoogleDriveUrl(item.url);
-    }
+      let convertedUrl = item.url;
+      if (item.type === "gallery" && item.url.includes("drive.google.com")) {
+        convertedUrl = convertGoogleDriveUrl(item.url);
+      }
 
-    // Validate URL
-    if (!isValidUrl(convertedUrl)) {
+      // Validate URL
+      if (!isValidUrl(convertedUrl)) {
+        const newItems = [...items];
+        newItems[index].urlError = "Ugyldig URL";
+        setItems(newItems);
+        return;
+      }
+
+      // Update with converted URL
       const newItems = [...items];
-      newItems[index].urlError = "Ugyldig URL";
+      newItems[index].url = convertedUrl;
+      newItems[index].urlError = undefined;
       setItems(newItems);
-      return;
-    }
+    },
+    [items, isValidUrl],
+  );
 
-    // Update with converted URL
-    const newItems = [...items];
-    newItems[index].url = convertedUrl;
-    newItems[index].urlError = undefined;
-    setItems(newItems);
-  }, [items, isValidUrl]);
-
-  const handleTestLink = useCallback((url: string, itemType: string) => {
-    if (!url.trim()) {
-      showToast("Legg inn en URL først.");
-      return;
-    }
-    const testUrl = itemType === "gallery" ? convertGoogleDriveUrl(url) : url;
-    if (isValidUrl(testUrl)) {
-      const finalUrl = testUrl.startsWith("http") ? testUrl : `https://${testUrl}`;
-      Linking.openURL(finalUrl).catch(() => {
-        showToast("Kunne ikke åpne lenken.");
-      });
-    } else {
-      showToast("Lenken er ikke gyldig.");
-    }
-  }, [isValidUrl]);
+  const handleTestLink = useCallback(
+    (url: string, itemType: string) => {
+      if (!url.trim()) {
+        showToast("Legg inn en URL først.");
+        return;
+      }
+      const testUrl = itemType === "gallery" ? convertGoogleDriveUrl(url) : url;
+      if (isValidUrl(testUrl)) {
+        const finalUrl = testUrl.startsWith("http")
+          ? testUrl
+          : `https://${testUrl}`;
+        Linking.openURL(finalUrl).catch(() => {
+          showToast("Kunne ikke åpne lenken.");
+        });
+      } else {
+        showToast("Lenken er ikke gyldig.");
+      }
+    },
+    [isValidUrl],
+  );
 
   const handleSubmit = useCallback(() => {
     if (!sessionToken) {
@@ -409,7 +503,9 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
     }
 
     // Check URLs on items with labels
-    const invalidUrls = itemsWithLabels.filter((i) => i.url?.trim() && !isValidUrl(i.url));
+    const invalidUrls = itemsWithLabels.filter(
+      (i) => i.url?.trim() && !isValidUrl(i.url),
+    );
     if (invalidUrls.length > 0) {
       showToast("Sjekk at alle lenker er gyldige.");
       return;
@@ -423,7 +519,16 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     saveMutation.mutate();
-  }, [sessionToken, coupleName, title, weddingDate, items, isValidDateString, isValidUrl, saveMutation]);
+  }, [
+    sessionToken,
+    coupleName,
+    title,
+    weddingDate,
+    items,
+    isValidDateString,
+    isValidUrl,
+    saveMutation,
+  ]);
 
   const weddingDateHelp = useCallback(() => {
     if (!weddingDate.trim()) return "Format: YYYY-MM-DD eller DD.MM.YYYY";
@@ -432,23 +537,50 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
       : "Ugyldig datoformat (YYYY-MM-DD eller DD.MM.YYYY)";
   }, [isValidDateString, weddingDate]);
 
-  const weddingDateHelpColor = weddingDate.trim() && !isValidDateString(weddingDate)
-    ? "#EF5350"
-    : theme.textMuted;
+  const weddingDateHelpColor =
+    weddingDate.trim() && !isValidDateString(weddingDate)
+      ? "#EF5350"
+      : theme.textMuted;
+
+  const visibleItems = items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => {
+      if (!itemSearch.trim()) return true;
+      const needle = itemSearch.toLowerCase().trim();
+      return [item.label, item.url, item.description, item.type]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle);
+    });
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      <View style={[styles.header, { paddingTop: insets.top + Spacing.md, backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top + Spacing.md,
+            backgroundColor: theme.backgroundDefault,
+            borderBottomColor: theme.border,
+          },
+        ]}
+      >
         <View style={styles.headerContent}>
-          <View style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}>
+          <View
+            style={[styles.headerIconCircle, { backgroundColor: theme.accent }]}
+          >
             <EvendiIcon name="package" size={20} color="#FFFFFF" />
           </View>
           <View style={styles.headerTextContainer}>
             <ThemedText style={[styles.headerTitle, { color: theme.text }]}>
               {isEditMode ? "Rediger leveranse" : "Ny leveranse"}
             </ThemedText>
-            <ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-              {isEditMode ? "Oppdater leveranseinfo" : "Del innhold med brudeparet"}
+            <ThemedText
+              style={[styles.headerSubtitle, { color: theme.textSecondary }]}
+            >
+              {isEditMode
+                ? "Oppdater leveranseinfo"
+                : "Del innhold med brudeparet"}
             </ThemedText>
           </View>
         </View>
@@ -456,7 +588,11 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           onPress={() => navigation.goBack()}
           style={({ pressed }) => [
             styles.closeButton,
-            { backgroundColor: pressed ? theme.backgroundSecondary : theme.backgroundRoot },
+            {
+              backgroundColor: pressed
+                ? theme.backgroundSecondary
+                : theme.backgroundRoot,
+            },
           ]}
         >
           <EvendiIcon name="x" size={20} color={theme.textSecondary} />
@@ -466,22 +602,42 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl },
+          {
+            paddingTop: Spacing.lg + Math.max(0, headerHeight - 56) / 6,
+            paddingBottom: insets.bottom + Spacing.xl,
+          },
         ]}
       >
         {/* Template Selection */}
         {showTemplates && !isEditMode && (
-          <View style={[styles.templatesCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.accent }]}>
+          <View
+            style={[
+              styles.templatesCard,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.accent,
+              },
+            ]}
+          >
             <View style={styles.templatesHeader}>
               <View style={styles.templatesHeaderLeft}>
                 <EvendiIcon name="zap" size={18} color={theme.accent} />
-                <ThemedText style={[styles.templatesTitle, { color: theme.accent }]}>Hurtigstart</ThemedText>
+                <ThemedText
+                  style={[styles.templatesTitle, { color: theme.accent }]}
+                >
+                  Hurtigstart
+                </ThemedText>
               </View>
-              <Pressable onPress={() => setShowTemplates(false)} style={styles.templatesClose}>
+              <Pressable
+                onPress={() => setShowTemplates(false)}
+                style={styles.templatesClose}
+              >
                 <EvendiIcon name="x" size={16} color={theme.textMuted} />
               </Pressable>
             </View>
-            <ThemedText style={[styles.templatesSubtitle, { color: theme.textSecondary }]}>
+            <ThemedText
+              style={[styles.templatesSubtitle, { color: theme.textSecondary }]}
+            >
               Velg en mal for å komme raskt i gang
             </ThemedText>
             <View style={styles.templatesGrid}>
@@ -489,12 +645,27 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
                 <Pressable
                   key={index}
                   onPress={() => applyDeliveryTemplate(template)}
-                  style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                  style={[
+                    styles.templateChip,
+                    {
+                      backgroundColor: theme.backgroundRoot,
+                      borderColor: theme.border,
+                    },
+                  ]}
                 >
                   <EvendiIcon name="copy" size={14} color={theme.accent} />
                   <View style={styles.templateChipContent}>
-                    <ThemedText style={[styles.templateChipTitle, { color: theme.text }]}>{template.title}</ThemedText>
-                    <ThemedText style={[styles.templateChipSubtitle, { color: theme.textSecondary }]}>
+                    <ThemedText
+                      style={[styles.templateChipTitle, { color: theme.text }]}
+                    >
+                      {template.title}
+                    </ThemedText>
+                    <ThemedText
+                      style={[
+                        styles.templateChipSubtitle,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
                       {template.description}
                     </ThemedText>
                   </View>
@@ -504,146 +675,425 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           </View>
         )}
 
-        <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        <View
+          style={[
+            styles.sectionCard,
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border,
+            },
+          ]}
+        >
           <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
+            <View
+              style={[
+                styles.sectionIconCircle,
+                { backgroundColor: theme.accent + "15" },
+              ]}
+            >
               <EvendiIcon name="users" size={16} color={theme.accent} />
             </View>
-            <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Brudepar</ThemedText>
+            <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
+              Brudepar
+            </ThemedText>
           </View>
           <View style={styles.section}>
-          <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <EvendiIcon name="users" size={18} color={theme.textMuted} />
-            <PersistentTextInput
-              draftKey="DeliveryCreateScreen-input-1"
-              style={[styles.input, { color: theme.text }]}
-              placeholder="Navn på brudeparet *"
-              placeholderTextColor={theme.textMuted}
-              value={coupleName}
-              onChangeText={setCoupleName}
-            />
-          </View>
-          <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <EvendiIcon name="mail" size={18} color={theme.textMuted} />
-            <PersistentTextInput
-              draftKey="DeliveryCreateScreen-input-2"
-              style={[styles.input, { color: theme.text }]}
-              placeholder="E-post (valgfritt)"
-              placeholderTextColor={theme.textMuted}
-              value={coupleEmail}
-              onChangeText={setCoupleEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-          <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <EvendiIcon name="calendar" size={18} color={theme.textMuted} />
-            <PersistentTextInput
-              draftKey="DeliveryCreateScreen-input-3"
-              style={[styles.input, { color: theme.text }]}
-              placeholder="Bryllupsdato (valgfritt)"
-              placeholderTextColor={theme.textMuted}
-              value={weddingDate}
-              onChangeText={setWeddingDate}
-            />
-          </View>
-          <ThemedText style={[styles.helperText, { color: weddingDateHelpColor }]}>
-            {weddingDateHelp()}
-          </ThemedText>
+            <View
+              style={[
+                styles.inputContainer,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <EvendiIcon name="users" size={18} color={theme.textMuted} />
+              <PersistentTextInput
+                draftKey="DeliveryCreateScreen-input-1"
+                style={[styles.input, { color: theme.text }]}
+                placeholder="Navn på brudeparet *"
+                placeholderTextColor={theme.textMuted}
+                value={coupleName}
+                onChangeText={setCoupleName}
+              />
+            </View>
+            <View
+              style={[
+                styles.inputContainer,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <EvendiIcon name="mail" size={18} color={theme.textMuted} />
+              <PersistentTextInput
+                draftKey="DeliveryCreateScreen-input-2"
+                style={[styles.input, { color: theme.text }]}
+                placeholder="E-post (valgfritt)"
+                placeholderTextColor={theme.textMuted}
+                value={coupleEmail}
+                onChangeText={setCoupleEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+            <View
+              style={[
+                styles.inputContainer,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <EvendiIcon name="calendar" size={18} color={theme.textMuted} />
+              <PersistentTextInput
+                draftKey="DeliveryCreateScreen-input-3"
+                style={[styles.input, { color: theme.text }]}
+                placeholder="Bryllupsdato (valgfritt)"
+                placeholderTextColor={theme.textMuted}
+                value={weddingDate}
+                onChangeText={setWeddingDate}
+              />
+            </View>
+            <ThemedText
+              style={[styles.helperText, { color: weddingDateHelpColor }]}
+            >
+              {weddingDateHelp()}
+            </ThemedText>
           </View>
         </View>
 
         {/* Bridge indicator — shows when delivery is linked to a project/timeline */}
         {(linkedProject || linkedTimeline || linkedCouple) && (
-          <View style={[styles.sectionCard, { backgroundColor: theme.accent + "08", borderColor: theme.accent + "30" }]}>
+          <View
+            style={[
+              styles.sectionCard,
+              {
+                backgroundColor: theme.accent + "08",
+                borderColor: theme.accent + "30",
+              },
+            ]}
+          >
             <View style={styles.sectionHeader}>
-              <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "20" }]}>
+              <View
+                style={[
+                  styles.sectionIconCircle,
+                  { backgroundColor: theme.accent + "20" },
+                ]}
+              >
                 <EvendiIcon name="link" size={16} color={theme.accent} />
               </View>
-              <ThemedText style={[styles.sectionTitle, { color: theme.accent }]}>Koblet til prosjekt</ThemedText>
+              <ThemedText
+                style={[styles.sectionTitle, { color: theme.accent }]}
+              >
+                Koblet til prosjekt
+              </ThemedText>
             </View>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 16, paddingBottom: 12 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap: 6,
+                paddingHorizontal: 16,
+                paddingBottom: 12,
+              }}
+            >
               {linkedProject && (
-                <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: theme.accent + "15", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: theme.accent + "15",
+                    borderRadius: 12,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                  }}
+                >
                   <EvendiIcon name="briefcase" size={12} color={theme.accent} />
-                  <ThemedText style={{ fontSize: 12, color: theme.accent, marginLeft: 4 }}>Prosjekt</ThemedText>
+                  <ThemedText
+                    style={{ fontSize: 12, color: theme.accent, marginLeft: 4 }}
+                  >
+                    Prosjekt
+                  </ThemedText>
+                  <Pressable
+                    onPress={() => setLinkedProject(null)}
+                    style={{ marginLeft: 6 }}
+                  >
+                    <EvendiIcon name="x" size={12} color={theme.accent} />
+                  </Pressable>
                 </View>
               )}
               {linkedTimeline && (
-                <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#7C3AED20", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}>
-                  <EvendiIcon name="clock" size={12} color="#7C3AED" />
-                  <ThemedText style={{ fontSize: 12, color: "#7C3AED", marginLeft: 4 }}>Tidslinje</ThemedText>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: Colors.light.warning + "20",
+                    borderRadius: 12,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                  }}
+                >
+                  <EvendiIcon
+                    name="clock"
+                    size={12}
+                    color={Colors.light.warning}
+                  />
+                  <ThemedText
+                    style={{
+                      fontSize: 12,
+                      color: Colors.light.warning,
+                      marginLeft: 4,
+                    }}
+                  >
+                    Tidslinje
+                  </ThemedText>
+                  <Pressable
+                    onPress={() => setLinkedTimeline(null)}
+                    style={{ marginLeft: 6 }}
+                  >
+                    <EvendiIcon
+                      name="x"
+                      size={12}
+                      color={Colors.light.warning}
+                    />
+                  </Pressable>
                 </View>
               )}
               {linkedCouple && (
-                <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#EC489920", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}>
-                  <EvendiIcon name="heart" size={12} color="#EC4899" />
-                  <ThemedText style={{ fontSize: 12, color: "#EC4899", marginLeft: 4 }}>Brudepar</ThemedText>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: Colors.light.error + "20",
+                    borderRadius: 12,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                  }}
+                >
+                  <EvendiIcon
+                    name="heart"
+                    size={12}
+                    color={Colors.light.error}
+                  />
+                  <ThemedText
+                    style={{
+                      fontSize: 12,
+                      color: Colors.light.error,
+                      marginLeft: 4,
+                    }}
+                  >
+                    Brudepar
+                  </ThemedText>
+                  <Pressable
+                    onPress={() => setLinkedCouple(null)}
+                    style={{ marginLeft: 6 }}
+                  >
+                    <EvendiIcon name="x" size={12} color={Colors.light.error} />
+                  </Pressable>
                 </View>
               )}
+            </View>
+            <View style={styles.bridgeEditorRow}>
+              <TextInput
+                style={[
+                  styles.bridgeInput,
+                  {
+                    borderColor: theme.border,
+                    color: theme.text,
+                    backgroundColor: theme.backgroundDefault,
+                  },
+                ]}
+                value={linkedProject ?? ""}
+                onChangeText={(value) =>
+                  setLinkedProject(value.trim() ? value : null)
+                }
+                placeholder="Project ID"
+                placeholderTextColor={theme.textMuted}
+                autoCapitalize="none"
+              />
+              <TextInput
+                style={[
+                  styles.bridgeInput,
+                  {
+                    borderColor: theme.border,
+                    color: theme.text,
+                    backgroundColor: theme.backgroundDefault,
+                  },
+                ]}
+                value={linkedTimeline ?? ""}
+                onChangeText={(value) =>
+                  setLinkedTimeline(value.trim() ? value : null)
+                }
+                placeholder="Timeline ID"
+                placeholderTextColor={theme.textMuted}
+                autoCapitalize="none"
+              />
+              <TextInput
+                style={[
+                  styles.bridgeInput,
+                  {
+                    borderColor: theme.border,
+                    color: theme.text,
+                    backgroundColor: theme.backgroundDefault,
+                  },
+                ]}
+                value={linkedCouple ?? ""}
+                onChangeText={(value) =>
+                  setLinkedCouple(value.trim() ? value : null)
+                }
+                placeholder="Couple ID"
+                placeholderTextColor={theme.textMuted}
+                autoCapitalize="none"
+              />
             </View>
           </View>
         )}
 
-        <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        <View
+          style={[
+            styles.sectionCard,
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border,
+            },
+          ]}
+        >
           <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
+            <View
+              style={[
+                styles.sectionIconCircle,
+                { backgroundColor: theme.accent + "15" },
+              ]}
+            >
               <EvendiIcon name="file-text" size={16} color={theme.accent} />
             </View>
-            <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Leveranse</ThemedText>
+            <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
+              Leveranse
+            </ThemedText>
           </View>
           <View style={styles.section}>
-          <View style={[styles.inputContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <EvendiIcon name="tag" size={18} color={theme.textMuted} />
-            <PersistentTextInput
-              draftKey="DeliveryCreateScreen-input-4"
-              style={[styles.input, { color: theme.text }]}
-              placeholder="Tittel *"
-              placeholderTextColor={theme.textMuted}
-              value={title}
-              onChangeText={setTitle}
-            />
-          </View>
-          <View style={[styles.inputContainer, styles.textAreaContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <PersistentTextInput
-              draftKey="DeliveryCreateScreen-input-5"
-              style={[styles.input, styles.textArea, { color: theme.text }]}
-              placeholder="Beskrivelse (valgfritt)"
-              placeholderTextColor={theme.textMuted}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={3}
-            />
-          </View>
+            <View
+              style={[
+                styles.inputContainer,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <EvendiIcon name="tag" size={18} color={theme.textMuted} />
+              <PersistentTextInput
+                draftKey="DeliveryCreateScreen-input-4"
+                style={[styles.input, { color: theme.text }]}
+                placeholder="Tittel *"
+                placeholderTextColor={theme.textMuted}
+                value={title}
+                onChangeText={setTitle}
+              />
+            </View>
+            <View
+              style={[
+                styles.inputContainer,
+                styles.textAreaContainer,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <PersistentTextInput
+                draftKey="DeliveryCreateScreen-input-5"
+                style={[styles.input, styles.textArea, { color: theme.text }]}
+                placeholder="Beskrivelse (valgfritt)"
+                placeholderTextColor={theme.textMuted}
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                numberOfLines={3}
+              />
+            </View>
           </View>
         </View>
 
         <View style={styles.itemsHeader}>
           <View style={styles.itemsHeaderLeft}>
-            <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
+            <View
+              style={[
+                styles.sectionIconCircle,
+                { backgroundColor: theme.accent + "15" },
+              ]}
+            >
               <EvendiIcon name="link" size={16} color={theme.accent} />
             </View>
-            <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Lenker</ThemedText>
+            <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
+              Lenker
+            </ThemedText>
           </View>
-          <Pressable 
-            onPress={addItem} 
+          <Pressable
+            onPress={addItem}
             style={({ pressed }) => [
-              styles.addItemBtn, 
-              { backgroundColor: pressed ? theme.accent : theme.accent + "15" }
+              styles.addItemBtn,
+              { backgroundColor: pressed ? theme.accent : theme.accent + "15" },
             ]}
           >
             <EvendiIcon name="plus" size={16} color={theme.accent} />
-            <ThemedText style={[styles.addItemText, { color: theme.accent }]}>Legg til</ThemedText>
+            <ThemedText style={[styles.addItemText, { color: theme.accent }]}>
+              Legg til
+            </ThemedText>
           </Pressable>
         </View>
 
-        {items.map((item, index) => (
-          <View key={item.id} style={[styles.itemCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        {items.length > 1 && (
+          <View
+            style={[
+              styles.itemSearchRow,
+              {
+                borderColor: theme.border,
+                backgroundColor: theme.backgroundDefault,
+              },
+            ]}
+          >
+            <EvendiIcon name="search" size={16} color={theme.textMuted} />
+            <TextInput
+              style={[styles.itemSearchInput, { color: theme.text }]}
+              value={itemSearch}
+              onChangeText={setItemSearch}
+              placeholder="Søk i lenker"
+              placeholderTextColor={theme.textMuted}
+            />
+            {itemSearch.trim() ? (
+              <Pressable onPress={() => setItemSearch("")}>
+                <EvendiIcon name="x" size={16} color={theme.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+        )}
+
+        {visibleItems.map(({ item, index }) => (
+          <View
+            key={item.id}
+            style={[
+              styles.itemCard,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+              },
+            ]}
+          >
             <View style={styles.itemHeader}>
-              <ThemedText style={[styles.itemNumber, { color: theme.textMuted }]}>Lenke {index + 1}</ThemedText>
+              <ThemedText
+                style={[styles.itemNumber, { color: theme.textMuted }]}
+              >
+                Lenke {index + 1}
+              </ThemedText>
               {items.length > 1 ? (
-                <Pressable onPress={() => removeItem(index)} style={styles.removeBtn}>
+                <Pressable
+                  onPress={() => removeItem(index)}
+                  style={styles.removeBtn}
+                >
                   <EvendiIcon name="x" size={18} color="#EF5350" />
                 </Pressable>
               ) : null}
@@ -657,15 +1107,20 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
                     updateItem(index, "type", type.value);
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   }}
-                  style={[{
-                    flex: 1,
-                    alignItems: "center",
-                    paddingVertical: Spacing.sm + 2,
-                    borderRadius: BorderRadius.sm,
-                    borderWidth: item.type === type.value ? 0 : 1,
-                    backgroundColor: item.type === type.value ? theme.accent : theme.backgroundRoot,
-                    borderColor: theme.border,
-                  }]}
+                  style={[
+                    {
+                      flex: 1,
+                      alignItems: "center",
+                      paddingVertical: Spacing.sm + 2,
+                      borderRadius: BorderRadius.sm,
+                      borderWidth: item.type === type.value ? 0 : 1,
+                      backgroundColor:
+                        item.type === type.value
+                          ? theme.accent
+                          : theme.backgroundRoot,
+                      borderColor: theme.border,
+                    },
+                  ]}
                 >
                   {renderIcon(
                     type.icon,
@@ -676,7 +1131,15 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
               ))}
             </View>
 
-            <View style={[styles.itemInput, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}>
+            <View
+              style={[
+                styles.itemInput,
+                {
+                  backgroundColor: theme.backgroundRoot,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
               <PersistentTextInput
                 draftKey="DeliveryCreateScreen-input-6"
                 style={[styles.input, { color: theme.text }]}
@@ -687,11 +1150,23 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
               />
             </View>
 
-            <View style={[styles.itemInput, { backgroundColor: theme.backgroundRoot, borderColor: item.urlError ? "#EF5350" : theme.border }]}>
+            <View
+              style={[
+                styles.itemInput,
+                {
+                  backgroundColor: theme.backgroundRoot,
+                  borderColor: item.urlError ? "#EF5350" : theme.border,
+                },
+              ]}
+            >
               <PersistentTextInput
                 draftKey="DeliveryCreateScreen-input-7"
                 style={[styles.input, { color: theme.text }]}
-                placeholder={item.type === "gallery" ? "Google Drive eller bilde-URL" : "URL (https://...)"}
+                placeholder={
+                  item.type === "gallery"
+                    ? "Google Drive eller bilde-URL"
+                    : "URL (https://...)"
+                }
                 placeholderTextColor={theme.textMuted}
                 value={item.url}
                 onChangeText={(v) => updateItem(index, "url", v)}
@@ -714,27 +1189,46 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
                 onPress={() => handleTestLink(item.url, item.type)}
                 style={({ pressed }) => [
                   styles.testLinkBtn,
-                  { backgroundColor: pressed ? theme.accent + "20" : theme.accent + "10" }
+                  {
+                    backgroundColor: pressed
+                      ? theme.accent + "20"
+                      : theme.accent + "10",
+                  },
                 ]}
               >
-                <EvendiIcon name="external-link" size={14} color={theme.accent} />
-                <ThemedText style={[styles.testLinkText, { color: theme.accent }]}>
+                <EvendiIcon
+                  name="external-link"
+                  size={14}
+                  color={theme.accent}
+                />
+                <ThemedText
+                  style={[styles.testLinkText, { color: theme.accent }]}
+                >
                   Test lenke
                 </ThemedText>
               </Pressable>
             )}
-            
+
             {/* Google Drive hint for gallery type */}
             {item.type === "gallery" && !item.url ? (
               <View style={styles.urlHintRow}>
-                <ThemedText style={[styles.urlHint, { color: theme.textMuted }]}>
+                <ThemedText
+                  style={[styles.urlHint, { color: theme.textMuted }]}
+                >
                   💡 Lim inn Google Drive-lenke – konverteres automatisk!
                 </ThemedText>
-                <Pressable 
+                <Pressable
                   onPress={() => setShowGoogleDriveHelp(true)}
-                  style={[styles.helpBtn, { backgroundColor: theme.accent + "15" }]}
+                  style={[
+                    styles.helpBtn,
+                    { backgroundColor: theme.accent + "15" },
+                  ]}
                 >
-                  <EvendiIcon name="help-circle" size={14} color={theme.accent} />
+                  <EvendiIcon
+                    name="help-circle"
+                    size={14}
+                    color={theme.accent}
+                  />
                 </Pressable>
               </View>
             ) : null}
@@ -746,8 +1240,8 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
           disabled={saveMutation.isPending}
           style={({ pressed }) => [
             styles.submitBtn,
-            { 
-              backgroundColor: theme.accent, 
+            {
+              backgroundColor: theme.accent,
               opacity: saveMutation.isPending ? 0.7 : 1,
               transform: [{ scale: pressed ? 0.98 : 1 }],
             },
@@ -773,7 +1267,7 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
             disabled={deleteMutation.isPending}
             style={({ pressed }) => [
               styles.deleteBtn,
-              { 
+              {
                 backgroundColor: "#F44336" + "15",
                 opacity: deleteMutation.isPending ? 0.5 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
@@ -785,7 +1279,9 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
             ) : (
               <>
                 <EvendiIcon name="trash-2" size={18} color="#F44336" />
-                <ThemedText style={[styles.deleteBtnText, { color: "#F44336" }]}>
+                <ThemedText
+                  style={[styles.deleteBtnText, { color: "#F44336" }]}
+                >
                   Slett leveranse
                 </ThemedText>
               </>
@@ -801,29 +1297,68 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
         transparent={true}
         onRequestClose={() => setShowSuccessSheet(false)}
       >
-        <View style={[styles.successSheetOverlay, { backgroundColor: "rgba(0,0,0,0.3)" }]}>
-          <View style={[styles.successSheet, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-            <View style={[styles.successIcon, { backgroundColor: theme.accent + "20" }]}>
+        <View
+          style={[
+            styles.successSheetOverlay,
+            { backgroundColor: "rgba(0,0,0,0.3)" },
+          ]}
+        >
+          <View
+            style={[
+              styles.successSheet,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.successIcon,
+                { backgroundColor: theme.accent + "20" },
+              ]}
+            >
               <EvendiIcon name="check-circle" size={44} color={theme.accent} />
             </View>
             <ThemedText style={[styles.successTitle, { color: theme.text }]}>
               Leveranse opprettet!
             </ThemedText>
-            <ThemedText style={[styles.successSubtitle, { color: theme.textSecondary }]}>
+            <ThemedText
+              style={[styles.successSubtitle, { color: theme.textSecondary }]}
+            >
               Tilgangskode:
             </ThemedText>
-            <View style={[styles.codeBox, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}>
-              <ThemedText style={[styles.codeText, { color: theme.text, fontFamily: "monospace" }]}>
+            <View
+              style={[
+                styles.codeBox,
+                {
+                  backgroundColor: theme.backgroundRoot,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <ThemedText
+                style={[
+                  styles.codeText,
+                  { color: theme.text, fontFamily: "monospace" },
+                ]}
+              >
                 {accessCode}
               </ThemedText>
               <Pressable
                 onPress={() => {
                   Clipboard.setStringAsync(accessCode);
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  Haptics.notificationAsync(
+                    Haptics.NotificationFeedbackType.Success,
+                  );
                 }}
                 style={({ pressed }) => [
                   styles.copyCodeBtn,
-                  { backgroundColor: pressed ? theme.accent : theme.accent + "15" }
+                  {
+                    backgroundColor: pressed
+                      ? theme.accent
+                      : theme.accent + "15",
+                  },
                 ]}
               >
                 <EvendiIcon name="copy" size={16} color={theme.accent} />
@@ -839,7 +1374,10 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
               }}
               style={({ pressed }) => [
                 styles.doneBtn,
-                { backgroundColor: pressed ? theme.accent : theme.accent, opacity: pressed ? 0.8 : 1 }
+                {
+                  backgroundColor: pressed ? theme.accent : theme.accent,
+                  opacity: pressed ? 0.8 : 1,
+                },
               ]}
             >
               <ThemedText style={styles.doneBtnText}>Ferdig</ThemedText>
@@ -856,19 +1394,26 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
         onRequestClose={() => setShowGoogleDriveHelp(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
             {/* Header with Google logo */}
             <View style={styles.modalHeader}>
               <View style={styles.modalTitleRow}>
-                <Image 
-                  source={{ uri: "https://www.gstatic.com/images/branding/product/2x/drive_2020q4_48dp.png" }}
+                <Image
+                  source={{
+                    uri: "https://www.gstatic.com/images/branding/product/2x/drive_2020q4_48dp.png",
+                  }}
                   style={styles.googleDriveLogo}
                 />
                 <ThemedText style={[styles.modalTitle, { color: theme.text }]}>
                   Google Drive Oppsett
                 </ThemedText>
               </View>
-              <Pressable 
+              <Pressable
                 onPress={() => setShowGoogleDriveHelp(false)}
                 style={styles.modalCloseBtn}
               >
@@ -876,21 +1421,30 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
               </Pressable>
             </View>
 
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              <ThemedText style={[styles.modalSubtitle, { color: theme.textMuted }]}>
+            <ScrollView
+              style={styles.modalScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              <ThemedText
+                style={[styles.modalSubtitle, { color: theme.textMuted }]}
+              >
                 Følg disse trinnene for å dele bilder fra Google Drive:
               </ThemedText>
 
               {/* Step 1 */}
               <View style={styles.helpStep}>
-                <View style={[styles.stepNumber, { backgroundColor: theme.accent }]}>
+                <View
+                  style={[styles.stepNumber, { backgroundColor: theme.accent }]}
+                >
                   <ThemedText style={styles.stepNumberText}>1</ThemedText>
                 </View>
                 <View style={styles.stepContent}>
                   <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
                     Åpne Google Drive
                   </ThemedText>
-                  <ThemedText style={[styles.stepDesc, { color: theme.textMuted }]}>
+                  <ThemedText
+                    style={[styles.stepDesc, { color: theme.textMuted }]}
+                  >
                     Gå til drive.google.com eller {driveAppHint.toLowerCase()}
                   </ThemedText>
                 </View>
@@ -898,38 +1452,63 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
 
               {/* Step 2 */}
               <View style={styles.helpStep}>
-                <View style={[styles.stepNumber, { backgroundColor: theme.accent }]}>
+                <View
+                  style={[styles.stepNumber, { backgroundColor: theme.accent }]}
+                >
                   <ThemedText style={styles.stepNumberText}>2</ThemedText>
                 </View>
                 <View style={styles.stepContent}>
                   <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
                     Velg bildet og åpne delings-innstillinger
                   </ThemedText>
-                  <ThemedText style={[styles.stepDesc, { color: theme.textMuted }]}>
-                    Høyreklikk på bildet → "Del" eller klikk på de tre prikkene → "Del"
+                  <ThemedText
+                    style={[styles.stepDesc, { color: theme.textMuted }]}
+                  >
+                    Høyreklikk på bildet → &quot;Del&quot; eller klikk på de tre
+                    prikkene → &quot;Del&quot;
                   </ThemedText>
                 </View>
               </View>
 
               {/* Step 3 - Important! */}
-              <View style={[styles.helpStep, styles.importantStep, { borderColor: theme.accent }]}>
-                <View style={[styles.stepNumber, { backgroundColor: theme.accent }]}>
+              <View
+                style={[
+                  styles.helpStep,
+                  styles.importantStep,
+                  { borderColor: theme.accent },
+                ]}
+              >
+                <View
+                  style={[styles.stepNumber, { backgroundColor: theme.accent }]}
+                >
                   <ThemedText style={styles.stepNumberText}>3</ThemedText>
                 </View>
                 <View style={styles.stepContent}>
                   <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
-                    Endre til "Alle med lenken" ⚠️
+                    Endre til &quot;Alle med lenken&quot; ⚠️
                   </ThemedText>
-                  <ThemedText style={[styles.stepDesc, { color: theme.textMuted }]}>
-                    Under "Generell tilgang", klikk på "Begrenset" og endre til{" "}
-                    <ThemedText style={{ fontWeight: "700", color: theme.text }}>
-                      "Alle med lenken"
+                  <ThemedText
+                    style={[styles.stepDesc, { color: theme.textMuted }]}
+                  >
+                    Under &quot;Generell tilgang&quot;, klikk på
+                    &quot;Begrenset&quot; og endre til{" "}
+                    <ThemedText
+                      style={{ fontWeight: "700", color: theme.text }}
+                    >
+                      &quot;Alle med lenken&quot;
                     </ThemedText>
                   </ThemedText>
-                  <View style={[styles.warningBox, { backgroundColor: "#FFF3E0" }]}>
-                    <EvendiIcon name="alert-triangle" size={16} color="#FF9800" />
+                  <View
+                    style={[styles.warningBox, { backgroundColor: "#FFF3E0" }]}
+                  >
+                    <EvendiIcon
+                      name="alert-triangle"
+                      size={16}
+                      color="#FF9800"
+                    />
                     <ThemedText style={styles.warningText}>
-                      Viktig: Hvis bildet forblir "Begrenset", vil det ikke vises i appen!
+                      Viktig: Hvis bildet forblir &quot;Begrenset&quot;, vil det
+                      ikke vises i appen!
                     </ThemedText>
                   </View>
                 </View>
@@ -937,43 +1516,67 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
 
               {/* Step 4 */}
               <View style={styles.helpStep}>
-                <View style={[styles.stepNumber, { backgroundColor: theme.accent }]}>
+                <View
+                  style={[styles.stepNumber, { backgroundColor: theme.accent }]}
+                >
                   <ThemedText style={styles.stepNumberText}>4</ThemedText>
                 </View>
                 <View style={styles.stepContent}>
                   <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
                     Kopier lenken
                   </ThemedText>
-                  <ThemedText style={[styles.stepDesc, { color: theme.textMuted }]}>
-                    Klikk "Kopier lenke" eller kopier URL-en fra adressefeltet
+                  <ThemedText
+                    style={[styles.stepDesc, { color: theme.textMuted }]}
+                  >
+                    Klikk &quot;Kopier lenke&quot; eller kopier URL-en fra
+                    adressefeltet
                   </ThemedText>
                 </View>
               </View>
 
               {/* Step 5 */}
               <View style={styles.helpStep}>
-                <View style={[styles.stepNumber, { backgroundColor: theme.accent }]}>
+                <View
+                  style={[styles.stepNumber, { backgroundColor: theme.accent }]}
+                >
                   <ThemedText style={styles.stepNumberText}>5</ThemedText>
                 </View>
                 <View style={styles.stepContent}>
                   <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
                     Lim inn i appen
                   </ThemedText>
-                  <ThemedText style={[styles.stepDesc, { color: theme.textMuted }]}>
-                    Lim inn lenken i URL-feltet – den konverteres automatisk til et bilde!
+                  <ThemedText
+                    style={[styles.stepDesc, { color: theme.textMuted }]}
+                  >
+                    Lim inn lenken i URL-feltet – den konverteres automatisk til
+                    et bilde!
                   </ThemedText>
                 </View>
               </View>
 
               {/* Supported formats */}
-              <View style={[styles.supportedFormats, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-                <ThemedText style={[styles.formatsTitle, { color: theme.text }]}>
+              <View
+                style={[
+                  styles.supportedFormats,
+                  {
+                    backgroundColor: theme.backgroundSecondary,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                <ThemedText
+                  style={[styles.formatsTitle, { color: theme.text }]}
+                >
                   ✅ Støttede lenkeformater:
                 </ThemedText>
-                <ThemedText style={[styles.formatExample, { color: theme.textMuted }]}>
+                <ThemedText
+                  style={[styles.formatExample, { color: theme.textMuted }]}
+                >
                   • drive.google.com/file/d/ABC123/view
                 </ThemedText>
-                <ThemedText style={[styles.formatExample, { color: theme.textMuted }]}>
+                <ThemedText
+                  style={[styles.formatExample, { color: theme.textMuted }]}
+                >
                   • drive.google.com/open?id=ABC123
                 </ThemedText>
               </View>
@@ -986,13 +1589,15 @@ export default function DeliveryCreateScreen({ navigation, route }: Props) {
                 }}
                 style={({ pressed }) => [
                   styles.openDriveBtn,
-                  { 
+                  {
                     backgroundColor: pressed ? "#1a73e8" : "#4285F4",
-                  }
+                  },
                 ]}
               >
-                <Image 
-                  source={{ uri: "https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png" }}
+                <Image
+                  source={{
+                    uri: "https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png",
+                  }}
                   style={styles.googleGLogo}
                 />
                 <ThemedText style={styles.openDriveBtnText}>
@@ -1079,6 +1684,20 @@ const styles = StyleSheet.create({
   section: {
     gap: Spacing.sm,
   },
+  bridgeEditorRow: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+  },
+  bridgeInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 12,
+  },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -1124,6 +1743,21 @@ const styles = StyleSheet.create({
   addItemText: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  itemSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  itemSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
   },
   itemCard: {
     padding: Spacing.lg,

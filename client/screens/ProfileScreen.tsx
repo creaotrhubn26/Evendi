@@ -3,7 +3,6 @@ import {
   ScrollView,
   StyleSheet,
   View,
-  TextInput,
   Pressable,
   Platform,
 } from "react-native";
@@ -547,6 +546,7 @@ export default function ProfileScreen() {
               });
               if (confirmed) {
                 logout();
+                rootNavigation.navigate("Main");
               }
             }}
           />

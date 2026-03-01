@@ -141,6 +141,22 @@ export default function ImportantPeopleScreen() {
     return map[role] || "other";
   };
 
+  const normalizeImportantPersonRole = (
+    role: string,
+  ): ImportantPerson["role"] => {
+    const mapped = roleToInviteRole(role);
+    if (
+      mapped === "bestman" ||
+      mapped === "maidofhonor" ||
+      mapped === "groomsman" ||
+      mapped === "bridesmaid" ||
+      mapped === "toastmaster"
+    ) {
+      return mapped;
+    }
+    return "other";
+  };
+
   const handleOpenInvite = (person: ImportantPerson) => {
     // Check if already invited
     const existing = existingInvites.find(
@@ -197,7 +213,11 @@ export default function ImportantPeopleScreen() {
       setInviteResult(result);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke opprette invitasjon");
+      const message =
+        e instanceof Error && e.message
+          ? e.message
+          : "Kunne ikke opprette invitasjon";
+      Alert.alert("Feil", message);
     } finally {
       setInviteLoading(false);
     }
@@ -232,12 +252,16 @@ export default function ImportantPeopleScreen() {
       if (editingPerson) {
         await updateMutation.mutateAsync({
           id: editingPerson.id,
-          data: { name: newName.trim(), role: newRole.trim() as any, phone: newPhone.trim() || undefined },
+          data: {
+            name: newName.trim(),
+            role: normalizeImportantPersonRole(newRole.trim()),
+            phone: newPhone.trim() || undefined,
+          },
         });
       } else {
         await createMutation.mutateAsync({
           name: newName.trim(),
-          role: newRole.trim() as any,
+          role: normalizeImportantPersonRole(newRole.trim()),
           phone: newPhone.trim() || undefined,
         });
       }
@@ -249,7 +273,9 @@ export default function ImportantPeopleScreen() {
       setShowForm(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre person");
+      const message =
+        e instanceof Error && e.message ? e.message : "Kunne ikke lagre person";
+      Alert.alert("Feil", message);
     }
   };
 
@@ -272,7 +298,11 @@ export default function ImportantPeopleScreen() {
             await deleteMutation.mutateAsync(id);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           } catch (e) {
-            Alert.alert("Feil", "Kunne ikke slette person");
+            const message =
+              e instanceof Error && e.message
+                ? e.message
+                : "Kunne ikke slette person";
+            Alert.alert("Feil", message);
           }
         },
       },
@@ -415,8 +445,7 @@ export default function ImportantPeopleScreen() {
             {editingPerson ? "Endre person" : "Legg til person"}
           </ThemedText>
 
-          <PersistentTextInput
-            draftKey="ImportantPeopleScreen-input-1"
+          <TextInput
             style={[
               styles.input,
               {

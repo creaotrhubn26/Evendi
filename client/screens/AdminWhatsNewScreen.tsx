@@ -3,7 +3,7 @@ import { View, ScrollView, StyleSheet, TextInput, Pressable, Switch, FlatList } 
 import { useRoute, useNavigation } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { EvendiIcon } from "@/components/EvendiIcon";
+import { EvendiIcon, EvendiIconGlyphMap } from "@/components/EvendiIcon";
 import * as Haptics from "expo-haptics";
 
 import { ThemedView } from "@/components/ThemedView";
@@ -16,7 +16,7 @@ import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 import type { WhatsNewItem } from "../../shared/schema";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AdminWhatsNew">;
 
@@ -31,11 +31,13 @@ export default function AdminWhatsNewScreen({ route }: Props) {
   const { adminKey } = route.params;
   const { theme } = useTheme();
   const navigation = useNavigation();
+  const routeInfo = useRoute();
   const queryClient = useQueryClient();
 
   const [activeCategory, setActiveCategory] = useState<Category>("vendor");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [formData, setFormData] = useState({
     category: "vendor" as Category,
     title: "",
@@ -57,6 +59,23 @@ export default function AdminWhatsNewScreen({ route }: Props) {
       return res.json();
     },
   });
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.trim().length > 0) {
+      return error.message;
+    }
+    return fallback;
+  };
+  const filteredItems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const source = [...items].sort((a, b) => a.sortOrder - b.sortOrder);
+    if (!query) return source;
+    return source.filter(
+      (item) =>
+        item.title.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query) ||
+        item.minAppVersion.toLowerCase().includes(query),
+    );
+  }, [items, searchQuery]);
 
   // Create mutation
   const createMutation = useMutation({
@@ -78,8 +97,8 @@ export default function AdminWhatsNewScreen({ route }: Props) {
       resetForm();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: (error: any) => {
-      showToast(error.message);
+    onError: (error: unknown) => {
+      showToast(getErrorMessage(error, "Kunne ikke opprette"));
     },
   });
 
@@ -103,8 +122,8 @@ export default function AdminWhatsNewScreen({ route }: Props) {
       resetForm();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: (error: any) => {
-      showToast(error.message);
+    onError: (error: unknown) => {
+      showToast(getErrorMessage(error, "Kunne ikke oppdatere"));
     },
   });
 
@@ -123,8 +142,8 @@ export default function AdminWhatsNewScreen({ route }: Props) {
       queryClient.invalidateQueries({ queryKey: ["whats-new", activeCategory] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: (error: any) => {
-      showToast(error.message);
+    onError: (error: unknown) => {
+      showToast(getErrorMessage(error, "Kunne ikke slette"));
     },
   });
 
@@ -188,6 +207,17 @@ export default function AdminWhatsNewScreen({ route }: Props) {
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.topBar}>
+          <Button
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
+            Tilbake
+          </Button>
+          <ThemedText style={[styles.routeName, { color: theme.textMuted }]}>
+            {routeInfo.name}
+          </ThemedText>
+        </View>
         {/* Category Tabs */}
         <View style={[styles.categoryTabs, { borderBottomColor: theme.border }]}>
           {(["vendor", "couple"] as const).map((category) => (
@@ -239,6 +269,22 @@ export default function AdminWhatsNewScreen({ route }: Props) {
             </Pressable>
           </View>
 
+          <View style={[styles.searchRow, { borderColor: theme.border, backgroundColor: theme.backgroundDefault }]}>
+            <EvendiIcon name="search" size={16} color={theme.textMuted} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Søk i elementer"
+              placeholderTextColor={theme.textMuted}
+              style={[styles.searchInput, { color: theme.text }]}
+            />
+            {searchQuery.length > 0 ? (
+              <Pressable onPress={() => setSearchQuery("")}>
+                <EvendiIcon name="x" size={16} color={theme.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+
           {showForm && (
             <View style={[styles.form, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
               <ThemedText style={styles.formTitle}>
@@ -287,7 +333,7 @@ export default function AdminWhatsNewScreen({ route }: Props) {
                       ]}
                     >
                       <EvendiIcon
-                        name={icon as any}
+                        name={icon as keyof typeof EvendiIconGlyphMap}
                         size={20}
                         color={formData.icon === icon ? "#FFFFFF" : theme.accent}
                       />
@@ -338,78 +384,81 @@ export default function AdminWhatsNewScreen({ route }: Props) {
               </View>
 
               <View style={styles.formButtons}>
-                <Pressable
+                <Button
                   onPress={handleSave}
                   style={[styles.saveButton, { backgroundColor: theme.accent }]}
                   disabled={createMutation.isPending || updateMutation.isPending}
                 >
-                  <ThemedText style={styles.buttonText}>
-                    {createMutation.isPending || updateMutation.isPending ? "Lagrer..." : "Lagre"}
-                  </ThemedText>
-                </Pressable>
-                <Pressable
+                  {createMutation.isPending || updateMutation.isPending ? "Lagrer..." : "Lagre"}
+                </Button>
+                <Button
                   onPress={resetForm}
-                  style={[styles.cancelButton, { borderColor: theme.border }]}
+                  style={[styles.cancelButton, { borderColor: theme.border, backgroundColor: theme.backgroundDefault }]}
                 >
-                  <ThemedText style={styles.buttonText}>Avbryt</ThemedText>
-                </Pressable>
+                  Avbryt
+                </Button>
               </View>
             </View>
           )}
 
           <View style={styles.itemsList}>
-            {items.length === 0 ? (
+            {filteredItems.length === 0 ? (
               <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
-                Ingen elementer ennå. Klikk "+" for å legge til.
+                {items.length === 0 ? "Ingen elementer ennå. Klikk pluss for å legge til." : "Ingen elementer matcher søket."}
               </ThemedText>
             ) : (
-              items.map((item) => (
-                <View
-                  key={item.id}
-                  style={[styles.item, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
-                >
-                  <View style={[styles.itemIcon, { backgroundColor: theme.accent + "20" }]}>
-                    <EvendiIcon name={item.icon as any} size={20} color={theme.accent} />
-                  </View>
+              <FlatList
+                data={filteredItems}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+                contentContainerStyle={{ gap: Spacing.sm }}
+                renderItem={({ item }) => (
+                  <View
+                    style={[styles.item, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+                  >
+                    <View style={[styles.itemIcon, { backgroundColor: theme.accent + "20" }]}>
+                      <EvendiIcon name={item.icon as keyof typeof EvendiIconGlyphMap} size={20} color={theme.accent} />
+                    </View>
 
-                  <View style={styles.itemContent}>
-                    <ThemedText style={styles.itemTitle}>{item.title}</ThemedText>
-                    <ThemedText
-                      style={[styles.itemDescription, { color: theme.textMuted }]}
-                      numberOfLines={2}
-                    >
-                      {item.description}
-                    </ThemedText>
-                    <View style={styles.itemMeta}>
-                      <ThemedText style={[styles.metaText, { color: theme.textMuted }]}>
-                        v{item.minAppVersion}
+                    <View style={styles.itemContent}>
+                      <ThemedText style={styles.itemTitle}>{item.title}</ThemedText>
+                      <ThemedText
+                        style={[styles.itemDescription, { color: theme.textMuted }]}
+                        numberOfLines={2}
+                      >
+                        {item.description}
                       </ThemedText>
-                      {!item.isActive && (
-                        <View style={[styles.badge, { backgroundColor: theme.error + "20" }]}>
-                          <ThemedText style={[styles.badgeText, { color: theme.error, fontSize: 11 }]}>
-                            Inaktiv
-                          </ThemedText>
-                        </View>
-                      )}
+                      <View style={styles.itemMeta}>
+                        <ThemedText style={[styles.metaText, { color: theme.textMuted }]}>
+                          v{item.minAppVersion}
+                        </ThemedText>
+                        {!item.isActive && (
+                          <View style={[styles.badge, { backgroundColor: theme.error + "20" }]}>
+                            <ThemedText style={[styles.badgeText, { color: theme.error, fontSize: 11 }]}>
+                              Inaktiv
+                            </ThemedText>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+
+                    <View style={styles.itemActions}>
+                      <Pressable
+                        onPress={() => handleEdit(item)}
+                        style={[styles.actionButton, { backgroundColor: theme.accent + "20" }]}
+                      >
+                        <EvendiIcon name="edit-2" size={16} color={theme.accent} />
+                      </Pressable>
+                      <Pressable
+                        onPress={() => handleDelete(item.id)}
+                        style={[styles.actionButton, { backgroundColor: theme.error + "20" }]}
+                      >
+                        <EvendiIcon name="trash-2" size={16} color={theme.error} />
+                      </Pressable>
                     </View>
                   </View>
-
-                  <View style={styles.itemActions}>
-                    <Pressable
-                      onPress={() => handleEdit(item)}
-                      style={[styles.actionButton, { backgroundColor: theme.accent + "20" }]}
-                    >
-                      <EvendiIcon name="edit-2" size={16} color={theme.accent} />
-                    </Pressable>
-                    <Pressable
-                      onPress={() => handleDelete(item.id)}
-                      style={[styles.actionButton, { backgroundColor: theme.error + "20" }]}
-                    >
-                      <EvendiIcon name="trash-2" size={16} color={theme.error} />
-                    </Pressable>
-                  </View>
-                </View>
-              ))
+                )}
+              />
             )}
           </View>
         </View>
@@ -433,6 +482,18 @@ const styles = StyleSheet.create({
   content: {
     padding: Spacing.lg,
     gap: Spacing.lg,
+  },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  backButton: {
+    minWidth: 110,
+    backgroundColor: Colors.dark.accent,
+  },
+  routeName: {
+    ...Typography.caption,
   },
   categoryTabs: {
     flexDirection: "row",
@@ -460,8 +521,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
+    ...Typography.h3,
   },
   addButton: {
     width: 36,
@@ -478,16 +538,30 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   formTitle: {
-    fontSize: 16,
-    fontWeight: "600",
+    ...Typography.h4,
     marginBottom: Spacing.sm,
   },
   formGroup: {
     gap: Spacing.sm,
   },
   label: {
-    fontSize: 13,
+    ...Typography.small,
     fontWeight: "500",
+  },
+  searchRow: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    ...Typography.small,
+    paddingVertical: 0,
   },
   input: {
     borderWidth: 1,

@@ -268,6 +268,15 @@ export default function MessagesScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+      {isLoggedIn ? (
+        <Pressable
+          onPress={handleLogout}
+          style={[styles.logoutChip, { top: headerHeight + Spacing.xs, borderColor: theme.border, backgroundColor: theme.backgroundDefault }]}
+        >
+          <EvendiIcon name="log-out" size={14} color={theme.textSecondary} />
+          <ThemedText style={[styles.logoutChipText, { color: theme.textSecondary }]}>Logg ut</ThemedText>
+        </Pressable>
+      ) : null}
       {isLoading ? (
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={Colors.dark.accent} />
@@ -306,6 +315,19 @@ export default function MessagesScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  logoutChip: {
+    position: "absolute",
+    right: Spacing.md,
+    zIndex: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    borderWidth: 1,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+  },
+  logoutChipText: { fontSize: 12, fontWeight: "600" },
   centerContent: {
     flex: 1,
     alignItems: "center",

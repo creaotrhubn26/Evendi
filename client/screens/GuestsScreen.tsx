@@ -13,8 +13,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
-import { useFocusEffect } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -27,6 +27,7 @@ import { SwipeableRow } from "@/components/SwipeableRow";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { GuestsStackParamList } from "@/navigation/GuestsStackNavigator";
+import type { MainTabParamList } from "@/navigation/MainTabNavigator";
 import { getCoupleSession } from "@/lib/storage";
 import { getGuests, createGuest, updateGuest, deleteGuest } from "@/lib/api-guests";
 import { GUEST_CATEGORIES } from "@/lib/types";
@@ -67,7 +68,7 @@ export default function GuestsScreen() {
   const [sendingInvite, setSendingInvite] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<"classic" | "floral" | "modern">("classic");
   const [invitationMessage, setInvitationMessage] = useState("");
-  const [invitations, setInvitations] = useState<Array<GuestInvitation & { inviteUrl: string }>>([]);
+  const [invitations, setInvitations] = useState<(GuestInvitation & { inviteUrl: string })[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
   const [rsvpFilter, setRsvpFilter] = useState<"all" | "hasInvite" | "responded" | "declined" | "sent">("all");
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
@@ -320,7 +321,8 @@ export default function GuestsScreen() {
       await loadData();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      Alert.alert("Feil", "Kunne ikke oppdatere status");
+      const message = error instanceof Error ? error.message : "Kunne ikke oppdatere status";
+      Alert.alert("Feil", message);
     } finally {
       setIsSaving(false);
     }
@@ -341,7 +343,8 @@ export default function GuestsScreen() {
             await loadData();
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           } catch (error) {
-            Alert.alert("Feil", "Kunne ikke slette gjest");
+            const message = error instanceof Error ? error.message : "Kunne ikke slette gjest";
+            Alert.alert("Feil", message);
           } finally {
             setIsSaving(false);
           }
@@ -511,9 +514,9 @@ export default function GuestsScreen() {
           <Pressable
             onPress={() => {
               // Navigate to VendorMatching with guest count
-              const rootNav = navigation.getParent()?.getParent();
-              if (rootNav) {
-                (rootNav as any).navigate("Planning", {
+              const tabNavigation = navigation.getParent<BottomTabNavigationProp<MainTabParamList>>();
+              if (tabNavigation) {
+                tabNavigation.navigate("PlanningTab", {
                   screen: "VendorMatching",
                   params: { guestCount: confirmedCount > 0 ? confirmedCount : guests.length },
                 });
@@ -540,11 +543,11 @@ export default function GuestsScreen() {
 
       <View style={styles.filterRow}>
         {[
-          { value: "all", label: "Alle" },
-          { value: "hasInvite", label: "Har invitasjon" },
-          { value: "responded", label: "Svar" },
-          { value: "declined", label: "Avslått" },
-          { value: "sent", label: "Sendt" },
+          { value: "all", label: `Alle (${guests.length})` },
+          { value: "hasInvite", label: `Har invitasjon (${invitations.length})` },
+          { value: "responded", label: `Svar (${respondedCount})` },
+          { value: "declined", label: `Avslått (${declinedCountInv})` },
+          { value: "sent", label: `Sendt (${sentCountInv})` },
         ].map((f) => (
           <Pressable
             key={f.value}
@@ -661,8 +664,12 @@ export default function GuestsScreen() {
           <ThemedText style={{ color: theme.textSecondary }}>Ingen invitasjoner enda</ThemedText>
         ) : (
           invitations.slice(0, 5).map((inv) => (
-            <View
+            <Pressable
               key={inv.id}
+              onPress={() => {
+                setSelectedInvite(inv);
+                setInviteModalVisible(true);
+              }}
               style={[styles.inviteRow, { borderColor: theme.border }]}
             >
               <View style={{ flex: 1 }}>
@@ -680,7 +687,7 @@ export default function GuestsScreen() {
               >
                 <Feather name="share-2" size={16} color={theme.text} />
               </Pressable>
-            </View>
+            </Pressable>
           ))
         )}
       </View>
@@ -874,8 +881,8 @@ export default function GuestsScreen() {
           />
 
           <View style={[styles.addFormButtons, { marginBottom: Spacing.md }]}>
-            <Button onPress={handleSendInvitation} style={styles.saveButton} disabled={sendingInvite}>
-              {sendingInvite ? "Sender..." : "Send invitasjon"}
+            <Button onPress={handleSendInvitation} style={styles.saveButton} disabled={sendingInvite || isSaving}>
+              {sendingInvite ? "Sender..." : isSaving ? "Lagrer..." : "Send invitasjon"}
             </Button>
           </View>
 
@@ -889,8 +896,8 @@ export default function GuestsScreen() {
             >
               <ThemedText style={{ color: theme.textSecondary }}>Avbryt</ThemedText>
             </Pressable>
-            <Button onPress={handleAddGuest} style={styles.saveButton}>
-              {editingGuest ? "Oppdater" : "Legg til"}
+            <Button onPress={handleAddGuest} style={styles.saveButton} disabled={isSaving}>
+              {isSaving ? "Lagrer..." : (editingGuest ? "Oppdater" : "Legg til")}
             </Button>
           </View>
         </Animated.View>
@@ -951,8 +958,11 @@ export default function GuestsScreen() {
         onRequestClose={() => setInviteModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+          <KeyboardAwareScrollViewCompat
+            contentContainerStyle={styles.modalScroll}
+            keyboardShouldPersistTaps="handled"
           >
+            <View style={[styles.modalCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <ThemedText style={[styles.modalTitle, { color: theme.text }]}>Invitasjon</ThemedText>
             {selectedInvite ? (
               <>
@@ -1049,7 +1059,8 @@ export default function GuestsScreen() {
             >
               <ThemedText style={{ color: theme.textSecondary }}>Lukk</ThemedText>
             </Pressable>
-          </View>
+            </View>
+          </KeyboardAwareScrollViewCompat>
         </View>
       </Modal>
 
@@ -1448,6 +1459,10 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  modalScroll: {
+    flexGrow: 1,
     justifyContent: "flex-end",
   },
   modalCard: {

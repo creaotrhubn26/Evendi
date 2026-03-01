@@ -70,15 +70,15 @@ export function useVendorSearch({
   const shouldSearch = debouncedText.length >= minChars && !selectedVendor;
 
   const { data: suggestions = [], isLoading } = useQuery<VendorSuggestion[]>({
-    queryKey: ["/api/vendors/matching", "search", category, debouncedText],
+    queryKey: ["/api/vendors/matching", "search", category, debouncedText, !!sessionToken],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (category) params.append("category", category);
       params.append("search", debouncedText);
 
-      const response = await fetch(
-        new URL(`/api/vendors/matching?${params.toString()}`, getApiUrl()).toString()
-      );
+      const response = await fetch(new URL(`/api/vendors/matching?${params.toString()}`, getApiUrl()).toString(), {
+        headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : undefined,
+      });
       if (!response.ok) return [];
       const data = await response.json();
       return data.map((v: VendorSuggestion) => ({

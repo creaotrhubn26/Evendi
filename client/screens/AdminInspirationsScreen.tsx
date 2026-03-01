@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Image,
   Modal,
-  TextInput,
   Platform,
   KeyboardAvoidingView,
 } from "react-native";

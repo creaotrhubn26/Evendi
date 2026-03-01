@@ -10,7 +10,6 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
-import { useAppSettings } from "@/hooks/useAppSettings";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { AppSetting } from "../../shared/schema";
@@ -62,7 +61,7 @@ export default function VendorHelpScreen() {
   }, [appSettings]);
   const supportEmail = getSettingValue("support_email", "support@evendi.no");
   const websiteUrl = getSettingValue("app_website", "https://norwedfilm.no");
-  const supportLinks = useMemo(
+  const supportLinks = useMemo<SupportLink[]>(
     () => [
       {
         label: "Fullstendig dokumentasjon",
@@ -152,7 +151,8 @@ export default function VendorHelpScreen() {
         }
         await Linking.openURL(url);
       } catch (error) {
-        showToast("Kunne ikke åpne lenken akkurat nå.");
+        const message = error instanceof Error ? error.message : "Kunne ikke åpne lenken akkurat nå.";
+        showToast(message);
       }
     }
   };

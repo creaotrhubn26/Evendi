@@ -141,7 +141,11 @@ export default function VendorCateringScreen() {
     try {
       await deleteProductMutation.mutateAsync(productId);
     } catch (error) {
-      showToast('Kunne ikke slette produkt');
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Kunne ikke slette produkt";
+      showToast(message);
     }
   };
   const handleDeleteOffer = async (offerId: string) => {
@@ -156,18 +160,20 @@ export default function VendorCateringScreen() {
     try {
       await deleteOfferMutation.mutateAsync(offerId);
     } catch (error) {
-      showToast('Kunne ikke slette tilbud');
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Kunne ikke slette tilbud";
+      showToast(message);
     }
   };
   const handleEditProduct = (product: VendorProduct) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // TODO: Open edit modal or navigate to edit screen
-    navigation.navigate("ProductCreate");
+    navigation.navigate("ProductCreate", { product });
   };
   const handleEditOffer = (offer: VendorOffer) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // TODO: Open edit modal or navigate to edit screen
-    navigation.navigate("OfferCreate");
+    navigation.navigate("OfferCreate", { offer });
   };
   if (!sessionToken) return null;
   return (

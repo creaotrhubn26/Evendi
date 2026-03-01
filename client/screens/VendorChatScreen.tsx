@@ -3,7 +3,6 @@ import {
   StyleSheet,
   View,
   FlatList,
-  TextInput,
   Pressable,
   ActivityIndicator,
   Alert,
@@ -228,7 +227,9 @@ export default function VendorChatScreen({ route, navigation }: Props) {
         }
       );
     } catch (error) {
-      // Silently fail - typing indicator is not critical
+      if (__DEV__) {
+        console.debug("Vendor typing ping failed", error);
+      }
     }
   };
   const handleTextChange = (text: string) => {
@@ -462,7 +463,8 @@ export default function VendorChatScreen({ route, navigation }: Props) {
         });
       }
     } catch (error) {
-      Alert.alert("Feil", "Kunne ikke laste opp bildet. Prøv igjen.");
+      const message = error instanceof Error ? error.message : "Kunne ikke laste opp bildet. Prøv igjen.";
+      Alert.alert("Feil", message);
     } finally {
       setIsUploading(false);
     }

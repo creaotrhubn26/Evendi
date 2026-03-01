@@ -99,7 +99,7 @@ export function QaWordCloud({ questions, onTagPress, selectedTag }: QaWordCloudP
       <View style={styles.cloud}>
         {tagWeights.map((tw, index) => {
           const fontSize = 13 + tw.weight * 16;
-          const color = TAG_COLORS[index % TAG_COLORS.length];
+          const color = TAG_COLORS[index % TAG_COLORS.length] || Colors.light.accent;
           const isSelected = selectedTag === tw.tag;
 
           return (

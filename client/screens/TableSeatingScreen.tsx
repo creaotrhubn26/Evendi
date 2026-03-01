@@ -4,7 +4,6 @@ import {
   StyleSheet,
   View,
   Pressable,
-  TextInput,
   Modal,
   LayoutRectangle,
   NativeScrollEvent,

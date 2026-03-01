@@ -38,6 +38,7 @@ export default function ReviewSubmissionScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation();
   const route = useRoute<any>();
+  const { width: screenWidth } = Dimensions.get("window");
 
   const { vendorId, vendorName } = route.params || {};
 
@@ -83,12 +84,12 @@ export default function ReviewSubmissionScreen() {
             Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify({
-            coupleId,
+            coupleId: coupleId || undefined,
             rating,
             title,
             description,
             eventDate: new Date().toISOString(),
-          }),
+          } satisfies Partial<ReviewData>),
         }
       );
 
@@ -116,6 +117,7 @@ export default function ReviewSubmissionScreen() {
   };
 
   const renderStars = () => {
+    const starSize = Math.max(30, Math.min(44, Math.floor(screenWidth / 9)));
     return (
       <View style={styles.starsContainer}>
         {[1, 2, 3, 4, 5].map((star) => (
@@ -127,7 +129,7 @@ export default function ReviewSubmissionScreen() {
           >
             <Feather
               name={star <= rating ? "star" : "star"}
-              size={40}
+              size={starSize}
               color={star <= rating ? theme.warning : theme.textSecondary}
               fill={star <= rating ? theme.warning : "none"}
             />

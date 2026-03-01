@@ -2,7 +2,6 @@ import React, { useState, useMemo } from "react";
 import {
   View,
   StyleSheet,
-  TextInput,
   Pressable,
 } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -125,7 +124,7 @@ export default function FeedbackScreen() {
         style={styles.container}
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.lg,
-          paddingBottom: tabBarHeight + Spacing.xl,
+          paddingBottom: tabBarHeight + insets.bottom + Spacing.xl,
           paddingHorizontal: Spacing.lg,
           flex: 1,
           justifyContent: "center",
@@ -161,7 +160,7 @@ export default function FeedbackScreen() {
       style={styles.container}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: tabBarHeight + insets.bottom + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
     >

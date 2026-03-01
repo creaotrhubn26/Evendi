@@ -39,8 +39,9 @@ export function SwipeableRow({
   const translateX = useSharedValue(0);
   const isOpen = useSharedValue(false);
 
-  const actionCount = (showEdit ? 1 : 0) + (showDelete ? 1 : 0);
-  const totalActionWidth = actionCount * 70;
+  const actionCount = Math.max((showEdit ? 1 : 0) + (showDelete ? 1 : 0), 1);
+  const actionButtonWidth = ACTION_WIDTH / 2;
+  const totalActionWidth = actionCount * actionButtonWidth;
 
   const panGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
@@ -83,13 +84,13 @@ export function SwipeableRow({
     <View style={styles.container}>
       <View style={styles.actionsContainer}>
         {showEdit && onEdit ? (
-          <Pressable style={[styles.actionButton, styles.editButton]} onPress={handleEdit}>
+          <Pressable style={[styles.actionButton, styles.editButton, { width: actionButtonWidth }]} onPress={handleEdit}>
             <EvendiIcon name="edit-2" size={18} color="#FFF" />
             <ThemedText style={styles.actionText}>{editLabel}</ThemedText>
           </Pressable>
         ) : null}
         {showDelete && onDelete ? (
-          <Pressable style={[styles.actionButton, styles.deleteButton]} onPress={handleDelete}>
+          <Pressable style={[styles.actionButton, styles.deleteButton, { width: actionButtonWidth }]} onPress={handleDelete}>
             <EvendiIcon name="trash-2" size={18} color="#FFF" />
             <ThemedText style={styles.actionText}>{deleteLabel}</ThemedText>
           </Pressable>
@@ -118,10 +119,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   actionButton: {
-    width: 70,
     justifyContent: "center",
     alignItems: "center",
-    gap: 4,
+    gap: Spacing.xs,
   },
   editButton: {
     backgroundColor: Colors.dark.accent,

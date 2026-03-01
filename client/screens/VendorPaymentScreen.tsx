@@ -53,6 +53,7 @@ export default function VendorPaymentScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const { theme } = useTheme();
   const { getSetting } = useAppSettings();
+  const walletAppLabel = Platform.OS === "ios" ? "Vipps-appen" : "Vipps/MobilePay-appen";
 
   // Fetch subscription status
   const { data: subscriptionStatus, isLoading } = useQuery<SubscriptionStatus>({
@@ -360,7 +361,7 @@ export default function VendorPaymentScreen() {
         <View style={styles.vippsInfo}>
           <EvendiIcon name="shield" size={14} color={theme.textSecondary} />
           <ThemedText style={styles.vippsInfoText}>
-            Sikker betaling med Vipps Recurring. Du administrerer abonnementet direkte i Vipps-appen.
+            Sikker betaling med Vipps Recurring. Du administrerer abonnementet direkte i {walletAppLabel}.
           </ThemedText>
         </View>
 

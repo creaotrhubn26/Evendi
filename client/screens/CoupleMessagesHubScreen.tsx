@@ -52,6 +52,7 @@ export default function CoupleMessagesHubScreen() {
   const { theme } = useTheme();
   const { getSetting } = useAppSettings();
   const navigation = useNavigation<NavigationProp>();
+  const peopleAccent = Colors.light.accent;
 
   const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -171,7 +172,7 @@ export default function CoupleMessagesHubScreen() {
     <ScrollView
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
       contentContainerStyle={{
-        paddingTop: Spacing.md,
+        paddingTop: Math.max(Spacing.md, headerHeight * 0.08),
         paddingBottom: insets.bottom + Spacing.xl,
         paddingHorizontal: Spacing.md,
       }}
@@ -183,14 +184,21 @@ export default function CoupleMessagesHubScreen() {
         />
       }
     >
+      {isLoading && (
+        <View style={styles.inlineLoader}>
+          <ActivityIndicator size="small" color={theme.accent} />
+        </View>
+      )}
+
       {/* ── Vendor Messages ── */}
       <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-        <Pressable
+        <Card
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             navigation.navigate("CoupleMessages");
           }}
           style={[
+            styles.cardNoPadding,
             styles.sectionCard,
             {
               backgroundColor: theme.backgroundDefault,
@@ -316,7 +324,7 @@ export default function CoupleMessagesHubScreen() {
               ))}
             </View>
           )}
-        </Pressable>
+        </Card>
       </Animated.View>
 
       {/* ── Important People ── */}
@@ -334,10 +342,10 @@ export default function CoupleMessagesHubScreen() {
             <View
               style={[
                 styles.sectionIcon,
-                { backgroundColor: "#8B5CF620" },
+                { backgroundColor: peopleAccent + "20" },
               ]}
             >
-              <EvendiIcon name="users" size={22} color="#8B5CF6" />
+              <EvendiIcon name="users" size={22} color={peopleAccent} />
             </View>
             <View style={styles.sectionHeaderText}>
               <ThemedText style={styles.sectionTitle}>
@@ -378,7 +386,7 @@ export default function CoupleMessagesHubScreen() {
             </View>
           ) : (
             <View style={styles.peopleList}>
-              {people.slice(0, 6).map((person, idx) => (
+              {people.slice(0, 6).map((person) => (
                 <View
                   key={person.id}
                   style={[
@@ -389,10 +397,10 @@ export default function CoupleMessagesHubScreen() {
                   <View
                     style={[
                       styles.personAvatar,
-                      { backgroundColor: "#8B5CF615" },
+                      { backgroundColor: peopleAccent + "15" },
                     ]}
                   >
-                    <EvendiIcon name="user" size={14} color="#8B5CF6" />
+                    <EvendiIcon name="user" size={14} color={peopleAccent} />
                   </View>
                   <View style={styles.personInfo}>
                     <ThemedText
@@ -622,6 +630,12 @@ export default function CoupleMessagesHubScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  inlineLoader: {
+    paddingVertical: Spacing.sm,
+  },
+  cardNoPadding: {
+    padding: 0,
   },
   sectionCard: {
     borderRadius: BorderRadius.lg,

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { ScrollView, StyleSheet, View, Pressable, TextInput, ActivityIndicator, Switch } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, ActivityIndicator, Switch } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EvendiIcon, EvendiIconGlyphMap } from "@/components/EvendiIcon";
 import * as Haptics from "expo-haptics";

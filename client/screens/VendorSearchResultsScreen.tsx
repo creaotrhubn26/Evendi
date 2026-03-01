@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   View,
-  ScrollView,
   Pressable,
   ActivityIndicator,
   FlatList,
@@ -278,10 +277,10 @@ export default function VendorSearchResultsScreen() {
     if (!filterAvailability) return true;
     // If availability filter is on but no event date, show all
     if (!eventDate) return true;
-    // NOTE: Full availability checking would require querying vendor availability
-    // For now, this filter is a placeholder that can be extended
-    // Future: Fetch vendor.availabilityStatus for eventDate and filter accordingly
-    return true;
+    const hasUnavailableWarning = (match.warnings || []).some((warning) =>
+      /ikke tilgjengelig|unavailable|opptatt/i.test(warning)
+    );
+    return !hasUnavailableWarning;
   });
 
   const handleVendorPress = (vendor: VendorMatch) => {
@@ -320,7 +319,6 @@ export default function VendorSearchResultsScreen() {
   };
 
   const renderVendorCard = ({ item }: { item: VendorMatch }) => {
-    const { color } = renderMatchScore(item.overallScore);
     const isFavorite = favorites.has(item.vendor.id);
 
     return (
@@ -342,16 +340,7 @@ export default function VendorSearchResultsScreen() {
                 style={styles.vendorImage}
               />
             )}
-            <View
-              style={[
-                styles.scoreOverlay,
-                { backgroundColor: color },
-              ]}
-            >
-              <ThemedText style={styles.scoreOverlayText}>
-                {Math.round(item.overallScore || 0)}%
-              </ThemedText>
-            </View>
+            <View style={styles.scoreOverlay}>{renderScoreRing(item.overallScore)}</View>
             <Pressable
               style={[
                 styles.favoriteButton,

@@ -21,6 +21,7 @@ export async function migrateChecklistFromAsyncStorage(sessionToken: string): Pr
     const storedData = await AsyncStorage.getItem(STORAGE_KEY);
     if (!storedData) {
       console.log("No legacy checklist data found");
+      await seedDefaultChecklist(sessionToken);
       return false;
     }
 

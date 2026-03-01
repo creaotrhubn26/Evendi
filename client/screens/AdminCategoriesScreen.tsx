@@ -4,7 +4,6 @@ import {
   View,
   Pressable,
   FlatList,
-  TextInput,
   ActivityIndicator,
   Modal,
 } from "react-native";
@@ -280,6 +279,7 @@ export default function AdminCategoriesScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={{
+            paddingTop: headerHeight + Spacing.xs,
             padding: Spacing.lg,
             paddingBottom: insets.bottom + 100,
           }}

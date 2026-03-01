@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { StyleSheet, View, FlatList, TextInput, Pressable, ActivityIndicator, Linking, ScrollView, Text, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
+import { StyleSheet, View, FlatList, Pressable, ActivityIndicator, Linking, ScrollView, Text, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import * as Haptics from "expo-haptics";
@@ -259,10 +259,14 @@ export default function VendorAdminChatScreen() {
   }, []);
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={["top","bottom"]}>
-      <View style={[styles.header, { borderBottomColor: theme.border }]}>
+      <View style={[styles.header, { borderBottomColor: theme.border, paddingTop: headerHeight + Spacing.xs }]}>
         <View style={styles.headerContent}>
           <ThemedText style={styles.title}>Evendi Support</ThemedText>
-          <ThemedText style={styles.subtitle}>Kommunikasjon med Evendi-teamet</ThemedText>
+          <ThemedText style={styles.subtitle}>
+            {conv?.lastMessageAt
+              ? `Sist aktivitet: ${new Date(conv.lastMessageAt).toLocaleString("nb-NO")}`
+              : "Kommunikasjon med Evendi-teamet"}
+          </ThemedText>
         </View>
         <Pressable
           onPress={() => navigation.goBack()}

@@ -62,6 +62,32 @@ export default function VendorExpertiseOnboardingScreen() {
     isSpecialized: false,
     notes: "",
   });
+  const filteredExpertise = selectedEventType
+    ? expertise.filter((item) => item.eventType === selectedEventType)
+    : expertise;
+
+  const vendorRequest = async (
+    method: string,
+    route: string,
+    body?: unknown,
+  ) => {
+    if (!sessionToken) {
+      return apiRequest(method, route, body);
+    }
+    const response = await fetch(new URL(route, getApiUrl()).toString(), {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sessionToken}`,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || `Request failed (${response.status})`);
+    }
+    return response;
+  };
 
   // Load vendor session
   useEffect(() => {
@@ -85,11 +111,9 @@ export default function VendorExpertiseOnboardingScreen() {
     queryKey: ["/api/vendor/expertise", vendorId],
     queryFn: async () => {
       if (!vendorId) return [];
-      const response = await fetch(
-        new URL(`/api/vendor/expertise/${vendorId}`, getApiUrl()).toString(),
-        {
-          headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
-        }
+      const response = await vendorRequest(
+        "GET",
+        `/api/vendor/expertise/${vendorId}`,
       );
       if (response.ok) {
         const data = await response.json();
@@ -109,16 +133,10 @@ export default function VendorExpertiseOnboardingScreen() {
   // Add expertise mutation
   const addExpertiseMutation = useMutation({
     mutationFn: async (data: VendorExpertise) => {
-      const response = await fetch(
-        new URL("/api/vendor/expertise", getApiUrl()).toString(),
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-          },
-          body: JSON.stringify(data),
-        }
+      const response = await vendorRequest(
+        "POST",
+        "/api/vendor/expertise",
+        data,
       );
       if (!response.ok) {
         const error = await response.json();
@@ -130,6 +148,7 @@ export default function VendorExpertiseOnboardingScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast("Ekspertise lagt til!");
       setShowForm(false);
+      setSelectedEventType(formData.eventType);
       setFormData({
         eventType: "",
         yearsExperience: 0,
@@ -146,14 +165,13 @@ export default function VendorExpertiseOnboardingScreen() {
   // Delete expertise mutation
   const deleteExpertiseMutation = useMutation({
     mutationFn: async (expertiseId: string) => {
-      const response = await fetch(
-        new URL(`/api/vendor/expertise/${expertiseId}`, getApiUrl()).toString(),
-        {
-          method: "DELETE",
-          headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
-        }
+      const response = await vendorRequest(
+        "DELETE",
+        `/api/vendor/expertise/${expertiseId}`,
       );
-      if (!response.ok) throw new Error("Failed to delete expertise");
+      if (!response.ok) {
+        throw new Error("Failed to delete expertise");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -205,7 +223,10 @@ export default function VendorExpertiseOnboardingScreen() {
       <View
         style={[
           styles.header,
-          { paddingTop: insets.top + Spacing.md, backgroundColor: theme.primary },
+          {
+            paddingTop: insets.top + Spacing.md,
+            backgroundColor: theme.primary,
+          },
         ]}
       >
         <Pressable
@@ -228,20 +249,96 @@ export default function VendorExpertiseOnboardingScreen() {
           style={styles.scrollView}
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: insets.bottom + Spacing.lg },
+            {
+              paddingTop: headerHeight * 0.06,
+              paddingBottom: insets.bottom + Spacing.lg,
+            },
           ]}
           showsVerticalScrollIndicator={false}
         >
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>
+              Filtrer etter arrangementtype
+            </ThemedText>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.eventTypeScroll}
+            >
+              <Pressable
+                style={[
+                  styles.eventTypeButton,
+                  {
+                    backgroundColor: selectedEventType
+                      ? theme.background
+                      : theme.primary,
+                    borderColor: selectedEventType
+                      ? theme.border
+                      : theme.primary,
+                  },
+                ]}
+                onPress={() => setSelectedEventType("")}
+              >
+                <ThemedText
+                  style={[
+                    styles.eventTypeButtonText,
+                    { color: selectedEventType ? theme.text : "#FFFFFF" },
+                  ]}
+                >
+                  Alle
+                </ThemedText>
+              </Pressable>
+              {EVENT_TYPES.map((eventType) => (
+                <Pressable
+                  key={eventType}
+                  style={[
+                    styles.eventTypeButton,
+                    {
+                      backgroundColor:
+                        selectedEventType === eventType
+                          ? theme.primary
+                          : theme.background,
+                      borderColor:
+                        selectedEventType === eventType
+                          ? theme.primary
+                          : theme.border,
+                    },
+                  ]}
+                  onPress={() => setSelectedEventType(eventType)}
+                >
+                  <ThemedText
+                    style={[
+                      styles.eventTypeButtonText,
+                      {
+                        color:
+                          selectedEventType === eventType
+                            ? "#FFFFFF"
+                            : theme.text,
+                      },
+                    ]}
+                  >
+                    {getEventTypeLabel(eventType)}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+
           {/* Existing Expertise */}
-          {expertise.length > 0 && (
+          {filteredExpertise.length > 0 && (
             <View style={styles.section}>
-              <ThemedText style={styles.sectionTitle}>Registrert Ekspertise</ThemedText>
-              {expertise.map((item, index) => (
+              <ThemedText style={styles.sectionTitle}>
+                Registrert Ekspertise
+              </ThemedText>
+              {filteredExpertise.map((item, index) => (
                 <View
                   key={index}
                   style={[
                     styles.expertiseCard,
-                    { borderColor: theme.border, backgroundColor: theme.backgroundDefault },
+                    {
+                      borderColor: theme.border,
+                      backgroundColor: theme.backgroundDefault,
+                    },
                   ]}
                 >
                   <View style={styles.expertiseHeader}>
@@ -255,28 +352,38 @@ export default function VendorExpertiseOnboardingScreen() {
                           { backgroundColor: theme.success },
                         ]}
                       >
-                        <ThemedText style={styles.badgeText}>Spesialisert</ThemedText>
+                        <ThemedText style={styles.badgeText}>
+                          Spesialisert
+                        </ThemedText>
                       </View>
                     )}
                   </View>
 
                   <View style={styles.expertiseDetails}>
                     <View style={styles.detailRow}>
-                      <ThemedText style={styles.detailLabel}>År erfaring:</ThemedText>
+                      <ThemedText style={styles.detailLabel}>
+                        År erfaring:
+                      </ThemedText>
                       <ThemedText style={styles.detailValue}>
                         {item.yearsExperience} år
                       </ThemedText>
                     </View>
                     <View style={styles.detailRow}>
-                      <ThemedText style={styles.detailLabel}>Gjennomførte arrangementer:</ThemedText>
+                      <ThemedText style={styles.detailLabel}>
+                        Gjennomførte arrangementer:
+                      </ThemedText>
                       <ThemedText style={styles.detailValue}>
                         {item.completedEvents}
                       </ThemedText>
                     </View>
                     {item.notes && (
                       <View style={styles.notesRow}>
-                        <ThemedText style={styles.detailLabel}>Notat:</ThemedText>
-                        <ThemedText style={styles.notesText}>{item.notes}</ThemedText>
+                        <ThemedText style={styles.detailLabel}>
+                          Notat:
+                        </ThemedText>
+                        <ThemedText style={styles.notesText}>
+                          {item.notes}
+                        </ThemedText>
                       </View>
                     )}
                   </View>
@@ -288,12 +395,26 @@ export default function VendorExpertiseOnboardingScreen() {
                     ]}
                     onPress={() => {
                       if (item.id) {
-                        deleteExpertiseMutation.mutate(item.id);
+                        Alert.alert(
+                          "Slette ekspertise",
+                          "Er du sikker på at du vil slette denne ekspertisen?",
+                          [
+                            { text: "Avbryt", style: "cancel" },
+                            {
+                              text: "Slett",
+                              style: "destructive",
+                              onPress: () =>
+                                deleteExpertiseMutation.mutate(item.id!),
+                            },
+                          ],
+                        );
                       }
                     }}
                   >
                     <Feather name="trash-2" size={16} color="#FFFFFF" />
-                    <ThemedText style={styles.deleteButtonText}>Slett</ThemedText>
+                    <ThemedText style={styles.deleteButtonText}>
+                      Slett
+                    </ThemedText>
                   </Pressable>
                 </View>
               ))}
@@ -306,7 +427,10 @@ export default function VendorExpertiseOnboardingScreen() {
               <View
                 style={[
                   styles.completionCard,
-                  { backgroundColor: theme.primary + "10", borderColor: theme.primary },
+                  {
+                    backgroundColor: theme.primary + "10",
+                    borderColor: theme.primary,
+                  },
                 ]}
               >
                 <Feather name="check-circle" size={24} color={theme.primary} />
@@ -317,7 +441,8 @@ export default function VendorExpertiseOnboardingScreen() {
                   Vil du aktivere tilgjengelighetssystemet?
                 </ThemedText>
                 <ThemedText style={styles.completionDescription}>
-                  La par se når du er tilgjengelig for arrangement. Du kan alltid endre dette senere.
+                  La par se når du er tilgjengelig for arrangement. Du kan
+                  alltid endre dette senere.
                 </ThemedText>
 
                 <View style={styles.completionActions}>
@@ -329,7 +454,9 @@ export default function VendorExpertiseOnboardingScreen() {
                     ]}
                     onPress={() => navigation.goBack()}
                   >
-                    <ThemedText style={styles.skipButtonText}>Hoppa over</ThemedText>
+                    <ThemedText style={styles.skipButtonText}>
+                      Hoppa over
+                    </ThemedText>
                   </Pressable>
 
                   <Pressable
@@ -338,7 +465,9 @@ export default function VendorExpertiseOnboardingScreen() {
                       styles.activateButton,
                       { backgroundColor: theme.primary },
                     ]}
-                    onPress={() => (navigation as any).navigate("VendorAvailabilitySettings")}
+                    onPress={() =>
+                      (navigation as any).navigate("VendorAvailabilitySettings")
+                    }
                   >
                     <Feather name="calendar" size={18} color="white" />
                     <ThemedText style={styles.activateButtonText}>
@@ -354,16 +483,29 @@ export default function VendorExpertiseOnboardingScreen() {
           {!showForm ? (
             <Pressable
               style={[styles.addButton, { backgroundColor: theme.primary }]}
-              onPress={() => setShowForm(true)}
+              onPress={() => {
+                setShowForm(true);
+                if (selectedEventType) {
+                  setFormData((prev) => ({
+                    ...prev,
+                    eventType: selectedEventType,
+                  }));
+                }
+              }}
             >
               <Feather name="plus" size={20} color="#FFFFFF" />
-              <ThemedText style={styles.addButtonText}>Legg til Ekspertise</ThemedText>
+              <ThemedText style={styles.addButtonText}>
+                Legg til Ekspertise
+              </ThemedText>
             </Pressable>
           ) : (
             <View
               style={[
                 styles.formCard,
-                { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                },
               ]}
             >
               <ThemedText style={styles.formTitle}>Ny Ekspertise</ThemedText>
@@ -391,7 +533,10 @@ export default function VendorExpertiseOnboardingScreen() {
                             : theme.border,
                       },
                     ]}
-                    onPress={() => setFormData({ ...formData, eventType })}
+                    onPress={() => {
+                      setSelectedEventType(eventType);
+                      setFormData({ ...formData, eventType });
+                    }}
                   >
                     <ThemedText
                       style={[
@@ -430,7 +575,9 @@ export default function VendorExpertiseOnboardingScreen() {
               />
 
               {/* Completed Events */}
-              <ThemedText style={styles.label}>Gjennomførte arrangementer</ThemedText>
+              <ThemedText style={styles.label}>
+                Gjennomførte arrangementer
+              </ThemedText>
               <TextInput
                 style={[
                   styles.input,
@@ -450,7 +597,9 @@ export default function VendorExpertiseOnboardingScreen() {
 
               {/* Specialized Toggle */}
               <View style={styles.toggleRow}>
-                <ThemedText style={styles.label}>Spesialisert i denne typen</ThemedText>
+                <ThemedText style={styles.label}>
+                  Spesialisert i denne typen
+                </ThemedText>
                 <Switch
                   value={formData.isSpecialized}
                   onValueChange={(value) =>
@@ -465,7 +614,9 @@ export default function VendorExpertiseOnboardingScreen() {
               </View>
 
               {/* Notes */}
-              <ThemedText style={styles.label}>Notat (f.eks. størrelsesspenn)</ThemedText>
+              <ThemedText style={styles.label}>
+                Notat (f.eks. størrelsesspenn)
+              </ThemedText>
               <TextInput
                 style={[
                   styles.input,
@@ -485,13 +636,12 @@ export default function VendorExpertiseOnboardingScreen() {
               {/* Action Buttons */}
               <View style={styles.buttonRow}>
                 <Pressable
-                  style={[
-                    styles.cancelButton,
-                    { borderColor: theme.border },
-                  ]}
+                  style={[styles.cancelButton, { borderColor: theme.border }]}
                   onPress={() => setShowForm(false)}
                 >
-                  <ThemedText style={styles.cancelButtonText}>Avbryt</ThemedText>
+                  <ThemedText style={styles.cancelButtonText}>
+                    Avbryt
+                  </ThemedText>
                 </Pressable>
 
                 <Pressable
@@ -508,7 +658,9 @@ export default function VendorExpertiseOnboardingScreen() {
                   {addExpertiseMutation.isPending ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <ThemedText style={styles.submitButtonText}>Lagre Ekspertise</ThemedText>
+                    <ThemedText style={styles.submitButtonText}>
+                      Lagre Ekspertise
+                    </ThemedText>
                   )}
                 </Pressable>
               </View>

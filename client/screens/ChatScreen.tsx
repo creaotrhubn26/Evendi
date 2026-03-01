@@ -3,7 +3,6 @@ import {
   StyleSheet,
   View,
   FlatList,
-  TextInput,
   Pressable,
   ActivityIndicator,
   Image,
@@ -23,7 +22,7 @@ import { uploadChatImage, isSupabaseConfigured } from "@/lib/supabase-storage";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { getApiUrl, apiRequest } from "@/lib/query-client";
+import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { showToast } from "@/lib/toast";
 import { showConfirm, showOptions } from "@/lib/dialogs";
@@ -222,7 +221,9 @@ export default function ChatScreen({ route, navigation }: Props) {
         }
       );
     } catch (error) {
-      // Silently fail - typing indicator is not critical
+      if (__DEV__) {
+        console.debug("Failed to notify typing status", error);
+      }
     }
   };
 
@@ -353,7 +354,8 @@ export default function ChatScreen({ route, navigation }: Props) {
         });
       }
     } catch (error) {
-      showToast("Kunne ikke laste opp bildet. Prøv igjen.");
+      const message = error instanceof Error ? error.message : "Kunne ikke laste opp bildet. Prøv igjen.";
+      showToast(message);
     } finally {
       setIsUploading(false);
     }

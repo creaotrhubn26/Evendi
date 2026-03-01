@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Pressable, ViewStyle } from "react-native";
+import { StyleSheet, Pressable, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -17,7 +17,7 @@ interface CardProps {
   description?: string;
   children?: React.ReactNode;
   onPress?: () => void;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 const springConfig: WithSpringConfig = {
@@ -56,7 +56,8 @@ export function Card({
 }: CardProps) {
   const { theme, designSettings } = useTheme();
   const scale = useSharedValue(1);
-  const cardRadius = parseInt(designSettings.cardRadius || "12");
+  const parsedCardRadius = parseInt(designSettings.cardRadius || `${BorderRadius.md}`, 10);
+  const cardRadius = Number.isFinite(parsedCardRadius) ? parsedCardRadius : BorderRadius.md;
 
   const cardBackgroundColor = getBackgroundColorForElevation(elevation, theme);
 

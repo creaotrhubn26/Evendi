@@ -2,7 +2,6 @@ import React, { useState, useCallback } from "react";
 import {
   StyleSheet,
   View,
-  TextInput,
   Pressable,
   ActivityIndicator,
   Image,
@@ -269,7 +268,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={['top', 'bottom']}>
       <KeyboardAwareScrollViewCompat
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: headerHeight + Spacing.md }]}
       >
         {showLogo ? (
           <Image

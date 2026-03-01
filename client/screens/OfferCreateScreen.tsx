@@ -46,9 +46,6 @@ interface OfferItem {
   unitPrice: number;
 }
 
-interface Props {
-}
-
 type RouteParams = {
   OfferCreate: { offer?: any };
 };

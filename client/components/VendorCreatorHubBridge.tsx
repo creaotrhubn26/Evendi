@@ -1,13 +1,10 @@
 import React, { useState, useCallback } from "react";
 import {
   View,
-  ScrollView,
   StyleSheet,
   Pressable,
-  TextInput,
   ActivityIndicator,
   Alert,
-  RefreshControl,
 } from "react-native";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";

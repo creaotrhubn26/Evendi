@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -8,6 +8,7 @@ import {
   Modal,
   Image,
   RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -19,14 +20,14 @@ import * as ImagePicker from "expo-image-picker";
 import { optimizeImage, PHOTO_PRESET } from "@/lib/optimize-image";
 import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { getCoupleProfile } from '@/lib/api-couples';
-import { TraditionHintBanner } from '@/components/TraditionHintBanner';
+import { getCoupleProfile } from "@/lib/api-couples";
+import { TraditionHintBanner } from "@/components/TraditionHintBanner";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
 import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
@@ -54,18 +55,56 @@ import {
 
 type NavigationProp = NativeStackNavigationProp<PlanningStackParamList>;
 
+const EMPTY_APPOINTMENTS: FlowerAppointment[] = [];
+const EMPTY_SELECTIONS: FlowerSelection[] = [];
+const DEFAULT_TIMELINE: FlowerTimeline = {
+  floristSelected: false,
+  consultationDone: false,
+  mockupApproved: false,
+  deliveryConfirmed: false,
+  budget: 0,
+};
+
 const TIMELINE_STEPS = [
-  { key: "floristSelected", label: "Florist valgt", icon: "check-circle" as const },
-  { key: "consultationDone", label: "Konsultasjon gjennomført", icon: "calendar" as const },
+  {
+    key: "floristSelected",
+    label: "Florist valgt",
+    icon: "check-circle" as const,
+  },
+  {
+    key: "consultationDone",
+    label: "Konsultasjon gjennomført",
+    icon: "calendar" as const,
+  },
   { key: "mockupApproved", label: "Mockup godkjent", icon: "image" as const },
-  { key: "deliveryConfirmed", label: "Levering bekreftet", icon: "truck" as const },
+  {
+    key: "deliveryConfirmed",
+    label: "Levering bekreftet",
+    icon: "truck" as const,
+  },
 ];
 
-const APPOINTMENT_TYPES = ["Konsultasjon", "Oppfølging", "Mockup-visning", "Leveringsplanlegging", "Annet"];
+const APPOINTMENT_TYPES = [
+  "Konsultasjon",
+  "Oppfølging",
+  "Mockup-visning",
+  "Leveringsplanlegging",
+  "Annet",
+];
 
-type FlowerItemType = "bouquet" | "boutonniere" | "centerpiece" | "ceremony" | "arch" | "other";
+type FlowerItemType =
+  | "bouquet"
+  | "boutonniere"
+  | "centerpiece"
+  | "ceremony"
+  | "arch"
+  | "other";
 
-const ITEM_TYPES: Array<{ key: FlowerItemType; label: string; icon: EvendiIconName }> = [
+const ITEM_TYPES: {
+  key: FlowerItemType;
+  label: string;
+  icon: EvendiIconName;
+}[] = [
   { key: "bouquet", label: "Brudebukett", icon: "heart" },
   { key: "boutonniere", label: "Knapphullsblomst", icon: "user" },
   { key: "centerpiece", label: "Borddekorasjon", icon: "layers" },
@@ -85,11 +124,15 @@ export default function BlomsterScreen() {
   const navigation = useNavigation<NavigationProp>();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"appointments" | "selections" | "timeline">("appointments");
+  const [activeTab, setActiveTab] = useState<
+    "appointments" | "selections" | "timeline"
+  >("appointments");
   const [refreshing, setRefreshing] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [appointmentSearch, setAppointmentSearch] = useState("");
+  const [selectionSearch, setSelectionSearch] = useState("");
 
-  const COUPLE_STORAGE_KEY = 'evendi_couple_session';
+  const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
   // Load session token on mount
   React.useEffect(() => {
@@ -104,37 +147,77 @@ export default function BlomsterScreen() {
 
   // Fetch couple profile for selected traditions
   const { data: coupleProfile } = useQuery({
-    queryKey: ['coupleProfile'],
+    queryKey: ["coupleProfile"],
     queryFn: async () => {
-      if (!sessionToken) throw new Error('No session');
+      if (!sessionToken) throw new Error("No session");
       return getCoupleProfile(sessionToken);
     },
     enabled: !!sessionToken,
   });
 
   // Query for flower data
-  const { data: flowerData, isLoading: loading, refetch } = useQuery({
+  const {
+    data: flowerData,
+    isLoading: loading,
+    refetch,
+  } = useQuery({
     queryKey: ["flower-data"],
     queryFn: getFlowerData,
   });
 
-  const appointments = flowerData?.appointments ?? [];
-  const selections = flowerData?.selections ?? [];
-  const timeline = flowerData?.timeline ?? {
-    floristSelected: false,
-    consultationDone: false,
-    mockupApproved: false,
-    deliveryConfirmed: false,
-    budget: 0,
-  };
+  const appointments = flowerData?.appointments ?? EMPTY_APPOINTMENTS;
+  const selections = flowerData?.selections ?? EMPTY_SELECTIONS;
+  const timeline = flowerData?.timeline ?? DEFAULT_TIMELINE;
   const budget = timeline?.budget ?? 0;
+
+  const filteredAppointments = useMemo(() => {
+    const needle = appointmentSearch.trim().toLowerCase();
+    if (!needle) return appointments;
+    return appointments.filter((appointment) => {
+      const haystack = [
+        appointment.floristName,
+        appointment.appointmentType,
+        appointment.date,
+        appointment.time,
+        appointment.location,
+        appointment.notes,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [appointments, appointmentSearch]);
+
+  const filteredSelections = useMemo(() => {
+    const needle = selectionSearch.trim().toLowerCase();
+    if (!needle) return selections;
+    return selections.filter((selection) => {
+      const haystack = [
+        selection.name,
+        selection.itemType,
+        selection.description,
+        selection.notes,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [selections, selectionSearch]);
+
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.trim()) return error.message;
+    return fallback;
+  };
 
   // Vendor search for florist autocomplete
   const floristSearch = useVendorSearch({ category: "florist" });
 
   // Appointment modal state
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
-  const [editingAppointment, setEditingAppointment] = useState<FlowerAppointment | null>(null);
+  const [editingAppointment, setEditingAppointment] =
+    useState<FlowerAppointment | null>(null);
   const [appointmentType, setAppointmentType] = useState("");
   const [appointmentDate, setAppointmentDate] = useState("");
   const [appointmentTime, setAppointmentTime] = useState("");
@@ -143,8 +226,11 @@ export default function BlomsterScreen() {
 
   // Selection modal state
   const [showSelectionModal, setShowSelectionModal] = useState(false);
-  const [editingSelection, setEditingSelection] = useState<FlowerSelection | null>(null);
-  const [selectionItemType, setSelectionItemType] = useState<FlowerItemType | "">("");
+  const [editingSelection, setEditingSelection] =
+    useState<FlowerSelection | null>(null);
+  const [selectionItemType, setSelectionItemType] = useState<
+    FlowerItemType | ""
+  >("");
   const [selectionName, setSelectionName] = useState("");
   const [selectionDescription, setSelectionDescription] = useState("");
   const [selectionImage, setSelectionImage] = useState<string | undefined>();
@@ -159,37 +245,56 @@ export default function BlomsterScreen() {
   // Mutations
   const createAppointmentMutation = useMutation({
     mutationFn: createFlowerAppointment,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
   });
 
   const updateAppointmentMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<FlowerAppointment> }) => updateFlowerAppointment(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: Partial<FlowerAppointment>;
+    }) => updateFlowerAppointment(id, data),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
   });
 
   const deleteAppointmentMutation = useMutation({
     mutationFn: deleteFlowerAppointment,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
   });
 
   const createSelectionMutation = useMutation({
     mutationFn: createFlowerSelection,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
   });
 
   const updateSelectionMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<FlowerSelection> }) => updateFlowerSelection(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: Partial<FlowerSelection>;
+    }) => updateFlowerSelection(id, data),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
   });
 
   const deleteSelectionMutation = useMutation({
     mutationFn: deleteFlowerSelection,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
   });
 
   const updateTimelineMutation = useMutation({
     mutationFn: updateFlowerTimeline,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["flower-data"] }),
   });
 
   const onRefresh = useCallback(async () => {
@@ -202,10 +307,16 @@ export default function BlomsterScreen() {
   const isValidDateString = (value: string) => {
     const trimmed = value.trim();
     if (!/^\d{2}\.\d{2}\.\d{4}$/.test(trimmed)) return false;
-    const [day, month, year] = trimmed.split(".").map((part) => parseInt(part, 10));
+    const [day, month, year] = trimmed
+      .split(".")
+      .map((part) => parseInt(part, 10));
     if (!day || !month || !year) return false;
     const date = new Date(year, month - 1, day);
-    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+    return (
+      date.getFullYear() === year &&
+      date.getMonth() === month - 1 &&
+      date.getDate() === day
+    );
   };
 
   const isValidTimeString = (value: string) => {
@@ -311,22 +422,38 @@ export default function BlomsterScreen() {
       }
       setShowAppointmentModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke lagre avtale");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre avtale"));
     }
   };
 
   const toggleAppointmentComplete = async (id: string) => {
     const appointment = appointments.find((a) => a.id === id);
     if (appointment) {
-      await updateAppointmentMutation.mutateAsync({ id, data: { completed: !appointment.completed } });
+      await updateAppointmentMutation.mutateAsync({
+        id,
+        data: { completed: !appointment.completed },
+      });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
 
   const handleDeleteAppointment = async (id: string) => {
-    await deleteAppointmentMutation.mutateAsync(id);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const confirmed = await showConfirm({
+      title: "Slette avtale?",
+      message: "Denne avtalen fjernes permanent.",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    try {
+      await deleteAppointmentMutation.mutateAsync(id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke slette avtale"));
+    }
   };
 
   const duplicateAppointment = async (appointment: FlowerAppointment) => {
@@ -341,8 +468,8 @@ export default function BlomsterScreen() {
         completed: false,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke duplisere avtale");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke duplisere avtale"));
     }
   };
 
@@ -350,7 +477,9 @@ export default function BlomsterScreen() {
   const openSelectionModal = (selection?: FlowerSelection) => {
     if (selection) {
       setEditingSelection(selection);
-      setSelectionItemType(isFlowerItemType(selection.itemType) ? selection.itemType : "");
+      setSelectionItemType(
+        isFlowerItemType(selection.itemType) ? selection.itemType : "",
+      );
       setSelectionName(selection.name);
       setSelectionDescription(selection.description || "");
       setSelectionImage(selection.imageUrl);
@@ -410,13 +539,20 @@ export default function BlomsterScreen() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      const optimizedUri = await optimizeImage(result.assets[0].uri, PHOTO_PRESET);
+      const optimizedUri = await optimizeImage(
+        result.assets[0].uri,
+        PHOTO_PRESET,
+      );
       setSelectionImage(optimizedUri);
     }
   };
 
   const saveSelection = async () => {
-    if (!selectionName.trim() || !selectionItemType.trim() || !isFlowerItemType(selectionItemType)) {
+    if (
+      !selectionName.trim() ||
+      !selectionItemType.trim() ||
+      !isFlowerItemType(selectionItemType)
+    ) {
       showToast("Vennligst fyll inn navn og type");
       return;
     }
@@ -429,8 +565,12 @@ export default function BlomsterScreen() {
         name: selectionName,
         description: selectionDescription,
         imageUrl: selectionImage,
-        quantity: selectionQuantity ? parseInt(selectionQuantity, 10) : undefined,
-        estimatedPrice: selectionPrice ? parseInt(selectionPrice, 10) : undefined,
+        quantity: selectionQuantity
+          ? parseInt(selectionQuantity, 10)
+          : undefined,
+        estimatedPrice: selectionPrice
+          ? parseInt(selectionPrice, 10)
+          : undefined,
         notes: selectionNotes,
         isConfirmed: false,
       };
@@ -445,22 +585,38 @@ export default function BlomsterScreen() {
       }
       setShowSelectionModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke lagre valg");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre valg"));
     }
   };
 
   const toggleSelectionConfirmed = async (id: string) => {
     const selection = selections.find((s) => s.id === id);
     if (selection) {
-      await updateSelectionMutation.mutateAsync({ id, data: { isConfirmed: !selection.isConfirmed } });
+      await updateSelectionMutation.mutateAsync({
+        id,
+        data: { isConfirmed: !selection.isConfirmed },
+      });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
 
   const handleDeleteSelection = async (id: string) => {
-    await deleteSelectionMutation.mutateAsync(id);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const confirmed = await showConfirm({
+      title: "Slette valg?",
+      message: "Dette blomstervalget fjernes permanent.",
+      confirmLabel: "Slett",
+      cancelLabel: "Avbryt",
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    try {
+      await deleteSelectionMutation.mutateAsync(id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke slette valg"));
+    }
   };
 
   const duplicateSelection = async (selection: FlowerSelection) => {
@@ -476,8 +632,8 @@ export default function BlomsterScreen() {
         isConfirmed: false,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke duplisere utvalg");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke duplisere utvalg"));
     }
   };
 
@@ -515,33 +671,101 @@ export default function BlomsterScreen() {
     return item?.icon || "help-circle";
   };
 
-  const completedSteps = TIMELINE_STEPS.filter((step) => timeline[step.key as keyof FlowerTimeline]).length;
+  const completedSteps = TIMELINE_STEPS.filter(
+    (step) => timeline[step.key as keyof FlowerTimeline],
+  ).length;
   const progressPercentage = (completedSteps / TIMELINE_STEPS.length) * 100;
-  const totalEstimated = selections.reduce((sum, s) => sum + ((s.estimatedPrice || 0) * (s.quantity || 1)), 0);
+  const totalEstimated = selections.reduce(
+    (sum, s) => sum + (s.estimatedPrice || 0) * (s.quantity || 1),
+    0,
+  );
 
   const renderAppointmentsTab = () => (
     <View style={styles.tabContent}>
       <View style={styles.sectionHeader}>
-        <ThemedText style={styles.sectionTitle}>Avtaler</ThemedText>
-        <Pressable onPress={() => openAppointmentModal()} style={[styles.addButton, { backgroundColor: theme.primary }]}>
+        <View style={styles.sectionTitleRow}>
+          <ThemedText style={styles.sectionTitle}>Avtaler</ThemedText>
+          {loading ? (
+            <ActivityIndicator
+              size="small"
+              color={theme.primary}
+              style={styles.sectionLoader}
+            />
+          ) : null}
+        </View>
+        <Pressable
+          onPress={() => openAppointmentModal()}
+          style={[styles.addButton, { backgroundColor: theme.primary }]}
+        >
           <EvendiIcon name="plus" size={20} color="#fff" />
         </Pressable>
       </View>
 
+      <TextInput
+        style={[
+          styles.searchInput,
+          {
+            backgroundColor: theme.backgroundDefault,
+            borderColor: theme.border,
+            color: theme.text,
+          },
+        ]}
+        value={appointmentSearch}
+        onChangeText={setAppointmentSearch}
+        placeholder="Søk etter florist, type, dato eller notat"
+        placeholderTextColor={theme.textSecondary}
+      />
+
       {appointments.length === 0 ? (
-        <View style={[styles.emptyState, { backgroundColor: theme.backgroundDefault }]}>
-          <EvendiIcon name="heart" size={48} color={theme.primary} style={{ opacity: 0.6 }} />
-          <ThemedText style={[styles.emptyText, { color: theme.text, fontWeight: '600', fontSize: 18 }]}>
+        <View
+          style={[
+            styles.emptyState,
+            { backgroundColor: theme.backgroundDefault },
+          ]}
+        >
+          <EvendiIcon
+            name="heart"
+            size={48}
+            color={theme.primary}
+            style={{ opacity: 0.6 }}
+          />
+          <ThemedText
+            style={[
+              styles.emptyText,
+              { color: theme.text, fontWeight: "600", fontSize: 18 },
+            ]}
+          >
             Hvilke blomster føles riktige for dere?
           </ThemedText>
-          <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary, fontSize: 15 }]}>
+          <ThemedText
+            style={[
+              styles.emptySubtext,
+              { color: theme.textSecondary, fontSize: 15 },
+            ]}
+          >
             La oss finne farger og uttrykk sammen.
           </ThemedText>
         </View>
+      ) : filteredAppointments.length === 0 ? (
+        <View
+          style={[
+            styles.emptyState,
+            { backgroundColor: theme.backgroundDefault, paddingVertical: 28 },
+          ]}
+        >
+          <ThemedText style={{ color: theme.textSecondary }}>
+            Ingen avtaler matcher søket
+          </ThemedText>
+        </View>
       ) : (
-        appointments.map((appointment, index) => (
-          <Animated.View key={appointment.id} entering={FadeInDown.delay(index * 50)}>
-            <SwipeableRow onDelete={() => handleDeleteAppointment(appointment.id)}>
+        filteredAppointments.map((appointment, index) => (
+          <Animated.View
+            key={appointment.id}
+            entering={FadeInDown.delay(index * 50)}
+          >
+            <SwipeableRow
+              onDelete={() => handleDeleteAppointment(appointment.id)}
+            >
               <Pressable
                 onPress={() => openAppointmentModal(appointment)}
                 onLongPress={() => {
@@ -550,37 +774,71 @@ export default function BlomsterScreen() {
                     title: appointment.floristName,
                     message: "Velg en handling",
                     options: [
-                      { label: "Rediger", onPress: () => openAppointmentModal(appointment) },
-                      { label: "Dupliser", onPress: () => duplicateAppointment(appointment) },
-                      { label: "Slett", destructive: true, onPress: () => handleDeleteAppointment(appointment.id) },
+                      {
+                        label: "Rediger",
+                        onPress: () => openAppointmentModal(appointment),
+                      },
+                      {
+                        label: "Dupliser",
+                        onPress: () => duplicateAppointment(appointment),
+                      },
+                      {
+                        label: "Slett",
+                        destructive: true,
+                        onPress: () => handleDeleteAppointment(appointment.id),
+                      },
                     ],
                     cancelLabel: "Avbryt",
                   });
                 }}
-                style={[styles.appointmentCard, { backgroundColor: theme.backgroundDefault }]}
+                style={[
+                  styles.appointmentCard,
+                  { backgroundColor: theme.backgroundDefault },
+                ]}
               >
                 <Pressable
                   onPress={() => toggleAppointmentComplete(appointment.id)}
                   style={[
                     styles.checkbox,
                     { borderColor: theme.border },
-                    appointment.completed && { backgroundColor: theme.primary, borderColor: theme.primary },
+                    appointment.completed && {
+                      backgroundColor: theme.primary,
+                      borderColor: theme.primary,
+                    },
                   ]}
                 >
-                  {appointment.completed && <EvendiIcon name="check" size={14} color="#fff" />}
+                  {appointment.completed && (
+                    <EvendiIcon name="check" size={14} color="#fff" />
+                  )}
                 </Pressable>
                 <View style={styles.appointmentInfo}>
                   <ThemedText
-                    style={[styles.appointmentShop, appointment.completed && styles.completedText]}
+                    style={[
+                      styles.appointmentShop,
+                      appointment.completed && styles.completedText,
+                    ]}
                   >
                     {appointment.floristName}
                   </ThemedText>
-                  <ThemedText style={[styles.appointmentDate, { color: theme.textSecondary }]}>
-                    {appointment.date} {appointment.time && `kl. ${appointment.time}`}
+                  <ThemedText
+                    style={[
+                      styles.appointmentDate,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    {appointment.date}{" "}
+                    {appointment.time && `kl. ${appointment.time}`}
                   </ThemedText>
                   {appointment.appointmentType && (
-                    <View style={[styles.typeBadge, { backgroundColor: theme.primary + '20' }]}>
-                      <ThemedText style={[styles.typeText, { color: theme.primary }]}>
+                    <View
+                      style={[
+                        styles.typeBadge,
+                        { backgroundColor: theme.primary + "20" },
+                      ]}
+                    >
+                      <ThemedText
+                        style={[styles.typeText, { color: theme.primary }]}
+                      >
                         {appointment.appointmentType}
                       </ThemedText>
                     </View>
@@ -593,9 +851,17 @@ export default function BlomsterScreen() {
                   }}
                   style={styles.quickActionButton}
                 >
-                  <EvendiIcon name="copy" size={16} color={theme.textSecondary} />
+                  <EvendiIcon
+                    name="copy"
+                    size={16}
+                    color={theme.textSecondary}
+                  />
                 </Pressable>
-                <EvendiIcon name="chevron-right" size={20} color={theme.textSecondary} />
+                <EvendiIcon
+                  name="chevron-right"
+                  size={20}
+                  color={theme.textSecondary}
+                />
               </Pressable>
             </SwipeableRow>
           </Animated.View>
@@ -608,14 +874,37 @@ export default function BlomsterScreen() {
     <View style={styles.tabContent}>
       <View style={styles.sectionHeader}>
         <ThemedText style={styles.sectionTitle}>Blomstervalg</ThemedText>
-        <Pressable onPress={() => openSelectionModal()} style={[styles.addButton, { backgroundColor: theme.primary }]}>
+        <Pressable
+          onPress={() => openSelectionModal()}
+          style={[styles.addButton, { backgroundColor: theme.primary }]}
+        >
           <EvendiIcon name="plus" size={20} color="#fff" />
         </Pressable>
       </View>
 
+      <TextInput
+        style={[
+          styles.searchInput,
+          {
+            backgroundColor: theme.backgroundDefault,
+            borderColor: theme.border,
+            color: theme.text,
+          },
+        ]}
+        value={selectionSearch}
+        onChangeText={setSelectionSearch}
+        placeholder="Søk etter navn, type eller notat"
+        placeholderTextColor={theme.textSecondary}
+      />
+
       {/* Cost summary */}
-      {selections.length > 0 && (
-        <View style={[styles.costSummary, { backgroundColor: theme.backgroundDefault }]}>
+      {filteredSelections.length > 0 && (
+        <View
+          style={[
+            styles.costSummary,
+            { backgroundColor: theme.backgroundDefault },
+          ]}
+        >
           <ThemedText style={styles.costLabel}>Estimert total</ThemedText>
           <ThemedText style={[styles.costAmount, { color: theme.primary }]}>
             {formatCurrencyValue(totalEstimated)}
@@ -624,19 +913,54 @@ export default function BlomsterScreen() {
       )}
 
       {selections.length === 0 ? (
-        <View style={[styles.emptyState, { backgroundColor: theme.backgroundDefault }]}>
-          <EvendiIcon name="heart" size={48} color={theme.primary} style={{ opacity: 0.6 }} />
-          <ThemedText style={[styles.emptyText, { color: theme.text, fontWeight: '600', fontSize: 18 }]}>
+        <View
+          style={[
+            styles.emptyState,
+            { backgroundColor: theme.backgroundDefault },
+          ]}
+        >
+          <EvendiIcon
+            name="heart"
+            size={48}
+            color={theme.primary}
+            style={{ opacity: 0.6 }}
+          />
+          <ThemedText
+            style={[
+              styles.emptyText,
+              { color: theme.text, fontWeight: "600", fontSize: 18 },
+            ]}
+          >
             Hvilke blomster føles riktige for dere?
           </ThemedText>
-          <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary, fontSize: 15 }]}>
+          <ThemedText
+            style={[
+              styles.emptySubtext,
+              { color: theme.textSecondary, fontSize: 15 },
+            ]}
+          >
             Lagre buketter og uttrykk dere elsker.
+          </ThemedText>
+        </View>
+      ) : filteredSelections.length === 0 ? (
+        <View
+          style={[
+            styles.emptyState,
+            { backgroundColor: theme.backgroundDefault, paddingVertical: 28 },
+          ]}
+        >
+          <ThemedText style={{ color: theme.textSecondary }}>
+            Ingen blomstervalg matcher søket
           </ThemedText>
         </View>
       ) : (
         <View style={styles.selectionsGrid}>
-          {selections.map((selection, index) => (
-            <Animated.View key={selection.id} entering={FadeInRight.delay(index * 50)} style={styles.selectionCardWrapper}>
+          {filteredSelections.map((selection, index) => (
+            <Animated.View
+              key={selection.id}
+              entering={FadeInRight.delay(index * 50)}
+              style={styles.selectionCardWrapper}
+            >
               <Pressable
                 onPress={() => openSelectionModal(selection)}
                 onLongPress={() => {
@@ -645,9 +969,19 @@ export default function BlomsterScreen() {
                     title: "Alternativer",
                     message: `Valg: ${selection.name}`,
                     options: [
-                      { label: "Rediger", onPress: () => openSelectionModal(selection) },
-                      { label: "Dupliser", onPress: () => duplicateSelection(selection) },
-                      { label: "Slett", destructive: true, onPress: () => handleDeleteSelection(selection.id) },
+                      {
+                        label: "Rediger",
+                        onPress: () => openSelectionModal(selection),
+                      },
+                      {
+                        label: "Dupliser",
+                        onPress: () => duplicateSelection(selection),
+                      },
+                      {
+                        label: "Slett",
+                        destructive: true,
+                        onPress: () => handleDeleteSelection(selection.id),
+                      },
                     ],
                     cancelLabel: "Avbryt",
                   });
@@ -655,31 +989,59 @@ export default function BlomsterScreen() {
                 style={[
                   styles.selectionCard,
                   { backgroundColor: theme.backgroundDefault },
-                  selection.isConfirmed ? { borderColor: Colors.light.success, borderWidth: 2 } : undefined,
+                  selection.isConfirmed
+                    ? { borderColor: Colors.light.success, borderWidth: 2 }
+                    : undefined,
                 ]}
               >
                 {selection.imageUrl ? (
-                  <Image source={{ uri: selection.imageUrl }} style={styles.selectionImage} />
+                  <Image
+                    source={{ uri: selection.imageUrl }}
+                    style={styles.selectionImage}
+                  />
                 ) : (
-                  <View style={[styles.selectionImagePlaceholder, { backgroundColor: theme.border }]}>
-                    <EvendiIcon name={getItemTypeIcon(selection.itemType)} size={32} color={theme.textSecondary} />
+                  <View
+                    style={[
+                      styles.selectionImagePlaceholder,
+                      { backgroundColor: theme.border },
+                    ]}
+                  >
+                    <EvendiIcon
+                      name={getItemTypeIcon(selection.itemType)}
+                      size={32}
+                      color={theme.textSecondary}
+                    />
                   </View>
                 )}
                 <View style={styles.selectionInfo}>
                   <ThemedText style={styles.selectionName} numberOfLines={1}>
                     {selection.name}
                   </ThemedText>
-                  <ThemedText style={[styles.selectionType, { color: theme.textSecondary }]}>
+                  <ThemedText
+                    style={[
+                      styles.selectionType,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
                     {getItemTypeLabel(selection.itemType)}
                   </ThemedText>
                   {selection.quantity && (
-                    <ThemedText style={[styles.selectionQuantity, { color: theme.textSecondary }]}>
+                    <ThemedText
+                      style={[
+                        styles.selectionQuantity,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
                       Antall: {selection.quantity}
                     </ThemedText>
                   )}
                   {selection.estimatedPrice && (
-                    <ThemedText style={[styles.selectionPrice, { color: theme.primary }]}>
-                      {formatCurrencyValue(selection.estimatedPrice * (selection.quantity || 1))}
+                    <ThemedText
+                      style={[styles.selectionPrice, { color: theme.primary }]}
+                    >
+                      {formatCurrencyValue(
+                        selection.estimatedPrice * (selection.quantity || 1),
+                      )}
                     </ThemedText>
                   )}
                 </View>
@@ -690,16 +1052,28 @@ export default function BlomsterScreen() {
                   }}
                   style={styles.quickActionButton}
                 >
-                  <EvendiIcon name="copy" size={16} color={theme.textSecondary} />
+                  <EvendiIcon
+                    name="copy"
+                    size={16}
+                    color={theme.textSecondary}
+                  />
                 </Pressable>
                 <Pressable
                   onPress={() => toggleSelectionConfirmed(selection.id)}
                   style={[
                     styles.confirmBadge,
-                    { backgroundColor: selection.isConfirmed ? Colors.light.success : theme.border },
+                    {
+                      backgroundColor: selection.isConfirmed
+                        ? Colors.light.success
+                        : theme.border,
+                    },
                   ]}
                 >
-                  <EvendiIcon name="check" size={12} color={selection.isConfirmed ? "#fff" : theme.textSecondary} />
+                  <EvendiIcon
+                    name="check"
+                    size={12}
+                    color={selection.isConfirmed ? "#fff" : theme.textSecondary}
+                  />
                 </Pressable>
               </Pressable>
             </Animated.View>
@@ -712,17 +1086,36 @@ export default function BlomsterScreen() {
   const renderTimelineTab = () => (
     <View style={styles.tabContent}>
       {/* Budget Card */}
-      <Pressable onPress={openBudgetModal} style={[styles.budgetCard, { backgroundColor: theme.backgroundDefault }]}>
+      <Pressable
+        onPress={openBudgetModal}
+        style={[
+          styles.budgetCard,
+          { backgroundColor: theme.backgroundDefault },
+        ]}
+      >
         <View style={styles.budgetHeader}>
-          <ThemedText style={styles.budgetLabel}>Budsjett for Blomster</ThemedText>
+          <ThemedText style={styles.budgetLabel}>
+            Budsjett for Blomster
+          </ThemedText>
           <EvendiIcon name="edit-2" size={16} color={theme.textSecondary} />
         </View>
         <ThemedText style={[styles.budgetAmount, { color: theme.primary }]}>
           {formatCurrencyValue(budget)}
         </ThemedText>
         {budget > 0 && totalEstimated > 0 && (
-          <ThemedText style={[styles.budgetUsed, { color: totalEstimated > budget ? Colors.light.error : theme.textSecondary }]}>
-            Estimert brukt: {formatCurrencyValue(totalEstimated)} ({Math.round((totalEstimated / budget) * 100)}%)
+          <ThemedText
+            style={[
+              styles.budgetUsed,
+              {
+                color:
+                  totalEstimated > budget
+                    ? Colors.light.error
+                    : theme.textSecondary,
+              },
+            ]}
+          >
+            Estimert brukt: {formatCurrencyValue(totalEstimated)} (
+            {Math.round((totalEstimated / budget) * 100)}%)
           </ThemedText>
         )}
       </Pressable>
@@ -730,7 +1123,7 @@ export default function BlomsterScreen() {
       {/* Find Vendors Button */}
       <Pressable
         onPress={() => {
-          navigation.navigate("VendorMatching", { 
+          navigation.navigate("VendorMatching", {
             category: "florist",
           });
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -743,29 +1136,51 @@ export default function BlomsterScreen() {
       </Pressable>
 
       {/* Progress */}
-      <View style={[styles.progressCard, { backgroundColor: theme.backgroundDefault }]}>
+      <View
+        style={[
+          styles.progressCard,
+          { backgroundColor: theme.backgroundDefault },
+        ]}
+      >
         <View style={styles.progressHeader}>
           <ThemedText style={styles.progressTitle}>Fremgang</ThemedText>
-          <ThemedText style={[styles.progressPercentage, { color: theme.primary }]}>
+          <ThemedText
+            style={[styles.progressPercentage, { color: theme.primary }]}
+          >
             {Math.round(progressPercentage)}%
           </ThemedText>
         </View>
         <View style={[styles.progressBar, { backgroundColor: theme.border }]}>
-          <View style={[styles.progressFill, { backgroundColor: theme.primary, width: `${progressPercentage}%` }]} />
+          <View
+            style={[
+              styles.progressFill,
+              {
+                backgroundColor: theme.primary,
+                width: `${progressPercentage}%`,
+              },
+            ]}
+          />
         </View>
-        <ThemedText style={[styles.progressSubtext, { color: theme.textSecondary }]}>
+        <ThemedText
+          style={[styles.progressSubtext, { color: theme.textSecondary }]}
+        >
           {completedSteps} av {TIMELINE_STEPS.length} steg fullført
         </ThemedText>
       </View>
 
       {/* Timeline Steps */}
-      <View style={[styles.timelineCard, { backgroundColor: theme.backgroundDefault }]}>
+      <View
+        style={[
+          styles.timelineCard,
+          { backgroundColor: theme.backgroundDefault },
+        ]}
+      >
         <ThemedText style={styles.timelineTitle}>Sjekkliste</ThemedText>
         {TIMELINE_STEPS.map((step, index) => {
           const isCompleted = timeline[step.key as keyof FlowerTimeline];
           return (
             <Pressable
-              key={step.key}
+              key={`${step.key}-${index}`}
               onPress={() => toggleTimelineStep(step.key)}
               style={styles.timelineStep}
             >
@@ -773,16 +1188,41 @@ export default function BlomsterScreen() {
                 style={[
                   styles.timelineCheckbox,
                   { borderColor: theme.border },
-                  isCompleted ? { backgroundColor: theme.primary, borderColor: theme.primary } : undefined,
+                  isCompleted
+                    ? {
+                        backgroundColor: theme.primary,
+                        borderColor: theme.primary,
+                      }
+                    : undefined,
                 ]}
               >
-                {isCompleted && <EvendiIcon name="check" size={14} color="#fff" />}
+                {isCompleted && (
+                  <EvendiIcon name="check" size={14} color="#fff" />
+                )}
               </View>
               <View style={styles.timelineStepContent}>
-                <View style={[styles.timelineIcon, { backgroundColor: isCompleted ? theme.primary + '20' : theme.border }]}>
-                  <EvendiIcon name={step.icon} size={16} color={isCompleted ? theme.primary : theme.textSecondary} />
+                <View
+                  style={[
+                    styles.timelineIcon,
+                    {
+                      backgroundColor: isCompleted
+                        ? theme.primary + "20"
+                        : theme.border,
+                    },
+                  ]}
+                >
+                  <EvendiIcon
+                    name={step.icon}
+                    size={16}
+                    color={isCompleted ? theme.primary : theme.textSecondary}
+                  />
                 </View>
-                <ThemedText style={[styles.timelineStepLabel, isCompleted ? styles.completedText : undefined]}>
+                <ThemedText
+                  style={[
+                    styles.timelineStepLabel,
+                    isCompleted ? styles.completedText : undefined,
+                  ]}
+                >
                   {step.label}
                 </ThemedText>
               </View>
@@ -796,19 +1236,49 @@ export default function BlomsterScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Tab Bar */}
-      <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        {([
-          { key: "appointments", label: "Avtaler", icon: "calendar" },
-          { key: "selections", label: "Valg", icon: "sun" },
-          { key: "timeline", label: "Tidslinje", icon: "list" },
-        ] as const).map((tab) => (
+      <View
+        style={[
+          styles.tabBar,
+          {
+            backgroundColor: theme.backgroundDefault,
+            borderBottomColor: theme.border,
+          },
+        ]}
+      >
+        {(
+          [
+            { key: "appointments", label: "Avtaler", icon: "calendar" },
+            { key: "selections", label: "Valg", icon: "sun" },
+            { key: "timeline", label: "Tidslinje", icon: "list" },
+          ] as const
+        ).map((tab) => (
           <Pressable
             key={tab.key}
             onPress={() => setActiveTab(tab.key)}
-            style={[styles.tab, activeTab === tab.key && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+            style={[
+              styles.tab,
+              activeTab === tab.key && {
+                borderBottomColor: theme.primary,
+                borderBottomWidth: 2,
+              },
+            ]}
           >
-            <EvendiIcon name={tab.icon} size={18} color={activeTab === tab.key ? theme.primary : theme.textSecondary} />
-            <ThemedText style={[styles.tabLabel, { color: activeTab === tab.key ? theme.primary : theme.textSecondary }]}>
+            <EvendiIcon
+              name={tab.icon}
+              size={18}
+              color={
+                activeTab === tab.key ? theme.primary : theme.textSecondary
+              }
+            />
+            <ThemedText
+              style={[
+                styles.tabLabel,
+                {
+                  color:
+                    activeTab === tab.key ? theme.primary : theme.textSecondary,
+                },
+              ]}
+            >
               {tab.label}
             </ThemedText>
           </Pressable>
@@ -819,9 +1289,18 @@ export default function BlomsterScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: tabBarHeight + Spacing.xl, paddingTop: insets.top + Spacing.sm },
+          {
+            paddingBottom: tabBarHeight + Spacing.xl,
+            paddingTop: insets.top + Spacing.sm,
+          },
         ]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.primary}
+          />
+        }
       >
         {/* Marketplace hero + search + vendor cards */}
         <VendorCategoryMarketplace
@@ -833,29 +1312,44 @@ export default function BlomsterScreen() {
         />
 
         {/* Tradition hints for flowers */}
-        {(coupleProfile?.selectedTraditions?.length ?? 0) > 0 && activeTab === "appointments" && (
-          <TraditionHintBanner
-            traditions={coupleProfile?.selectedTraditions || []}
-            category="flowers"
-          />
-        )}
+        {(coupleProfile?.selectedTraditions?.length ?? 0) > 0 &&
+          activeTab === "appointments" && (
+            <TraditionHintBanner
+              traditions={coupleProfile?.selectedTraditions || []}
+              category="flowers"
+            />
+          )}
         {activeTab === "appointments" && renderAppointmentsTab()}
         {activeTab === "selections" && renderSelectionsTab()}
         {activeTab === "timeline" && renderTimelineTab()}
       </ScrollView>
 
       {/* Appointment Modal */}
-      <Modal visible={showAppointmentModal} animationType="slide" presentationStyle="pageSheet">
-        <View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+      <Modal
+        visible={showAppointmentModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View
+          style={[styles.modalContainer, { backgroundColor: theme.background }]}
+        >
+          <View
+            style={[styles.modalHeader, { borderBottomColor: theme.border }]}
+          >
             <Pressable onPress={() => setShowAppointmentModal(false)}>
-              <ThemedText style={[styles.modalCancel, { color: theme.textSecondary }]}>Avbryt</ThemedText>
+              <ThemedText
+                style={[styles.modalCancel, { color: theme.textSecondary }]}
+              >
+                Avbryt
+              </ThemedText>
             </Pressable>
             <ThemedText style={styles.modalTitle}>
               {editingAppointment ? "Rediger avtale" : "Ny avtale"}
             </ThemedText>
             <Pressable onPress={saveAppointment}>
-              <ThemedText style={[styles.modalSave, { color: theme.primary }]}>Lagre</ThemedText>
+              <ThemedText style={[styles.modalSave, { color: theme.primary }]}>
+                Lagre
+              </ThemedText>
             </Pressable>
           </View>
 
@@ -864,7 +1358,14 @@ export default function BlomsterScreen() {
               <ThemedText style={styles.formLabel}>Florist *</ThemedText>
               <PersistentTextInput
                 draftKey="BlomsterScreen-input-1"
-                style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
+                style={[
+                  styles.formInput,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={floristSearch.searchText}
                 onChangeText={floristSearch.onChangeText}
                 placeholder="Søk etter registrert florist..."
@@ -882,14 +1383,16 @@ export default function BlomsterScreen() {
                 suggestions={floristSearch.suggestions}
                 isLoading={floristSearch.isLoading}
                 onSelect={floristSearch.onSelectVendor}
-                onViewProfile={(v) => navigation.navigate("VendorDetail", {
-                  vendorId: v.id,
-                  vendorName: v.businessName,
-                  vendorDescription: v.description || "",
-                  vendorLocation: v.location || "",
-                  vendorPriceRange: v.priceRange || "",
-                  vendorCategory: "florist",
-                })}
+                onViewProfile={(v) =>
+                  navigation.navigate("VendorDetail", {
+                    vendorId: v.id,
+                    vendorName: v.businessName,
+                    vendorDescription: v.description || "",
+                    vendorLocation: v.location || "",
+                    vendorPriceRange: v.priceRange || "",
+                    vendorCategory: "florist",
+                  })
+                }
                 icon="sun"
               />
             </View>
@@ -903,12 +1406,23 @@ export default function BlomsterScreen() {
                     onPress={() => setAppointmentType(type)}
                     style={[
                       styles.chip,
-                      { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
-                      appointmentType === type ? { backgroundColor: theme.primary, borderColor: theme.primary } : undefined,
+                      {
+                        backgroundColor: theme.backgroundDefault,
+                        borderColor: theme.border,
+                      },
+                      appointmentType === type
+                        ? {
+                            backgroundColor: theme.primary,
+                            borderColor: theme.primary,
+                          }
+                        : undefined,
                     ]}
                   >
                     <ThemedText
-                      style={[styles.chipText, appointmentType === type && { color: "#fff" }]}
+                      style={[
+                        styles.chipText,
+                        appointmentType === type && { color: "#fff" },
+                      ]}
                     >
                       {type}
                     </ThemedText>
@@ -921,7 +1435,14 @@ export default function BlomsterScreen() {
               <ThemedText style={styles.formLabel}>Dato *</ThemedText>
               <PersistentTextInput
                 draftKey="BlomsterScreen-input-2"
-                style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
+                style={[
+                  styles.formInput,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={appointmentDate}
                 onChangeText={setAppointmentDate}
                 placeholder="DD.MM.ÅÅÅÅ"
@@ -933,7 +1454,14 @@ export default function BlomsterScreen() {
               <ThemedText style={styles.formLabel}>Klokkeslett</ThemedText>
               <PersistentTextInput
                 draftKey="BlomsterScreen-input-3"
-                style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
+                style={[
+                  styles.formInput,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={appointmentTime}
                 onChangeText={setAppointmentTime}
                 placeholder="HH:MM"
@@ -945,7 +1473,14 @@ export default function BlomsterScreen() {
               <ThemedText style={styles.formLabel}>Sted</ThemedText>
               <PersistentTextInput
                 draftKey="BlomsterScreen-input-4"
-                style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
+                style={[
+                  styles.formInput,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={appointmentLocation}
                 onChangeText={setAppointmentLocation}
                 placeholder="Adresse eller butikk"
@@ -957,7 +1492,15 @@ export default function BlomsterScreen() {
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
               <PersistentTextInput
                 draftKey="BlomsterScreen-input-5"
-                style={[styles.formInput, styles.formTextArea, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
+                style={[
+                  styles.formInput,
+                  styles.formTextArea,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={appointmentNotes}
                 onChangeText={setAppointmentNotes}
                 placeholder="Tilleggsinfo..."
@@ -971,24 +1514,42 @@ export default function BlomsterScreen() {
               onPress={resetAppointmentForm}
               style={[styles.resetButton, { borderColor: theme.border }]}
             >
-              <ThemedText style={[styles.resetButtonText, { color: theme.textSecondary }]}>Nullstill skjema</ThemedText>
+              <ThemedText
+                style={[styles.resetButtonText, { color: theme.textSecondary }]}
+              >
+                Nullstill skjema
+              </ThemedText>
             </Pressable>
           </ScrollView>
         </View>
       </Modal>
 
       {/* Selection Modal */}
-      <Modal visible={showSelectionModal} animationType="slide" presentationStyle="pageSheet">
-        <View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+      <Modal
+        visible={showSelectionModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View
+          style={[styles.modalContainer, { backgroundColor: theme.background }]}
+        >
+          <View
+            style={[styles.modalHeader, { borderBottomColor: theme.border }]}
+          >
             <Pressable onPress={() => setShowSelectionModal(false)}>
-              <ThemedText style={[styles.modalCancel, { color: theme.textSecondary }]}>Avbryt</ThemedText>
+              <ThemedText
+                style={[styles.modalCancel, { color: theme.textSecondary }]}
+              >
+                Avbryt
+              </ThemedText>
             </Pressable>
             <ThemedText style={styles.modalTitle}>
               {editingSelection ? "Rediger valg" : "Nytt valg"}
             </ThemedText>
             <Pressable onPress={saveSelection}>
-              <ThemedText style={[styles.modalSave, { color: theme.primary }]}>Lagre</ThemedText>
+              <ThemedText style={[styles.modalSave, { color: theme.primary }]}>
+                Lagre
+              </ThemedText>
             </Pressable>
           </View>
 
@@ -1002,19 +1563,36 @@ export default function BlomsterScreen() {
                     onPress={() => setSelectionItemType(item.key)}
                     style={[
                       styles.itemTypeCard,
-                      { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
-                      selectionItemType === item.key ? { backgroundColor: theme.primary + '20', borderColor: theme.primary } : undefined,
+                      {
+                        backgroundColor: theme.backgroundDefault,
+                        borderColor: theme.border,
+                      },
+                      selectionItemType === item.key
+                        ? {
+                            backgroundColor: theme.primary + "20",
+                            borderColor: theme.primary,
+                          }
+                        : undefined,
                     ]}
                   >
                     <EvendiIcon
                       name={item.icon}
                       size={20}
-                      color={selectionItemType === item.key ? theme.primary : theme.textSecondary}
+                      color={
+                        selectionItemType === item.key
+                          ? theme.primary
+                          : theme.textSecondary
+                      }
                     />
                     <ThemedText
                       style={[
                         styles.itemTypeLabel,
-                        { color: selectionItemType === item.key ? theme.primary : theme.text },
+                        {
+                          color:
+                            selectionItemType === item.key
+                              ? theme.primary
+                              : theme.text,
+                        },
                       ]}
                     >
                       {item.label}
@@ -1028,7 +1606,14 @@ export default function BlomsterScreen() {
               <ThemedText style={styles.formLabel}>Navn *</ThemedText>
               <PersistentTextInput
                 draftKey="BlomsterScreen-input-6"
-                style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
+                style={[
+                  styles.formInput,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={selectionName}
                 onChangeText={setSelectionName}
                 placeholder="F.eks. Hvit rosebukett"
@@ -1040,7 +1625,14 @@ export default function BlomsterScreen() {
               <ThemedText style={styles.formLabel}>Beskrivelse</ThemedText>
               <PersistentTextInput
                 draftKey="BlomsterScreen-input-7"
-                style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
+                style={[
+                  styles.formInput,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={selectionDescription}
                 onChangeText={setSelectionDescription}
                 placeholder="Detaljer om blomstene"
@@ -1050,13 +1642,34 @@ export default function BlomsterScreen() {
 
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Bilde</ThemedText>
-              <Pressable onPress={pickImage} style={[styles.imagePickerButton, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+              <Pressable
+                onPress={pickImage}
+                style={[
+                  styles.imagePickerButton,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
                 {selectionImage ? (
-                  <Image source={{ uri: selectionImage }} style={styles.pickedImage} />
+                  <Image
+                    source={{ uri: selectionImage }}
+                    style={styles.pickedImage}
+                  />
                 ) : (
                   <View style={styles.imagePickerPlaceholder}>
-                    <EvendiIcon name="image" size={32} color={theme.textSecondary} />
-                    <ThemedText style={[styles.imagePickerText, { color: theme.textSecondary }]}>
+                    <EvendiIcon
+                      name="image"
+                      size={32}
+                      color={theme.textSecondary}
+                    />
+                    <ThemedText
+                      style={[
+                        styles.imagePickerText,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
                       Velg bilde
                     </ThemedText>
                   </View>
@@ -1069,7 +1682,14 @@ export default function BlomsterScreen() {
                 <ThemedText style={styles.formLabel}>Antall</ThemedText>
                 <PersistentTextInput
                   draftKey="BlomsterScreen-input-8"
-                  style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
+                  style={[
+                    styles.formInput,
+                    {
+                      backgroundColor: theme.backgroundDefault,
+                      borderColor: theme.border,
+                      color: theme.text,
+                    },
+                  ]}
                   value={selectionQuantity}
                   onChangeText={setSelectionQuantity}
                   placeholder="1"
@@ -1081,7 +1701,14 @@ export default function BlomsterScreen() {
                 <ThemedText style={styles.formLabel}>Pris (kr)</ThemedText>
                 <PersistentTextInput
                   draftKey="BlomsterScreen-input-9"
-                  style={[styles.formInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
+                  style={[
+                    styles.formInput,
+                    {
+                      backgroundColor: theme.backgroundDefault,
+                      borderColor: theme.border,
+                      color: theme.text,
+                    },
+                  ]}
                   value={selectionPrice}
                   onChangeText={setSelectionPrice}
                   placeholder="0"
@@ -1095,7 +1722,15 @@ export default function BlomsterScreen() {
               <ThemedText style={styles.formLabel}>Notater</ThemedText>
               <PersistentTextInput
                 draftKey="BlomsterScreen-input-10"
-                style={[styles.formInput, styles.formTextArea, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
+                style={[
+                  styles.formInput,
+                  styles.formTextArea,
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={selectionNotes}
                 onChangeText={setSelectionNotes}
                 placeholder="Tilleggsinfo..."
@@ -1109,7 +1744,11 @@ export default function BlomsterScreen() {
               onPress={resetSelectionForm}
               style={[styles.resetButton, { borderColor: theme.border }]}
             >
-              <ThemedText style={[styles.resetButtonText, { color: theme.textSecondary }]}>Nullstill skjema</ThemedText>
+              <ThemedText
+                style={[styles.resetButtonText, { color: theme.textSecondary }]}
+              >
+                Nullstill skjema
+              </ThemedText>
             </Pressable>
 
             {editingSelection && (
@@ -1118,9 +1757,21 @@ export default function BlomsterScreen() {
                   handleDeleteSelection(editingSelection.id);
                   setShowSelectionModal(false);
                 }}
-                style={[styles.deleteButton, { backgroundColor: Colors.light.error + '20', borderColor: Colors.light.error, borderWidth: 1, borderRadius: 8, padding: 12, alignItems: 'center' }]}
+                style={[
+                  styles.deleteButton,
+                  {
+                    backgroundColor: Colors.light.error + "20",
+                    borderColor: Colors.light.error,
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    padding: 12,
+                    alignItems: "center",
+                  },
+                ]}
               >
-                <ThemedText style={{ color: Colors.light.error }}>Slett valg</ThemedText>
+                <ThemedText style={{ color: Colors.light.error }}>
+                  Slett valg
+                </ThemedText>
               </Pressable>
             )}
           </ScrollView>
@@ -1130,11 +1781,25 @@ export default function BlomsterScreen() {
       {/* Budget Modal */}
       <Modal visible={showBudgetModal} animationType="slide" transparent>
         <View style={styles.budgetModalOverlay}>
-          <View style={[styles.budgetModalContent, { backgroundColor: theme.backgroundDefault }]}>
-            <ThemedText style={styles.budgetModalTitle}>Budsjett for Blomster</ThemedText>
+          <View
+            style={[
+              styles.budgetModalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
+            <ThemedText style={styles.budgetModalTitle}>
+              Budsjett for Blomster
+            </ThemedText>
             <PersistentTextInput
               draftKey="BlomsterScreen-input-11"
-              style={[styles.budgetInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
+              style={[
+                styles.budgetInput,
+                {
+                  backgroundColor: theme.background,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+              ]}
               value={budgetInput}
               onChangeText={setBudgetInput}
               placeholder="0"
@@ -1142,10 +1807,24 @@ export default function BlomsterScreen() {
               keyboardType="numeric"
             />
             <View style={styles.budgetModalButtons}>
-              <Pressable onPress={() => setShowBudgetModal(false)} style={[styles.budgetModalButton, { borderColor: theme.border, borderWidth: 1, borderRadius: 8, padding: 12, alignItems: 'center' }]}>
+              <Pressable
+                onPress={() => setShowBudgetModal(false)}
+                style={[
+                  styles.budgetModalButton,
+                  {
+                    borderColor: theme.border,
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    padding: 12,
+                    alignItems: "center",
+                  },
+                ]}
+              >
                 <ThemedText>Avbryt</ThemedText>
               </Pressable>
-              <Button onPress={saveBudget} style={styles.budgetModalButton}>Lagre</Button>
+              <Button onPress={saveBudget} style={styles.budgetModalButton}>
+                Lagre
+              </Button>
             </View>
           </View>
         </View>
@@ -1190,9 +1869,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: Spacing.sm,
   },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
+  },
+  sectionLoader: {
+    marginTop: 2,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontSize: 14,
+    marginBottom: Spacing.xs,
   },
   addButton: {
     width: 36,

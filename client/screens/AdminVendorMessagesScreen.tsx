@@ -3,7 +3,6 @@ import {
   StyleSheet,
   View,
   FlatList,
-  TextInput,
   Pressable,
   ActivityIndicator,
   RefreshControl,
@@ -238,13 +237,21 @@ export default function AdminVendorMessagesScreen({ route, navigation }: Props) 
       }
       await Linking.openURL(guide.videoUrl);
     } catch (error) {
-      showToast("Kunne ikke åpne videoguiden akkurat nå.");
+      const message = error instanceof Error ? error.message : "Kunne ikke åpne videoguiden akkurat nå.";
+      showToast(message);
     }
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={["top", "bottom"]}>
       <View style={[styles.header, { paddingTop: headerHeight + Spacing.md }]}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={[styles.backButton, { borderColor: theme.border, backgroundColor: theme.backgroundDefault }]}
+        >
+          <EvendiIcon name="arrow-left" size={16} color={theme.textSecondary} />
+          <ThemedText style={[styles.backButtonText, { color: theme.textSecondary }]}>Tilbake</ThemedText>
+        </Pressable>
         <ThemedText style={styles.title}>{vendorName || "Leverandør"}</ThemedText>
         <ThemedText style={styles.subtitle}>Evendi Support Chat</ThemedText>
       </View>
@@ -417,6 +424,18 @@ export default function AdminVendorMessagesScreen({ route, navigation }: Props) 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: Spacing.md, paddingTop: Spacing.md, paddingBottom: Spacing.sm },
+  backButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    borderWidth: 1,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    marginBottom: Spacing.xs,
+  },
+  backButtonText: { fontSize: 12, fontWeight: "600" },
   title: { fontSize: 18, fontWeight: "700" },
   subtitle: { fontSize: 12, opacity: 0.6, marginTop: 2 },
   bubble: { borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm },

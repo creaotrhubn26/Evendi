@@ -5,7 +5,6 @@ import {
   ScrollView,
   Pressable,
   Modal,
-  TextInput,
   ActivityIndicator,
   Switch,
   FlatList,

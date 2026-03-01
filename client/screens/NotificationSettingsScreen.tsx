@@ -10,7 +10,7 @@ import * as Notifications from "expo-notifications";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import {
   NotificationSettings,
   getNotificationSettings,

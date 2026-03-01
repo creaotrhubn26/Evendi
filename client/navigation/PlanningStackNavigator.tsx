@@ -49,7 +49,7 @@ export type PlanningStackParamList = {
   Budget: undefined;
   AITime: undefined;
   Vendors: undefined;
-  VendorMatching: { category?: string; guestCount?: number };
+  VendorMatching: { category?: string; guestCount?: number; selectedTraditions?: string[] };
   Timeline: undefined;
   StressTracker: undefined;
   BudgetScenarios: undefined;
@@ -262,7 +262,7 @@ export default function PlanningStackNavigator() {
       <Stack.Screen
         name="VendorMatchDetails"
         component={MatchDetailsScreen}
-        options={({ route }) => ({ title: "Detaljer om Match" })}
+        options={{ title: "Detaljer om Match" }}
       />
       <Stack.Screen
         name="VendorExpertiseOnboarding"

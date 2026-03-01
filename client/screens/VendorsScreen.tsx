@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   FlatList,
   StyleSheet,
   View,
   Pressable,
   Image,
+  type ImageSourcePropType,
   Modal,
   ScrollView,
   ActivityIndicator,
@@ -28,17 +29,40 @@ import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { Vendor } from "@/lib/types";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
-import PersistentTextInput from "@/components/PersistentTextInput";
-import { type EventType, VENDOR_CATEGORIES, getVendorCategoryGradientByDbName } from "@shared/event-types";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
+import {
+  type EventType,
+  VENDOR_CATEGORIES,
+  getVendorCategoryGradientByDbName,
+  isVendorCategoryApplicable,
+} from "@shared/event-types";
 
 const FALLBACK_LOGO = require("../../assets/images/Evendi_logo_norsk_tagline.png");
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const CARD_IMAGE_HEIGHT = Math.max(172, Math.round(SCREEN_WIDTH * 0.42));
+type DropdownIcon = keyof typeof Ionicons.glyphMap | ImageSourcePropType;
+type VendorListItem = Vendor & { imageUrl?: string | null };
 // Stable separator component extracted outside render
 const VendorSeparator = () => <View style={{ height: Spacing.md }} />;
 // ─── Vendor Categories for dropdown (from shared registry) ─────
 const VENDOR_CATEGORY_DROPDOWN = [
   { id: "all", name: "Alle kategorier" },
-  ...(["photographer", "videographer", "photo-video", "venue", "music", "florist", "catering", "cake", "planner", "beauty", "transport", "dress"] as const).map(slug => ({
+  ...(
+    [
+      "photographer",
+      "videographer",
+      "photo-video",
+      "venue",
+      "music",
+      "florist",
+      "catering",
+      "cake",
+      "planner",
+      "beauty",
+      "transport",
+      "dress",
+    ] as const
+  ).map((slug) => ({
     id: slug,
     name: VENDOR_CATEGORIES[slug].labelNo,
   })),
@@ -46,7 +70,9 @@ const VENDOR_CATEGORY_DROPDOWN = [
 
 // ─── Placeholder gradient colors per category (from shared registry) ──
 const CATEGORY_GRADIENT: Record<string, [string, string]> = (() => {
-  const map: Record<string, [string, string]> = { default: ["#667eea", "#764ba2"] };
+  const map: Record<string, [string, string]> = {
+    default: ["#667eea", "#764ba2"],
+  };
   for (const info of Object.values(VENDOR_CATEGORIES)) {
     map[info.dbName] = info.gradient;
   }
@@ -55,16 +81,156 @@ const CATEGORY_GRADIENT: Record<string, [string, string]> = (() => {
 
 // ─── Hardcoded sample vendors ──────────────────────────────────
 const SCANDINAVIAN_VENDORS: Vendor[] = [
-  { id: "1", name: "Nordic Moments", categoryId: null, categoryName: "Fotograf", location: "Oslo", country: "Norway", rating: 4.9, priceRange: "25 000 - 40 000 kr", description: "Naturlig lys og tidløse øyeblikk", saved: false, isFeatured: true, isPrioritized: false, hasReviewBadge: true },
-  { id: "2", name: "Stockholm Event Films", categoryId: null, categoryName: "Videograf", location: "Stockholm", country: "Sweden", rating: 4.8, priceRange: "30 000 - 50 000 kr", description: "Cinematiske event-filmer", saved: false, isFeatured: false, isPrioritized: true, hasReviewBadge: false },
-  { id: "3", name: "Copenhagen Beats", categoryId: null, categoryName: "Musikk", location: "København", country: "Denmark", rating: 4.7, priceRange: "12 000 - 20 000 kr", description: "Stemningsfull musikk hele kvelden", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
-  { id: "4", name: "Bergen Foto", categoryId: null, categoryName: "Fotograf", location: "Bergen", country: "Norway", rating: 4.9, priceRange: "20 000 - 35 000 kr", description: "Vestlandets mest ettertraktede", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: true },
-  { id: "5", name: "Malmö Films", categoryId: null, categoryName: "Videograf", location: "Malmö", country: "Sweden", rating: 4.6, priceRange: "25 000 - 45 000 kr", description: "Moderne og kreativt uttrykk", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
-  { id: "6", name: "Oslo DJ Collective", categoryId: null, categoryName: "Musikk", location: "Oslo", country: "Norway", rating: 4.8, priceRange: "15 000 - 25 000 kr", description: "Profesjonelle DJs for alle arrangementer", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
-  { id: "7", name: "Trondheim Foto", categoryId: null, categoryName: "Fotograf", location: "Trondheim", country: "Norway", rating: 4.7, priceRange: "18 000 - 30 000 kr", description: "Autentiske bilder med sjel", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
-  { id: "8", name: "Danish Event Films", categoryId: null, categoryName: "Videograf", location: "Aarhus", country: "Denmark", rating: 4.8, priceRange: "28 000 - 48 000 kr", description: "Fortellende filmproduksjon", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
-  { id: "9", name: "Blomster & Fest", categoryId: null, categoryName: "Blomster", location: "Oslo", country: "Norway", rating: 4.9, priceRange: "8 000 - 25 000 kr", description: "Vakre buketter og dekorasjoner", saved: false, isFeatured: true, isPrioritized: false, hasReviewBadge: false },
-  { id: "10", name: "Göteborg Events", categoryId: null, categoryName: "Catering", location: "Göteborg", country: "Sweden", rating: 4.7, priceRange: "500 - 1200 kr/person", description: "Nordisk gourmet-catering", saved: false, isFeatured: false, isPrioritized: false, hasReviewBadge: false },
+  {
+    id: "1",
+    name: "Nordic Moments",
+    categoryId: null,
+    categoryName: "Fotograf",
+    location: "Oslo",
+    country: "Norway",
+    rating: 4.9,
+    priceRange: "25 000 - 40 000 kr",
+    description: "Naturlig lys og tidløse øyeblikk",
+    saved: false,
+    isFeatured: true,
+    isPrioritized: false,
+    hasReviewBadge: true,
+  },
+  {
+    id: "2",
+    name: "Stockholm Event Films",
+    categoryId: null,
+    categoryName: "Videograf",
+    location: "Stockholm",
+    country: "Sweden",
+    rating: 4.8,
+    priceRange: "30 000 - 50 000 kr",
+    description: "Cinematiske event-filmer",
+    saved: false,
+    isFeatured: false,
+    isPrioritized: true,
+    hasReviewBadge: false,
+  },
+  {
+    id: "3",
+    name: "Copenhagen Beats",
+    categoryId: null,
+    categoryName: "Musikk",
+    location: "København",
+    country: "Denmark",
+    rating: 4.7,
+    priceRange: "12 000 - 20 000 kr",
+    description: "Stemningsfull musikk hele kvelden",
+    saved: false,
+    isFeatured: false,
+    isPrioritized: false,
+    hasReviewBadge: false,
+  },
+  {
+    id: "4",
+    name: "Bergen Foto",
+    categoryId: null,
+    categoryName: "Fotograf",
+    location: "Bergen",
+    country: "Norway",
+    rating: 4.9,
+    priceRange: "20 000 - 35 000 kr",
+    description: "Vestlandets mest ettertraktede",
+    saved: false,
+    isFeatured: false,
+    isPrioritized: false,
+    hasReviewBadge: true,
+  },
+  {
+    id: "5",
+    name: "Malmö Films",
+    categoryId: null,
+    categoryName: "Videograf",
+    location: "Malmö",
+    country: "Sweden",
+    rating: 4.6,
+    priceRange: "25 000 - 45 000 kr",
+    description: "Moderne og kreativt uttrykk",
+    saved: false,
+    isFeatured: false,
+    isPrioritized: false,
+    hasReviewBadge: false,
+  },
+  {
+    id: "6",
+    name: "Oslo DJ Collective",
+    categoryId: null,
+    categoryName: "Musikk",
+    location: "Oslo",
+    country: "Norway",
+    rating: 4.8,
+    priceRange: "15 000 - 25 000 kr",
+    description: "Profesjonelle DJs for alle arrangementer",
+    saved: false,
+    isFeatured: false,
+    isPrioritized: false,
+    hasReviewBadge: false,
+  },
+  {
+    id: "7",
+    name: "Trondheim Foto",
+    categoryId: null,
+    categoryName: "Fotograf",
+    location: "Trondheim",
+    country: "Norway",
+    rating: 4.7,
+    priceRange: "18 000 - 30 000 kr",
+    description: "Autentiske bilder med sjel",
+    saved: false,
+    isFeatured: false,
+    isPrioritized: false,
+    hasReviewBadge: false,
+  },
+  {
+    id: "8",
+    name: "Danish Event Films",
+    categoryId: null,
+    categoryName: "Videograf",
+    location: "Aarhus",
+    country: "Denmark",
+    rating: 4.8,
+    priceRange: "28 000 - 48 000 kr",
+    description: "Fortellende filmproduksjon",
+    saved: false,
+    isFeatured: false,
+    isPrioritized: false,
+    hasReviewBadge: false,
+  },
+  {
+    id: "9",
+    name: "Blomster & Fest",
+    categoryId: null,
+    categoryName: "Blomster",
+    location: "Oslo",
+    country: "Norway",
+    rating: 4.9,
+    priceRange: "8 000 - 25 000 kr",
+    description: "Vakre buketter og dekorasjoner",
+    saved: false,
+    isFeatured: true,
+    isPrioritized: false,
+    hasReviewBadge: false,
+  },
+  {
+    id: "10",
+    name: "Göteborg Events",
+    categoryId: null,
+    categoryName: "Catering",
+    location: "Göteborg",
+    country: "Sweden",
+    rating: 4.7,
+    priceRange: "500 - 1200 kr/person",
+    description: "Nordisk gourmet-catering",
+    saved: false,
+    isFeatured: false,
+    isPrioritized: false,
+    hasReviewBadge: false,
+  },
 ];
 
 interface ApiVendor {
@@ -84,17 +250,61 @@ interface ApiVendor {
 }
 
 // ─── Event-type-aware labels ───────────────────────────────────
-const EVENT_TYPE_OPTIONS: { value: EventType; label: string; icon: any }[] = [
-  { value: "wedding", label: "Bryllup", icon: require("@/assets/images/event_types/Evendi_event_type_wedding.png") },
-  { value: "confirmation", label: "Konfirmasjon", icon: require("@/assets/images/event_types/Evendi_event_type_conformation.png") },
-  { value: "birthday", label: "Bursdag", icon: require("@/assets/images/event_types/Evendi_event_type_birthday.png") },
-  { value: "anniversary", label: "Jubileum", icon: require("@/assets/images/event_types/Evendi_event_type_anniversary.png") },
-  { value: "conference", label: "Konferanse", icon: require("@/assets/images/event_types/Evendi_event_type_conference.png") },
-  { value: "christmas_party", label: "Julebord", icon: require("@/assets/images/event_types/Evendi_event_type_julebord.png") },
-  { value: "summer_party", label: "Sommerfest", icon: require("@/assets/images/event_types/Evendi_event_type_sommer.png") },
-  { value: "team_building", label: "Teambuilding", icon: require("@/assets/images/event_types/Evendi_event_type_team_building.png") },
-  { value: "kickoff", label: "Kickoff", icon: require("@/assets/images/event_types/Evendi_event_type_kickoff.png") },
-  { value: "awards_night", label: "Galla", icon: require("@/assets/images/event_types/Evendi_event_type_award_night.png") },
+const EVENT_TYPE_OPTIONS: {
+  value: EventType;
+  label: string;
+  icon: DropdownIcon;
+}[] = [
+  {
+    value: "wedding",
+    label: "Bryllup",
+    icon: require("@/assets/images/event_types/Evendi_event_type_wedding.png"),
+  },
+  {
+    value: "confirmation",
+    label: "Konfirmasjon",
+    icon: require("@/assets/images/event_types/Evendi_event_type_conformation.png"),
+  },
+  {
+    value: "birthday",
+    label: "Bursdag",
+    icon: require("@/assets/images/event_types/Evendi_event_type_birthday.png"),
+  },
+  {
+    value: "anniversary",
+    label: "Jubileum",
+    icon: require("@/assets/images/event_types/Evendi_event_type_anniversary.png"),
+  },
+  {
+    value: "conference",
+    label: "Konferanse",
+    icon: require("@/assets/images/event_types/Evendi_event_type_conference.png"),
+  },
+  {
+    value: "christmas_party",
+    label: "Julebord",
+    icon: require("@/assets/images/event_types/Evendi_event_type_julebord.png"),
+  },
+  {
+    value: "summer_party",
+    label: "Sommerfest",
+    icon: require("@/assets/images/event_types/Evendi_event_type_sommer.png"),
+  },
+  {
+    value: "team_building",
+    label: "Teambuilding",
+    icon: require("@/assets/images/event_types/Evendi_event_type_team_building.png"),
+  },
+  {
+    value: "kickoff",
+    label: "Kickoff",
+    icon: require("@/assets/images/event_types/Evendi_event_type_kickoff.png"),
+  },
+  {
+    value: "awards_night",
+    label: "Galla",
+    icon: require("@/assets/images/event_types/Evendi_event_type_award_night.png"),
+  },
 ];
 
 // ────────────────────────────────────────────────────────────────
@@ -110,7 +320,7 @@ function Dropdown({
 }: {
   label: string;
   value: string;
-  options: { id: string; name: string; icon?: any }[];
+  options: { id: string; name: string; icon?: DropdownIcon }[];
   onSelect: (id: string) => void;
   icon?: keyof typeof EvendiIconGlyphMap;
   theme: any;
@@ -118,11 +328,11 @@ function Dropdown({
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.id === value);
 
-  const renderIcon = (iconProp: any) => {
+  const renderIcon = (iconProp?: DropdownIcon) => {
     if (!iconProp) return null;
-    
+
     // Check if it's an image (require'd asset)
-    if (typeof iconProp === 'object' && (iconProp.uri || iconProp)) {
+    if (typeof iconProp !== "string") {
       return (
         <Image
           source={iconProp}
@@ -131,10 +341,15 @@ function Dropdown({
         />
       );
     }
-    
+
     // Otherwise treat as Ionicon name
     return (
-      <Ionicons name={iconProp as any} size={18} color={theme.text} style={{ marginRight: Spacing.sm }} />
+      <Ionicons
+        name={iconProp}
+        size={18}
+        color={theme.text}
+        style={{ marginRight: Spacing.sm }}
+      />
     );
   };
 
@@ -147,11 +362,19 @@ function Dropdown({
         }}
         style={[
           styles.dropdown,
-          { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+          {
+            backgroundColor: theme.backgroundDefault,
+            borderColor: theme.border,
+          },
         ]}
       >
-        {icon && <EvendiIcon name={icon} size={16} color={theme.textSecondary} />}
-        <ThemedText style={[styles.dropdownText, { color: theme.text }]} numberOfLines={1}>
+        {icon && (
+          <EvendiIcon name={icon} size={16} color={theme.textSecondary} />
+        )}
+        <ThemedText
+          style={[styles.dropdownText, { color: theme.text }]}
+          numberOfLines={1}
+        >
           {selected?.name || label}
         </ThemedText>
         <EvendiIcon name="chevron-down" size={16} color={theme.textSecondary} />
@@ -159,15 +382,24 @@ function Dropdown({
 
       <Modal visible={open} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setOpen(false)}>
-          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
-            <ThemedText style={[styles.modalTitle, { color: theme.text }]}>{label}</ThemedText>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
+            <ThemedText style={[styles.modalTitle, { color: theme.text }]}>
+              {label}
+            </ThemedText>
             <ScrollView style={{ maxHeight: 400 }}>
               {options.map((opt) => (
                 <Pressable
                   key={opt.id}
                   style={[
                     styles.modalOption,
-                    opt.id === value && { backgroundColor: theme.accent + "18" },
+                    opt.id === value && {
+                      backgroundColor: theme.accent + "18",
+                    },
                   ]}
                   onPress={() => {
                     onSelect(opt.id);
@@ -206,13 +438,20 @@ export default function VendorsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { theme, designSettings } = useTheme();
   const { eventType, config } = useEventType();
-  const navigation = useNavigation<NativeStackNavigationProp<PlanningStackParamList>>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<PlanningStackParamList>>();
 
   // ── State ──
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEventType, setSelectedEventType] = useState<string>("all");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [savedVendors, setSavedVendors] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (selectedEventType === "all") {
+      setSelectedEventType(eventType);
+    }
+  }, [eventType, selectedEventType]);
 
   // ── API data ──
   const { data: apiVendors = [], isLoading } = useQuery<ApiVendor[]>({
@@ -260,6 +499,12 @@ export default function VendorsScreen() {
     };
     return allVendors
       .filter((v) => {
+        const matchesEventType =
+          selectedEventType === "all" ||
+          isVendorCategoryApplicable(
+            v.categoryName || "",
+            selectedEventType as EventType,
+          );
         const matchesCat =
           selectedCategory === "all" ||
           v.categoryName === catMap[selectedCategory] ||
@@ -268,24 +513,33 @@ export default function VendorsScreen() {
           !searchQuery ||
           v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           v.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (v.categoryName || "").toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesCat && matchesSearch;
+          (v.categoryName || "")
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase());
+        return matchesEventType && matchesCat && matchesSearch;
       })
       .map((v) => ({ ...v, saved: savedVendors.has(v.id) }));
-  }, [allVendors, selectedCategory, searchQuery, savedVendors]);
+  }, [
+    allVendors,
+    searchQuery,
+    savedVendors,
+    selectedCategory,
+    selectedEventType,
+  ]);
 
   // ── Handlers ──
-  const handleToggleSave = useCallback(
-    (id: string) => {
-      setSavedVendors((prev) => {
-        const next = new Set(prev);
-        next.has(id) ? next.delete(id) : next.add(id);
-        return next;
-      });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    },
-    [],
-  );
+  const handleToggleSave = useCallback((id: string) => {
+    setSavedVendors((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
 
   const handleVendorPress = useCallback(
     (vendor: Vendor) => {
@@ -303,7 +557,9 @@ export default function VendorsScreen() {
   );
 
   // ── Icon helper ──
-  const getCatIcon = (categoryName?: string): keyof typeof EvendiIconGlyphMap => {
+  const getCatIcon = (
+    categoryName?: string,
+  ): keyof typeof EvendiIconGlyphMap => {
     const map: Record<string, string> = {
       Fotograf: "camera",
       Videograf: "film",
@@ -318,7 +574,8 @@ export default function VendorsScreen() {
       Underholdning: "smile",
       Dekorasjon: "star",
     };
-    return (map[categoryName || ""] || "camera") as keyof typeof EvendiIconGlyphMap;
+    return (map[categoryName || ""] ||
+      "camera") as keyof typeof EvendiIconGlyphMap;
   };
 
   // ── Country formatter ──
@@ -330,27 +587,47 @@ export default function VendorsScreen() {
     const full = Math.floor(rating);
     const stars: React.ReactNode[] = [];
     for (let i = 0; i < full; i++) {
-      stars.push(<EvendiIcon key={`f${i}`} name="star" size={14} color="#F59E0B" />);
+      stars.push(
+        <EvendiIcon key={`f${i}`} name="star" size={14} color="#F59E0B" />,
+      );
     }
     return stars;
   };
 
   // ── Render a full-width vendor card (matching screenshot design) ──
-  const renderVendorCard = ({ item, index }: { item: Vendor; index: number }) => {
-    const gradientColors = CATEGORY_GRADIENT[item.categoryName || ""] || CATEGORY_GRADIENT.default;
-    const hasImage = !!(item as any).imageUrl;
+  const renderVendorCard = ({
+    item,
+    index,
+  }: {
+    item: VendorListItem;
+    index: number;
+  }) => {
+    const gradientColors = item.categoryName
+      ? getVendorCategoryGradientByDbName(item.categoryName)
+      : CATEGORY_GRADIENT.default;
+    const hasImage = !!item.imageUrl;
 
     return (
-      <Animated.View entering={index < 10 ? FadeInDown.delay(index * 80).duration(400) : undefined}>
+      <Animated.View
+        entering={
+          index < 10 ? FadeInDown.delay(index * 80).duration(400) : undefined
+        }
+      >
         <Pressable
-          style={[styles.vendorCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+          style={[
+            styles.vendorCard,
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border,
+            },
+          ]}
           onPress={() => handleVendorPress(item)}
         >
           {/* Image / Gradient placeholder */}
           <View style={styles.cardImageContainer}>
             {hasImage ? (
               <Image
-                source={{ uri: (item as any).imageUrl }}
+                source={{ uri: item.imageUrl || "" }}
                 style={styles.cardImage}
                 resizeMode="cover"
               />
@@ -362,14 +639,22 @@ export default function VendorsScreen() {
                 style={styles.cardImage}
               >
                 <View style={styles.placeholderIcon}>
-                  <EvendiIcon name={getCatIcon(item.categoryName)} size={40} color="#fff" />
+                  <EvendiIcon
+                    name={getCatIcon(item.categoryName)}
+                    size={40}
+                    color="#fff"
+                  />
                 </View>
               </LinearGradient>
             )}
 
             {/* Category badge on image */}
             <View style={styles.categoryBadge}>
-              <EvendiIcon name={getCatIcon(item.categoryName)} size={12} color="#fff" />
+              <EvendiIcon
+                name={getCatIcon(item.categoryName)}
+                size={12}
+                color="#fff"
+              />
               <ThemedText style={styles.categoryBadgeText}>
                 {item.categoryName || "Leverandør"}
               </ThemedText>
@@ -390,7 +675,9 @@ export default function VendorsScreen() {
 
             {/* Featured badge */}
             {item.isFeatured && (
-              <View style={[styles.featuredTag, { backgroundColor: theme.accent }]}>
+              <View
+                style={[styles.featuredTag, { backgroundColor: theme.accent }]}
+              >
                 <EvendiIcon name="star" size={11} color="#fff" />
                 <ThemedText style={styles.featuredText}>Anbefalt</ThemedText>
               </View>
@@ -400,24 +687,41 @@ export default function VendorsScreen() {
           {/* Card content below image */}
           <View style={styles.cardContent}>
             <View style={styles.cardTopRow}>
-              <ThemedText style={[styles.vendorName, { color: theme.text }]} numberOfLines={1}>
+              <ThemedText
+                style={[styles.vendorName, { color: theme.text }]}
+                numberOfLines={1}
+              >
                 {item.name}
               </ThemedText>
               {item.hasReviewBadge && (
-                <View style={[styles.reviewBadge, { backgroundColor: theme.accent }]}>
+                <View
+                  style={[
+                    styles.reviewBadge,
+                    { backgroundColor: theme.accent },
+                  ]}
+                >
                   <EvendiIcon name="award" size={11} color="#fff" />
                 </View>
               )}
             </View>
 
             <View style={styles.locationRow}>
-              <EvendiIcon name="map-pin" size={13} color={theme.textSecondary} />
-              <ThemedText style={[styles.locationText, { color: theme.textSecondary }]}>
+              <EvendiIcon
+                name="map-pin"
+                size={13}
+                color={theme.textSecondary}
+              />
+              <ThemedText
+                style={[styles.locationText, { color: theme.textSecondary }]}
+              >
                 {item.location}, {countryLabel(item.country)}
               </ThemedText>
             </View>
 
-            <ThemedText style={[styles.descriptionText, { color: theme.textMuted }]} numberOfLines={2}>
+            <ThemedText
+              style={[styles.descriptionText, { color: theme.textMuted }]}
+              numberOfLines={2}
+            >
               {item.description}
             </ThemedText>
 
@@ -425,11 +729,18 @@ export default function VendorsScreen() {
             <View style={styles.cardBottomRow}>
               <View style={styles.ratingRow}>
                 <View style={styles.starsRow}>{renderStars(item.rating)}</View>
-                <ThemedText style={[styles.ratingNumber, { color: theme.text }]}>
+                <ThemedText
+                  style={[styles.ratingNumber, { color: theme.text }]}
+                >
                   {item.rating.toFixed(1)}
                 </ThemedText>
-                <View style={[styles.dot, { backgroundColor: theme.textMuted }]} />
-                <ThemedText style={[styles.priceText, { color: theme.textSecondary }]} numberOfLines={1}>
+                <View
+                  style={[styles.dot, { backgroundColor: theme.textMuted }]}
+                />
+                <ThemedText
+                  style={[styles.priceText, { color: theme.textSecondary }]}
+                  numberOfLines={1}
+                >
                   {item.priceRange}
                 </ThemedText>
               </View>
@@ -449,9 +760,13 @@ export default function VendorsScreen() {
 
   // ── List header ──
   const ListHeader = () => {
-    const eventTypeDropdownOptions = [
-      { id: "all", name: "Alle arrangementer", icon: "sparkles" },
-      ...EVENT_TYPE_OPTIONS.map((o) => ({ id: o.value, name: o.label, icon: o.icon })),
+    const eventTypeDropdownOptions: { id: string; name: string; icon?: DropdownIcon }[] = [
+      { id: "all", name: "Alle arrangementer" },
+      ...EVENT_TYPE_OPTIONS.map((o) => ({
+        id: o.value,
+        name: o.label,
+        icon: o.icon,
+      })),
     ];
 
     return (
@@ -463,14 +778,25 @@ export default function VendorsScreen() {
           end={{ x: 0, y: 1 }}
           style={styles.heroHeader}
         >
-          <Image source={designSettings.logoUrl ? { uri: designSettings.logoUrl } : FALLBACK_LOGO} style={styles.logo} resizeMode="contain" />
+          <Image
+            source={
+              designSettings.logoUrl
+                ? { uri: designSettings.logoUrl }
+                : FALLBACK_LOGO
+            }
+            style={styles.logo}
+            resizeMode="contain"
+          />
         </LinearGradient>
 
         {/* Search bar */}
         <View
           style={[
             styles.searchBar,
-            { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border,
+            },
           ]}
         >
           <EvendiIcon name="search" size={20} color={theme.textMuted} />
@@ -505,7 +831,10 @@ export default function VendorsScreen() {
             <Dropdown
               label="Kategori"
               value={selectedCategory}
-              options={VENDOR_CATEGORY_DROPDOWN.map((c) => ({ id: c.id, name: c.name }))}
+              options={VENDOR_CATEGORY_DROPDOWN.map((c) => ({
+                id: c.id,
+                name: c.name,
+              }))}
               onSelect={setSelectedCategory}
               icon="grid"
               theme={theme}
@@ -518,12 +847,21 @@ export default function VendorsScreen() {
           <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
             {selectedCategory === "all"
               ? "Populære Leverandører"
-              : VENDOR_CATEGORY_DROPDOWN.find((c) => c.id === selectedCategory)?.name || "Leverandører"}
+              : VENDOR_CATEGORY_DROPDOWN.find((c) => c.id === selectedCategory)
+                  ?.name || "Leverandører"}
           </ThemedText>
-          <ThemedText style={[styles.resultsCount, { color: theme.textSecondary }]}>
+          <ThemedText
+            style={[styles.resultsCount, { color: theme.textSecondary }]}
+          >
             {filteredVendors.length} funnet
           </ThemedText>
         </View>
+        <ThemedText
+          style={[styles.eventContextHint, { color: theme.textSecondary }]}
+        >
+          Forslag tilpasset{" "}
+          {selectedEventType === "all" ? config.labelNo : selectedEventType}
+        </ThemedText>
 
         {/* Smart vendor matching CTA */}
         <Pressable
@@ -535,10 +873,7 @@ export default function VendorsScreen() {
             });
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           }}
-          style={[
-            styles.smartMatchBanner,
-            { borderColor: theme.accent },
-          ]}
+          style={[styles.smartMatchBanner, { borderColor: theme.accent }]}
         >
           <LinearGradient
             colors={[theme.accent + "18", theme.accent + "08"]}
@@ -546,14 +881,23 @@ export default function VendorsScreen() {
             end={{ x: 1, y: 0 }}
             style={styles.smartMatchGradient}
           >
-            <View style={[styles.smartMatchIcon, { backgroundColor: theme.accent + "20" }]}>
+            <View
+              style={[
+                styles.smartMatchIcon,
+                { backgroundColor: theme.accent + "20" },
+              ]}
+            >
               <EvendiIcon name="zap" size={22} color={theme.accent} />
             </View>
             <View style={styles.vendorCtaTextWrap}>
-              <ThemedText style={[styles.vendorCtaTitle, { color: theme.text }]}>
+              <ThemedText
+                style={[styles.vendorCtaTitle, { color: theme.text }]}
+              >
                 Finn din perfekte leverandør
               </ThemedText>
-              <ThemedText style={[styles.vendorCtaSub, { color: theme.textSecondary }]}>
+              <ThemedText
+                style={[styles.vendorCtaSub, { color: theme.textSecondary }]}
+              >
                 Smart matching basert på dine preferanser og budsjett
               </ThemedText>
             </View>
@@ -569,7 +913,10 @@ export default function VendorsScreen() {
           }}
           style={[
             styles.vendorCtaBanner,
-            { backgroundColor: theme.accent + "12", borderColor: theme.accent + "40" },
+            {
+              backgroundColor: theme.accent + "12",
+              borderColor: theme.accent + "40",
+            },
           ]}
         >
           <EvendiIcon name="briefcase" size={20} color={theme.accent} />
@@ -577,7 +924,9 @@ export default function VendorsScreen() {
             <ThemedText style={[styles.vendorCtaTitle, { color: theme.text }]}>
               Er du leverandør?
             </ThemedText>
-            <ThemedText style={[styles.vendorCtaSub, { color: theme.textSecondary }]}>
+            <ThemedText
+              style={[styles.vendorCtaSub, { color: theme.textSecondary }]}
+            >
               Registrer din bedrift og nå tusenvis av kunder
             </ThemedText>
           </View>
@@ -614,7 +963,11 @@ export default function VendorsScreen() {
       ListHeaderComponent={ListHeader}
       ListEmptyComponent={
         isLoading ? (
-          <ActivityIndicator size="large" color={theme.accent} style={{ paddingTop: 60 }} />
+          <ActivityIndicator
+            size="large"
+            color={theme.accent}
+            style={{ paddingTop: 60 }}
+          />
         ) : (
           EmptyState
         )
@@ -643,6 +996,7 @@ const styles = StyleSheet.create({
   logo: {
     width: 160,
     height: 50,
+    borderRadius: BorderRadius.sm,
   },
 
   // ── Search bar ──
@@ -734,6 +1088,11 @@ const styles = StyleSheet.create({
   resultsCount: {
     fontSize: 13,
   },
+  eventContextHint: {
+    fontSize: 12,
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+  },
 
   // ── Vendor CTA banner ──
   vendorCtaBanner: {
@@ -775,13 +1134,13 @@ const styles = StyleSheet.create({
   // ── Vendor card ──
   vendorCard: {
     marginHorizontal: Spacing.lg,
-    borderRadius: 16,
+    borderRadius: BorderRadius.md,
     borderWidth: 1,
     overflow: "hidden",
   },
   cardImageContainer: {
     width: "100%",
-    height: 180,
+    height: CARD_IMAGE_HEIGHT,
     position: "relative",
   },
   cardImage: {

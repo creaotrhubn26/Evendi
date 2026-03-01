@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   RefreshControl,
   Modal,
-  TextInput,
   Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -309,19 +308,23 @@ export default function InspirationScreen() {
                 onPress={() => handleOpenDetail(item)}
                 style={[
                   styles.imageCard,
-                  { backgroundColor: theme.backgroundDefault },
+                  {
+                    backgroundColor: theme.backgroundDefault,
+                    width: CARD_WIDTH,
+                  },
                 ]}
               >
                 {item.coverImageUrl || (item.media.length > 0 && item.media[0].url) ? (
                   <Image
                     source={{ uri: item.coverImageUrl || item.media[0].url }}
-                    style={styles.imagePlaceholder}
+                    style={[styles.imagePlaceholder, { height: CARD_WIDTH * 1.3 }]}
                     contentFit="cover"
                   />
                 ) : (
                   <View
                     style={[
                       styles.imagePlaceholder,
+                      { height: CARD_WIDTH * 1.3 },
                       { backgroundColor: theme.backgroundSecondary },
                     ]}
                   >

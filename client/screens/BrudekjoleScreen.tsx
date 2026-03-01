@@ -24,7 +24,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
 import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
@@ -62,7 +62,9 @@ const TIMELINE_STEPS = [
   { key: "alterations", label: "Endringer", icon: "scissors" as const, dateKey: "alterationsDate" },
   { key: "finalFitting", label: "Siste prøving", icon: "check-circle" as const, dateKey: "finalFittingDate" },
   { key: "pickup", label: "Hentet", icon: "gift" as const, dateKey: "pickupDate" },
-];
+] as const;
+type TimelineStepKey = (typeof TIMELINE_STEPS)[number]["key"];
+type TimelineDateKey = (typeof TIMELINE_STEPS)[number]["dateKey"];
 
 export default function BrudekjoleScreen() {
   const insets = useSafeAreaInsets();
@@ -91,6 +93,7 @@ export default function BrudekjoleScreen() {
 
   const [activeTab, setActiveTab] = useState<"appointments" | "favorites" | "timeline">("appointments");
   const [refreshing, setRefreshing] = useState(false);
+  const [favoriteSearch, setFavoriteSearch] = useState("");
 
   // Query for dress data
   const { data: dressData, isLoading: loading, refetch } = useQuery({
@@ -100,7 +103,7 @@ export default function BrudekjoleScreen() {
 
   const appointments = dressData?.appointments ?? [];
   const favorites = dressData?.favorites ?? [];
-  const timeline = dressData?.timeline ?? {
+  const timeline: DressTimeline = dressData?.timeline ?? {
     ordered: false,
     firstFitting: false,
     alterations: false,
@@ -109,6 +112,21 @@ export default function BrudekjoleScreen() {
     budget: 0,
   };
   const dressBudget = timeline?.budget ?? 0;
+  const filteredFavorites = favorites.filter((dress) => {
+    const query = favoriteSearch.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      dress.name.toLowerCase().includes(query) ||
+      (dress.designer || "").toLowerCase().includes(query) ||
+      (dress.shop || "").toLowerCase().includes(query)
+    );
+  });
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.trim().length > 0) {
+      return error.message;
+    }
+    return fallback;
+  };
 
   // Appointment modal state
   // Vendor search for bridal shop autocomplete
@@ -219,8 +237,8 @@ export default function BrudekjoleScreen() {
       }
       setShowAppointmentModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke lagre avtale");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre avtale"));
     }
   };
 
@@ -247,8 +265,8 @@ export default function BrudekjoleScreen() {
         completed: false,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke duplisere avtale");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke duplisere avtale"));
     }
   };
 
@@ -320,8 +338,8 @@ export default function BrudekjoleScreen() {
       }
       setShowDressModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke lagre kjole");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre kjole"));
     }
   };
 
@@ -350,14 +368,14 @@ export default function BrudekjoleScreen() {
         isFavorite: dress.isFavorite,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke duplisere kjole");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke duplisere kjole"));
     }
   };
 
   // Timeline handlers
-  const toggleTimelineStep = async (key: string, dateKey: string) => {
-    const currentValue = (timeline as any)[key];
+  const toggleTimelineStep = async (key: TimelineStepKey, dateKey: TimelineDateKey) => {
+    const currentValue = Boolean(timeline[key]);
     try {
       await updateTimelineMutation.mutateAsync({
         ...timeline,
@@ -365,8 +383,8 @@ export default function BrudekjoleScreen() {
         [dateKey]: !currentValue ? new Date().toISOString().split("T")[0] : undefined,
       });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch (e) {
-      showToast("Kunne ikke oppdatere tidslinje");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke oppdatere tidslinje"));
     }
   };
 
@@ -377,8 +395,8 @@ export default function BrudekjoleScreen() {
       await updateTimelineMutation.mutateAsync({ ...timeline, budget });
       setShowBudgetModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke lagre budsjett");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre budsjett"));
     }
   };
 
@@ -409,7 +427,7 @@ export default function BrudekjoleScreen() {
           category="dress"
           categoryName="Brudekjole"
           icon="heart"
-          subtitle={isWedding ? 'Finn drømmekjolen' : 'Finn det perfekte antrekket'}
+          subtitle={isWedding ? "Finn drømmekjolen" : `Finn antrekk til ${config.labelNo.toLowerCase()}`}
           selectedTraditions={coupleProfile?.selectedTraditions}
         />
 
@@ -471,15 +489,15 @@ export default function BrudekjoleScreen() {
         {/* Tabs */}
         <Animated.View entering={FadeInDown.delay(100).duration(400)}>
           <View style={styles.tabs}>
-            {[
-              { key: "appointments", label: "Avtaler", icon: "calendar" },
-              { key: "favorites", label: "Favoritter", icon: "heart" },
-              { key: "timeline", label: "Tidslinje", icon: "git-commit" },
-            ].map((tab) => (
+            {([
+              { key: "appointments", label: "Avtaler", icon: "calendar" as const },
+              { key: "favorites", label: "Favoritter", icon: "heart" as const },
+              { key: "timeline", label: "Tidslinje", icon: "git-commit" as const },
+            ] as const).map((tab) => (
               <Pressable
                 key={tab.key}
                 onPress={() => {
-                  setActiveTab(tab.key as any);
+                  setActiveTab(tab.key);
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
                 style={[
@@ -488,7 +506,7 @@ export default function BrudekjoleScreen() {
                 ]}
               >
                 <EvendiIcon
-                  name={tab.icon as any}
+                  name={tab.icon}
                   size={16}
                   color={activeTab === tab.key ? "#fff" : theme.textMuted}
                 />
@@ -607,19 +625,35 @@ export default function BrudekjoleScreen() {
               </Pressable>
             </View>
 
-            {favorites.length === 0 ? (
+            <View style={[styles.searchBox, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+              <EvendiIcon name="search" size={16} color={theme.textMuted} />
+              <TextInput
+                value={favoriteSearch}
+                onChangeText={setFavoriteSearch}
+                placeholder="Søk i favoritter"
+                placeholderTextColor={theme.textMuted}
+                style={[styles.searchInput, { color: theme.text }]}
+              />
+              {favoriteSearch.length > 0 ? (
+                <Pressable onPress={() => setFavoriteSearch("")}>
+                  <EvendiIcon name="x" size={16} color={theme.textMuted} />
+                </Pressable>
+              ) : null}
+            </View>
+
+            {filteredFavorites.length === 0 ? (
               <View style={[styles.emptyCard, { backgroundColor: theme.backgroundDefault }]}>
                 <EvendiIcon name="heart" size={40} color={theme.textMuted} />
                 <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
-                  Ingen kjoler lagret
+                  {favorites.length === 0 ? "Ingen kjoler lagret" : "Ingen favoritter matcher søket"}
                 </ThemedText>
                 <ThemedText style={[styles.emptySubtext, { color: theme.textMuted }]}>
-                  Ta bilde av kjoler du liker under prøvinger
+                  {favorites.length === 0 ? "Ta bilde av kjoler du liker under prøvinger" : "Prøv et annet søkeord"}
                 </ThemedText>
               </View>
             ) : (
               <View style={styles.dressGrid}>
-                {favorites.map((dress, idx) => (
+                {filteredFavorites.map((dress, idx) => (
                   <Animated.View
                     key={dress.id}
                     entering={FadeInDown.delay(idx * 50).duration(300)}
@@ -690,8 +724,9 @@ export default function BrudekjoleScreen() {
             <ThemedText style={styles.sectionTitle}>{isWedding ? "Kjolens reise" : "Antrekksplan"}</ThemedText>
             <View style={[styles.timelineCard, { backgroundColor: theme.backgroundDefault }]}>
               {TIMELINE_STEPS.map((step, idx) => {
-                const isCompleted = (timeline as any)[step.key] as boolean;
-                const dateValue = (timeline as any)[step.dateKey] as string | undefined;
+                const isCompleted = Boolean(timeline[step.key as keyof DressTimeline]);
+                const rawDate = timeline[step.dateKey as keyof DressTimeline];
+                const dateValue = typeof rawDate === "string" ? rawDate : undefined;
 
                 return (
                   <Pressable
@@ -1006,6 +1041,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: Spacing.md,
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
   },
   sectionTitle: {
     fontSize: 18,

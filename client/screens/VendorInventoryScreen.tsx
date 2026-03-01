@@ -16,7 +16,6 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
@@ -192,7 +191,7 @@ export default function VendorInventoryScreen({ navigation }: Props) {
         style={[
           styles.header,
           {
-            paddingTop: insets.top + Spacing.md,
+            paddingTop: Math.max(insets.top, headerHeight) + Spacing.xs,
             backgroundColor: theme.backgroundDefault,
             borderBottomColor: theme.border,
           },

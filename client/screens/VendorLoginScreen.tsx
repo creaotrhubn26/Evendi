@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   View,
-  TextInput,
   Pressable,
   Image,
   ActivityIndicator,
@@ -284,8 +283,8 @@ export default function VendorLoginScreen({ navigation }: Props) {
           </View>
           <Pressable
             onPress={handleLogin}
-            disabled={loginMutation.isPending}
-            style={[styles.loginBtn, { backgroundColor: theme.accent, opacity: loginMutation.isPending ? 0.6 : 1 }]}
+            disabled={loginMutation.isPending || !formReady}
+            style={[styles.loginBtn, { backgroundColor: theme.accent, opacity: loginMutation.isPending || !formReady ? 0.6 : 1 }]}
           >
             {loginMutation.isPending ? (
               <ActivityIndicator color={theme.buttonText} />

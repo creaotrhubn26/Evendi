@@ -25,7 +25,6 @@ import {
   Pressable,
   Image,
   useWindowDimensions,
-  FlatList,
   ScrollView,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -97,7 +96,8 @@ export function VendorCategoryMarketplace({
   const navigation = useNavigation<NavigationProp>();
   const { width: SCREEN_WIDTH } = useWindowDimensions();
   const CARD_WIDTH = useMemo(() => SCREEN_WIDTH * 0.62, [SCREEN_WIDTH]);
-  const colors = gradientColors ?? CATEGORY_GRADIENTS[category] ?? CATEGORY_GRADIENTS.default;
+  const sharedGradient = getVendorCategoryGradient(category);
+  const colors = gradientColors ?? CATEGORY_GRADIENTS[category] ?? sharedGradient ?? CATEGORY_GRADIENTS.default;
   const traditions = selectedTraditions ?? [];
 
   // Fetch all vendors (shared cache with VendorsScreen)
@@ -134,6 +134,7 @@ export function VendorCategoryMarketplace({
   const handleSmartMatch = () => {
     navigation.navigate("VendorMatching", {
       category,
+      selectedTraditions: traditions,
     });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
@@ -153,6 +154,15 @@ export function VendorCategoryMarketplace({
           </View>
           <ThemedText style={styles.heroTitle}>{categoryName}</ThemedText>
           <ThemedText style={styles.heroSubtitle}>{subtitle}</ThemedText>
+          {traditions.length > 0 ? (
+            <View style={styles.traditionRow}>
+              {traditions.slice(0, 3).map((tradition) => (
+                <View key={tradition} style={styles.traditionChip}>
+                  <ThemedText style={styles.traditionChipText}>{tradition}</ThemedText>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
       </LinearGradient>
 
@@ -328,6 +338,25 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.85)",
     textAlign: "center",
     maxWidth: 260,
+  },
+  traditionRow: {
+    marginTop: Spacing.xs,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: Spacing.xs,
+    maxWidth: 280,
+  },
+  traditionChip: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 999,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+  },
+  traditionChipText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 
   // ── Search ──

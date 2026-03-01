@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, TextInput, Modal } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -411,7 +411,9 @@ export default function VendorPlanleggerScreen() {
         }
       >
       <ThemedText style={[styles.title, { color: theme.text }]}>Planlegger dashboard</ThemedText>
-      <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Publiser planleggingspakker, tjenester og priser, og send tilbud raskt.</ThemedText>
+      <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
+        {vendorConfig.categoryName}: publiser planleggingspakker, tjenester og priser, og send tilbud raskt.
+      </ThemedText>
       <View style={styles.cardRow}>
         <Pressable
           onPress={goToProducts}

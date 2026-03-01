@@ -38,7 +38,10 @@ import { generateId, getCoupleSession } from "@/lib/storage";
 import { getCoupleProfile } from "@/lib/api-couples";
 import { TRADITION_BUDGET_ITEMS, getPerPersonBudget, CULTURAL_LABELS } from "@/constants/tradition-data";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
+
+const BUDGET_UI_PREFS_KEY = "evendi_budget_ui_prefs";
+const BUDGET_DRAFT_NAMESPACE_KEY = "evendi_budget_draft_namespace";
 
 const useFieldValidation = () => {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -200,6 +203,9 @@ export default function BudgetScreen() {
   const [newActualCost, setNewActualCost] = useState("");
   const [newIsPaid, setNewIsPaid] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("other");
+  const [itemFilter, setItemFilter] = useState("");
+  const [showOnlyUnpaid, setShowOnlyUnpaid] = useState(false);
+  const [draftNamespace, setDraftNamespace] = useState("BudgetScreen");
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState(totalBudget.toString());
   const [editingItem, setEditingItem] = useState<BudgetItem | null>(null);
@@ -212,10 +218,59 @@ export default function BudgetScreen() {
     }
   }, [budgetSettings?.totalBudget]);
 
+  useEffect(() => {
+    const hydratePreferences = async () => {
+      try {
+        const [rawPrefs, rawNamespace] = await Promise.all([
+          AsyncStorage.getItem(BUDGET_UI_PREFS_KEY),
+          AsyncStorage.getItem(BUDGET_DRAFT_NAMESPACE_KEY),
+        ]);
+
+        if (rawPrefs) {
+          const parsed = JSON.parse(rawPrefs) as {
+            selectedCategory?: string;
+            itemFilter?: string;
+            showOnlyUnpaid?: boolean;
+          };
+          if (typeof parsed.selectedCategory === "string") setSelectedCategory(parsed.selectedCategory);
+          if (typeof parsed.itemFilter === "string") setItemFilter(parsed.itemFilter);
+          if (typeof parsed.showOnlyUnpaid === "boolean") setShowOnlyUnpaid(parsed.showOnlyUnpaid);
+        }
+
+        if (rawNamespace && rawNamespace.trim().length > 0) {
+          setDraftNamespace(rawNamespace);
+          return;
+        }
+
+        const generatedNamespace = `BudgetScreen-${generateId()}`;
+        setDraftNamespace(generatedNamespace);
+        await AsyncStorage.setItem(BUDGET_DRAFT_NAMESPACE_KEY, generatedNamespace);
+      } catch {
+        setDraftNamespace("BudgetScreen-fallback");
+      }
+    };
+
+    hydratePreferences();
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(
+      BUDGET_UI_PREFS_KEY,
+      JSON.stringify({ selectedCategory, itemFilter, showOnlyUnpaid }),
+    ).catch(() => undefined);
+  }, [selectedCategory, itemFilter, showOnlyUnpaid]);
+
   // Helper to parse Norwegian number format (strips spaces and non-numeric chars)
   const parseNumber = (value: string): number => {
     const cleaned = value.replace(/[^\d]/g, "");
     return parseInt(cleaned) || 0;
+  };
+
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.trim().length > 0) {
+      return error.message;
+    }
+    return fallback;
   };
 
   const totalEstimated = items.reduce((sum, item) => sum + (item.estimatedCost || 0), 0);
@@ -226,6 +281,12 @@ export default function BudgetScreen() {
   // Use actual if available, otherwise estimated
   const effectiveSpent = totalActual > 0 ? totalActual : totalEstimated;
   const remaining = totalBudget - effectiveSpent;
+  const filteredItems = items.filter((item) => {
+    if (showOnlyUnpaid && item.isPaid) return false;
+    const query = itemFilter.trim().toLowerCase();
+    if (!query) return true;
+    return item.label.toLowerCase().includes(query) || item.category.toLowerCase().includes(query);
+  });
 
   const handleAddItem = async () => {
     if (!newLabel.trim() || !newCost.trim()) {
@@ -265,8 +326,8 @@ export default function BudgetScreen() {
       setShowForm(false);
       resetValidation();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre utgift");
+    } catch (error) {
+      Alert.alert("Feil", getErrorMessage(error, "Kunne ikke lagre utgift"));
     } finally {
       setIsSaving(false);
     }
@@ -311,8 +372,8 @@ export default function BudgetScreen() {
       await updateSettingsMutation.mutateAsync({ totalBudget: newBudget });
       setEditingBudget(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      Alert.alert("Feil", "Kunne ikke lagre budsjett");
+    } catch (error) {
+      Alert.alert("Feil", getErrorMessage(error, "Kunne ikke lagre budsjett"));
     }
   };
 
@@ -324,10 +385,11 @@ export default function BudgetScreen() {
     return CATEGORIES.find((c) => c.id === categoryId) || CATEGORIES[7];
   };
 
+  const selectedCategoryInfo = getCategoryInfo(selectedCategory);
   const groupedItems = CATEGORIES.map((cat) => ({
     ...cat,
-    items: items.filter((i) => i.category === cat.id),
-    total: items.filter((i) => i.category === cat.id).reduce((sum, i) => sum + i.estimatedCost, 0),
+    items: filteredItems.filter((i) => i.category === cat.id),
+    total: filteredItems.filter((i) => i.category === cat.id).reduce((sum, i) => sum + i.estimatedCost, 0),
   })).filter((cat) => cat.items.length > 0);
 
   // Function to add all default items
@@ -344,8 +406,8 @@ export default function BudgetScreen() {
         });
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      Alert.alert("Feil", "Kunne ikke importere standardbudsjettet");
+    } catch (error) {
+      Alert.alert("Feil", getErrorMessage(error, "Kunne ikke importere standardbudsjettet"));
     } finally {
       setIsSaving(false);
     }
@@ -375,8 +437,8 @@ export default function BudgetScreen() {
         }
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      Alert.alert("Feil", "Kunne ikke importere tradisjonsbudsjett");
+    } catch (error) {
+      Alert.alert("Feil", getErrorMessage(error, "Kunne ikke importere tradisjonsbudsjett"));
     } finally {
       setIsSaving(false);
     }
@@ -441,7 +503,7 @@ export default function BudgetScreen() {
             {editingBudget ? (
               <View style={styles.budgetEditRow}>
                 <PersistentTextInput
-                  draftKey="BudgetScreen-input-1"
+                  draftKey={`${draftNamespace}-input-1`}
                   style={[styles.budgetInput, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   value={budgetInput}
                   onChangeText={setBudgetInput}
@@ -507,6 +569,10 @@ export default function BudgetScreen() {
               </ThemedText>
             </View>
           </View>
+
+          <ThemedText style={[styles.remainingHint, { color: theme.textSecondary }]}>
+            Rest estimert: {formatCurrencyValue(remainingEstimated)} • Rest faktisk: {formatCurrencyValue(remainingActual)}
+          </ThemedText>
         </View>
       </Animated.View>
 
@@ -544,6 +610,48 @@ export default function BudgetScreen() {
             <EvendiIcon name="plus-circle" size={18} color="#FFB300" />
           </Pressable>
         </Animated.View>
+      )}
+
+      {items.length > 0 && (
+        <View style={[styles.filterCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <View style={[styles.searchInputRow, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+            <EvendiIcon name="search" size={16} color={theme.textSecondary} />
+            <TextInput
+              value={itemFilter}
+              onChangeText={setItemFilter}
+              placeholder="Søk i budsjettposter"
+              placeholderTextColor={theme.textMuted}
+              style={[styles.searchInput, { color: theme.text }]}
+            />
+            {itemFilter.length > 0 ? (
+              <Pressable onPress={() => setItemFilter("")}>
+                <EvendiIcon name="x" size={16} color={theme.textSecondary} />
+              </Pressable>
+            ) : null}
+          </View>
+
+          <Pressable
+            onPress={() => setShowOnlyUnpaid((prev) => !prev)}
+            style={[styles.unpaidToggleRow, { borderColor: theme.border }]}
+          >
+            <View
+              style={[
+                styles.checkbox,
+                {
+                  marginRight: 0,
+                  backgroundColor: showOnlyUnpaid ? Colors.dark.accent : "transparent",
+                  borderColor: showOnlyUnpaid ? Colors.dark.accent : theme.border,
+                },
+              ]}
+            >
+              {showOnlyUnpaid ? <EvendiIcon name="check" size={12} color="#1A1A1A" /> : null}
+            </View>
+            <ThemedText style={{ color: theme.text }}>Vis kun ubetalte poster</ThemedText>
+            <ThemedText style={{ color: theme.textSecondary, marginLeft: "auto" }}>
+              {filteredItems.length} vist
+            </ThemedText>
+          </Pressable>
+        </View>
       )}
 
       {items.length > 0 && (
@@ -633,16 +741,34 @@ export default function BudgetScreen() {
         </Animated.View>
       ))}
 
+      {items.length > 0 && groupedItems.length === 0 && (
+        <View style={[styles.emptyState, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <EvendiIcon name="search" size={42} color={theme.textMuted} />
+          <ThemedText style={{ color: theme.text, marginTop: Spacing.sm, fontWeight: "600" }}>
+            Ingen poster matcher filteret
+          </ThemedText>
+          <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.xs, textAlign: "center" }}>
+            Nullstill søk eller vis også betalte poster.
+          </ThemedText>
+        </View>
+      )}
+
       {showForm ? (
         <Animated.View
           entering={FadeInDown.duration(300)}
           style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
           <ThemedText type="h3" style={styles.formTitle}>{editingItem ? "Endre utgift" : "Legg til utgift"}</ThemedText>
+          <View style={[styles.selectedCategoryBadge, { backgroundColor: selectedCategoryInfo.color + "20" }]}>
+            {renderIcon(selectedCategoryInfo.icon, selectedCategoryInfo.color, 14)}
+            <ThemedText style={[styles.selectedCategoryText, { color: selectedCategoryInfo.color }]}>
+              Kategori: {selectedCategoryInfo.name}
+            </ThemedText>
+          </View>
 
           <View>
             <PersistentTextInput
-              draftKey="BudgetScreen-input-2"
+              draftKey={`${draftNamespace}-input-2`}
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("newLabel")]}
               placeholder="Navn"
               placeholderTextColor={theme.textMuted}
@@ -657,7 +783,7 @@ export default function BudgetScreen() {
 
           <View>
             <PersistentTextInput
-              draftKey="BudgetScreen-input-3"
+              draftKey={`${draftNamespace}-input-3`}
               style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }, getFieldStyle("newCost")]}
               placeholder={`Estimert beløp (${getCurrencyCode(getSetting)})`}
               placeholderTextColor={theme.textMuted}
@@ -676,7 +802,7 @@ export default function BudgetScreen() {
             <>
               <View>
                 <PersistentTextInput
-                  draftKey="BudgetScreen-input-4"
+                  draftKey={`${draftNamespace}-input-4`}
                   style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
                   placeholder={`Faktisk beløp (${getCurrencyCode(getSetting)})`}
                   placeholderTextColor={theme.textMuted}
@@ -808,6 +934,40 @@ const styles = StyleSheet.create({
   statItem: { alignItems: "center" },
   statValue: { fontSize: 16, fontWeight: "600" },
   statLabel: { fontSize: 12, marginTop: 2 },
+  remainingHint: {
+    marginTop: Spacing.md,
+    fontSize: 12,
+    textAlign: "center",
+  },
+  filterCard: {
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    gap: Spacing.sm,
+  },
+  searchInputRow: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  unpaidToggleRow: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
   swipeHint: { fontSize: 12, textAlign: "center", marginBottom: Spacing.md },
   categorySection: { marginBottom: Spacing.xl },
   categoryHeader: { flexDirection: "row", alignItems: "center", marginBottom: Spacing.md },
@@ -844,6 +1004,20 @@ const styles = StyleSheet.create({
   },
   formCard: { padding: Spacing.xl, borderRadius: BorderRadius.md, borderWidth: 1, marginTop: Spacing.lg },
   formTitle: { marginBottom: Spacing.lg },
+  selectedCategoryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    alignSelf: "flex-start",
+    marginBottom: Spacing.md,
+  },
+  selectedCategoryText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
   input: { height: Spacing.inputHeight, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.md, borderWidth: 1, fontSize: 16, marginBottom: Spacing.md },
   categoryPicker: { marginBottom: Spacing.lg, marginHorizontal: -Spacing.xl, paddingHorizontal: Spacing.xl },
   categoryChip: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full, marginRight: Spacing.sm },

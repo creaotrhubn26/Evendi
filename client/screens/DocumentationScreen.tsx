@@ -5,7 +5,6 @@ import {
   View,
   Pressable,
   useWindowDimensions,
-  TextInput,
   Linking,
   Modal,
   ActivityIndicator,

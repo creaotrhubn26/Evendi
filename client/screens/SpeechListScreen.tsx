@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   ScrollView,
   StyleSheet,
   View,
-  TextInput,
   Pressable,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -48,6 +48,7 @@ const EVENT_DEFAULT_SPEECHES: Speech[] = [
   { id: "1", speakerName: "Hovedtaler", role: "Taler", time: "18:00", order: 1, status: "ready", tableId: null },
   { id: "2", speakerName: "Konferansier", role: "Konferansier", time: "18:30", order: 2, status: "ready", tableId: null },
 ];
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 export default function SpeechListScreen() {
   const insets = useSafeAreaInsets();
@@ -76,8 +77,9 @@ export default function SpeechListScreen() {
     useCallback(() => {
       const loadToken = async () => {
         try {
-          const stored = await getSpeeches();
-          const parsed = JSON.parse(localStorage.getItem("session") || "{}");
+          await getSpeeches();
+          const raw = await AsyncStorage.getItem(COUPLE_STORAGE_KEY);
+          const parsed = raw ? JSON.parse(raw) : {};
           setSessionToken(parsed?.sessionToken || null);
         } catch {
           setSessionToken(null);

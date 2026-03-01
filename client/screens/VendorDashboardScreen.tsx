@@ -180,6 +180,10 @@ export default function VendorDashboardScreen({ navigation }: Props) {
   const isFocused = useIsFocused();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
+  const { width: screenWidth } = Dimensions.get("window");
+  const maxPreviewImages = screenWidth < 400 ? 3 : 4;
+  const googleOpenLabel =
+    Platform.OS === "web" ? "Åpne i ny fane" : "Åpne i Google";
 
   const [session, setSession] = useState<VendorSession | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -615,7 +619,10 @@ export default function VendorDashboardScreen({ navigation }: Props) {
   const renderInspirationItem = ({ item, index }: { item: Inspiration; index: number }) => {
     // Get thumbnail: prefer coverImageUrl, then first image from media
     const thumbnailUrl = item.coverImageUrl || item.media.find(m => m.type === "image")?.url;
-    const thumbnails = item.media.filter(m => m.type === "image").slice(0, 4);
+    const thumbnails = item.media
+      .filter((m) => m.type === "image")
+      .slice(0, maxPreviewImages);
+    const sideThumbnails = thumbnails.slice(1, maxPreviewImages);
     
     return (
       <Animated.View entering={FadeInDown.delay(index * 50).duration(300)}>
@@ -627,17 +634,17 @@ export default function VendorDashboardScreen({ navigation }: Props) {
           style={[styles.showcaseCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
         >
           {/* Thumbnail Grid */}
-          {thumbnails.length > 0 ? (
+          {thumbnails.length > 0 || thumbnailUrl ? (
             <View style={styles.thumbnailGrid}>
-              {thumbnails.length === 1 ? (
+              {thumbnails.length <= 1 ? (
                 <Image
-                  source={{ uri: thumbnails[0].url }}
+                  source={{ uri: thumbnailUrl || thumbnails[0]?.url || "" }}
                   style={styles.singleThumbnail}
                   resizeMode="cover"
                 />
               ) : thumbnails.length === 2 ? (
                 <View style={styles.twoThumbnails}>
-                  {thumbnails.map((media, i) => (
+                  {thumbnails.map((media) => (
                     <Image
                       key={media.id}
                       source={{ uri: media.url }}
@@ -654,16 +661,19 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                     resizeMode="cover"
                   />
                   <View style={styles.sideThumbnails}>
-                    {thumbnails.slice(1, 4).map((media, i) => (
+                    {sideThumbnails.map((media, i) => (
                       <View key={media.id} style={styles.smallThumbnailWrapper}>
                         <Image
                           source={{ uri: media.url }}
                           style={styles.smallThumbnail}
                           resizeMode="cover"
                         />
-                        {i === 2 && item.media.length > 4 && (
+                        {i === sideThumbnails.length - 1 &&
+                          item.media.length > maxPreviewImages && (
                           <View style={styles.moreOverlay}>
-                            <ThemedText style={styles.moreText}>+{item.media.length - 4}</ThemedText>
+                            <ThemedText style={styles.moreText}>
+                              +{item.media.length - maxPreviewImages}
+                            </ThemedText>
                           </View>
                         )}
                       </View>
@@ -1572,7 +1582,11 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                       try {
                         await Linking.openURL(vendorProfile.googleReviewUrl!);
                       } catch (e) {
-                        Alert.alert("Feil", "Kunne ikke åpne lenken");
+                        const message =
+                          e instanceof Error && e.message
+                            ? e.message
+                            : "Kunne ikke åpne lenken";
+                        Alert.alert("Feil", message);
                       }
                     }}
                   >
@@ -1581,7 +1595,9 @@ export default function VendorDashboardScreen({ navigation }: Props) {
                       style={{ width: 16, height: 16 }}
                       resizeMode="contain"
                     />
-                    <ThemedText style={[styles.googleReviewsBtnText, { color: "#3C4043" }]}>Åpne i Google</ThemedText>
+                    <ThemedText style={[styles.googleReviewsBtnText, { color: "#3C4043" }]}>
+                      {googleOpenLabel}
+                    </ThemedText>
                   </Pressable>
                 ) : (
                   <Pressable

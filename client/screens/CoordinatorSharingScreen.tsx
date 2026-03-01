@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   RefreshControl,
   FlatList,
-  TextInput,
   Switch,
   Modal,
   Share,
@@ -26,7 +25,7 @@ import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { getApiUrl, apiRequest } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 import PersistentTextInput from "@/components/PersistentTextInput";
@@ -268,7 +267,7 @@ export default function CoordinatorSharingScreen() {
   const getStatusInfo = (status: string) => {
     switch (status) {
       case "active":
-        return { label: "Aktiv", color: "#4CAF50" }; // Could use theme.success if available
+        return { label: "Aktiv", color: Colors.light.success || "#4CAF50" };
       case "revoked":
         return { label: "Tilbakekalt", color: "#FF3B30" }; // iOS red, could use theme.danger
       case "expired":

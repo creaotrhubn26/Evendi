@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   View,
-  ScrollView,
   Pressable,
   ActivityIndicator,
   FlatList,
@@ -224,7 +223,7 @@ export default function ReviewsListScreen() {
         >
           <Feather name="chevron-left" size={24} color={"#FFFFFF"} />
         </Pressable>
-        <ThemedText style={styles.headerTitle}>Anmeldelser</ThemedText>
+        <ThemedText style={styles.headerTitle}>{vendorName ? `Anmeldelser · ${vendorName}` : "Anmeldelser"}</ThemedText>
         <View style={styles.headerSpacer} />
       </View>
 

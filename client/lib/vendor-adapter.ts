@@ -3,7 +3,7 @@
  * Customizes tabs, features, insights, and stats for different vendor types
  */
 
-import { EvendiIcon, EvendiIconGlyphMap } from "@/components/EvendiIcon";
+import { EvendiIconGlyphMap } from "@/components/EvendiIcon";
 
 export type TabType = "deliveries" | "inspirations" | "messages" | "products" | "offers" | "reviews" | "couples";
 

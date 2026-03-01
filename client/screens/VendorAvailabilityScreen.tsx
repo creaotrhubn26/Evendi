@@ -49,6 +49,27 @@ interface BookingInfo {
   acceptedBookings: number;
 }
 
+const AVAILABILITY_STATUS_OPTIONS: {
+  value: VendorAvailability["status"];
+  label: string;
+  icon: React.ComponentProps<typeof Feather>["name"];
+  color: string;
+}[] = [
+  {
+    value: "available",
+    label: "Tilgjengelig",
+    icon: "check-circle",
+    color: "#4CAF50",
+  },
+  { value: "blocked", label: "Blokkert", icon: "x-circle", color: "#EF5350" },
+  {
+    value: "limited",
+    label: "Begrenset",
+    icon: "alert-circle",
+    color: "#FF9800",
+  },
+];
+
 type Props = NativeStackScreenProps<any>;
 
 export default function VendorAvailabilityScreen({ navigation }: Props) {
@@ -65,12 +86,21 @@ export default function VendorAvailabilityScreen({ navigation }: Props) {
   const [editNotes, setEditNotes] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const handleNavigateBack = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate("VendorDashboard");
+  }, [navigation]);
+
   const { data: availability = [], isLoading } = useQuery<VendorAvailability[]>({
     queryKey: ["vendor-availability"],
     queryFn: async () => {
       const session = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
       if (!session) throw new Error("Not authenticated");
-      const { sessionToken } = JSON.parse(session);
+      const { sessionToken } = JSON.parse(session) as VendorSession;
       const res = await fetch(`${getApiUrl()}/api/vendor/availability`, {
         headers: { Authorization: `Bearer ${sessionToken}` },
       });
@@ -84,7 +114,7 @@ export default function VendorAvailabilityScreen({ navigation }: Props) {
     queryFn: async () => {
       const session = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
       if (!session) throw new Error("Not authenticated");
-      const { sessionToken } = JSON.parse(session);
+      const { sessionToken } = JSON.parse(session) as VendorSession;
       
       // Get bookings for visible dates
       const dates = getDatesInMonth(currentMonth);
@@ -101,7 +131,7 @@ export default function VendorAvailabilityScreen({ navigation }: Props) {
             bookingsMap[date] = data;
           }
         } catch (error) {
-          // Ignore errors for individual dates
+          console.warn("Kunne ikke hente bookinger for dato:", date, error);
         }
       }
       
@@ -114,7 +144,7 @@ export default function VendorAvailabilityScreen({ navigation }: Props) {
     mutationFn: async (data: { date: string; status: string; maxBookings: number | null; notes: string | null }) => {
       const session = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
       if (!session) throw new Error("Not authenticated");
-      const { sessionToken } = JSON.parse(session);
+      const { sessionToken } = JSON.parse(session) as VendorSession;
       
       const res = await fetch(`${getApiUrl()}/api/vendor/availability`, {
         method: "POST",
@@ -150,7 +180,7 @@ export default function VendorAvailabilityScreen({ navigation }: Props) {
     mutationFn: async (date: string) => {
       const session = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
       if (!session) throw new Error("Not authenticated");
-      const { sessionToken } = JSON.parse(session);
+      const { sessionToken } = JSON.parse(session) as VendorSession;
       
       const res = await fetch(`${getApiUrl()}/api/vendor/availability/${date}`, {
         method: "DELETE",
@@ -369,13 +399,23 @@ export default function VendorAvailabilityScreen({ navigation }: Props) {
         }
       >
         {/* Header Info */}
-        <View style={[styles.infoCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-          <Feather name="calendar" size={24} color={Colors.dark.accent} />
-          <ThemedText type="h3" style={styles.infoTitle}>Kalender & Tilgjengelighet</ThemedText>
-          <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>
-            Administrer tilgjengelighet for datoer. Blokkerte datoer vil ikke kunne motta tilbud.
-          </ThemedText>
-        </View>
+        <Animated.View entering={FadeInDown.delay(50).duration(280)}>
+          <View style={[styles.infoCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+            <View style={styles.infoHeaderRow}>
+              <Feather name="calendar" size={24} color={Colors.dark.accent} />
+              <Pressable onPress={handleNavigateBack} style={styles.backAction}>
+                <Feather name="arrow-left" size={14} color={theme.textSecondary} />
+                <ThemedText style={[styles.backActionText, { color: theme.textSecondary }]}>
+                  Til dashboard
+                </ThemedText>
+              </Pressable>
+            </View>
+            <ThemedText type="h3" style={styles.infoTitle}>Kalender & Tilgjengelighet</ThemedText>
+            <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>
+              Administrer tilgjengelighet for datoer. Blokkerte datoer vil ikke kunne motta tilbud.
+            </ThemedText>
+          </View>
+        </Animated.View>
 
         {/* Legend */}
         <View style={[styles.legendCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
@@ -470,15 +510,11 @@ export default function VendorAvailabilityScreen({ navigation }: Props) {
             <View style={styles.modalBody}>
               <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Status</ThemedText>
               <View style={styles.statusButtons}>
-                {[
-                  { value: "available", label: "Tilgjengelig", icon: "check-circle", color: "#4CAF50" },
-                  { value: "blocked", label: "Blokkert", icon: "x-circle", color: "#EF5350" },
-                  { value: "limited", label: "Begrenset", icon: "alert-circle", color: "#FF9800" },
-                ].map(option => (
+                {AVAILABILITY_STATUS_OPTIONS.map((option) => (
                   <Pressable
                     key={option.value}
                     onPress={() => {
-                      setEditStatus(option.value as any);
+                      setEditStatus(option.value);
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     style={[
@@ -488,7 +524,7 @@ export default function VendorAvailabilityScreen({ navigation }: Props) {
                     ]}
                   >
                     <Feather 
-                      name={option.icon as any} 
+                      name={option.icon} 
                       size={20} 
                       color={editStatus === option.value ? option.color : theme.textMuted} 
                     />
@@ -596,6 +632,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     marginBottom: Spacing.lg,
+  },
+  infoHeaderRow: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  backAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+  },
+  backActionText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   infoTitle: { marginTop: Spacing.sm, textAlign: "center" },
   infoText: { marginTop: Spacing.sm, textAlign: "center", lineHeight: 20 },

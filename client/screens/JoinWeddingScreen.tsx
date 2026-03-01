@@ -66,7 +66,7 @@ export default function JoinWeddingScreen() {
   const cardBg = isDark ? "#232347" : "#fff";
   const textColor = isDark ? "#fff" : "#1a1a2e";
   const subtextColor = isDark ? "#b0b0cc" : "#666";
-  const accent = theme.accent;
+  const accent = theme.accent || Colors.dark.accent;
   const inputBg = isDark ? "#2a2a4a" : "#f0eef8";
   const borderColor = isDark ? "#3a3a5a" : "#e0ddf0";
 
@@ -96,7 +96,8 @@ export default function JoinWeddingScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setStep("role");
     } catch (error) {
-      Alert.alert("Feil", "Kunne ikke validere koden. Prøv igjen.");
+      const message = error instanceof Error ? error.message : "Kunne ikke validere koden. Prøv igjen.";
+      Alert.alert("Feil", message);
     } finally {
       setLoading(false);
     }
@@ -150,7 +151,8 @@ export default function JoinWeddingScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setStep("success");
     } catch (error) {
-      Alert.alert("Feil", "Nettverksfeil. Prøv igjen.");
+      const message = error instanceof Error ? error.message : "Nettverksfeil. Prøv igjen.";
+      Alert.alert("Feil", message);
     } finally {
       setLoading(false);
     }

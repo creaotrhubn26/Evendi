@@ -4,7 +4,6 @@ import {
   View,
   Pressable,
   FlatList,
-  TextInput,
   ActivityIndicator,
   Modal,
   ScrollView,
@@ -278,7 +277,9 @@ export default function AdminVendorsScreen() {
       setStoredKey(adminKey);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Nettverksfeil. Prøv igjen.";
       setLoginError("Nettverksfeil. Prøv igjen.");
+      Alert.alert("Innlogging feilet", message);
     }
   };
 

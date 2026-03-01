@@ -31,6 +31,8 @@ export function FotoVideografScreen() {
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>('sessions');
   const [refreshing, setRefreshing] = useState(false);
+  const [providerSearch, setProviderSearch] = useState('');
+  const [sessionNotes, setSessionNotes] = useState('');
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -40,7 +42,10 @@ export function FotoVideografScreen() {
 
   const handleFindProvider = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate('VendorMatching', { category: 'photo-video' });
+    navigation.navigate('VendorMatching', {
+      category: 'photo-video',
+      guestCount: providerSearch.trim() ? 1 : undefined,
+    });
   };
 
   return (
@@ -96,6 +101,24 @@ export function FotoVideografScreen() {
             <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
               Bruk søket ovenfor for å finne en leverandør som tilbyr både foto og video.
             </ThemedText>
+            <PersistentTextInput
+              draftKey="FotoVideografScreen-input-1"
+              style={[styles.noteInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundDefault }]}
+              value={providerSearch}
+              onChangeText={setProviderSearch}
+              placeholder="Søkestikkord (f.eks. drone, portrett, heldags)"
+              placeholderTextColor={theme.textMuted}
+            />
+            <TextInput
+              style={[styles.noteInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundDefault }]}
+              value={sessionNotes}
+              onChangeText={setSessionNotes}
+              placeholder="Notater for leverandør (valgfritt)"
+              placeholderTextColor={theme.textMuted}
+            />
+            <Button style={styles.findButton} onPress={handleFindProvider}>
+              Finn foto-/videograf
+            </Button>
           </Animated.View>
         ) : (
           <Animated.View entering={FadeInDown.duration(300)} style={styles.timelineContainer}>
@@ -147,6 +170,16 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
   emptyText: { fontSize: 14, textAlign: 'center', maxWidth: 280 },
+  noteInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  findButton: {
+    width: '100%',
+  },
   timelineContainer: { gap: Spacing.lg, padding: Spacing.lg },
   timelineItem: {
     flexDirection: 'row',

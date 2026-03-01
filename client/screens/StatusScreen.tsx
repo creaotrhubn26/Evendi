@@ -202,7 +202,10 @@ export default function StatusScreen() {
       }
       await Linking.openURL(url);
     } catch (error) {
-      showToast(t("Kunne ikke åpne lenken akkurat nå.", "Could not open the link right now."));
+      const message = error instanceof Error
+        ? error.message
+        : t("Kunne ikke åpne lenken akkurat nå.", "Could not open the link right now.");
+      showToast(message);
     }
   };
 

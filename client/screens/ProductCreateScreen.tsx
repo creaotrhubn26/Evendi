@@ -19,8 +19,8 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { ThemedText } from "@/components/ThemedText";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { Spacing, BorderRadius } from "@/constants/theme";
+import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import type { ProfileStackParamList } from "@/navigation/ProfileStackNavigator";
@@ -201,7 +201,7 @@ export default function ProductCreateScreen({ navigation, route }: Props) {
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl },
+          { paddingTop: Math.max(Spacing.md, Math.floor(headerHeight * 0.08)), paddingBottom: insets.bottom + Spacing.xl },
         ]}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
       >

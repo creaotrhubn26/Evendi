@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, Pressable, Share, Alert, TextInput, Switch, ActivityIndicator } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, Share, Alert, Switch, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
@@ -57,7 +57,7 @@ export default function SharePartnerScreen() {
     canEditPlanning: true,
   });
 
-  const { data: invites, isLoading } = useQuery({
+  const { data: invites, isLoading } = useQuery<WeddingRoleInvitation[]>({
     queryKey: ["wedding-invites"],
     queryFn: getWeddingInvites,
   });

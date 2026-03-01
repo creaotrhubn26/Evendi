@@ -307,7 +307,7 @@ export default function DressDetailsScreen({
             </View>
             <View style={styles.headerTextContainer}>
               <ThemedText style={[styles.headerTitle, { color: theme.text }]}>
-                Brudekjoledetaljer
+                {isWedding ? "Brudekjoledetaljer" : "Antrekksdetaljer"}
               </ThemedText>
               <ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
                 Laster...
@@ -349,7 +349,7 @@ export default function DressDetailsScreen({
           </View>
           <View style={styles.headerTextContainer}>
             <ThemedText style={[styles.headerTitle, { color: theme.text }]}>
-              Brudekjoledetaljer
+              {isWedding ? "Brudekjoledetaljer" : "Antrekksdetaljer"}
             </ThemedText>
             <ThemedText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
               Spesifiser dine tjenester

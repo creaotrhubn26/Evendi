@@ -96,6 +96,10 @@ export function usePhotoLocationScouting(): PhotoLocationScouting {
 
   const travelCacheRef = useRef<Record<string, string>>({});
   const venueLoadedRef = useRef(false);
+  const travelCacheKey = useMemo(
+    () => (coupleId ? `${SCOUTING_CACHE_KEY}:${coupleId}` : SCOUTING_CACHE_KEY),
+    [coupleId],
+  );
 
   // ─ Auto-load venue data on first use ─
   const ensureVenueLoaded = useCallback(async () => {
@@ -110,7 +114,15 @@ export function usePhotoLocationScouting(): PhotoLocationScouting {
       if (!cId) return;
       setCoupleId(cId);
 
-      const data = await getWeatherLocationData(cId);
+      const rawCache = await AsyncStorage.getItem(`${SCOUTING_CACHE_KEY}:${cId}`);
+      if (rawCache) {
+        const parsed = JSON.parse(rawCache) as { timestamp: number; data: Record<string, string> };
+        if (Date.now() - parsed.timestamp < CACHE_DURATION) {
+          travelCacheRef.current = parsed.data;
+        }
+      }
+
+      const data: WeatherLocationData = await getWeatherLocationData(cId);
       if (data.venue?.coordinates) {
         setVenueCoordinates(data.venue.coordinates);
         setVenueName(data.venue.name || null);
@@ -133,7 +145,7 @@ export function usePhotoLocationScouting(): PhotoLocationScouting {
     if (!query || query.length < 2) return [];
 
     try {
-      const results = await searchAddress(query);
+      const results: KartverketSearchResult[] = await searchAddress(query);
       return results.map((r) => ({
         address: r.address,
         coordinates: r.coordinates,
@@ -151,19 +163,31 @@ export function usePhotoLocationScouting(): PhotoLocationScouting {
 
     let travelText = '';
     let weatherTipText = '';
+    const locationKey = `${result.coordinates.lat.toFixed(4)},${result.coordinates.lng.toFixed(4)}`;
 
     // Calculate travel from venue to this location
     if (coupleId && venueCoordinates) {
-      try {
-        const travelResult = await calculateTravel(coupleId, {
-          lat: result.coordinates.lat,
-          lng: result.coordinates.lng,
-        });
-        if (travelResult.travel) {
-          travelText = `${travelResult.travel.drivingFormatted} • ${travelResult.travel.roadDistanceKm.toFixed(1)} km`;
+      const cachedTravel = travelCacheRef.current[locationKey];
+      if (cachedTravel) {
+        travelText = cachedTravel;
+      } else {
+        try {
+          const travelResult = await calculateTravel(coupleId, {
+            lat: result.coordinates.lat,
+            lng: result.coordinates.lng,
+          });
+          const travel: TravelInfo | undefined = travelResult.travel;
+          if (travel) {
+            travelText = `${travel.drivingFormatted} • ${travel.roadDistanceKm.toFixed(1)} km`;
+            travelCacheRef.current[locationKey] = travelText;
+            await AsyncStorage.setItem(
+              travelCacheKey,
+              JSON.stringify({ timestamp: Date.now(), data: travelCacheRef.current }),
+            );
+          }
+        } catch {
+          // Travel calc failed — non-critical
         }
-      } catch {
-        // Travel calc failed — non-critical
       }
     }
 
@@ -188,7 +212,7 @@ export function usePhotoLocationScouting(): PhotoLocationScouting {
       travelFromVenue: travelText,
       scouted: true,
     };
-  }, [coupleId, venueCoordinates, venueTemperature, ensureVenueLoaded]);
+  }, [coupleId, venueCoordinates, venueTemperature, ensureVenueLoaded, travelCacheKey]);
 
   // ─ Travel badge for an existing shot ─
   const getTravelBadgeForShot = useCallback((shot: PhotoShot): string | null => {
@@ -238,13 +262,32 @@ export function usePhotoLocationScouting(): PhotoLocationScouting {
 
   // ─ Weather tip for arbitrary coords ─
   const getWeatherTipForCoords = useCallback(async (lat: number, lng: number): Promise<string> => {
+    const hasValidCoords = Number.isFinite(lat) && Number.isFinite(lng);
+    if (!hasValidCoords) {
+      return '🌤️ Ugyldig lokasjon - sjekk koordinater før fotografering';
+    }
+
     // For now use a heuristic based on venue weather (same region)
     if (venueTemperature !== null) {
+      const weddingTips = getWeddingWeatherTips({
+        temperature: venueTemperature,
+        windSpeed: 3,
+        humidity: 60,
+        symbol: 'partlycloudy_day',
+        precipitation: 0,
+        time: new Date().toISOString(),
+      });
+      if (weddingTips.length > 0) {
+        return weddingTips[0];
+      }
       if (venueTemperature < 0) return '❄️ Under null — vurder innendørs alternativ';
       if (venueTemperature < 5) return '🧥 Kaldt — ha varme klær for utendørsfotografering';
       if (venueTemperature > 25) return '☀️ Varmt — planlegg skyggefulle pauser og vann';
       if (venueTemperature >= 15) return '✨ Fint vær for fotografering utendørs';
       return '🌤️ Moderat temperatur — passende for utendørsbilder';
+    }
+    if (Math.abs(lat) > 67) {
+      return '🧤 Nordlig lokasjon - planlegg ekstra varme og korte takes utendørs';
     }
     return '🌤️ Sjekk lokalt vær før fotografering';
   }, [venueTemperature]);

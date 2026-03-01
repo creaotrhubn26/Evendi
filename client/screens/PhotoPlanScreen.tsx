@@ -3,7 +3,6 @@ import {
   ScrollView,
   StyleSheet,
   View,
-  TextInput,
   Pressable,
   RefreshControl,
   ActivityIndicator,
@@ -230,7 +229,8 @@ export default function PhotoPlanScreen() {
       clearLocationSelection();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      showToast("Kunne ikke lagre bildet");
+      const message = e instanceof Error ? e.message : "Kunne ikke lagre bildet";
+      showToast(message);
     }
   };
 
@@ -270,7 +270,8 @@ export default function PhotoPlanScreen() {
       await deleteMutation.mutateAsync(id);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (e) {
-      showToast("Kunne ikke slette bildet");
+      const message = e instanceof Error ? e.message : "Kunne ikke slette bildet";
+      showToast(message);
     }
   };
 

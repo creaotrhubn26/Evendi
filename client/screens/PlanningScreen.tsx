@@ -269,7 +269,7 @@ export default function PlanningScreen() {
                 <Feather name="arrow-right" size={16} color={Colors.dark.accent} />
               </View>
               {schedule.slice(0, 2).map((event, idx) => (
-                <View key={event.id} style={styles.scheduleRow}>
+                <View key={`${event.id}-${idx}`} style={styles.scheduleRow}>
                   <View style={[styles.scheduleTime, { backgroundColor: Colors.dark.accent + "20" }]}>
                     <ThemedText style={[styles.scheduleTimeText, { color: Colors.dark.accent }]}>{event.time}</ThemedText>
                   </View>

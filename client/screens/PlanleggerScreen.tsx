@@ -20,7 +20,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
 import { SwipeableRow } from '../components/SwipeableRow';
-import PersistentTextInput from '@/components/PersistentTextInput';
+import { PersistentTextInput } from '@/components/PersistentTextInput';
 import { VendorSuggestions } from '../components/VendorSuggestions';
 import { VendorActionBar } from '../components/VendorActionBar';
 import { VendorCategoryMarketplace } from '@/components/VendorCategoryMarketplace';
@@ -88,6 +88,8 @@ export function PlanleggerScreen() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<PlannerMeeting | null>(null);
   const [editingTask, setEditingTask] = useState<PlannerTask | null>(null);
+  const [meetingSearch, setMeetingSearch] = useState('');
+  const [taskSearch, setTaskSearch] = useState('');
 
   // Vendor search for planner autocomplete
   const plannerSearch = useVendorSearch({ category: 'planner' });
@@ -115,6 +117,33 @@ export function PlanleggerScreen() {
   const meetings = plannerQuery.data?.meetings ?? [];
   const tasks = plannerQuery.data?.tasks ?? [];
   const timeline: PlannerTimeline = plannerQuery.data?.timeline ?? {};
+
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.trim().length > 0) {
+      return error.message;
+    }
+    return fallback;
+  };
+
+  const filteredMeetings = meetings.filter((meeting) => {
+    const query = meetingSearch.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      meeting.plannerName.toLowerCase().includes(query) ||
+      meeting.date.toLowerCase().includes(query) ||
+      (meeting.topic || '').toLowerCase().includes(query)
+    );
+  });
+
+  const filteredTasks = tasks.filter((task) => {
+    const query = taskSearch.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      task.title.toLowerCase().includes(query) ||
+      task.dueDate.toLowerCase().includes(query) ||
+      (task.category || '').toLowerCase().includes(query)
+    );
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -211,8 +240,8 @@ export function PlanleggerScreen() {
       }
       setShowMeetingModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast('Kunne ikke lagre møte');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Kunne ikke lagre møte'));
     }
   };
 
@@ -229,8 +258,8 @@ export function PlanleggerScreen() {
     try {
       await meetingDeleteMut.mutateAsync(id);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast('Kunne ikke slette møte');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Kunne ikke slette møte'));
     }
   };
 
@@ -246,8 +275,8 @@ export function PlanleggerScreen() {
         completed: false,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast('Kunne ikke duplisere møte');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Kunne ikke duplisere møte'));
     }
   };
 
@@ -257,8 +286,8 @@ export function PlanleggerScreen() {
     try {
       await meetingUpdateMut.mutateAsync({ id, data: { completed: !meeting.completed } });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch (e) {
-      // silent
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Kunne ikke oppdatere møte'));
     }
   };
 
@@ -305,8 +334,8 @@ export function PlanleggerScreen() {
       }
       setShowTaskModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast('Kunne ikke lagre oppgave');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Kunne ikke lagre oppgave'));
     }
   };
 
@@ -323,8 +352,8 @@ export function PlanleggerScreen() {
     try {
       await taskDeleteMut.mutateAsync(id);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast('Kunne ikke slette oppgave');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Kunne ikke slette oppgave'));
     }
   };
 
@@ -339,8 +368,8 @@ export function PlanleggerScreen() {
         completed: false,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast('Kunne ikke duplisere oppgave');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Kunne ikke duplisere oppgave'));
     }
   };
 
@@ -350,8 +379,8 @@ export function PlanleggerScreen() {
     try {
       await taskUpdateMut.mutateAsync({ id, data: { completed: !task.completed } });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch (e) {
-      // silent
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Kunne ikke oppdatere oppgave'));
     }
   };
 
@@ -369,21 +398,37 @@ export function PlanleggerScreen() {
         </Pressable>
       </View>
 
-      {meetings.length === 0 ? (
+      <View style={[styles.searchBox, { borderColor: theme.border, backgroundColor: theme.backgroundDefault }]}>
+        <EvendiIcon name="search" size={16} color={theme.textSecondary} />
+        <TextInput
+          value={meetingSearch}
+          onChangeText={setMeetingSearch}
+          placeholder="Søk møter (navn, dato, tema)"
+          placeholderTextColor={theme.textSecondary}
+          style={[styles.searchInput, { color: theme.text }]}
+        />
+        {meetingSearch.length > 0 ? (
+          <Pressable onPress={() => setMeetingSearch('')}>
+            <EvendiIcon name="x" size={16} color={theme.textSecondary} />
+          </Pressable>
+        ) : null}
+      </View>
+
+      {filteredMeetings.length === 0 ? (
         <View style={[styles.emptyState, { backgroundColor: theme.backgroundDefault }]}>
           <EvendiIcon name="users" size={48} color={theme.textSecondary} />
           <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-            Ingen møter planlagt ennå
+            {meetings.length === 0 ? 'Ingen møter planlagt ennå' : 'Ingen møter matcher søket'}
           </ThemedText>
           <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-            Planlegg møter med bryllupsplanleggeren
+            {meetings.length === 0 ? 'Planlegg møter med bryllupsplanleggeren' : 'Prøv et annet søkeord'}
           </ThemedText>
           <Button onPress={() => openMeetingModal()} style={styles.buttonSmall}>
             Legg til møte
           </Button>
         </View>
       ) : (
-        meetings.map((meeting, index) => (
+        filteredMeetings.map((meeting, index) => (
           <Animated.View key={meeting.id} entering={FadeInDown.delay(index * 50)}>
             <SwipeableRow onDelete={() => deleteMeeting(meeting.id)}>
               <Pressable
@@ -453,21 +498,37 @@ export function PlanleggerScreen() {
         </Pressable>
       </View>
 
-      {tasks.length === 0 ? (
+      <View style={[styles.searchBox, { borderColor: theme.border, backgroundColor: theme.backgroundDefault }]}>
+        <EvendiIcon name="search" size={16} color={theme.textSecondary} />
+        <TextInput
+          value={taskSearch}
+          onChangeText={setTaskSearch}
+          placeholder="Søk oppgaver (tittel, dato, kategori)"
+          placeholderTextColor={theme.textSecondary}
+          style={[styles.searchInput, { color: theme.text }]}
+        />
+        {taskSearch.length > 0 ? (
+          <Pressable onPress={() => setTaskSearch('')}>
+            <EvendiIcon name="x" size={16} color={theme.textSecondary} />
+          </Pressable>
+        ) : null}
+      </View>
+
+      {filteredTasks.length === 0 ? (
         <View style={[styles.emptyState, { backgroundColor: theme.backgroundDefault }]}>
           <EvendiIcon name="check-square" size={48} color={theme.textSecondary} />
           <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-            Ingen oppgaver ennå
+            {tasks.length === 0 ? 'Ingen oppgaver ennå' : 'Ingen oppgaver matcher søket'}
           </ThemedText>
           <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-            Opprett oppgaver for å holde styr på planleggingen
+            {tasks.length === 0 ? 'Opprett oppgaver for å holde styr på planleggingen' : 'Prøv et annet søkeord'}
           </ThemedText>
           <Button onPress={() => openTaskModal()} style={styles.buttonSmall}>
             Legg til oppgave
           </Button>
         </View>
       ) : (
-        tasks.map((task, index) => (
+        filteredTasks.map((task, index) => (
           <Animated.View key={task.id} entering={FadeInDown.delay(index * 50)}>
             <SwipeableRow onDelete={() => deleteTask(task.id)}>
               <Pressable
@@ -585,6 +646,15 @@ export function PlanleggerScreen() {
           icon="clipboard"
           subtitle="Profesjonell planlegging og koordinering"
         />
+        <TouchableOpacity
+          onPress={handleFindPlanner}
+          style={[styles.findPlannerButton, { backgroundColor: theme.primary }]}
+          activeOpacity={0.85}
+        >
+          <EvendiIcon name="search" size={18} color="#fff" />
+          <ThemedText style={styles.findPlannerButtonText}>Finn planlegger</ThemedText>
+          <EvendiIcon name="arrow-right" size={18} color="#fff" />
+        </TouchableOpacity>
 
         {/* Tab bar */}
         <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
@@ -868,6 +938,36 @@ const styles = StyleSheet.create({
   content: { flex: 1 },
   scrollContent: { flexGrow: 1, padding: Spacing.lg },
   tabContent: { gap: Spacing.md },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  findPlannerButton: {
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+  },
+  findPlannerButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

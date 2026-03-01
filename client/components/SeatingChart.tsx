@@ -9,7 +9,7 @@ import { Spacing, BorderRadius } from '@/constants/theme';
 import { Speech } from '@/lib/types';
 import { showToast } from '@/lib/toast';
 import { showConfirm } from '@/lib/dialogs';
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 
 export type TableShape = 'round' | 'rectangle' | 'square';
 export type TableCategory = 'family' | 'friends' | 'speakers' | 'kids' | 'groomsmen' | 'bridesmaids' | 'other';
@@ -250,9 +250,10 @@ export function SeatingChart({
       onStartShouldSetPanResponder: () => editable,
       onMoveShouldSetPanResponder: () => editable,
       
-      onPanResponderGrant: (evt, gestureState) => {
-        // Find which table was touched based on the touch position
-        // This is handled by individual table touch handlers
+      onPanResponderGrant: () => {
+        // Reset drop target state when a new drag gesture starts.
+        currentDropTarget.current = null;
+        setDropTargetTableId(null);
       },
       
       onPanResponderMove: (evt, gestureState) => {
@@ -301,10 +302,11 @@ export function SeatingChart({
   const deleteTable = async (tableId: string) => {
     const table = tables.find(t => t.id === tableId);
     const assignedGuestsCount = guests.filter(g => g.tableId === tableId).length;
+    const tableLabel = table?.name || "this table";
     
     const message = assignedGuestsCount > 0 
-      ? `This table has ${assignedGuestsCount} assigned guest${assignedGuestsCount > 1 ? 's' : ''}. All guests will be unassigned.`
-      : 'Remove this table?';
+      ? `${tableLabel} has ${assignedGuestsCount} assigned guest${assignedGuestsCount > 1 ? 's' : ''}. All guests will be unassigned.`
+      : `Remove ${tableLabel}?`;
     
     const confirmed = await showConfirm({
       title: 'Delete Table',
@@ -418,7 +420,7 @@ export function SeatingChart({
         }}
         onLayout={(e) => {
           // Measure table hitbox for accurate hit-testing
-          const { x, y, width, height } = e.nativeEvent.layout;
+          const { width, height } = e.nativeEvent.layout;
           tableHitboxes.current.set(table.id, { x: displayTable.x, y: displayTable.y, width, height });
         }}
         style={[
@@ -496,7 +498,7 @@ export function SeatingChart({
             </View>
           )}
         </View>
-        {assignedGuests.slice(0, 3).map((guest, idx) => (
+        {assignedGuests.slice(0, 3).map((guest) => (
           <ThemedText 
             key={guest.id} 
             style={[styles.guestChip, { color: theme.textSecondary }]}
@@ -558,8 +560,7 @@ export function SeatingChart({
 
         <View style={styles.searchBox}>
           <EvendiIcon name="search" size={16} color={theme.textSecondary} />
-          <PersistentTextInput
-            draftKey="SeatingChart-input-1"
+          <TextInput
             style={[styles.searchInput, { color: theme.text }]}
             placeholder="Search guests..."
             placeholderTextColor={theme.textSecondary}

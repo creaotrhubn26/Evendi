@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   View,
-  TextInput,
   Pressable,
   ActivityIndicator,
   Image,
@@ -84,7 +83,8 @@ export default function AdminLoginScreen({ navigation, onLoginSuccess, initialAd
       onLoginSuccess?.(adminKey);
       navigation.replace("AdminMain", { adminKey });
     } catch (error) {
-      setError("Nettverksfeil. Prøv igjen.");
+      const message = error instanceof Error ? error.message : "Nettverksfeil. Prøv igjen.";
+      setError(message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setIsLoading(false);
@@ -150,12 +150,12 @@ export default function AdminLoginScreen({ navigation, onLoginSuccess, initialAd
 
             <Pressable
               onPress={handleLogin}
-              disabled={isLoading || !adminKey}
+              disabled={isLoading || !adminKey || !formReady}
               style={[
                 styles.loginBtn,
                 {
                   backgroundColor: Colors.dark.accent,
-                  opacity: isLoading || !adminKey ? 0.5 : 1,
+                  opacity: isLoading || !adminKey || !formReady ? 0.5 : 1,
                 },
               ]}
             >

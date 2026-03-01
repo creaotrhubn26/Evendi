@@ -45,6 +45,7 @@ interface UserPreferences {
 
 export default function UserEventPreferencesScreen() {
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const navigation = useNavigation();
 
@@ -71,6 +72,7 @@ export default function UserEventPreferencesScreen() {
   // Load couple session
   useEffect(() => {
     const loadSession = async () => {
+      setIsLoading(true);
       try {
         const sessionData = await AsyncStorage.getItem(COUPLE_SESSION_KEY);
         if (sessionData) {
@@ -80,6 +82,8 @@ export default function UserEventPreferencesScreen() {
         }
       } catch (error) {
         console.error("Error loading couple session:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
     loadSession();
@@ -189,7 +193,7 @@ export default function UserEventPreferencesScreen() {
     }));
   };
 
-  if (isFetching) {
+  if (isFetching || isLoading) {
     return (
       <View
         style={[
@@ -226,7 +230,10 @@ export default function UserEventPreferencesScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: insets.bottom + Spacing.lg },
+          {
+            paddingTop: Math.max(Spacing.xs, headerHeight * 0.04),
+            paddingBottom: insets.bottom + Spacing.lg,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -295,7 +302,10 @@ export default function UserEventPreferencesScreen() {
                   },
                 ]}
                 onPress={() =>
-                  setPreferences({ ...preferences, eventCategory: category as any })
+                  setPreferences({
+                    ...preferences,
+                    eventCategory: category as UserPreferences["eventCategory"],
+                  })
                 }
               >
                 <ThemedText
@@ -313,6 +323,20 @@ export default function UserEventPreferencesScreen() {
                 </ThemedText>
               </Pressable>
             ))}
+          </View>
+          <View style={styles.categorySwitchRow}>
+            <ThemedText style={{ color: theme.textSecondary }}>Bedrift</ThemedText>
+            <Switch
+              value={preferences.eventCategory === "corporate"}
+              onValueChange={(isCorporate) =>
+                setPreferences({
+                  ...preferences,
+                  eventCategory: isCorporate ? "corporate" : "personal",
+                })
+              }
+              trackColor={{ false: theme.border, true: theme.primary }}
+              thumbColor="#FFFFFF"
+            />
           </View>
         </View>
 
@@ -564,6 +588,12 @@ const styles = StyleSheet.create({
   categoryRow: {
     flexDirection: "row",
     gap: Spacing.md,
+  },
+  categorySwitchRow: {
+    marginTop: Spacing.sm,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   categoryButton: {
     flex: 1,

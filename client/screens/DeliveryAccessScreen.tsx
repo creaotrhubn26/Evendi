@@ -29,7 +29,7 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 
 const GALLERY_COLUMNS = 3;
 const GALLERY_GAP = 2;
@@ -106,6 +106,7 @@ export default function DeliveryAccessScreen() {
   const [accessCode, setAccessCode] = useState(prefillCode || "");
   const [deliveryData, setDeliveryData] = useState<DeliveryData | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [gallerySearch, setGallerySearch] = useState("");
 
   // PicTime-style gallery state
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -185,11 +186,15 @@ export default function DeliveryAccessScreen() {
       // Animate in
       Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const errorMsg = error.message || "Kunne ikke hente leveranse";
+      const errorMsg = error instanceof Error ? error.message : "Kunne ikke hente leveranse";
       const [code, message] = errorMsg.includes(":") ? errorMsg.split(":") : ["unknown", errorMsg];
-      setErrorMessage(message);
+      if (code === "404" && deliveryId) {
+        setErrorMessage(`${message} (leveranse-ID: ${deliveryId})`);
+      } else {
+        setErrorMessage(message);
+      }
     },
   });
 
@@ -235,6 +240,17 @@ export default function DeliveryAccessScreen() {
     }
   }, [prefillCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!deliveryId) return;
+    trackDeliveryAction(
+      deliveryId,
+      "entry",
+      undefined,
+      prefillCode ? normalizeCode(prefillCode) : undefined,
+      fromShowcase ? "showcase-bridge" : "direct-link",
+    );
+  }, [deliveryId, fromShowcase, prefillCode, normalizeCode]);
+
   const openLink = useCallback(async (url: string, item?: DeliveryItem) => {
     if (!isValidUrlScheme(url)) {
       Alert.alert("Ugyldig lenke", "Denne lenken kan ikke åpnes.");
@@ -265,7 +281,8 @@ export default function DeliveryAccessScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Kopiert", `"${label}" er kopiert til utklippstavlen.`);
     } catch (error) {
-      Alert.alert("Feil", "Kunne ikke kopiere lenken.");
+      const message = error instanceof Error ? error.message : "Kunne ikke kopiere lenken.";
+      Alert.alert("Feil", message);
     }
   }, []);
 
@@ -277,7 +294,8 @@ export default function DeliveryAccessScreen() {
         url,
       });
     } catch (error) {
-      Alert.alert("Feil", "Kunne ikke dele lenken.");
+      const message = error instanceof Error ? error.message : "Kunne ikke dele lenken.";
+      Alert.alert("Feil", message);
     }
   }, []);
 
@@ -306,8 +324,20 @@ export default function DeliveryAccessScreen() {
   };
 
   // Separate image items from other types for gallery
-  const imageItems = deliveryData?.delivery.items.filter(i => i.type === 'gallery' || i.type === 'video') || [];
-  const otherItems = deliveryData?.delivery.items.filter(i => i.type !== 'gallery' && i.type !== 'video') || [];
+  const mediaQuery = gallerySearch.trim().toLowerCase();
+  const matchesMediaQuery = useCallback(
+    (item: DeliveryItem) =>
+      mediaQuery.length === 0 ||
+      item.label.toLowerCase().includes(mediaQuery) ||
+      (item.description || "").toLowerCase().includes(mediaQuery),
+    [mediaQuery],
+  );
+  const imageItems = deliveryData?.delivery.items
+    .filter((i) => i.type === "gallery" || i.type === "video")
+    .filter(matchesMediaQuery) || [];
+  const otherItems = deliveryData?.delivery.items
+    .filter((i) => i.type !== "gallery" && i.type !== "video")
+    .filter(matchesMediaQuery) || [];
   const favoritedItems = deliveryData?.delivery.items.filter(i => favorites.has(i.id)) || [];
 
   // PicTime-style fullscreen lightbox
@@ -468,6 +498,22 @@ export default function DeliveryAccessScreen() {
             )}
           </View>
 
+          <View style={[styles.searchRow, { borderColor: theme.border, backgroundColor: theme.backgroundDefault }]}>
+            <EvendiIcon name="search" size={16} color={theme.textMuted} />
+            <TextInput
+              value={gallerySearch}
+              onChangeText={setGallerySearch}
+              placeholder="Søk i leveransen"
+              placeholderTextColor={theme.textMuted}
+              style={[styles.searchInput, { color: theme.text }]}
+            />
+            {gallerySearch.length > 0 ? (
+              <Pressable onPress={() => setGallerySearch("")}>
+                <EvendiIcon name="x" size={16} color={theme.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+
           {/* PicTime-style Gallery Grid */}
           {imageItems.length > 0 && (
             <View style={styles.gallerySection}>
@@ -476,10 +522,15 @@ export default function DeliveryAccessScreen() {
               </ThemedText>
 
               {viewMode === 'grid' ? (
-                <View style={styles.galleryGrid}>
-                  {imageItems.map((item, index) => (
+                <FlatList
+                  data={imageItems}
+                  keyExtractor={(item) => item.id}
+                  numColumns={GALLERY_COLUMNS}
+                  scrollEnabled={false}
+                  contentContainerStyle={styles.galleryGrid}
+                  columnWrapperStyle={{ gap: GALLERY_GAP }}
+                  renderItem={({ item, index }) => (
                     <Pressable
-                      key={item.id}
                       style={[styles.galleryItem, { width: GALLERY_ITEM_SIZE, height: GALLERY_ITEM_SIZE }]}
                       onPress={() => setSelectedImageIndex(index)}
                       onLongPress={() => {
@@ -503,8 +554,8 @@ export default function DeliveryAccessScreen() {
                         </View>
                       )}
                     </Pressable>
-                  ))}
-                </View>
+                  )}
+                />
               ) : (
                 imageItems.map((item) => (
                   <Pressable
@@ -626,8 +677,8 @@ export default function DeliveryAccessScreen() {
           { paddingTop: headerHeight + Spacing.xl },
         ]}
       >
-        <View style={[styles.iconContainer, { backgroundColor: theme.accent + "20" }]}>
-          <EvendiIcon name="gift" size={32} color={theme.accent} />
+        <View style={[styles.iconContainer, { backgroundColor: Colors.dark.accent + "20" }]}>
+          <EvendiIcon name="gift" size={32} color={Colors.dark.accent} />
         </View>
 
         <ThemedText style={styles.title}>Hent din leveranse</ThemedText>
@@ -664,7 +715,7 @@ export default function DeliveryAccessScreen() {
           <Pressable
             onPress={handleFetch}
             disabled={fetchMutation.isPending || !accessCode.trim()}
-            style={[styles.submitBtn, { backgroundColor: theme.accent, opacity: fetchMutation.isPending || !accessCode.trim() ? 0.5 : 1 }]}
+            style={[styles.submitBtn, { backgroundColor: Colors.dark.accent, opacity: fetchMutation.isPending || !accessCode.trim() ? 0.5 : 1 }]}
           >
             {fetchMutation.isPending ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -828,6 +879,22 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     gap: Spacing.xs,
     marginBottom: Spacing.sm,
+  },
+  searchRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
   },
   viewToggleBtn: {
     width: 36,

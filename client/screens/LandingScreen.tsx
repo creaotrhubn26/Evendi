@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
-  ScrollView,
   StyleSheet,
   View,
   Pressable,
@@ -188,7 +187,9 @@ export default function LandingScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const tier = useTier();
   const scrollY = useSharedValue(0);
+  const tabScale = useSharedValue(1);
   const [activeTab, setActiveTab] = useState<"couple" | "vendor">("couple");
+  const landingScrollRef = useRef<React.ComponentRef<typeof Animated.ScrollView> | null>(null);
 
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -198,6 +199,9 @@ export default function LandingScreen() {
 
   const heroParallax = useAnimatedStyle(() => ({
     transform: [{ translateY: interpolate(scrollY.value, [0, 300], [0, -60]) }],
+  }));
+  const tabScaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: tabScale.value }],
   }));
 
   /* ---- Responsive values ---- */
@@ -216,12 +220,23 @@ export default function LandingScreen() {
   const features = activeTab === "couple" ? coupleFeatures : vendorFeatures;
 
   const handleGetStarted = useCallback(() => {
+    landingScrollRef.current?.scrollTo({ y: 0, animated: true });
     navigation.navigate("Login");
   }, [navigation]);
 
   const handleVendorLogin = useCallback(() => {
     navigation.navigate("VendorLogin");
   }, [navigation]);
+
+  const handleFeatureTabChange = useCallback(
+    (tab: "couple" | "vendor") => {
+      setActiveTab(tab);
+      tabScale.value = withSpring(0.96, { damping: 14, stiffness: 220 }, () => {
+        tabScale.value = withSpring(1, { damping: 14, stiffness: 220 });
+      });
+    },
+    [tabScale],
+  );
 
   const contentStyle = {
     maxWidth: maxContent,
@@ -231,8 +246,12 @@ export default function LandingScreen() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.backgroundRoot }]}>
+    <SafeAreaView
+      edges={["top", "left", "right"]}
+      style={[styles.root, { backgroundColor: theme.backgroundRoot }]}
+    >
       <Animated.ScrollView
+        ref={landingScrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
@@ -363,9 +382,9 @@ export default function LandingScreen() {
           </Animated.View>
 
           {/* Tabs */}
-          <View style={styles.tabs}>
+          <Animated.View style={[styles.tabs, tabScaleStyle]}>
             <Pressable
-              onPress={() => setActiveTab("couple")}
+              onPress={() => handleFeatureTabChange("couple")}
               style={[
                 styles.tab,
                 { borderColor: theme.border },
@@ -379,7 +398,7 @@ export default function LandingScreen() {
               </ThemedText>
             </Pressable>
             <Pressable
-              onPress={() => setActiveTab("vendor")}
+              onPress={() => handleFeatureTabChange("vendor")}
               style={[
                 styles.tab,
                 { borderColor: theme.border },
@@ -392,7 +411,7 @@ export default function LandingScreen() {
                 For vendors
               </ThemedText>
             </Pressable>
-          </View>
+          </Animated.View>
 
           {/* Feature cards */}
           <View style={[styles.grid, { gap: tierValue(tier, { 1: 12, 3: 16, 5: 20, 7: 28 }) }]}>
@@ -560,7 +579,7 @@ export default function LandingScreen() {
           </ThemedText>
         </View>
       </Animated.ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

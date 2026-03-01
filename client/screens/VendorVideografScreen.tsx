@@ -179,7 +179,9 @@ export default function VendorVideografScreen() {
       {/* Header */}
       <View style={{ padding: Spacing.lg, paddingTop: insets.top + Spacing.md }}>
         <ThemedText style={[styles.title, { color: theme.text }]}>Videograf dashboard</ThemedText>
-        <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>Publiser videopakker, tjenester og priser, og send tilbud raskt.</ThemedText>
+        <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
+          {vendorConfig.categoryName}: publiser videopakker, tjenester og priser, og send tilbud raskt.
+        </ThemedText>
       </View>
       {/* Tab Navigation */}
       <View style={[styles.tabContainer, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
@@ -199,6 +201,15 @@ export default function VendorVideografScreen() {
           <EvendiIcon name="mic" size={18} color={activeTab === 'speeches' ? theme.accent : theme.textSecondary} />
           <ThemedText style={[styles.tabText, { color: activeTab === 'speeches' ? theme.accent : theme.textSecondary }]}>
             Taler ({speeches.length})
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, activeTab === 'seating' && { borderBottomColor: theme.accent, borderBottomWidth: 2 }]}
+          onPress={() => setActiveTab('seating')}
+        >
+          <EvendiIcon name="users" size={18} color={activeTab === 'seating' ? theme.accent : theme.textSecondary} />
+          <ThemedText style={[styles.tabText, { color: activeTab === 'seating' ? theme.accent : theme.textSecondary }]}>
+            Bordplan
           </ThemedText>
         </Pressable>
         <Pressable
@@ -355,6 +366,33 @@ export default function VendorVideografScreen() {
               <EvendiIcon name="mic" size={32} color={theme.textSecondary} />
               <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen taler lagt til</ThemedText>
               <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>Taler vises her når kunden legger dem til</ThemedText>
+            </View>
+          )}
+        </ScrollView>
+      ) : activeTab === 'seating' ? (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }}>
+          {seatingData.tables.length > 0 || (seatingData.guests?.length || 0) > 0 ? (
+            <View style={[styles.sectionCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.sm, marginBottom: Spacing.sm }}>
+                <EvendiIcon name="users" size={18} color={theme.accent} />
+                <ThemedText style={styles.cardTitle}>Bordplan og plasseringer</ThemedText>
+              </View>
+              <SeatingChart
+                tables={seatingData.tables}
+                guests={seatingData.guests || []}
+                onTablesChange={(tables) => setSeatingData((prev) => ({ ...prev, tables }))}
+                onGuestsChange={(guests) => setSeatingData((prev) => ({ ...prev, guests }))}
+                editable={false}
+                speeches={speeches}
+              />
+            </View>
+          ) : (
+            <View style={[styles.emptyCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+              <EvendiIcon name="users" size={32} color={theme.textSecondary} />
+              <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>Ingen bordplan ennå</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
+                Bordplasseringer vises her når paret har opprettet dem
+              </ThemedText>
             </View>
           )}
         </ScrollView>

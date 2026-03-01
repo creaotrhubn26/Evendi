@@ -17,7 +17,6 @@ import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
-import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { formatCurrency } from "@/lib/format-currency";
@@ -269,7 +268,7 @@ export default function CoupleContractsScreen() {
         renderItem={renderContract}
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.md,
-          paddingBottom: tabBarHeight + Spacing.xl,
+          paddingBottom: tabBarHeight + insets.bottom + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
         refreshControl={

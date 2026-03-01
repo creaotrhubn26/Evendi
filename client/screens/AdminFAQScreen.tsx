@@ -1,12 +1,9 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, Pressable, TextInput, ActivityIndicator, Switch } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, ActivityIndicator, Switch } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
@@ -15,8 +12,6 @@ import { getApiUrl } from "@/lib/query-client";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
 import PersistentTextInput from "@/components/PersistentTextInput";
-
-type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 interface FaqItem {
   id: string;
@@ -30,7 +25,6 @@ interface FaqItem {
 
 export default function AdminFAQScreen({ route }: { route: { params: { adminKey: string } } }) {
   const { theme } = useTheme();
-  const navigation = useNavigation<NavigationProp>();
   const queryClient = useQueryClient();
   const { adminKey } = route.params;
 

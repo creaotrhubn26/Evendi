@@ -1,7 +1,6 @@
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useDesignContext } from "@/lib/DesignProvider";
-import { useContext } from "react";
 
 const DEFAULT_DESIGN_SETTINGS = {
   primaryColor: "#1E6BFF",
@@ -40,6 +39,9 @@ export function useTheme() {
     settings = designContext.settings;
   } catch (e) {
     // DesignProvider not available, use defaults
+    if (__DEV__) {
+      console.debug("[useTheme] Falling back to default design settings", e);
+    }
   }
 
   // Respect design settings for dark mode if available

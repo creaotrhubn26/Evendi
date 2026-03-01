@@ -27,7 +27,7 @@ import type { WeddingGuest } from "@shared/schema";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { SwipeableRow } from "@/components/SwipeableRow";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 import { VendorSuggestions } from "@/components/VendorSuggestions";
 import { VendorActionBar } from "@/components/VendorActionBar";
 import { VendorCategoryMarketplace } from "@/components/VendorCategoryMarketplace";
@@ -64,7 +64,7 @@ const TIMELINE_STEPS = [
   { key: "tastingCompleted", label: "Smaksprøve fullført", icon: "coffee" as const },
   { key: "menuFinalized", label: "Meny godkjent", icon: "list" as const },
   { key: "guestCountConfirmed", label: "Antall gjester bekreftet", icon: "users" as const },
-];
+] as const;
 
 const COURSE_TYPES = [
   { key: "appetizer", label: "Forrett" },
@@ -112,6 +112,7 @@ export default function CateringScreen() {
   const [guests, setGuests] = useState<WeddingGuest[]>([]);
   const [showGuestPicker, setShowGuestPicker] = useState(false);
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
+  const [guestSearch, setGuestSearch] = useState("");
 
   // Fetch couple profile for selected traditions
   const { data: coupleProfile } = useQuery({
@@ -230,6 +231,21 @@ export default function CateringScreen() {
   const guestsWithDietary = guests.filter(
     (g) => g.dietaryRequirements || g.allergies
   );
+  const filteredGuests = guests.filter((guest) => {
+    const query = guestSearch.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      guest.name.toLowerCase().includes(query) ||
+      (guest.dietaryRequirements || "").toLowerCase().includes(query) ||
+      (guest.allergies || "").toLowerCase().includes(query)
+    );
+  });
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.trim().length > 0) {
+      return error.message;
+    }
+    return fallback;
+  };
 
   // Mutations
   const createTastingMutation = useMutation({
@@ -352,8 +368,8 @@ export default function CateringScreen() {
       }
       setShowTastingModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke lagre smaksprøve");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre smaksprøve"));
     }
   };
 
@@ -434,8 +450,8 @@ export default function CateringScreen() {
       }
       setShowMenuModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke lagre rett");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre rett"));
     }
   };
 
@@ -489,6 +505,7 @@ export default function CateringScreen() {
       setSelectedGuestId(null);
     }
     setShowGuestPicker(false);
+    setGuestSearch("");
     setShowDietaryModal(true);
   };
 
@@ -502,6 +519,7 @@ export default function CateringScreen() {
       setDietaryNotes(`Allergier: ${guest.allergies}`);
     }
     setShowGuestPicker(false);
+    setGuestSearch("");
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -511,8 +529,8 @@ export default function CateringScreen() {
       await updateTimelineMutation.mutateAsync({ guestCount: confirmedGuestCount });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast(`Antall gjester synkronisert: ${confirmedGuestCount} bekreftede gjester`);
-    } catch (e) {
-      showToast("Kunne ikke synkronisere antall gjester");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke synkronisere antall gjester"));
     }
   };
 
@@ -541,8 +559,8 @@ export default function CateringScreen() {
       }
       setShowDietaryModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke lagre kostbehov");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre kostbehov"));
     }
   };
 
@@ -572,8 +590,8 @@ export default function CateringScreen() {
         completed: false,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke duplisere smaksprøve");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke duplisere smaksprøve"));
     }
   };
 
@@ -591,8 +609,8 @@ export default function CateringScreen() {
         isSelected: false,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke duplisere rett");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke duplisere rett"));
     }
   };
 
@@ -604,13 +622,13 @@ export default function CateringScreen() {
         notes: dietary.notes,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      showToast("Kunne ikke duplisere kostbehov");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke duplisere kostbehov"));
     }
   };
 
   // Timeline handlers
-  const getTimelineValue = (key: TimelineStepKey) => Boolean((timeline as Record<string, any>)[key]);
+  const getTimelineValue = (key: TimelineStepKey) => Boolean(timeline[key]);
 
   const toggleTimelineStep = async (key: TimelineStepKey) => {
     const newValue = !getTimelineValue(key);
@@ -628,9 +646,13 @@ export default function CateringScreen() {
   const saveBudget = async () => {
     const newBudget = parseInt(budgetInput, 10) || 0;
     const newGuestCount = parseInt(guestCountInput, 10) || 0;
-    await updateTimelineMutation.mutateAsync({ budget: newBudget, guestCount: newGuestCount });
-    setShowBudgetModal(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      await updateTimelineMutation.mutateAsync({ budget: newBudget, guestCount: newGuestCount });
+      setShowBudgetModal(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre budsjett og gjester"));
+    }
   };
 
   // Cuisine handlers
@@ -642,8 +664,8 @@ export default function CateringScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await updateTimelineMutation.mutateAsync({ cuisineTypes: next } as Partial<CateringTimeline> & { cuisineTypes: string[] });
-    } catch (e) {
-      showToast("Kunne ikke lagre mattype-valg");
+    } catch (error) {
+      showToast(getErrorMessage(error, "Kunne ikke lagre mattype-valg"));
     }
   };
 
@@ -861,6 +883,9 @@ export default function CateringScreen() {
                     >
                       <View style={styles.menuInfo}>
                         <ThemedText style={styles.menuName}>{menuItem.dishName}</ThemedText>
+                        <ThemedText style={[styles.menuCourse, { color: theme.textSecondary }]}>
+                          {getCourseLabel(menuItem.courseType)}
+                        </ThemedText>
                         {menuItem.description && (
                           <ThemedText style={[styles.menuDesc, { color: theme.textSecondary }]} numberOfLines={1}>
                             {menuItem.description}
@@ -1149,7 +1174,7 @@ export default function CateringScreen() {
           const isCompleted = getTimelineValue(step.key);
           return (
             <Pressable
-              key={step.key}
+              key={`${step.key}-${index}`}
               onPress={() => toggleTimelineStep(step.key)}
               style={styles.timelineStep}
             >
@@ -1181,18 +1206,18 @@ export default function CateringScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Tab Bar */}
       <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-        {[
-          { key: "tastings", label: "Smaksprøver", icon: "coffee" },
-          { key: "menu", label: "Meny", icon: "list" },
-          { key: "dietary", label: "Kostbehov", icon: "alert-circle" },
-          { key: "timeline", label: "Oversikt", icon: "check-square" },
-        ].map((tab) => (
+        {([
+          { key: "tastings", label: "Smaksprøver", icon: "coffee" as const },
+          { key: "menu", label: "Meny", icon: "list" as const },
+          { key: "dietary", label: "Kostbehov", icon: "alert-circle" as const },
+          { key: "timeline", label: "Oversikt", icon: "check-square" as const },
+        ] as const).map((tab) => (
           <Pressable
             key={tab.key}
-            onPress={() => setActiveTab(tab.key as any)}
+            onPress={() => setActiveTab(tab.key)}
             style={[styles.tab, activeTab === tab.key && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
           >
-            <EvendiIcon name={tab.icon as any} size={16} color={activeTab === tab.key ? theme.primary : theme.textSecondary} />
+            <EvendiIcon name={tab.icon} size={16} color={activeTab === tab.key ? theme.primary : theme.textSecondary} />
             <ThemedText style={[styles.tabLabel, { color: activeTab === tab.key ? theme.primary : theme.textSecondary }]}>
               {tab.label}
             </ThemedText>
@@ -1202,7 +1227,8 @@ export default function CateringScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + Spacing.xl }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + insets.bottom + Spacing.xl }]}
+        scrollIndicatorInsets={{ bottom: insets.bottom }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         {/* Marketplace hero + search + vendor cards */}
@@ -1499,29 +1525,51 @@ export default function CateringScreen() {
 
                 {showGuestPicker && (
                   <View style={[styles.guestPickerList, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-                    {guests.map((guest) => (
-                      <Pressable
-                        key={guest.id}
-                        onPress={() => selectGuestForDietary(guest)}
-                        style={[
-                          styles.guestPickerItem,
-                          { borderBottomColor: theme.border },
-                          selectedGuestId === guest.id ? { backgroundColor: theme.primary + '20' } : undefined,
-                        ]}
-                      >
-                        <View style={styles.guestPickerInfo}>
-                          <ThemedText style={styles.guestPickerName}>{guest.name}</ThemedText>
-                          {(guest.dietaryRequirements || guest.allergies) && (
-                            <ThemedText style={[styles.guestPickerDietary, { color: theme.textSecondary }]}>
-                              {guest.dietaryRequirements || guest.allergies}
-                            </ThemedText>
+                    <View style={[styles.guestSearchRow, { borderColor: theme.border, backgroundColor: theme.background }]}>
+                      <EvendiIcon name="search" size={16} color={theme.textSecondary} />
+                      <TextInput
+                        value={guestSearch}
+                        onChangeText={setGuestSearch}
+                        placeholder="Søk i gjestelisten"
+                        placeholderTextColor={theme.textSecondary}
+                        style={[styles.guestSearchInput, { color: theme.text }]}
+                      />
+                      {guestSearch.length > 0 ? (
+                        <Pressable onPress={() => setGuestSearch("")}>
+                          <EvendiIcon name="x" size={16} color={theme.textSecondary} />
+                        </Pressable>
+                      ) : null}
+                    </View>
+
+                    {filteredGuests.length === 0 ? (
+                      <ThemedText style={[styles.guestNoResults, { color: theme.textSecondary }]}>
+                        Ingen gjester matcher søket
+                      </ThemedText>
+                    ) : (
+                      filteredGuests.map((guest) => (
+                        <Pressable
+                          key={guest.id}
+                          onPress={() => selectGuestForDietary(guest)}
+                          style={[
+                            styles.guestPickerItem,
+                            { borderBottomColor: theme.border },
+                            selectedGuestId === guest.id ? { backgroundColor: theme.primary + '20' } : undefined,
+                          ]}
+                        >
+                          <View style={styles.guestPickerInfo}>
+                            <ThemedText style={styles.guestPickerName}>{guest.name}</ThemedText>
+                            {(guest.dietaryRequirements || guest.allergies) && (
+                              <ThemedText style={[styles.guestPickerDietary, { color: theme.textSecondary }]}>
+                                {guest.dietaryRequirements || guest.allergies}
+                              </ThemedText>
+                            )}
+                          </View>
+                          {selectedGuestId === guest.id && (
+                            <EvendiIcon name="check" size={18} color={theme.primary} />
                           )}
-                        </View>
-                        {selectedGuestId === guest.id && (
-                          <EvendiIcon name="check" size={18} color={theme.primary} />
-                        )}
-                      </Pressable>
-                    ))}
+                        </Pressable>
+                      ))
+                    )}
                   </View>
                 )}
               </View>
@@ -1841,6 +1889,11 @@ const styles = StyleSheet.create({
   menuName: {
     fontSize: 15,
     fontWeight: "500",
+  },
+  menuCourse: {
+    fontSize: 12,
+    fontWeight: "500",
+    textTransform: "uppercase",
   },
   menuDesc: {
     fontSize: 13,
@@ -2181,6 +2234,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     maxHeight: 200,
     marginBottom: Spacing.sm,
+  },
+  guestSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    borderBottomWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  guestSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  guestNoResults: {
+    padding: Spacing.md,
+    textAlign: "center",
+    fontSize: 13,
   },
   guestPickerItem: {
     flexDirection: "row",

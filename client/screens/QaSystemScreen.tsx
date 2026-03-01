@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useFocusEffect } from "@react-navigation/native";
-import { EvendiIcon } from "@/components/EvendiIcon";
+import { EvendiIcon, EvendiIconGlyphMap } from "@/components/EvendiIcon";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { optimizeImage, ICON_PRESET } from "@/lib/optimize-image";
@@ -28,7 +28,7 @@ import { getQaSessions, saveQaSessions, generateId } from "@/lib/storage";
 import { QaQuestion, QaSession, QaSettings, GameScore } from "@/lib/types";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 import {
   type QaGameConfig,
   type QaGameMode,
@@ -123,20 +123,16 @@ export default function QaSystemScreen() {
   const { eventType, config, isWedding, isCorporate } = useEventType();
 
   // Event-type-aware games
-  const availableGames: QaGameConfig[] = config.qaGames ?? [];
+  const availableGames: QaGameConfig[] = useMemo(() => config.qaGames ?? [], [config.qaGames]);
   const hasGames = availableGames.length > 0;
 
   // Build tabs dynamically based on event type
   const tabConfig = useMemo(() => {
-    const tabs: { key: QaTab; label: string; icon: string }[] = [
-      { key: "audience", label: "Still spørsmål", icon: "message-circle" },
-    ];
+    const tabs: { key: QaTab; label: string; icon: string }[] = [...TAB_CONFIG];
     if (hasGames) {
       const primaryGame = availableGames[0];
-      tabs.push({ key: "games", label: primaryGame.labelNo, icon: "zap" });
+      tabs.splice(1, 0, { key: "games", label: primaryGame.labelNo, icon: "zap" });
     }
-    tabs.push({ key: "cloud", label: "Populært", icon: "bar-chart-2" });
-    tabs.push({ key: "admin", label: "Administrer", icon: "settings" });
     return tabs;
   }, [hasGames, availableGames]);
 
@@ -151,6 +147,7 @@ export default function QaSystemScreen() {
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [newTags, setNewTags] = useState("");
   const [showSubmitForm, setShowSubmitForm] = useState(false);
+  const [questionSearch, setQuestionSearch] = useState("");
   const [selectedCloudTag, setSelectedCloudTag] = useState<string | null>(null);
 
   // Admin filter
@@ -206,6 +203,12 @@ export default function QaSystemScreen() {
     await saveQaSessions(sessions);
   }, []);
 
+  useEffect(() => {
+    if (!hasGames && activeTab === "games") {
+      setActiveTab("audience");
+    }
+  }, [activeTab, hasGames]);
+
   // ── Computed ──
   const visibleQuestions = useMemo(() => {
     if (!session) return [];
@@ -232,6 +235,16 @@ export default function QaSystemScreen() {
       );
     }
 
+    if (questionSearch.trim().length > 0) {
+      const query = questionSearch.trim().toLowerCase();
+      questions = questions.filter(
+        (q) =>
+          q.text.toLowerCase().includes(query) ||
+          q.authorName.toLowerCase().includes(query) ||
+          q.tags.some((tag) => tag.toLowerCase().includes(query)),
+      );
+    }
+
     // Sort: highlighted first, then by upvotes, then newest
     return [...questions].sort((a, b) => {
       if (a.status === "highlighted" && b.status !== "highlighted") return -1;
@@ -239,7 +252,7 @@ export default function QaSystemScreen() {
       if (b.upvotes !== a.upvotes) return b.upvotes - a.upvotes;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [session, activeTab, adminFilter, selectedCloudTag]);
+  }, [session, activeTab, adminFilter, selectedCloudTag, questionSearch]);
 
   const stats = useMemo(() => {
     if (!session) return { total: 0, pending: 0, answered: 0, highlighted: 0 };
@@ -713,7 +726,11 @@ export default function QaSystemScreen() {
     >
       {/* ── Event Type Banner ── */}
       <View style={[styles.eventBanner, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-        <Image source={getQaSessionIcon(getSettings(session).customQaIcon)} style={{ width: 40, height: 40, borderRadius: 8 }} resizeMode="cover" />
+        <Image
+          source={getQaSessionIcon(getSettings(session).customQaIcon) || QA_GAMES_LOGO}
+          style={{ width: 40, height: 40, borderRadius: 8 }}
+          resizeMode="cover"
+        />
         <View style={{ flex: 1, marginLeft: Spacing.sm }}>
           <ThemedText style={[styles.eventBannerTitle, { color: theme.text }]}>
             Q&A – {config.labelNo}
@@ -721,8 +738,19 @@ export default function QaSystemScreen() {
           <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
             {hasGames
               ? `${availableGames.length} ${availableGames.length === 1 ? "lek" : "leker"} tilgjengelig`
-              : "Åpne spørsmål og svar"}
+              : "Åpne spørsmål og svar"} • {isCorporate ? "Corporate" : isWedding ? "Bryllup" : eventType}
           </ThemedText>
+          <View style={styles.iconStrip}>
+            {ALL_DEFAULT_GAME_ICONS.slice(0, 4).map((iconOption) => (
+              <View key={iconOption.mode} style={[styles.iconChip, { backgroundColor: theme.backgroundSecondary }]}>
+                <Image
+                  source={iconOption.image}
+                  style={{ width: 14, height: 14, borderRadius: 3 }}
+                  resizeMode="cover"
+                />
+              </View>
+            ))}
+          </View>
         </View>
       </View>
 
@@ -747,7 +775,7 @@ export default function QaSystemScreen() {
               ]}
             >
               <EvendiIcon
-                name={tab.icon as any}
+                name={tab.icon as keyof typeof EvendiIconGlyphMap}
                 size={16}
                 color={isActive ? tabColor : theme.textSecondary}
               />
@@ -772,6 +800,22 @@ export default function QaSystemScreen() {
         <StatBadge label="Uthevet" value={stats.highlighted} color="#8b5cf6" bg="#8b5cf615" />
       </View>
 
+      <View style={[styles.searchRow, { borderColor: theme.border, backgroundColor: theme.backgroundDefault }]}>
+        <EvendiIcon name="search" size={16} color={theme.textSecondary} />
+        <TextInput
+          value={questionSearch}
+          onChangeText={setQuestionSearch}
+          placeholder="Søk spørsmål"
+          placeholderTextColor={theme.textMuted}
+          style={[styles.searchInput, { color: theme.text }]}
+        />
+        {questionSearch.length > 0 ? (
+          <Pressable onPress={() => setQuestionSearch("")}>
+            <EvendiIcon name="x" size={16} color={theme.textSecondary} />
+          </Pressable>
+        ) : null}
+      </View>
+
       {/* ── Cloud Tag Filter Active ── */}
       {selectedCloudTag && (
         <View style={[styles.filterBanner, { backgroundColor: Colors.dark.accent + "15", borderColor: Colors.dark.accent + "40" }]}>
@@ -790,7 +834,7 @@ export default function QaSystemScreen() {
           {/* Submit Form */}
           {showSubmitForm ? (
             <Animated.View
-              entering={FadeInDown.duration(300)}
+              entering={SlideInRight.duration(260)}
               style={[
                 styles.formCard,
                 { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
@@ -1827,17 +1871,22 @@ function SettingToggle({
 }: {
   label: string;
   hint: string;
-  icon: string;
+  icon: keyof typeof EvendiIconGlyphMap;
   value: boolean;
   onToggle: (newValue: boolean) => void;
   color: string;
-  theme: any;
+  theme: {
+    text: string;
+    textSecondary: string;
+    textMuted: string;
+    backgroundSecondary: string;
+  };
 }) {
   return (
     <View style={styles.settingRow}>
       <View style={styles.settingInfo}>
         <View style={styles.settingLabelRow}>
-          <EvendiIcon name={icon as any} size={14} color={value ? color : theme.textSecondary} />
+          <EvendiIcon name={icon} size={14} color={value ? color : theme.textSecondary} />
           <ThemedText style={[styles.settingLabel, { color: theme.text }]}>{label}</ThemedText>
         </View>
         <ThemedText style={[styles.settingHint, { color: theme.textMuted }]}>{hint}</ThemedText>
@@ -1934,6 +1983,21 @@ const styles = StyleSheet.create({
   },
   statValue: { fontSize: 20, fontWeight: "700" },
   statLabel: { fontSize: 11, marginTop: 2 },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
 
   filterBanner: {
     flexDirection: "row",
@@ -2196,6 +2260,18 @@ const styles = StyleSheet.create({
   eventBannerTitle: {
     fontSize: 16,
     fontWeight: "700",
+  },
+  iconStrip: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  iconChip: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // Games

@@ -5,7 +5,6 @@ import {
   Pressable,
   ActivityIndicator,
   FlatList,
-  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -18,7 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { PlanningStackParamList } from "@/navigation/PlanningStackNavigator";
 import { getApiUrl } from "@/lib/query-client";
 
@@ -357,6 +356,12 @@ export default function VendorMatchingScreen() {
               <ThemedText style={[styles.matchBadgeText, { color: "#4CAF50" }]}>{smartHint}</ThemedText>
             </View>
           )}
+          {!smartHint && !hasPreferences ? (
+            <View style={[styles.matchBadge, { backgroundColor: theme.textMuted + "18" }]}>
+              <Feather name="sliders" size={12} color={theme.textSecondary} />
+              <ThemedText style={[styles.matchBadgeText, { color: theme.textSecondary }]}>Tilpass preferanser</ThemedText>
+            </View>
+          ) : null}
           <Feather name="chevron-right" size={18} color={theme.textMuted} />
         </Pressable>
       </Animated.View>

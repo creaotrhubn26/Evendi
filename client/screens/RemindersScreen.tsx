@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, View, Pressable, TextInput, Platform } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  View,
+  Pressable,
+  TextInput,
+  Platform,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -8,7 +15,9 @@ import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -26,7 +35,7 @@ import {
 import { getAppLanguage, type AppLanguage } from "@/lib/storage";
 import { showToast } from "@/lib/toast";
 import { showConfirm } from "@/lib/dialogs";
-import PersistentTextInput from "@/components/PersistentTextInput";
+import { PersistentTextInput } from "@/components/PersistentTextInput";
 
 interface Reminder {
   id: string;
@@ -40,7 +49,13 @@ interface Reminder {
   updatedAt: string;
 }
 
-const CATEGORIES = ["general", "vendor", "budget", "guest", "planning"] as const;
+const CATEGORIES = [
+  "general",
+  "vendor",
+  "budget",
+  "guest",
+  "planning",
+] as const;
 
 const CATEGORY_COLORS: Record<string, string> = {
   general: "#64B5F6",
@@ -65,86 +80,97 @@ export default function RemindersScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [appLanguage, setAppLanguage] = useState<AppLanguage>("nb");
+  const [searchQuery, setSearchQuery] = useState("");
+  const remindersApiBase = getApiUrl();
 
-  const copy = appLanguage === "en"
-    ? {
-      loading: "Loading...",
-      upcoming: "Upcoming",
-      completed: "Completed",
-      emptyTitle: "No reminders",
-      emptyText: "Create a reminder to track important deadlines and tasks.",
-      summaryTitle: "Reminders",
-      summaryStatus: (completed: number, total: number) => `${completed} of ${total} completed`,
-      summaryEmpty: "No reminders yet",
-      statsThisWeek: (count: number) => `${count} due this week`,
-      statsOverdue: (count: number) => `${count} overdue`,
-      filterAll: "All",
-      errorTitleMissing: "Title is required",
-      deleteTitle: "Delete reminder",
-      deleteConfirm: (title: string) => `Are you sure you want to delete "${title}"?`,
-      deleteCancel: "Cancel",
-      deleteConfirmAction: "Delete",
-      overdueTitle: (count: number) => `${count} overdue reminder${count === 1 ? "" : "s"}`,
-      overdueSubtitle: "Mark as completed or snooze",
-      addReminder: "Add reminder",
-      addReminderCta: "Add a new reminder",
-      allCompleted: "All reminders are completed",
-      newReminder: "New reminder",
-      quickPick: "Quick picks:",
-      titleLabel: "Title",
-      titlePlaceholder: "What should we remind you about?",
-      descriptionLabel: "Description (optional)",
-      descriptionPlaceholder: "Add more information...",
-      dateLabel: "Date",
-      datePlaceholder: "YYYY-MM-DD",
-      categoryLabel: "Category",
-      cancel: "Cancel",
-      create: "Create",
-      saving: "Saving...",
-      templatePayVendor: "Pay vendor",
-      templateVendorMeeting: "Vendor meeting",
-      templateSendRsvp: "Send RSVP",
-      templateCheckBudget: "Check budget",
-    }
-    : {
-      loading: "Laster...",
-      upcoming: "Kommende",
-      completed: "Fullført",
-      emptyTitle: "Ingen påminnelser",
-      emptyText: "Opprett en påminnelse for å holde styr på viktige frister og oppgaver.",
-      summaryTitle: "Påminnelser",
-      summaryStatus: (completed: number, total: number) => `${completed} av ${total} fullført`,
-      summaryEmpty: "Ingen påminnelser ennå",
-      statsThisWeek: (count: number) => `${count} denne uken`,
-      statsOverdue: (count: number) => `${count} forfalt`,
-      filterAll: "Alle",
-      errorTitleMissing: "Tittel er påkrevd",
-      deleteTitle: "Slett påminnelse",
-      deleteConfirm: (title: string) => `Er du sikker på at du vil slette "${title}"?`,
-      deleteCancel: "Avbryt",
-      deleteConfirmAction: "Slett",
-      overdueTitle: (count: number) => `${count} forfalt${count === 1 ? "" : "e"} påminnelse${count === 1 ? "" : "r"}`,
-      overdueSubtitle: "Marker som fullført eller utsett",
-      addReminder: "Legg til påminnelse",
-      addReminderCta: "Legg til ny påminnelse",
-      allCompleted: "Alle påminnelser er fullført",
-      newReminder: "Ny påminnelse",
-      quickPick: "Hurtigvalg:",
-      titleLabel: "Tittel",
-      titlePlaceholder: "Hva vil du bli påminnet om?",
-      descriptionLabel: "Beskrivelse (valgfritt)",
-      descriptionPlaceholder: "Legg til mer informasjon...",
-      dateLabel: "Dato",
-      datePlaceholder: "YYYY-MM-DD",
-      categoryLabel: "Kategori",
-      cancel: "Avbryt",
-      create: "Opprett",
-      saving: "Lagrer...",
-      templatePayVendor: "Betal leverandør",
-      templateVendorMeeting: "Møte leverandør",
-      templateSendRsvp: "Send RSVP",
-      templateCheckBudget: "Sjekk budsjett",
-    };
+  const copy =
+    appLanguage === "en"
+      ? {
+          loading: "Loading...",
+          upcoming: "Upcoming",
+          completed: "Completed",
+          emptyTitle: "No reminders",
+          emptyText:
+            "Create a reminder to track important deadlines and tasks.",
+          summaryTitle: "Reminders",
+          summaryStatus: (completed: number, total: number) =>
+            `${completed} of ${total} completed`,
+          summaryEmpty: "No reminders yet",
+          statsThisWeek: (count: number) => `${count} due this week`,
+          statsOverdue: (count: number) => `${count} overdue`,
+          filterAll: "All",
+          errorTitleMissing: "Title is required",
+          deleteTitle: "Delete reminder",
+          deleteConfirm: (title: string) =>
+            `Are you sure you want to delete "${title}"?`,
+          deleteCancel: "Cancel",
+          deleteConfirmAction: "Delete",
+          overdueTitle: (count: number) =>
+            `${count} overdue reminder${count === 1 ? "" : "s"}`,
+          overdueSubtitle: "Mark as completed or snooze",
+          addReminder: "Add reminder",
+          addReminderCta: "Add a new reminder",
+          allCompleted: "All reminders are completed",
+          newReminder: "New reminder",
+          quickPick: "Quick picks:",
+          titleLabel: "Title",
+          titlePlaceholder: "What should we remind you about?",
+          descriptionLabel: "Description (optional)",
+          descriptionPlaceholder: "Add more information...",
+          dateLabel: "Date",
+          datePlaceholder: "YYYY-MM-DD",
+          categoryLabel: "Category",
+          cancel: "Cancel",
+          create: "Create",
+          saving: "Saving...",
+          templatePayVendor: "Pay vendor",
+          templateVendorMeeting: "Vendor meeting",
+          templateSendRsvp: "Send RSVP",
+          templateCheckBudget: "Check budget",
+        }
+      : {
+          loading: "Laster...",
+          upcoming: "Kommende",
+          completed: "Fullført",
+          emptyTitle: "Ingen påminnelser",
+          emptyText:
+            "Opprett en påminnelse for å holde styr på viktige frister og oppgaver.",
+          summaryTitle: "Påminnelser",
+          summaryStatus: (completed: number, total: number) =>
+            `${completed} av ${total} fullført`,
+          summaryEmpty: "Ingen påminnelser ennå",
+          statsThisWeek: (count: number) => `${count} denne uken`,
+          statsOverdue: (count: number) => `${count} forfalt`,
+          filterAll: "Alle",
+          errorTitleMissing: "Tittel er påkrevd",
+          deleteTitle: "Slett påminnelse",
+          deleteConfirm: (title: string) =>
+            `Er du sikker på at du vil slette "${title}"?`,
+          deleteCancel: "Avbryt",
+          deleteConfirmAction: "Slett",
+          overdueTitle: (count: number) =>
+            `${count} forfalt${count === 1 ? "" : "e"} påminnelse${count === 1 ? "" : "r"}`,
+          overdueSubtitle: "Marker som fullført eller utsett",
+          addReminder: "Legg til påminnelse",
+          addReminderCta: "Legg til ny påminnelse",
+          allCompleted: "Alle påminnelser er fullført",
+          newReminder: "Ny påminnelse",
+          quickPick: "Hurtigvalg:",
+          titleLabel: "Tittel",
+          titlePlaceholder: "Hva vil du bli påminnet om?",
+          descriptionLabel: "Beskrivelse (valgfritt)",
+          descriptionPlaceholder: "Legg til mer informasjon...",
+          dateLabel: "Dato",
+          datePlaceholder: "YYYY-MM-DD",
+          categoryLabel: "Kategori",
+          cancel: "Avbryt",
+          create: "Opprett",
+          saving: "Lagrer...",
+          templatePayVendor: "Betal leverandør",
+          templateVendorMeeting: "Møte leverandør",
+          templateSendRsvp: "Send RSVP",
+          templateCheckBudget: "Sjekk budsjett",
+        };
 
   const locale = appLanguage === "en" ? "en-US" : "nb-NO";
 
@@ -157,11 +183,16 @@ export default function RemindersScreen() {
   }, []);
 
   const { data: reminders = [], isLoading } = useQuery<Reminder[]>({
-    queryKey: ["/api/reminders"],
+    queryKey: ["/api/reminders", remindersApiBase],
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: { title: string; description?: string; reminderDate: string; category: string }): Promise<Reminder> => {
+    mutationFn: async (data: {
+      title: string;
+      description?: string;
+      reminderDate: string;
+      category: string;
+    }): Promise<Reminder> => {
       const res = await apiRequest("POST", "/api/reminders", data);
       return res.json();
     },
@@ -177,7 +208,9 @@ export default function RemindersScreen() {
           category: newReminder.category,
         });
         if (notificationId) {
-          await apiRequest("PATCH", `/api/reminders/${newReminder.id}`, { notificationId });
+          await apiRequest("PATCH", `/api/reminders/${newReminder.id}`, {
+            notificationId,
+          });
         }
       }
       resetForm();
@@ -186,7 +219,13 @@ export default function RemindersScreen() {
   });
 
   const toggleMutation = useMutation({
-    mutationFn: async ({ id, isCompleted }: { id: string; isCompleted: boolean }) => {
+    mutationFn: async ({
+      id,
+      isCompleted,
+    }: {
+      id: string;
+      isCompleted: boolean;
+    }) => {
       return apiRequest("PATCH", `/api/reminders/${id}`, { isCompleted });
     },
     onSuccess: () => {
@@ -272,9 +311,22 @@ export default function RemindersScreen() {
     return `Om ${Math.ceil(diffDays / 30)} måneder`;
   };
 
-  const filteredReminders = filterCategory
-    ? reminders.filter((r) => r.category === filterCategory)
-    : reminders;
+  const filteredReminders = reminders.filter((reminder) => {
+    const categoryMatch =
+      !filterCategory || reminder.category === filterCategory;
+    const searchNeedle = searchQuery.trim().toLowerCase();
+    const searchMatch =
+      !searchNeedle ||
+      [
+        reminder.title,
+        reminder.description,
+        getCategoryLabel(reminder.category, appLanguage),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(searchNeedle);
+    return categoryMatch && searchMatch;
+  });
 
   const upcomingReminders = filteredReminders.filter((r) => !r.isCompleted);
   const completedReminders = filteredReminders.filter((r) => r.isCompleted);
@@ -290,12 +342,16 @@ export default function RemindersScreen() {
   });
   const dueThisWeekReminders = upcomingReminders.filter((r) => {
     const reminderDate = new Date(r.reminderDate);
-    const diffDays = Math.ceil((reminderDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.ceil(
+      (reminderDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+    );
     return diffDays >= 0 && diffDays <= 7;
   });
   const dueNextWeekReminders = upcomingReminders.filter((r) => {
     const reminderDate = new Date(r.reminderDate);
-    const diffDays = Math.ceil((reminderDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.ceil(
+      (reminderDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+    );
     return diffDays > 7 && diffDays <= 14;
   });
 
@@ -306,7 +362,13 @@ export default function RemindersScreen() {
 
   // Helper: Smart reminder suggestions
   const getSmartSuggestions = () => {
-    const suggestions = [];
+    const suggestions: {
+      icon: keyof typeof EvendiIconGlyphMap;
+      label: string;
+      color: string;
+      priority: "urgent" | "high";
+      action: () => void;
+    }[] = [];
     if (overdueReminders.length > 0) {
       suggestions.push({
         icon: "alert-circle" as const,
@@ -315,6 +377,7 @@ export default function RemindersScreen() {
         priority: "urgent",
         action: () => {
           setFilterCategory(null);
+          setSearchQuery("");
           // Scroll to overdue section would happen here
         },
       });
@@ -326,7 +389,9 @@ export default function RemindersScreen() {
         color: "#FFB74D",
         priority: "high",
         action: () => {
-          // Filter to this week
+          setFilterCategory(null);
+          setSearchQuery("");
+          setShowForm(false);
         },
       });
     }
@@ -337,9 +402,13 @@ export default function RemindersScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+      <View
+        style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+      >
         <View style={styles.loadingContainer}>
-          <ThemedText style={{ color: theme.textMuted }}>{copy.loading}</ThemedText>
+          <ThemedText style={{ color: theme.textMuted }}>
+            {copy.loading}
+          </ThemedText>
         </View>
       </View>
     );
@@ -350,34 +419,77 @@ export default function RemindersScreen() {
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={[
           styles.content,
-          { paddingTop: headerHeight + Spacing.lg, paddingBottom: tabBarHeight + Spacing.xl },
+          {
+            paddingTop: headerHeight + Spacing.lg,
+            paddingBottom: tabBarHeight + Spacing.xl,
+          },
         ]}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
       >
-        <Animated.View entering={FadeInDown.duration(300)} style={styles.header}>
-          <View style={[styles.summaryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        <Animated.View
+          entering={FadeInDown.duration(300)}
+          style={styles.header}
+        >
+          <View
+            style={[
+              styles.summaryCard,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+              },
+            ]}
+          >
             <View style={styles.summaryRow}>
-              <View style={[styles.iconContainer, { backgroundColor: theme.accent + "20" }]}>
+              <View
+                style={[
+                  styles.iconContainer,
+                  { backgroundColor: theme.accent + "20" },
+                ]}
+              >
                 <EvendiIcon name="bell" size={24} color={theme.accent} />
               </View>
               <View style={styles.summaryText}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.sm }}>
-                  <ThemedText style={styles.summaryTitle}>{copy.summaryTitle}</ThemedText>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: Spacing.sm,
+                  }}
+                >
+                  <ThemedText style={styles.summaryTitle}>
+                    {copy.summaryTitle}
+                  </ThemedText>
                   {overdueReminders.length > 0 && (
-                    <View style={[styles.urgencyBadge, { backgroundColor: "#FF3B30" }]}>
-                      <ThemedText style={styles.urgencyBadgeText}>{overdueReminders.length}</ThemedText>
+                    <View
+                      style={[
+                        styles.urgencyBadge,
+                        { backgroundColor: "#FF3B30" },
+                      ]}
+                    >
+                      <ThemedText style={styles.urgencyBadgeText}>
+                        {overdueReminders.length}
+                      </ThemedText>
                     </View>
                   )}
                 </View>
-                <ThemedText style={[styles.summarySubtitle, { color: theme.textMuted }]}> 
-                  {totalCount > 0 ? copy.summaryStatus(completedCount, totalCount) : copy.summaryEmpty}
+                <ThemedText
+                  style={[styles.summarySubtitle, { color: theme.textMuted }]}
+                >
+                  {totalCount > 0
+                    ? copy.summaryStatus(completedCount, totalCount)
+                    : copy.summaryEmpty}
                 </ThemedText>
               </View>
             </View>
             {totalCount > 0 ? (
               <>
                 <View style={styles.progressContainer}>
-                  <View style={[styles.progressBar, { backgroundColor: theme.border }]}>
+                  <View
+                    style={[
+                      styles.progressBar,
+                      { backgroundColor: theme.border },
+                    ]}
+                  >
                     <View
                       style={[
                         styles.progressFill,
@@ -388,7 +500,9 @@ export default function RemindersScreen() {
                       ]}
                     />
                   </View>
-                  <ThemedText style={[styles.progressText, { color: theme.textMuted }]}>
+                  <ThemedText
+                    style={[styles.progressText, { color: theme.textMuted }]}
+                  >
                     {Math.round((completedCount / totalCount) * 100)}%
                   </ThemedText>
                 </View>
@@ -397,21 +511,69 @@ export default function RemindersScreen() {
                     {dueThisWeekReminders.length > 0 && (
                       <View style={styles.statItem}>
                         <EvendiIcon name="clock" size={12} color="#FFB74D" />
-                        <ThemedText style={[styles.statText, { color: theme.textMuted }]}>
+                        <ThemedText
+                          style={[styles.statText, { color: theme.textMuted }]}
+                        >
                           {copy.statsThisWeek(dueThisWeekReminders.length)}
+                        </ThemedText>
+                      </View>
+                    )}
+                    {dueNextWeekReminders.length > 0 && (
+                      <View style={styles.statItem}>
+                        <EvendiIcon
+                          name="calendar"
+                          size={12}
+                          color={theme.accent}
+                        />
+                        <ThemedText
+                          style={[styles.statText, { color: theme.textMuted }]}
+                        >
+                          {appLanguage === "en"
+                            ? `${dueNextWeekReminders.length} next week`
+                            : `${dueNextWeekReminders.length} neste uke`}
                         </ThemedText>
                       </View>
                     )}
                     {overdueReminders.length > 0 && (
                       <View style={styles.statItem}>
-                        <EvendiIcon name="alert-circle" size={12} color="#FF3B30" />
-                        <ThemedText style={[styles.statText, { color: "#FF3B30" }]}>
+                        <EvendiIcon
+                          name="alert-circle"
+                          size={12}
+                          color="#FF3B30"
+                        />
+                        <ThemedText
+                          style={[styles.statText, { color: "#FF3B30" }]}
+                        >
                           {copy.statsOverdue(overdueReminders.length)}
                         </ThemedText>
                       </View>
                     )}
                   </View>
                 )}
+                <View style={styles.categoryBreakdownRow}>
+                  {CATEGORIES.map((category) => {
+                    const count = getCategoryCount(category);
+                    if (count === 0) return null;
+                    return (
+                      <View
+                        key={category}
+                        style={[
+                          styles.categoryBreakdownChip,
+                          { backgroundColor: CATEGORY_COLORS[category] + "15" },
+                        ]}
+                      >
+                        <ThemedText
+                          style={[
+                            styles.categoryBreakdownText,
+                            { color: CATEGORY_COLORS[category] },
+                          ]}
+                        >
+                          {getCategoryLabel(category, appLanguage)}: {count}
+                        </ThemedText>
+                      </View>
+                    );
+                  })}
+                </View>
               </>
             ) : null}
           </View>
@@ -427,8 +589,12 @@ export default function RemindersScreen() {
               style={[
                 styles.filterChip,
                 {
-                  backgroundColor: filterCategory === null ? Colors.dark.accent : theme.backgroundDefault,
-                  borderColor: filterCategory === null ? Colors.dark.accent : theme.border,
+                  backgroundColor:
+                    filterCategory === null
+                      ? Colors.dark.accent
+                      : theme.backgroundDefault,
+                  borderColor:
+                    filterCategory === null ? Colors.dark.accent : theme.border,
                 },
               ]}
               onPress={() => {
@@ -439,7 +605,10 @@ export default function RemindersScreen() {
               <ThemedText
                 style={[
                   styles.filterText,
-                  { color: filterCategory === null ? "#1A1A1A" : theme.textSecondary },
+                  {
+                    color:
+                      filterCategory === null ? "#1A1A1A" : theme.textSecondary,
+                  },
                 ]}
               >
                 {copy.filterAll}
@@ -451,8 +620,14 @@ export default function RemindersScreen() {
                 style={[
                   styles.filterChip,
                   {
-                    backgroundColor: filterCategory === cat ? CATEGORY_COLORS[cat] : theme.backgroundDefault,
-                    borderColor: filterCategory === cat ? CATEGORY_COLORS[cat] : theme.border,
+                    backgroundColor:
+                      filterCategory === cat
+                        ? CATEGORY_COLORS[cat]
+                        : theme.backgroundDefault,
+                    borderColor:
+                      filterCategory === cat
+                        ? CATEGORY_COLORS[cat]
+                        : theme.border,
                   },
                 ]}
                 onPress={() => {
@@ -463,13 +638,20 @@ export default function RemindersScreen() {
                 <EvendiIcon
                   name={CATEGORY_ICONS[cat] as keyof typeof EvendiIconGlyphMap}
                   size={14}
-                  color={filterCategory === cat ? "#1A1A1A" : theme.textSecondary}
+                  color={
+                    filterCategory === cat ? "#1A1A1A" : theme.textSecondary
+                  }
                   style={styles.filterIcon}
                 />
                 <ThemedText
                   style={[
                     styles.filterText,
-                    { color: filterCategory === cat ? "#1A1A1A" : theme.textSecondary },
+                    {
+                      color:
+                        filterCategory === cat
+                          ? "#1A1A1A"
+                          : theme.textSecondary,
+                    },
                   ]}
                 >
                   {getCategoryLabel(cat, appLanguage)}
@@ -479,11 +661,82 @@ export default function RemindersScreen() {
           </ScrollView>
         </Animated.View>
 
+        <Animated.View entering={FadeInDown.duration(300).delay(120)}>
+          <View
+            style={[
+              styles.searchBar,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <EvendiIcon name="search" size={16} color={theme.textMuted} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder={
+                appLanguage === "en"
+                  ? "Search reminders..."
+                  : "Søk i påminnelser..."
+              }
+              placeholderTextColor={theme.textMuted}
+              style={[styles.searchInput, { color: theme.text }]}
+            />
+            {searchQuery.trim().length > 0 ? (
+              <Pressable onPress={() => setSearchQuery("")}>
+                <EvendiIcon name="x" size={16} color={theme.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+        </Animated.View>
+
+        {smartSuggestions.length > 0 && (
+          <Animated.View entering={FadeInDown.duration(300).delay(130)}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.suggestionRow}
+            >
+              {smartSuggestions.map((suggestion) => (
+                <Pressable
+                  key={suggestion.label}
+                  onPress={() => {
+                    suggestion.action();
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={[
+                    styles.suggestionChip,
+                    {
+                      borderColor: suggestion.color,
+                      backgroundColor: suggestion.color + "15",
+                    },
+                  ]}
+                >
+                  <EvendiIcon
+                    name={suggestion.icon}
+                    size={14}
+                    color={suggestion.color}
+                  />
+                  <ThemedText
+                    style={[styles.suggestionText, { color: suggestion.color }]}
+                  >
+                    {suggestion.label}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </Animated.View>
+        )}
+
         {/* Contextual CTAs */}
         {overdueReminders.length > 0 && !showForm && (
           <Animated.View entering={FadeInDown.duration(300).delay(150)}>
             <Pressable
-              style={[styles.ctaCard, { backgroundColor: "#FF3B3015", borderColor: "#FF3B30" }]}
+              style={[
+                styles.ctaCard,
+                { backgroundColor: "#FF3B3015", borderColor: "#FF3B30" },
+              ]}
               onPress={() => {
                 // Mark all overdue as complete or snooze
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -496,7 +749,9 @@ export default function RemindersScreen() {
                 <ThemedText style={[styles.ctaTitle, { color: "#FF3B30" }]}>
                   {copy.overdueTitle(overdueReminders.length)}
                 </ThemedText>
-                <ThemedText style={[styles.ctaSubtitle, { color: theme.textMuted }]}>
+                <ThemedText
+                  style={[styles.ctaSubtitle, { color: theme.textMuted }]}
+                >
                   {copy.overdueSubtitle}
                 </ThemedText>
               </View>
@@ -505,40 +760,81 @@ export default function RemindersScreen() {
           </Animated.View>
         )}
 
-        {upcomingReminders.length === 0 && completedReminders.length > 0 && !showForm && (
-          <Animated.View entering={FadeInDown.duration(300).delay(150)}>
-            <Pressable
-              style={[styles.ctaCard, { backgroundColor: theme.accent + "15", borderColor: theme.accent }]}
-              onPress={() => {
-                setShowForm(true);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-            >
-              <View style={[styles.ctaIcon, { backgroundColor: theme.accent }]}>
-                <EvendiIcon name="plus" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.ctaContent}>
-                <ThemedText style={[styles.ctaTitle, { color: theme.text }]}>{copy.addReminderCta}</ThemedText>
-                <ThemedText style={[styles.ctaSubtitle, { color: theme.textMuted }]}>
-                  {copy.allCompleted}
-                </ThemedText>
-              </View>
-              <EvendiIcon name="arrow-right" size={20} color={theme.accent} />
-            </Pressable>
-          </Animated.View>
-        )}
+        {upcomingReminders.length === 0 &&
+          completedReminders.length > 0 &&
+          !showForm && (
+            <Animated.View entering={FadeInDown.duration(300).delay(150)}>
+              <Pressable
+                style={[
+                  styles.ctaCard,
+                  {
+                    backgroundColor: theme.accent + "15",
+                    borderColor: theme.accent,
+                  },
+                ]}
+                onPress={() => {
+                  setShowForm(true);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <View
+                  style={[styles.ctaIcon, { backgroundColor: theme.accent }]}
+                >
+                  <EvendiIcon name="plus" size={20} color="#FFFFFF" />
+                </View>
+                <View style={styles.ctaContent}>
+                  <ThemedText style={[styles.ctaTitle, { color: theme.text }]}>
+                    {copy.addReminderCta}
+                  </ThemedText>
+                  <ThemedText
+                    style={[styles.ctaSubtitle, { color: theme.textMuted }]}
+                  >
+                    {copy.allCompleted}
+                  </ThemedText>
+                </View>
+                <EvendiIcon name="arrow-right" size={20} color={theme.accent} />
+              </Pressable>
+            </Animated.View>
+          )}
 
         {showForm ? (
-          <Animated.View entering={FadeInUp.duration(300)} style={styles.formSection}>
-            <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
-              <ThemedText style={styles.formTitle}>{copy.newReminder}</ThemedText>
+          <Animated.View
+            entering={FadeInUp.duration(300)}
+            style={styles.formSection}
+          >
+            <View
+              style={[
+                styles.formCard,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <ThemedText style={styles.formTitle}>
+                {copy.newReminder}
+              </ThemedText>
 
               {/* Quick templates */}
               <View style={styles.templateRow}>
-                <ThemedText style={[styles.templateLabel, { color: theme.textMuted }]}>{copy.quickPick}</ThemedText>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.templateScroll}>
+                <ThemedText
+                  style={[styles.templateLabel, { color: theme.textMuted }]}
+                >
+                  {copy.quickPick}
+                </ThemedText>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.templateScroll}
+                >
                   <Pressable
-                    style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                    style={[
+                      styles.templateChip,
+                      {
+                        backgroundColor: theme.backgroundRoot,
+                        borderColor: theme.border,
+                      },
+                    ]}
                     onPress={() => {
                       setTitle(copy.templatePayVendor);
                       setSelectedCategory("vendor");
@@ -548,11 +844,28 @@ export default function RemindersScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                   >
-                    <EvendiIcon name="dollar-sign" size={12} color={CATEGORY_COLORS.vendor} />
-                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>{copy.templatePayVendor}</ThemedText>
+                    <EvendiIcon
+                      name="dollar-sign"
+                      size={12}
+                      color={CATEGORY_COLORS.vendor}
+                    />
+                    <ThemedText
+                      style={[
+                        styles.templateText,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      {copy.templatePayVendor}
+                    </ThemedText>
                   </Pressable>
                   <Pressable
-                    style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                    style={[
+                      styles.templateChip,
+                      {
+                        backgroundColor: theme.backgroundRoot,
+                        borderColor: theme.border,
+                      },
+                    ]}
                     onPress={() => {
                       setTitle(copy.templateVendorMeeting);
                       setSelectedCategory("vendor");
@@ -562,11 +875,28 @@ export default function RemindersScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                   >
-                    <EvendiIcon name="calendar" size={12} color={CATEGORY_COLORS.vendor} />
-                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>{copy.templateVendorMeeting}</ThemedText>
+                    <EvendiIcon
+                      name="calendar"
+                      size={12}
+                      color={CATEGORY_COLORS.vendor}
+                    />
+                    <ThemedText
+                      style={[
+                        styles.templateText,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      {copy.templateVendorMeeting}
+                    </ThemedText>
                   </Pressable>
                   <Pressable
-                    style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                    style={[
+                      styles.templateChip,
+                      {
+                        backgroundColor: theme.backgroundRoot,
+                        borderColor: theme.border,
+                      },
+                    ]}
                     onPress={() => {
                       setTitle(copy.templateSendRsvp);
                       setSelectedCategory("guest");
@@ -576,11 +906,28 @@ export default function RemindersScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                   >
-                    <EvendiIcon name="users" size={12} color={CATEGORY_COLORS.guest} />
-                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>{copy.templateSendRsvp}</ThemedText>
+                    <EvendiIcon
+                      name="users"
+                      size={12}
+                      color={CATEGORY_COLORS.guest}
+                    />
+                    <ThemedText
+                      style={[
+                        styles.templateText,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      {copy.templateSendRsvp}
+                    </ThemedText>
                   </Pressable>
                   <Pressable
-                    style={[styles.templateChip, { backgroundColor: theme.backgroundRoot, borderColor: theme.border }]}
+                    style={[
+                      styles.templateChip,
+                      {
+                        backgroundColor: theme.backgroundRoot,
+                        borderColor: theme.border,
+                      },
+                    ]}
                     onPress={() => {
                       setTitle(copy.templateCheckBudget);
                       setSelectedCategory("budget");
@@ -590,20 +937,39 @@ export default function RemindersScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                   >
-                    <EvendiIcon name="trending-up" size={12} color={CATEGORY_COLORS.budget} />
-                    <ThemedText style={[styles.templateText, { color: theme.textSecondary }]}>{copy.templateCheckBudget}</ThemedText>
+                    <EvendiIcon
+                      name="trending-up"
+                      size={12}
+                      color={CATEGORY_COLORS.budget}
+                    />
+                    <ThemedText
+                      style={[
+                        styles.templateText,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      {copy.templateCheckBudget}
+                    </ThemedText>
                   </Pressable>
                 </ScrollView>
               </View>
 
               <View style={styles.inputGroup}>
-                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>{copy.titleLabel}</ThemedText>
+                <ThemedText
+                  style={[styles.inputLabel, { color: theme.textMuted }]}
+                >
+                  {copy.titleLabel}
+                </ThemedText>
                 <PersistentTextInput
                   draftKey="RemindersScreen-input-1"
                   testID="input-reminder-title"
                   style={[
                     styles.textInput,
-                    { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
+                    {
+                      backgroundColor: theme.backgroundRoot,
+                      color: theme.text,
+                      borderColor: theme.border,
+                    },
                   ]}
                   placeholder={copy.titlePlaceholder}
                   placeholderTextColor={theme.textMuted}
@@ -613,14 +979,22 @@ export default function RemindersScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>{copy.descriptionLabel}</ThemedText>
+                <ThemedText
+                  style={[styles.inputLabel, { color: theme.textMuted }]}
+                >
+                  {copy.descriptionLabel}
+                </ThemedText>
                 <PersistentTextInput
                   draftKey="RemindersScreen-input-2"
                   testID="input-reminder-description"
                   style={[
                     styles.textInput,
                     styles.textArea,
-                    { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
+                    {
+                      backgroundColor: theme.backgroundRoot,
+                      color: theme.text,
+                      borderColor: theme.border,
+                    },
                   ]}
                   placeholder={copy.descriptionPlaceholder}
                   placeholderTextColor={theme.textMuted}
@@ -632,13 +1006,21 @@ export default function RemindersScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>{copy.dateLabel}</ThemedText>
+                <ThemedText
+                  style={[styles.inputLabel, { color: theme.textMuted }]}
+                >
+                  {copy.dateLabel}
+                </ThemedText>
                 {Platform.OS === "web" ? (
                   <PersistentTextInput
                     draftKey="RemindersScreen-input-3"
                     style={[
                       styles.textInput,
-                      { backgroundColor: theme.backgroundRoot, color: theme.text, borderColor: theme.border },
+                      {
+                        backgroundColor: theme.backgroundRoot,
+                        color: theme.text,
+                        borderColor: theme.border,
+                      },
                     ]}
                     placeholder={copy.datePlaceholder}
                     placeholderTextColor={theme.textMuted}
@@ -655,11 +1037,18 @@ export default function RemindersScreen() {
                     <Pressable
                       style={[
                         styles.dateButton,
-                        { backgroundColor: theme.backgroundRoot, borderColor: theme.border },
+                        {
+                          backgroundColor: theme.backgroundRoot,
+                          borderColor: theme.border,
+                        },
                       ]}
                       onPress={() => setShowDatePicker(true)}
                     >
-                      <EvendiIcon name="calendar" size={18} color={Colors.dark.accent} />
+                      <EvendiIcon
+                        name="calendar"
+                        size={18}
+                        color={Colors.dark.accent}
+                      />
                       <ThemedText style={styles.dateButtonText}>
                         {selectedDate.toLocaleDateString(locale, {
                           weekday: "long",
@@ -686,7 +1075,11 @@ export default function RemindersScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <ThemedText style={[styles.inputLabel, { color: theme.textMuted }]}>{copy.categoryLabel}</ThemedText>
+                <ThemedText
+                  style={[styles.inputLabel, { color: theme.textMuted }]}
+                >
+                  {copy.categoryLabel}
+                </ThemedText>
                 <View style={styles.categoryGrid}>
                   {CATEGORIES.map((cat) => (
                     <Pressable
@@ -695,8 +1088,13 @@ export default function RemindersScreen() {
                         styles.categoryOption,
                         {
                           backgroundColor:
-                            selectedCategory === cat ? CATEGORY_COLORS[cat] + "20" : theme.backgroundRoot,
-                          borderColor: selectedCategory === cat ? CATEGORY_COLORS[cat] : theme.border,
+                            selectedCategory === cat
+                              ? CATEGORY_COLORS[cat] + "20"
+                              : theme.backgroundRoot,
+                          borderColor:
+                            selectedCategory === cat
+                              ? CATEGORY_COLORS[cat]
+                              : theme.border,
                         },
                       ]}
                       onPress={() => {
@@ -705,14 +1103,25 @@ export default function RemindersScreen() {
                       }}
                     >
                       <EvendiIcon
-                        name={CATEGORY_ICONS[cat] as keyof typeof EvendiIconGlyphMap}
+                        name={
+                          CATEGORY_ICONS[cat] as keyof typeof EvendiIconGlyphMap
+                        }
                         size={16}
-                        color={selectedCategory === cat ? CATEGORY_COLORS[cat] : theme.textMuted}
+                        color={
+                          selectedCategory === cat
+                            ? CATEGORY_COLORS[cat]
+                            : theme.textMuted
+                        }
                       />
                       <ThemedText
                         style={[
                           styles.categoryOptionText,
-                          { color: selectedCategory === cat ? CATEGORY_COLORS[cat] : theme.textSecondary },
+                          {
+                            color:
+                              selectedCategory === cat
+                                ? CATEGORY_COLORS[cat]
+                                : theme.textSecondary,
+                          },
                         ]}
                       >
                         {getCategoryLabel(cat, appLanguage)}
@@ -728,7 +1137,9 @@ export default function RemindersScreen() {
                   style={[styles.cancelButton, { borderColor: theme.border }]}
                   onPress={resetForm}
                 >
-                  <ThemedText style={{ color: theme.textSecondary }}>{copy.cancel}</ThemedText>
+                  <ThemedText style={{ color: theme.textSecondary }}>
+                    {copy.cancel}
+                  </ThemedText>
                 </Pressable>
                 <Button
                   onPress={handleCreateReminder}
@@ -744,14 +1155,22 @@ export default function RemindersScreen() {
           <Animated.View entering={FadeInDown.duration(300).delay(200)}>
             <Pressable
               testID="button-add-reminder"
-              style={[styles.addButton, { backgroundColor: theme.backgroundDefault, borderColor: theme.accent }]}
+              style={[
+                styles.addButton,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.accent,
+                },
+              ]}
               onPress={() => {
                 setShowForm(true);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
             >
               <EvendiIcon name="plus" size={20} color={theme.accent} />
-              <ThemedText style={[styles.addButtonText, { color: theme.accent }]}>
+              <ThemedText
+                style={[styles.addButtonText, { color: theme.accent }]}
+              >
                 {copy.addReminder}
               </ThemedText>
             </Pressable>
@@ -759,7 +1178,10 @@ export default function RemindersScreen() {
         )}
 
         {upcomingReminders.length > 0 ? (
-          <Animated.View entering={FadeInDown.duration(300).delay(300)} style={styles.section}>
+          <Animated.View
+            entering={FadeInDown.duration(300).delay(300)}
+            style={styles.section}
+          >
             <ThemedText style={styles.sectionTitle}>{copy.upcoming}</ThemedText>
             {upcomingReminders.map((reminder, index) => (
               <Animated.View
@@ -770,7 +1192,12 @@ export default function RemindersScreen() {
                   reminder={reminder}
                   theme={theme}
                   appLanguage={appLanguage}
-                  onToggle={() => toggleMutation.mutate({ id: reminder.id, isCompleted: true })}
+                  onToggle={() =>
+                    toggleMutation.mutate({
+                      id: reminder.id,
+                      isCompleted: true,
+                    })
+                  }
                   onDelete={() => handleDeleteReminder(reminder)}
                   formatDate={formatDate}
                   getTimeUntil={getTimeUntil}
@@ -781,8 +1208,15 @@ export default function RemindersScreen() {
         ) : null}
 
         {completedReminders.length > 0 ? (
-          <Animated.View entering={FadeInDown.duration(300).delay(400)} style={styles.section}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.textMuted }]}>{copy.completed}</ThemedText>
+          <Animated.View
+            entering={FadeInDown.duration(300).delay(400)}
+            style={styles.section}
+          >
+            <ThemedText
+              style={[styles.sectionTitle, { color: theme.textMuted }]}
+            >
+              {copy.completed}
+            </ThemedText>
             {completedReminders.map((reminder, index) => (
               <Animated.View
                 key={reminder.id}
@@ -792,7 +1226,12 @@ export default function RemindersScreen() {
                   reminder={reminder}
                   theme={theme}
                   appLanguage={appLanguage}
-                  onToggle={() => toggleMutation.mutate({ id: reminder.id, isCompleted: false })}
+                  onToggle={() =>
+                    toggleMutation.mutate({
+                      id: reminder.id,
+                      isCompleted: false,
+                    })
+                  }
                   onDelete={() => handleDeleteReminder(reminder)}
                   formatDate={formatDate}
                   getTimeUntil={getTimeUntil}
@@ -804,7 +1243,10 @@ export default function RemindersScreen() {
         ) : null}
 
         {reminders.length === 0 ? (
-          <Animated.View entering={FadeInDown.duration(300).delay(300)} style={styles.emptyState}>
+          <Animated.View
+            entering={FadeInDown.duration(300).delay(300)}
+            style={styles.emptyState}
+          >
             <EmptyStateIllustration stateKey="reminders" />
             <ThemedText style={styles.emptyTitle}>{copy.emptyTitle}</ThemedText>
             <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
@@ -836,7 +1278,8 @@ function ReminderItem({
   getTimeUntil: (date: string) => string;
   completed?: boolean;
 }) {
-  const categoryColor = CATEGORY_COLORS[reminder.category] || CATEGORY_COLORS.general;
+  const categoryColor =
+    CATEGORY_COLORS[reminder.category] || CATEGORY_COLORS.general;
   const timeUntil = getTimeUntil(reminder.reminderDate);
   const isOverdue = new Date(reminder.reminderDate) < new Date();
 
@@ -861,7 +1304,9 @@ function ReminderItem({
             },
           ]}
         >
-          {completed ? <EvendiIcon name="check" size={14} color="#1A1A1A" /> : null}
+          {completed ? (
+            <EvendiIcon name="check" size={14} color="#1A1A1A" />
+          ) : null}
         </View>
       </Pressable>
 
@@ -870,7 +1315,10 @@ function ReminderItem({
           <ThemedText
             style={[
               styles.reminderTitle,
-              completed && { textDecorationLine: "line-through", color: theme.textMuted },
+              completed && {
+                textDecorationLine: "line-through",
+                color: theme.textMuted,
+              },
             ]}
           >
             {reminder.title}
@@ -890,13 +1338,24 @@ function ReminderItem({
         ) : null}
 
         <View style={styles.reminderMeta}>
-          <View style={[styles.categoryBadge, { backgroundColor: categoryColor + "20" }]}>
+          <View
+            style={[
+              styles.categoryBadge,
+              { backgroundColor: categoryColor + "20" },
+            ]}
+          >
             <EvendiIcon
-              name={CATEGORY_ICONS[reminder.category] as keyof typeof EvendiIconGlyphMap}
+              name={
+                CATEGORY_ICONS[
+                  reminder.category
+                ] as keyof typeof EvendiIconGlyphMap
+              }
               size={12}
               color={categoryColor}
             />
-            <ThemedText style={[styles.categoryBadgeText, { color: categoryColor }]}>
+            <ThemedText
+              style={[styles.categoryBadgeText, { color: categoryColor }]}
+            >
               {getCategoryLabel(reminder.category, appLanguage)}
             </ThemedText>
           </View>
@@ -910,7 +1369,9 @@ function ReminderItem({
             <ThemedText
               style={[
                 styles.dateText,
-                { color: isOverdue && !completed ? "#FF6B6B" : theme.textMuted },
+                {
+                  color: isOverdue && !completed ? "#FF6B6B" : theme.textMuted,
+                },
               ]}
             >
               {formatDate(reminder.reminderDate)}
@@ -1014,6 +1475,54 @@ const styles = StyleSheet.create({
   filterText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  suggestionRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    paddingBottom: Spacing.md,
+  },
+  suggestionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    borderWidth: 1,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  suggestionText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  categoryBreakdownRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  categoryBreakdownChip: {
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+  },
+  categoryBreakdownText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
   addButton: {
     flexDirection: "row",

@@ -4,7 +4,6 @@ import {
   View,
   Pressable,
   ScrollView,
-  TextInput,
   Alert,
   ActivityIndicator,
 } from "react-native";
@@ -85,7 +84,9 @@ export default function AdminDashboardScreen() {
       setStoredKey(adminKey);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Nettverksfeil. Prøv igjen.";
       setLoginError("Nettverksfeil. Prøv igjen.");
+      Alert.alert("Innlogging feilet", message);
     }
   };
 
@@ -263,6 +264,7 @@ export default function AdminDashboardScreen() {
         {adminSections.map((section, index) => (
           <Pressable
             key={section.screen}
+            testID={`admin-section-${index}`}
             style={[styles.menuItem, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

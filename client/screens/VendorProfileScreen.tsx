@@ -156,7 +156,14 @@ export default function VendorProfileScreen({ navigation }: Props) {
           Authorization: `Bearer ${sessionToken}`,
         },
       });
-      if (!response.ok) throw new Error("Kunne ikke hente profil");
+      if (!response.ok) {
+        try {
+          const fallback = await apiRequest("GET", "/api/vendor/profile");
+          return fallback.json();
+        } catch {
+          throw new Error("Kunne ikke hente profil");
+        }
+      }
       return response.json();
     },
     enabled: !!sessionToken,
@@ -172,7 +179,14 @@ export default function VendorProfileScreen({ navigation }: Props) {
           Authorization: `Bearer ${sessionToken}`,
         },
       });
-      if (!response.ok) throw new Error("Kunne ikke hente kategori-detaljer");
+      if (!response.ok) {
+        try {
+          const fallback = await apiRequest("GET", "/api/vendor/category-details");
+          return fallback.json();
+        } catch {
+          throw new Error("Kunne ikke hente kategori-detaljer");
+        }
+      }
       return response.json();
     },
     enabled: !!sessionToken,
@@ -1021,8 +1035,53 @@ export default function VendorProfileScreen({ navigation }: Props) {
           </View>
         </View>
 
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.sectionTabs}
+        >
+          {[
+            { key: "basic", label: "Grunnleggende" },
+            { key: "general", label: "Generell info" },
+            { key: "category", label: "Kategori-detaljer" },
+          ].map((section) => (
+            <Pressable
+              key={section.key}
+              onPress={() =>
+                setActiveSection(section.key as "basic" | "category" | "general")
+              }
+              style={[
+                styles.sectionTab,
+                {
+                  borderColor:
+                    activeSection === section.key ? theme.accent : theme.border,
+                  backgroundColor:
+                    activeSection === section.key
+                      ? theme.accent + "15"
+                      : theme.backgroundDefault,
+                },
+              ]}
+            >
+              <ThemedText
+                style={[
+                  styles.sectionTabText,
+                  {
+                    color:
+                      activeSection === section.key
+                        ? theme.accent
+                        : theme.textSecondary,
+                  },
+                ]}
+              >
+                {section.label}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </ScrollView>
+
         {/* Business Information */}
-        <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        {activeSection === "basic" && (
+          <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
               <Feather name="briefcase" size={16} color={theme.accent} />
@@ -1068,10 +1127,12 @@ export default function VendorProfileScreen({ navigation }: Props) {
               textAlignVertical="top"
             />
           </View>
-        </View>
+          </View>
+        )}
 
         {/* Contact Information */}
-        <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        {activeSection === "basic" && (
+          <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
               <Feather name="phone" size={16} color={theme.accent} />
@@ -1114,10 +1175,12 @@ export default function VendorProfileScreen({ navigation }: Props) {
               autoCapitalize="none"
             />
           </View>
-        </View>
+          </View>
+        )}
 
         {/* Pricing & Reviews */}
-        <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        {activeSection === "basic" && (
+          <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
               <Feather name="dollar-sign" size={16} color={theme.accent} />
@@ -1148,7 +1211,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
               autoCapitalize="none"
             />
           </View>
-        </View>
+          </View>
+        )}
 
         {/* Save Button */}
         <Pressable
@@ -1173,7 +1237,8 @@ export default function VendorProfileScreen({ navigation }: Props) {
         </Pressable>
 
         {/* General Business Details */}
-        <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, marginTop: Spacing.xl }]}>
+        {activeSection === "general" && (
+          <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, marginTop: Spacing.xl }]}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
               <Feather name="award" size={16} color={theme.accent} />
@@ -1182,10 +1247,11 @@ export default function VendorProfileScreen({ navigation }: Props) {
           </View>
 
           {renderGeneralFields()}
-        </View>
+          </View>
+        )}
 
         {/* Category-Specific Details */}
-        {profile.category && (
+        {activeSection === "category" && profile.category && (
           <View style={[styles.formCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
             <View style={styles.sectionHeader}>
               <View style={[styles.sectionIconCircle, { backgroundColor: theme.accent + "15" }]}>
@@ -1227,6 +1293,22 @@ export default function VendorProfileScreen({ navigation }: Props) {
             </View>
 
             {renderCategoryFields()}
+          </View>
+        )}
+
+        {activeSection === "category" && !profile.category && (
+          <View
+            style={[
+              styles.formCard,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <ThemedText style={{ color: theme.textSecondary }}>
+              Velg en leverandørkategori for å få tilgang til kategori-detaljer.
+            </ThemedText>
           </View>
         )}
 
@@ -1332,6 +1414,20 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.lg,
+  },
+  sectionTabs: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  sectionTab: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  sectionTabText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
   statusCard: {
     borderRadius: BorderRadius.lg,

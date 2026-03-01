@@ -446,7 +446,11 @@ export function KakeScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      showToast('Kunne ikke duplisere smaksprøve');
+      const message =
+        e instanceof Error && e.message
+          ? e.message
+          : 'Kunne ikke duplisere smaksprøve';
+      showToast(message);
     }
   };
 
@@ -466,7 +470,11 @@ export function KakeScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      showToast('Kunne ikke duplisere design');
+      const message =
+        e instanceof Error && e.message
+          ? e.message
+          : 'Kunne ikke duplisere design';
+      showToast(message);
     }
   };
 
@@ -1067,12 +1075,9 @@ export function KakeScreen() {
             <ThemedText style={[styles.errorSubtext, { color: theme.textSecondary }]}>
               {error instanceof Error ? error.message : 'Ukjent feil'}
             </ThemedText>
-            <TouchableOpacity
-              style={[styles.retryButton, { backgroundColor: theme.primary }]}
-              onPress={() => refetch()}
-            >
-              <ThemedText style={styles.retryButtonText}>Prøv igjen</ThemedText>
-            </TouchableOpacity>
+            <Button style={styles.retryButton} onPress={() => refetch()}>
+              Prøv igjen
+            </Button>
           </View>
         ) : (
           <>
@@ -1568,8 +1573,7 @@ export function KakeScreen() {
             <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}> 
               Budsjett ({getCurrencyCode(getSetting)})
             </ThemedText>
-            <PersistentTextInput
-              draftKey="KakeScreen-input-16"
+            <TextInput
               style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
               value={budgetInput}
               onChangeText={setBudgetInput}
