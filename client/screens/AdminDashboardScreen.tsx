@@ -176,6 +176,12 @@ export default function AdminDashboardScreen() {
       description: "Kjor raske helsesjekker og typecheck",
       screen: "AdminSmokeTest" as const,
     },
+    {
+      title: "Playwright E2E",
+      icon: "play" as const,
+      description: "Kjør og overvåk alle API E2E-tester",
+      screen: "AdminPlaywright" as const,
+    },
   ];
 
   if (!isAuthenticated) {

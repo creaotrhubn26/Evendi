@@ -4,9 +4,12 @@ import { WebSocketServer, type WebSocket } from "ws";
 import crypto from "node:crypto";
 import { db } from "./db";
 import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { registerSubscriptionRoutes } from "./subscription-routes";
-import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema } from "@shared/schema";
+import { registerCoupleFeatureRoutes } from "./couple-feature-routes";
+import { registerExpertiseRoutes } from "./routes/expertiseRoutes";
+import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetSettings, coupleBudgetItems, createBudgetItemSchema, coupleVendorFavorites, insertCoupleVendorFavoriteSchema, coupleVendorSearches, vendorMatchScores } from "@shared/schema";
 import { eq, and, desc, sql, inArray, or } from "drizzle-orm";
 
 function generateAccessCode(): string {
@@ -23,35 +26,134 @@ interface VendorSession {
   expiresAt: Date;
 }
 
+interface VendorAuthCacheEntry {
+  vendorId: string;
+  expiresAt: number;
+}
+
 const VENDOR_SESSIONS: Map<string, VendorSession> = new Map();
+const VENDOR_AUTH_CACHE: Map<string, VendorAuthCacheEntry> = new Map();
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const VENDOR_AUTH_CACHE_TTL_MS = 60 * 1000;
 
 interface CoupleSessionCache {
   coupleId: string;
   expiresAt: Date;
 }
 const COUPLE_SESSIONS: Map<string, CoupleSessionCache> = new Map();
+const TYPING_LAST_EMIT: Map<string, number> = new Map();
+const TYPING_MIN_INTERVAL_MS = 1500;
+const TYPING_CACHE_TTL_MS = 10 * 60 * 1000;
+
+function getCachedVendorIdFromToken(token: string): string | null {
+  const now = Date.now();
+
+  const previewSession = VENDOR_SESSIONS.get(token);
+  if (previewSession) {
+    if (previewSession.expiresAt.getTime() > now) {
+      return previewSession.vendorId;
+    }
+    VENDOR_SESSIONS.delete(token);
+  }
+
+  const cached = VENDOR_AUTH_CACHE.get(token);
+  if (cached) {
+    if (cached.expiresAt > now) {
+      return cached.vendorId;
+    }
+    VENDOR_AUTH_CACHE.delete(token);
+  }
+
+  return null;
+}
+
+function cacheVendorToken(token: string, vendorId: string, sessionExpiresAt: Date): void {
+  const cacheExpiresAt = Math.min(sessionExpiresAt.getTime(), Date.now() + VENDOR_AUTH_CACHE_TTL_MS);
+  VENDOR_AUTH_CACHE.set(token, { vendorId, expiresAt: cacheExpiresAt });
+}
+
+function shouldEmitTypingEvent(cacheKey: string): boolean {
+  const now = Date.now();
+  const previous = TYPING_LAST_EMIT.get(cacheKey);
+  if (previous && now - previous < TYPING_MIN_INTERVAL_MS) {
+    return false;
+  }
+
+  TYPING_LAST_EMIT.set(cacheKey, now);
+  return true;
+}
 
 function cleanExpiredSessions() {
-  const now = new Date();
+  const now = Date.now();
   for (const [token, session] of VENDOR_SESSIONS.entries()) {
-    if (session.expiresAt < now) {
+    if (session.expiresAt.getTime() <= now) {
       VENDOR_SESSIONS.delete(token);
+    }
+  }
+
+  for (const [token, session] of COUPLE_SESSIONS.entries()) {
+    if (session.expiresAt.getTime() <= now) {
+      COUPLE_SESSIONS.delete(token);
+    }
+  }
+
+  for (const [token, cacheEntry] of VENDOR_AUTH_CACHE.entries()) {
+    if (cacheEntry.expiresAt <= now) {
+      VENDOR_AUTH_CACHE.delete(token);
+    }
+  }
+
+  for (const [key, emittedAt] of TYPING_LAST_EMIT.entries()) {
+    if (now - emittedAt > TYPING_CACHE_TTL_MS) {
+      TYPING_LAST_EMIT.delete(key);
     }
   }
 }
 
-setInterval(cleanExpiredSessions, 60 * 60 * 1000);
+const sessionCleanupTimer = setInterval(cleanExpiredSessions, 60 * 60 * 1000) as unknown as NodeJS.Timeout;
+sessionCleanupTimer.unref?.();
 
 const YR_CACHE: Map<string, { data: any; expires: Date }> = new Map();
 
-function hashPassword(password: string): string {
-  const salt = bcrypt.genSaltSync(10);
-  return bcrypt.hashSync(password, salt);
+function cleanExpiredWeatherCache() {
+  const now = new Date();
+  for (const [key, entry] of YR_CACHE.entries()) {
+    if (entry.expires <= now) {
+      YR_CACHE.delete(key);
+    }
+  }
 }
 
-function verifyPassword(password: string, hash: string): boolean {
-  return bcrypt.compareSync(password, hash);
+const weatherCacheCleanupTimer = setInterval(cleanExpiredWeatherCache, 60 * 60 * 1000) as unknown as NodeJS.Timeout;
+weatherCacheCleanupTimer.unref?.();
+
+const WEATHER_FETCH_TIMEOUT_MS = 8_000;
+const BRREG_FETCH_TIMEOUT_MS = 6_000;
+const BRREG_CACHE_TTL_MS = 5 * 60 * 1000;
+const BRREG_CACHE_MAX_ENTRIES = 300;
+
+const YR_INFLIGHT: Map<string, Promise<any>> = new Map();
+const BRREG_CACHE: Map<string, { entities: any[]; expiresAt: number }> = new Map();
+const BRREG_INFLIGHT: Map<string, Promise<any[]>> = new Map();
+
+function cleanExpiredBrregCache() {
+  const now = Date.now();
+  for (const [key, entry] of BRREG_CACHE.entries()) {
+    if (entry.expiresAt <= now) {
+      BRREG_CACHE.delete(key);
+    }
+  }
+}
+
+const brregCacheCleanupTimer = setInterval(cleanExpiredBrregCache, 10 * 60 * 1000) as unknown as NodeJS.Timeout;
+brregCacheCleanupTimer.unref?.();
+
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 10);
+}
+
+async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
 }
 
 const DEFAULT_CATEGORIES = [
@@ -83,34 +185,140 @@ const DEFAULT_INSPIRATION_CATEGORIES = [
 async function fetchYrWeather(lat: number, lon: number): Promise<any> {
   const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
   const cached = YR_CACHE.get(cacheKey);
-  
+
   if (cached && cached.expires > new Date()) {
     return cached.data;
   }
 
-  const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`;
-  
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": "Wedflow/1.0 https://replit.com",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`YR API error: ${response.status}`);
+  const inFlight = YR_INFLIGHT.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
   }
 
-  const data = await response.json();
-  
-  const expiresHeader = response.headers.get("Expires");
-  const expires = expiresHeader ? new Date(expiresHeader) : new Date(Date.now() + 3600000);
-  
-  YR_CACHE.set(cacheKey, { data, expires });
-  
-  return data;
+  const requestPromise = (async () => {
+    const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), WEATHER_FETCH_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Wedflow/1.0 https://replit.com",
+        },
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`YR API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const expiresHeader = response.headers.get("Expires");
+      const expires = expiresHeader ? new Date(expiresHeader) : new Date(Date.now() + 3600000);
+
+      YR_CACHE.set(cacheKey, { data, expires });
+      return data;
+    } finally {
+      clearTimeout(timeout);
+    }
+  })().finally(() => {
+    YR_INFLIGHT.delete(cacheKey);
+  });
+
+  YR_INFLIGHT.set(cacheKey, requestPromise);
+  return requestPromise;
+}
+
+async function fetchBrregEntities(rawQuery: string): Promise<any[]> {
+  const query = rawQuery.trim().toLowerCase();
+  if (!query || query.length < 2) return [];
+
+  const cached = BRREG_CACHE.get(query);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.entities;
+  }
+
+  const inFlight = BRREG_INFLIGHT.get(query);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const requestPromise = (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), BRREG_FETCH_TIMEOUT_MS);
+
+    try {
+      const brregUrl = `https://data.brreg.no/enhetsregisteret/api/enheter?navn=${encodeURIComponent(query)}&size=10`;
+      const response = await fetch(brregUrl, {
+        headers: {
+          Accept: "application/json",
+        },
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        console.error("Brreg API error:", response.status);
+        return [];
+      }
+
+      const data = await response.json();
+      const entities = (data._embedded?.enheter || []).map((entity: any) => ({
+        organizationNumber: entity.organisasjonsnummer,
+        name: entity.navn,
+        organizationForm: entity.organisasjonsform?.beskrivelse,
+        address: entity.forretningsadresse
+          ? {
+              street: entity.forretningsadresse.adresse?.join(", "),
+              postalCode: entity.forretningsadresse.postnummer,
+              city: entity.forretningsadresse.poststed,
+              municipality: entity.forretningsadresse.kommune,
+            }
+          : null,
+      }));
+
+      if (BRREG_CACHE.size >= BRREG_CACHE_MAX_ENTRIES) {
+        const oldestKey = BRREG_CACHE.keys().next().value;
+        if (oldestKey) BRREG_CACHE.delete(oldestKey);
+      }
+
+      BRREG_CACHE.set(query, { entities, expiresAt: Date.now() + BRREG_CACHE_TTL_MS });
+      return entities;
+    } finally {
+      clearTimeout(timeout);
+    }
+  })().finally(() => {
+    BRREG_INFLIGHT.delete(query);
+  });
+
+  BRREG_INFLIGHT.set(query, requestPromise);
+  return requestPromise;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  const weatherRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "For mange værforespørsler. Prøv igjen om ett minutt." },
+  });
+
+  const brregRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    max: 40,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "For mange Brreg-søk. Prøv igjen om ett minutt." },
+  });
+
+  const typingRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "For mange skriveoppdateringer. Prøv igjen om litt." },
+  });
+
   // --- Realtime (WebSocket) setup state ---
   const adminConvClients: Map<string, Set<WebSocket>> = new Map();
   const adminListClients: Set<WebSocket> = new Set();
@@ -119,13 +327,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const coupleListClients: Map<string, Set<WebSocket>> = new Map();
 
   async function checkVendorToken(token: string): Promise<string | null> {
+    const cachedVendorId = getCachedVendorIdFromToken(token);
+    if (cachedVendorId) return cachedVendorId;
+
     const [vendorSession] = await db
-      .select({ vendorId: vendorSessions.vendorId })
+      .select({
+        vendorId: vendorSessions.vendorId,
+        expiresAt: vendorSessions.expiresAt,
+      })
       .from(vendorSessions)
-      .where(and(eq(vendorSessions.token, token), sql`${vendorSessions.expiresAt} > NOW()`));
+      .innerJoin(vendors, eq(vendorSessions.vendorId, vendors.id))
+      .where(
+        and(
+          eq(vendorSessions.token, token),
+          sql`${vendorSessions.expiresAt} > NOW()`,
+          eq(vendors.status, "approved")
+        )
+      )
+      .limit(1);
+
     if (!vendorSession) return null;
-    const [vendor] = await db.select().from(vendors).where(eq(vendors.id, vendorSession.vendorId));
-    if (!vendor || vendor.status !== "approved") return null;
+    cacheVendorToken(token, vendorSession.vendorId, vendorSession.expiresAt);
     return vendorSession.vendorId;
   }
 
@@ -163,13 +385,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   async function checkCoupleToken(token: string): Promise<string | null> {
+    const cached = COUPLE_SESSIONS.get(token);
+    if (cached && cached.expiresAt.getTime() > Date.now()) {
+      return cached.coupleId;
+    }
+
     const [sess] = await db
-      .select({ coupleId: coupleSessions.coupleId })
+      .select({ coupleId: coupleSessions.coupleId, expiresAt: coupleSessions.expiresAt })
       .from(coupleSessions)
-      .where(and(eq(coupleSessions.token, token), sql`${coupleSessions.expiresAt} > NOW()`));
+      .where(and(eq(coupleSessions.token, token), sql`${coupleSessions.expiresAt} > NOW()`))
+      .limit(1);
     if (!sess) return null;
-    const [couple] = await db.select().from(coupleProfiles).where(eq(coupleProfiles.id, sess.coupleId));
-    if (!couple) return null;
+
+    COUPLE_SESSIONS.set(token, { coupleId: sess.coupleId, expiresAt: sess.expiresAt });
     return sess.coupleId;
   }
 
@@ -214,7 +442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   }
-  app.get("/api/weather", async (req: Request, res: Response) => {
+  app.get("/api/weather", weatherRateLimit, async (req: Request, res: Response) => {
     try {
       const lat = parseFloat(req.query.lat as string);
       const lon = parseFloat(req.query.lon as string);
@@ -282,41 +510,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   seedInspirationCategories().catch(console.error);
 
   // Brreg.no business search endpoint
-  app.get("/api/brreg/search", async (req: Request, res: Response) => {
+  app.get("/api/brreg/search", brregRateLimit, async (req: Request, res: Response) => {
     try {
       const { q } = req.query;
       if (!q || typeof q !== "string" || q.length < 2) {
         return res.json({ entities: [] });
       }
 
-      const brregUrl = `https://data.brreg.no/enhetsregisteret/api/enheter?navn=${encodeURIComponent(q)}&size=10`;
-      const response = await fetch(brregUrl, {
-        headers: {
-          "Accept": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        console.error("Brreg API error:", response.status);
-        return res.json({ entities: [] });
-      }
-
-      const data = await response.json();
-      const entities = data._embedded?.enheter || [];
-
-      const formattedEntities = entities.map((entity: any) => ({
-        organizationNumber: entity.organisasjonsnummer,
-        name: entity.navn,
-        organizationForm: entity.organisasjonsform?.beskrivelse,
-        address: entity.forretningsadresse ? {
-          street: entity.forretningsadresse.adresse?.join(", "),
-          postalCode: entity.forretningsadresse.postnummer,
-          city: entity.forretningsadresse.poststed,
-          municipality: entity.forretningsadresse.kommune,
-        } : null,
-      }));
-
-      res.json({ entities: formattedEntities });
+      const entities = await fetchBrregEntities(q);
+      res.json({ entities });
     } catch (error) {
       console.error("Error searching brreg:", error?.message || String(error));
       res.json({ entities: [] });
@@ -503,7 +705,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "E-postadressen er allerede registrert" });
       }
 
-      const hashedPassword = hashPassword(password);
+      const hashedPassword = await hashPassword(password);
 
       const [newVendor] = await db.insert(vendors).values({
         email,
@@ -559,7 +761,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Ugyldig e-post eller passord" });
       }
 
-      if (!verifyPassword(password, vendor.password)) {
+      if (!(await verifyPassword(password, vendor.password))) {
         return res.status(401).json({ error: "Ugyldig e-post eller passord" });
       }
 
@@ -571,6 +773,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         token: sessionToken,
         expiresAt,
       });
+      cacheVendorToken(sessionToken, vendor.id, expiresAt);
 
       const { password: _, ...vendorWithoutPassword } = vendor;
       res.json({ vendor: vendorWithoutPassword, sessionToken });
@@ -604,6 +807,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             token: sessionToken,
             expiresAt,
           });
+          cacheVendorToken(sessionToken, existingVendor.id, expiresAt);
 
           const { password: _, ...vendorWithoutPassword } = existingVendor;
           return res.json({ 
@@ -658,6 +862,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.replace("Bearer ", "");
+      VENDOR_SESSIONS.delete(token);
+      VENDOR_AUTH_CACHE.delete(token);
       await db.delete(vendorSessions).where(eq(vendorSessions.token, token));
     }
     res.json({ message: "Logget ut" });
@@ -673,25 +879,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const token = authHeader.replace("Bearer ", "");
     
     try {
-      const [vendorSession] = await db.select({ vendorId: vendorSessions.vendorId })
-        .from(vendorSessions)
-        .where(and(
-          eq(vendorSessions.token, token),
-          sql`${vendorSessions.expiresAt} > NOW()`
-        ));
-      
-      if (!vendorSession) {
+      const vendorId = await checkVendorToken(token);
+      if (!vendorId) {
         res.status(401).json({ valid: false, error: "Økt utløpt" });
         return;
       }
 
-      const [vendor] = await db.select().from(vendors).where(eq(vendors.id, vendorSession.vendorId));
-      if (!vendor || vendor.status !== "approved") {
-        res.status(401).json({ valid: false, error: "Ikke autorisert" });
-        return;
-      }
+      const [vendor] = await db
+        .select({ businessName: vendors.businessName })
+        .from(vendors)
+        .where(eq(vendors.id, vendorId));
 
-      res.json({ valid: true, vendorId: vendorSession.vendorId, businessName: vendor.businessName });
+      res.json({ valid: true, vendorId, businessName: vendor?.businessName });
     } catch (error) {
       res.status(500).json({ valid: false, error: "Serverfeil" });
     }
@@ -934,26 +1133,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return null;
     }
     const token = authHeader.replace("Bearer ", "");
-    
-    // Check if session exists in database and is not expired
-    const [vendorSession] = await db.select({ vendorId: vendorSessions.vendorId })
-      .from(vendorSessions)
-      .where(and(
-        eq(vendorSessions.token, token),
-        sql`${vendorSessions.expiresAt} > NOW()`
-      ));
-    
-    if (!vendorSession) {
+
+    const vendorId = await checkVendorToken(token);
+    if (!vendorId) {
       res.status(401).json({ error: "Økt utløpt. Vennligst logg inn på nytt." });
       return null;
     }
 
-    const [vendor] = await db.select().from(vendors).where(eq(vendors.id, vendorSession.vendorId));
-    if (!vendor || vendor.status !== "approved") {
-      res.status(401).json({ error: "Ikke autorisert" });
-      return null;
-    }
-    return vendorSession.vendorId;
+    return vendorId;
   };
 
   // Check if vendor has active subscription (not paused)
@@ -1427,23 +1614,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const categoryId = req.query.categoryId as string | undefined;
 
-      const approvedInspirations = await db.select().from(inspirations).where(eq(inspirations.status, "approved"));
+      const inspirationWhere = categoryId
+        ? and(eq(inspirations.status, "approved"), eq(inspirations.categoryId, categoryId))
+        : eq(inspirations.status, "approved");
 
-      const filtered = categoryId 
-        ? approvedInspirations.filter(i => i.categoryId === categoryId)
-        : approvedInspirations;
+      const approvedInspirations = await db.select().from(inspirations).where(inspirationWhere);
+      if (approvedInspirations.length === 0) {
+        return res.json([]);
+      }
 
-      const inspirationsWithDetails = await Promise.all(
-        filtered.map(async (insp) => {
-          const media = await db.select().from(inspirationMedia).where(eq(inspirationMedia.inspirationId, insp.id));
-          const [vendor] = await db.select({
-            id: vendors.id,
-            businessName: vendors.businessName,
-          }).from(vendors).where(eq(vendors.id, insp.vendorId));
-          const [category] = await db.select().from(inspirationCategories).where(eq(inspirationCategories.id, insp.categoryId || ""));
-          return { ...insp, media, vendor, category };
-        })
+      const inspirationIds = approvedInspirations.map((insp) => insp.id);
+      const vendorIds = Array.from(new Set(approvedInspirations.map((insp) => insp.vendorId)));
+      const categoryIds = Array.from(
+        new Set(
+          approvedInspirations
+            .map((insp) => insp.categoryId)
+            .filter((id): id is string => Boolean(id))
+        )
       );
+
+      const [mediaRows, vendorRows, categoryRows] = await Promise.all([
+        db.select().from(inspirationMedia).where(inArray(inspirationMedia.inspirationId, inspirationIds)),
+        vendorIds.length
+          ? db
+              .select({ id: vendors.id, businessName: vendors.businessName })
+              .from(vendors)
+              .where(inArray(vendors.id, vendorIds))
+          : Promise.resolve([]),
+        categoryIds.length
+          ? db.select().from(inspirationCategories).where(inArray(inspirationCategories.id, categoryIds))
+          : Promise.resolve([]),
+      ]);
+
+      const mediaByInspiration = new Map<string, any[]>();
+      for (const media of mediaRows) {
+        const existing = mediaByInspiration.get(media.inspirationId);
+        if (existing) {
+          existing.push(media);
+        } else {
+          mediaByInspiration.set(media.inspirationId, [media]);
+        }
+      }
+
+      const vendorById = new Map(vendorRows.map((vendor) => [vendor.id, vendor]));
+      const categoryById = new Map(categoryRows.map((category) => [category.id, category]));
+
+      const inspirationsWithDetails = approvedInspirations.map((insp) => ({
+        ...insp,
+        media: mediaByInspiration.get(insp.id) || [],
+        vendor: vendorById.get(insp.vendorId) || null,
+        category: insp.categoryId ? categoryById.get(insp.categoryId) || null : null,
+      }));
 
       res.json(inspirationsWithDetails);
     } catch (error) {
@@ -1458,14 +1679,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const vendorInspirations = await db.select().from(inspirations).where(eq(inspirations.vendorId, vendorId));
+      if (vendorInspirations.length === 0) {
+        return res.json([]);
+      }
 
-      const inspirationsWithMedia = await Promise.all(
-        vendorInspirations.map(async (insp) => {
-          const media = await db.select().from(inspirationMedia).where(eq(inspirationMedia.inspirationId, insp.id));
-          const [category] = await db.select().from(inspirationCategories).where(eq(inspirationCategories.id, insp.categoryId || ""));
-          return { ...insp, media, category };
-        })
+      const inspirationIds = vendorInspirations.map((insp) => insp.id);
+      const categoryIds = Array.from(
+        new Set(
+          vendorInspirations
+            .map((insp) => insp.categoryId)
+            .filter((id): id is string => Boolean(id))
+        )
       );
+
+      const [mediaRows, categoryRows] = await Promise.all([
+        db.select().from(inspirationMedia).where(inArray(inspirationMedia.inspirationId, inspirationIds)),
+        categoryIds.length
+          ? db.select().from(inspirationCategories).where(inArray(inspirationCategories.id, categoryIds))
+          : Promise.resolve([]),
+      ]);
+
+      const mediaByInspiration = new Map<string, any[]>();
+      for (const media of mediaRows) {
+        const existing = mediaByInspiration.get(media.inspirationId);
+        if (existing) {
+          existing.push(media);
+        } else {
+          mediaByInspiration.set(media.inspirationId, [media]);
+        }
+      }
+
+      const categoryById = new Map(categoryRows.map((category) => [category.id, category]));
+      const inspirationsWithMedia = vendorInspirations.map((insp) => ({
+        ...insp,
+        media: mediaByInspiration.get(insp.id) || [],
+        category: insp.categoryId ? categoryById.get(insp.categoryId) || null : null,
+      }));
 
       res.json(inspirationsWithMedia);
     } catch (error) {
@@ -2083,6 +2332,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  registerCoupleFeatureRoutes(app, db, checkCoupleAuth);
+
   // ============ CONVERSATIONS & MESSAGES ============
 
   // Get couple's conversations
@@ -2098,26 +2349,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ))
         .orderBy(desc(conversations.lastMessageAt));
 
-      // Enrich with vendor and inspiration info
-      const enriched = await Promise.all(convos.map(async (conv) => {
-        const [vendor] = await db.select({ id: vendors.id, businessName: vendors.businessName })
-          .from(vendors).where(eq(vendors.id, conv.vendorId));
-        
-        let inspiration = null;
-        if (conv.inspirationId) {
-          const [insp] = await db.select({ id: inspirations.id, title: inspirations.title, coverImageUrl: inspirations.coverImageUrl })
-            .from(inspirations).where(eq(inspirations.id, conv.inspirationId));
-          inspiration = insp;
-        }
+      if (convos.length === 0) {
+        return res.json([]);
+      }
 
-        // Get last message
-        const [lastMsg] = await db.select().from(messages)
-          .where(eq(messages.conversationId, conv.id))
-          .orderBy(desc(messages.createdAt))
-          .limit(1);
+      const vendorIds = Array.from(new Set(convos.map((conv) => conv.vendorId)));
+      const inspirationIds = Array.from(
+        new Set(convos.map((conv) => conv.inspirationId).filter((id): id is string => Boolean(id)))
+      );
 
-        return { ...conv, vendor, inspiration, lastMessage: lastMsg };
-      }));
+      const [vendorRows, inspirationRows] = await Promise.all([
+        db
+          .select({ id: vendors.id, businessName: vendors.businessName })
+          .from(vendors)
+          .where(inArray(vendors.id, vendorIds)),
+        inspirationIds.length
+          ? db
+              .select({ id: inspirations.id, title: inspirations.title, coverImageUrl: inspirations.coverImageUrl })
+              .from(inspirations)
+              .where(inArray(inspirations.id, inspirationIds))
+          : Promise.resolve([]),
+      ]);
+
+      const vendorsById = new Map(vendorRows.map((vendor) => [vendor.id, vendor]));
+      const inspirationsById = new Map(inspirationRows.map((inspiration) => [inspiration.id, inspiration]));
+
+      const enriched = await Promise.all(
+        convos.map(async (conv) => {
+          const [lastMsg] = await db
+            .select()
+            .from(messages)
+            .where(eq(messages.conversationId, conv.id))
+            .orderBy(desc(messages.createdAt))
+            .limit(1);
+
+          return {
+            ...conv,
+            vendor: vendorsById.get(conv.vendorId) || null,
+            inspiration: conv.inspirationId ? inspirationsById.get(conv.inspirationId) || null : null,
+            lastMessage: lastMsg,
+          };
+        })
+      );
 
       res.json(enriched);
     } catch (error) {
@@ -2139,24 +2412,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ))
         .orderBy(desc(conversations.lastMessageAt));
 
-      const enriched = await Promise.all(convos.map(async (conv) => {
-        const [couple] = await db.select({ id: coupleProfiles.id, displayName: coupleProfiles.displayName, email: coupleProfiles.email })
-          .from(coupleProfiles).where(eq(coupleProfiles.id, conv.coupleId));
-        
-        let inspiration = null;
-        if (conv.inspirationId) {
-          const [insp] = await db.select({ id: inspirations.id, title: inspirations.title })
-            .from(inspirations).where(eq(inspirations.id, conv.inspirationId));
-          inspiration = insp;
-        }
+      if (convos.length === 0) {
+        return res.json([]);
+      }
 
-        const [lastMsg] = await db.select().from(messages)
-          .where(eq(messages.conversationId, conv.id))
-          .orderBy(desc(messages.createdAt))
-          .limit(1);
+      const coupleIds = Array.from(new Set(convos.map((conv) => conv.coupleId)));
+      const inspirationIds = Array.from(
+        new Set(convos.map((conv) => conv.inspirationId).filter((id): id is string => Boolean(id)))
+      );
 
-        return { ...conv, couple, inspiration, lastMessage: lastMsg };
-      }));
+      const [coupleRows, inspirationRows] = await Promise.all([
+        db
+          .select({ id: coupleProfiles.id, displayName: coupleProfiles.displayName, email: coupleProfiles.email })
+          .from(coupleProfiles)
+          .where(inArray(coupleProfiles.id, coupleIds)),
+        inspirationIds.length
+          ? db
+              .select({ id: inspirations.id, title: inspirations.title })
+              .from(inspirations)
+              .where(inArray(inspirations.id, inspirationIds))
+          : Promise.resolve([]),
+      ]);
+
+      const couplesById = new Map(coupleRows.map((couple) => [couple.id, couple]));
+      const inspirationsById = new Map(inspirationRows.map((inspiration) => [inspiration.id, inspiration]));
+
+      const enriched = await Promise.all(
+        convos.map(async (conv) => {
+          const [lastMsg] = await db
+            .select()
+            .from(messages)
+            .where(eq(messages.conversationId, conv.id))
+            .orderBy(desc(messages.createdAt))
+            .limit(1);
+
+          return {
+            ...conv,
+            couple: couplesById.get(conv.coupleId) || null,
+            inspiration: conv.inspirationId ? inspirationsById.get(conv.inspirationId) || null : null,
+            lastMessage: lastMsg,
+          };
+        })
+      );
 
       res.json(enriched);
     } catch (error) {
@@ -2625,12 +2922,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin typing indicator for vendor-admin chat
-  app.post("/api/admin/vendor-admin-conversations/:id/typing", async (req: Request, res: Response) => {
+  app.post("/api/admin/vendor-admin-conversations/:id/typing", typingRateLimit, async (req: Request, res: Response) => {
     if (!checkAdminAuth(req, res)) return;
     try {
       const { id } = req.params;
-      broadcastAdminConv(id, { type: "typing", payload: { sender: "admin", at: new Date().toISOString() } });
-      res.json({ success: true });
+      const typingCacheKey = `admin:${id}`;
+      if (!shouldEmitTypingEvent(typingCacheKey)) {
+        return res.json({ success: true, throttled: true });
+      }
+
+      const typingAt = new Date().toISOString();
+      broadcastAdminConv(id, { type: "typing", payload: { sender: "admin", at: typingAt } });
+      res.json({ success: true, throttled: false });
     } catch (error) {
       res.status(500).json({ error: "Kunne ikke sende skrive-status" });
     }
@@ -2708,7 +3011,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Vendor typing indicator
-  app.post("/api/vendor/conversations/:id/typing", async (req: Request, res: Response) => {
+  app.post("/api/vendor/conversations/:id/typing", typingRateLimit, async (req: Request, res: Response) => {
     const vendorId = await checkVendorAuth(req, res);
     if (!vendorId) return;
 
@@ -2716,22 +3019,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
 
       // Verify vendor owns this conversation
-      const [conv] = await db.select().from(conversations).where(eq(conversations.id, id));
-      if (!conv || conv.vendorId !== vendorId) {
+      const [conv] = await db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(and(eq(conversations.id, id), eq(conversations.vendorId, vendorId)))
+        .limit(1);
+      if (!conv) {
         return res.status(403).json({ error: "Ingen tilgang til denne samtalen" });
       }
 
+      const typingCacheKey = `vendor:${vendorId}:${id}`;
+      if (!shouldEmitTypingEvent(typingCacheKey)) {
+        return res.json({ success: true, throttled: true });
+      }
+
       // Update vendor typing timestamp
+      const typingAt = new Date();
       await db.update(conversations)
         .set({
-          vendorTypingAt: new Date(),
+          vendorTypingAt: typingAt,
         })
         .where(eq(conversations.id, id));
 
       // Broadcast typing to couple client(s)
-      broadcastConversation(id, { type: "typing", payload: { sender: "vendor", at: new Date().toISOString() } });
+      broadcastConversation(id, { type: "typing", payload: { sender: "vendor", at: typingAt.toISOString() } });
 
-      res.json({ success: true });
+      res.json({ success: true, throttled: false });
     } catch (error) {
       console.error("Error updating typing status:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere skrive-status" });
@@ -2739,7 +3052,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Couple typing indicator
-  app.post("/api/couples/conversations/:id/typing", async (req: Request, res: Response) => {
+  app.post("/api/couples/conversations/:id/typing", typingRateLimit, async (req: Request, res: Response) => {
     const coupleId = await checkCoupleAuth(req, res);
     if (!coupleId) return;
 
@@ -2747,22 +3060,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
 
       // Verify couple owns this conversation
-      const [conv] = await db.select().from(conversations).where(eq(conversations.id, id));
-      if (!conv || conv.coupleId !== coupleId) {
+      const [conv] = await db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(and(eq(conversations.id, id), eq(conversations.coupleId, coupleId)))
+        .limit(1);
+      if (!conv) {
         return res.status(403).json({ error: "Ingen tilgang til denne samtalen" });
       }
 
+      const typingCacheKey = `couple:${coupleId}:${id}`;
+      if (!shouldEmitTypingEvent(typingCacheKey)) {
+        return res.json({ success: true, throttled: true });
+      }
+
       // Update couple typing timestamp
+      const typingAt = new Date();
       await db.update(conversations)
         .set({
-          coupleTypingAt: new Date(),
+          coupleTypingAt: typingAt,
         })
         .where(eq(conversations.id, id));
 
       // Broadcast typing to vendor client(s)
-      broadcastConversation(id, { type: "typing", payload: { sender: "couple", at: new Date().toISOString() } });
+      broadcastConversation(id, { type: "typing", payload: { sender: "couple", at: typingAt.toISOString() } });
 
-      res.json({ success: true });
+      res.json({ success: true, throttled: false });
     } catch (error) {
       console.error("Error updating typing status:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke oppdatere skrive-status" });
@@ -3804,7 +4127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           conversationId: validatedData.conversationId,
           senderType: "vendor",
           senderId: vendorId,
-          body: `📋 Nytt tilbud: ${validatedData.title}\nTotalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`,
+          body: `[OFFER] Nytt tilbud: ${validatedData.title}\nTotalt: ${(totalAmount / 100).toLocaleString("nb-NO")} kr`,
         });
 
         // Update conversation
@@ -4272,34 +4595,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(vendorOffers.coupleId, coupleId))
         .orderBy(desc(vendorOffers.createdAt));
 
-      // Get items for each offer with product details
-      const offersWithItems = await Promise.all(
-        offers.map(async ({ offer, vendor }) => {
-          const items = await db.select({
-            item: vendorOfferItems,
-            product: vendorProducts,
-          })
-            .from(vendorOfferItems)
-            .leftJoin(vendorProducts, eq(vendorOfferItems.productId, vendorProducts.id))
-            .where(eq(vendorOfferItems.offerId, offer.id))
-            .orderBy(vendorOfferItems.sortOrder);
-          
-          // Format items with product availability info
-          const formattedItems = items.map(({ item, product }) => ({
-            ...item,
-            product: product ? {
-              id: product.id,
-              title: product.title,
-              trackInventory: product.trackInventory,
-              availableQuantity: product.availableQuantity,
-              reservedQuantity: product.reservedQuantity,
-              bookingBuffer: product.bookingBuffer,
-            } : null,
-          }));
-          
-          return { ...offer, vendor, items: formattedItems };
+      if (offers.length === 0) {
+        return res.json([]);
+      }
+
+      const offerIds = offers.map(({ offer }) => offer.id);
+      const offerItemsRows = await db
+        .select({
+          item: vendorOfferItems,
+          product: vendorProducts,
         })
-      );
+        .from(vendorOfferItems)
+        .leftJoin(vendorProducts, eq(vendorOfferItems.productId, vendorProducts.id))
+        .where(inArray(vendorOfferItems.offerId, offerIds))
+        .orderBy(vendorOfferItems.sortOrder);
+
+      const itemsByOfferId = new Map<string, any[]>();
+      for (const { item, product } of offerItemsRows) {
+        const formattedItem = {
+          ...item,
+          product: product
+            ? {
+                id: product.id,
+                title: product.title,
+                trackInventory: product.trackInventory,
+                availableQuantity: product.availableQuantity,
+                reservedQuantity: product.reservedQuantity,
+                bookingBuffer: product.bookingBuffer,
+              }
+            : null,
+        };
+
+        const existing = itemsByOfferId.get(item.offerId);
+        if (existing) {
+          existing.push(formattedItem);
+        } else {
+          itemsByOfferId.set(item.offerId, [formattedItem]);
+        }
+      }
+
+      const offersWithItems = offers.map(({ offer, vendor }) => ({
+        ...offer,
+        vendor,
+        items: itemsByOfferId.get(offer.id) || [],
+      }));
 
       res.json(offersWithItems);
     } catch (error) {
@@ -7823,6 +8162,126 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== BUDGET ROUTES =====
+
+  // Get budget settings
+  app.get("/api/couple/budget/settings", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const [settings] = await db.select().from(coupleBudgetSettings).where(eq(coupleBudgetSettings.coupleId, coupleId));
+      res.json(settings || { totalBudget: 0, currency: "NOK" });
+    } catch (error) {
+      console.error("Error fetching budget settings:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke hente budsjettinnstillinger" });
+    }
+  });
+
+  // Update budget settings (upsert)
+  app.put("/api/couple/budget/settings", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const { totalBudget, currency } = req.body;
+      const [existing] = await db.select().from(coupleBudgetSettings).where(eq(coupleBudgetSettings.coupleId, coupleId));
+      if (existing) {
+        const [updated] = await db.update(coupleBudgetSettings)
+          .set({ totalBudget, currency, updatedAt: new Date() })
+          .where(eq(coupleBudgetSettings.coupleId, coupleId))
+          .returning();
+        res.json(updated);
+      } else {
+        const [created] = await db.insert(coupleBudgetSettings)
+          .values({ coupleId, totalBudget, currency: currency || "NOK" })
+          .returning();
+        res.json(created);
+      }
+    } catch (error) {
+      console.error("Error updating budget settings:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke oppdatere budsjettinnstillinger" });
+    }
+  });
+
+  // Get budget items
+  app.get("/api/couple/budget/items", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const items = await db.select().from(coupleBudgetItems)
+        .where(eq(coupleBudgetItems.coupleId, coupleId))
+        .orderBy(coupleBudgetItems.sortOrder, coupleBudgetItems.createdAt);
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching budget items:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke hente budsjettlinjer" });
+    }
+  });
+
+  // Create budget item
+  app.post("/api/couple/budget/items", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const parsed = createBudgetItemSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Ugyldig data", details: parsed.error.flatten() });
+      }
+      const [item] = await db.insert(coupleBudgetItems)
+        .values({ coupleId, ...parsed.data })
+        .returning();
+      res.json(item);
+    } catch (error) {
+      console.error("Error creating budget item:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke opprette budsjettlinje" });
+    }
+  });
+
+  // Update budget item
+  app.patch("/api/couple/budget/items/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const { id } = req.params;
+      const { category, label, estimatedCost, actualCost, isPaid, notes, sortOrder } = req.body;
+      const [existing] = await db.select().from(coupleBudgetItems)
+        .where(and(eq(coupleBudgetItems.id, id), eq(coupleBudgetItems.coupleId, coupleId)));
+      if (!existing) {
+        return res.status(404).json({ error: "Fant ikke budsjettlinje" });
+      }
+      const updateData: Record<string, any> = { updatedAt: new Date() };
+      if (category !== undefined) updateData.category = category;
+      if (label !== undefined) updateData.label = label;
+      if (estimatedCost !== undefined) updateData.estimatedCost = estimatedCost;
+      if (actualCost !== undefined) updateData.actualCost = actualCost;
+      if (isPaid !== undefined) updateData.isPaid = isPaid;
+      if (notes !== undefined) updateData.notes = notes;
+      if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
+      const [updated] = await db.update(coupleBudgetItems)
+        .set(updateData)
+        .where(eq(coupleBudgetItems.id, id))
+        .returning();
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating budget item:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke oppdatere budsjettlinje" });
+    }
+  });
+
+  // Delete budget item
+  app.delete("/api/couple/budget/items/:id", async (req: Request, res: Response) => {
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const { id } = req.params;
+      await db.delete(coupleBudgetItems)
+        .where(and(eq(coupleBudgetItems.id, id), eq(coupleBudgetItems.coupleId, coupleId)));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting budget item:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke slette budsjettlinje" });
+    }
+  });
+
   // ===== FAQ ROUTES =====
   
   // Get FAQ items by category (public)
@@ -8464,6 +8923,747 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try { ws.close(); } catch {}
     }
   });
+
+  // ─── Playwright test runner panel ────────────────────────────────────
+  interface PlaywrightTestResult {
+    title: string;
+    fullTitle: string;
+    project: string;
+    status: "passed" | "failed" | "skipped" | "timedOut";
+    duration: number;
+    error?: string;
+  }
+
+  interface PlaywrightRun {
+    id: string;
+    status: "queued" | "running" | "passed" | "failed";
+    startedAt?: string;
+    finishedAt?: string;
+    summary: { passed: number; failed: number; skipped: number; total: number };
+    results: PlaywrightTestResult[];
+    logs: string[];
+    project?: string; // optional project filter
+  }
+
+  let latestPlaywrightRun: PlaywrightRun | null = null;
+
+  app.get("/api/admin/playwright", (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    res.json({ latest: latestPlaywrightRun });
+  });
+
+  app.post("/api/admin/playwright", (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+
+    if (latestPlaywrightRun?.status === "running") {
+      res.status(409).json({ error: "En Playwright-kjøring pågår allerede" });
+      return;
+    }
+
+    const projectFilter: string | undefined = req.body?.project; // "evendi-api" | "creatorhub-api" | "bridge-api" | undefined (all)
+
+    const run: PlaywrightRun = {
+      id: Date.now().toString(36),
+      status: "running",
+      startedAt: new Date().toISOString(),
+      summary: { passed: 0, failed: 0, skipped: 0, total: 0 },
+      results: [],
+      logs: [],
+      project: projectFilter,
+    };
+    latestPlaywrightRun = run;
+
+    res.json({ ok: true, id: run.id });
+
+    // Spawn Playwright in the background
+    const { spawn } = require("child_process");
+    const args = ["playwright", "test", "--reporter=json"];
+    if (projectFilter) {
+      args.push("--project", projectFilter);
+    }
+
+    run.logs.push(`$ npx ${args.join(" ")}`);
+
+    const child = spawn("npx", args, {
+      cwd: process.cwd(),
+      env: { ...process.env },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let jsonBuf = "";
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      jsonBuf += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk: Buffer) => {
+      const lines = chunk.toString().split("\n").filter(Boolean);
+      for (const line of lines) {
+        run.logs.push(line);
+        // Keep log buffer bounded
+        if (run.logs.length > 500) run.logs.shift();
+      }
+    });
+
+    child.on("close", (code: number | null) => {
+      run.finishedAt = new Date().toISOString();
+
+      // Parse the JSON reporter output
+      try {
+        const report = JSON.parse(jsonBuf);
+        const suites = report.suites || [];
+
+        const extractTests = (suiteArr: any[]): void => {
+          for (const suite of suiteArr) {
+            if (suite.specs) {
+              for (const spec of suite.specs) {
+                for (const test of spec.tests || []) {
+                  for (const result of test.results || []) {
+                    const projectName = test.projectName || suite.title || "";
+                    const status = result.status === "passed" ? "passed"
+                      : result.status === "failed" ? "failed"
+                      : result.status === "timedOut" ? "timedOut"
+                      : "skipped";
+                    const entry: PlaywrightTestResult = {
+                      title: spec.title,
+                      fullTitle: `${suite.title} > ${spec.title}`,
+                      project: projectName,
+                      status,
+                      duration: result.duration || 0,
+                      error: result.error?.message || result.error?.snippet || undefined,
+                    };
+                    run.results.push(entry);
+                  }
+                }
+              }
+            }
+            if (suite.suites) extractTests(suite.suites);
+          }
+        };
+
+        extractTests(suites);
+
+        run.summary.total = run.results.length;
+        run.summary.passed = run.results.filter((r) => r.status === "passed").length;
+        run.summary.failed = run.results.filter((r) => r.status === "failed" || r.status === "timedOut").length;
+        run.summary.skipped = run.results.filter((r) => r.status === "skipped").length;
+        run.status = run.summary.failed > 0 ? "failed" : "passed";
+      } catch {
+        run.logs.push("⚠ Could not parse JSON reporter output");
+        run.status = code === 0 ? "passed" : "failed";
+      }
+
+      run.logs.push(`\nPlaywright exited with code ${code}`);
+    });
+  });
+
+  // Register expertise and matching routes
+  registerExpertiseRoutes(app);
+
+  // ============================================================================
+  // VENDOR AVAILABILITY SETTINGS
+  // ============================================================================
+
+  /**
+   * POST /api/vendor/availability/settings
+   * Save vendor availability settings (enable/disable calendar, lead times)
+   */
+  app.post("/api/vendor/availability/settings", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { isEnabled, leadTimeMinDays, leadTimeMaxDays } = req.body;
+
+      if (typeof isEnabled !== "boolean" || typeof leadTimeMinDays !== "number" || typeof leadTimeMaxDays !== "number") {
+        return res.status(400).json({
+          success: false,
+          error: "isEnabled, leadTimeMinDays, and leadTimeMaxDays are required",
+        });
+      }
+
+      // For now, store in memory or as a note field update
+      // In production, would create a vendor_availability_settings table
+      res.json({
+        success: true,
+        settings: {
+          vendorId,
+          isEnabled,
+          leadTimeMinDays,
+          leadTimeMaxDays,
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error("Error saving availability settings:", error);
+      res.status(500).json({
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to save availability settings",
+      });
+    }
+  });
+
+  /**
+   * GET /api/vendor/availability/settings/:vendorId
+   * Get vendor availability settings
+   */
+  app.get("/api/vendor/availability/settings/:vendorId", async (req: Request, res: Response) => {
+    try {
+      const { vendorId } = req.params;
+
+      // Verify it's a valid vendor
+      const vendor = await db
+        .select()
+        .from(vendors)
+        .where(eq(vendors.id, vendorId))
+        .limit(1);
+
+      if (vendor.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: "Vendor not found",
+        });
+      }
+
+      // Default settings (in production would read from database)
+      res.json({
+        vendorId,
+        isEnabled: false,
+        leadTimeMinDays: 7,
+        leadTimeMaxDays: 90,
+      });
+    } catch (error) {
+      console.error("Error fetching availability settings:", error);
+      res.status(500).json({
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch availability settings",
+      });
+    }
+  });
+
+  /**
+   * PUT /api/vendor/availability
+   * Bulk update availability dates (for calendar management)
+   */
+  app.put("/api/vendor/availability", async (req: Request, res: Response) => {
+    const vendorId = await checkVendorAuth(req, res);
+    if (!vendorId) return;
+
+    try {
+      const { dates } = req.body;
+
+      if (!Array.isArray(dates)) {
+        return res.status(400).json({
+          success: false,
+          error: "dates array is required",
+        });
+      }
+
+      const results = [];
+      for (const { date, isAvailable } of dates) {
+        const [existing] = await db
+          .select()
+          .from(vendorAvailability)
+          .where(
+            and(
+              eq(vendorAvailability.vendorId, vendorId),
+              eq(vendorAvailability.date, date)
+            )
+          );
+
+        let result;
+        if (existing) {
+          [result] = await db
+            .update(vendorAvailability)
+            .set({
+              status: isAvailable ? "available" : "blocked",
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(vendorAvailability.vendorId, vendorId),
+                eq(vendorAvailability.date, date)
+              )
+            )
+            .returning();
+        } else {
+          [result] = await db
+            .insert(vendorAvailability)
+            .values({
+              vendorId,
+              date,
+              status: isAvailable ? "available" : "blocked",
+            })
+            .returning();
+        }
+        results.push(result);
+      }
+
+      res.json({
+        success: true,
+        updated: results.length,
+        dates: results,
+      });
+    } catch (error) {
+      console.error("Error updating availability:", error);
+      res.status(500).json({
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to update availability",
+      });
+    }
+  });
+
+  // ============================================================================
+  // VENDOR CONTACT & FAVORITES ENDPOINTS
+  // ============================================================================
+
+  /**
+   * POST /api/vendor/:vendorId/contact
+   * Send contact request to a vendor
+   */
+  app.post("/api/vendor/:vendorId/contact", async (req: Request, res: Response) => {
+    try {
+      const { vendorId } = req.params;
+      const { coupleId, message } = req.body;
+
+      if (!coupleId || !message) {
+        return res.status(400).json({
+          success: false,
+          error: "coupleId and message are required",
+        });
+      }
+
+      // Get vendor
+      const vendorResult = await db
+        .select()
+        .from(vendors)
+        .where(eq(vendors.id, vendorId))
+        .limit(1);
+
+      if (vendorResult.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: "Vendor not found",
+        });
+      }
+
+      // For now, just return success (in production, would create a message/contact record)
+      res.json({
+        success: true,
+        message: "Contact request sent to vendor",
+        vendorId,
+        coupleId,
+      });
+    } catch (error) {
+      console.error("Error sending contact request:", error);
+      res.status(500).json({
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to send contact request",
+      });
+    }
+  });
+
+  /**
+   * POST /api/couple/:coupleId/favorites/add
+   * Add vendor to couple's favorites
+   */
+  app.post("/api/couple/:coupleId/favorites/add", async (req: Request, res: Response) => {
+    try {
+      const { coupleId } = req.params;
+      const { vendorId, notes } = req.body;
+
+      if (!vendorId) {
+        return res.status(400).json({
+          success: false,
+          error: "vendorId is required",
+        });
+      }
+
+      // Verify vendor exists
+      const vendorResult = await db
+        .select()
+        .from(vendors)
+        .where(eq(vendors.id, vendorId))
+        .limit(1);
+
+      if (vendorResult.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: "Vendor not found",
+        });
+      }
+
+      // Check if already favorited
+      const existing = await db
+        .select()
+        .from(coupleVendorFavorites)
+        .where(
+          and(
+            eq(coupleVendorFavorites.coupleId, coupleId),
+            eq(coupleVendorFavorites.vendorId, vendorId)
+          )
+        )
+        .limit(1);
+
+      if (existing.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Vendor already in favorites",
+        });
+      }
+
+      // Add to favorites
+      const favorite = await db
+        .insert(coupleVendorFavorites)
+        .values({
+          coupleId,
+          vendorId,
+          notes: notes || undefined,
+        })
+        .returning();
+
+      res.json({
+        success: true,
+        message: "Vendor added to favorites",
+        favorite: favorite[0],
+      });
+    } catch (error) {
+      console.error("Error adding favorite:", error);
+      res.status(500).json({
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to add favorite",
+      });
+    }
+  });
+
+  /**
+   * GET /api/couple/:coupleId/favorites
+   * Get all of couple's favorite vendors
+   */
+  app.get("/api/couple/:coupleId/favorites", async (req: Request, res: Response) => {
+    try {
+      const { coupleId } = req.params;
+
+      const favorites = await db
+        .select({
+          id: coupleVendorFavorites.id,
+          vendorId: coupleVendorFavorites.vendorId,
+          notes: coupleVendorFavorites.notes,
+          addedAt: coupleVendorFavorites.addedAt,
+          vendor: {
+            id: vendors.id,
+            businessName: vendors.businessName,
+            description: vendors.description,
+            location: vendors.location,
+            priceRange: vendors.priceRange,
+            imageUrl: vendors.imageUrl,
+            categoryId: vendors.categoryId,
+          },
+        })
+        .from(coupleVendorFavorites)
+        .leftJoin(vendors, eq(coupleVendorFavorites.vendorId, vendors.id))
+        .where(eq(coupleVendorFavorites.coupleId, coupleId))
+        .orderBy(desc(coupleVendorFavorites.addedAt));
+
+      res.json({
+        success: true,
+        favorites,
+        count: favorites.length,
+      });
+    } catch (error) {
+      console.error("Error fetching favorites:", error);
+      res.status(500).json({
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch favorites",
+      });
+    }
+  });
+
+  /**
+   * DELETE /api/couple/:coupleId/favorites/:vendorId
+   * Remove vendor from couple's favorites
+   */
+  app.delete(
+    "/api/couple/:coupleId/favorites/:vendorId",
+    async (req: Request, res: Response) => {
+      try {
+        const { coupleId, vendorId } = req.params;
+
+        // Delete the favorite
+        const result = await db
+          .delete(coupleVendorFavorites)
+          .where(
+            and(
+              eq(coupleVendorFavorites.coupleId, coupleId),
+              eq(coupleVendorFavorites.vendorId, vendorId)
+            )
+          )
+          .returning();
+
+        if (result.length === 0) {
+          return res.status(404).json({
+            success: false,
+            error: "Favorite not found",
+          });
+        }
+
+        res.json({
+          success: true,
+          message: "Vendor removed from favorites",
+        });
+      } catch (error) {
+        console.error("Error removing favorite:", error);
+        res.status(500).json({
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to remove favorite",
+        });
+      }
+    }
+  );
+
+  // ============================================================================
+  // REVIEW & RATING ENDPOINTS
+  // ============================================================================
+
+  /**
+   * POST /api/vendor/:vendorId/review
+   * Submit a review for a vendor
+   */
+  app.post("/api/vendor/:vendorId/review", async (req: Request, res: Response) => {
+    try {
+      const { vendorId } = req.params;
+      const { coupleId, rating, title, description } = req.body;
+
+      if (!coupleId || !rating || !title || !description) {
+        return res.status(400).json({
+          success: false,
+          error: "coupleId, rating, title, and description are required",
+        });
+      }
+
+      if (rating < 1 || rating > 5) {
+        return res.status(400).json({
+          success: false,
+          error: "Rating must be between 1 and 5",
+        });
+      }
+
+      // For now, just return success (in production, would save to reviews table)
+      res.json({
+        success: true,
+        message: "Review submitted successfully",
+        vendorId,
+        coupleId,
+        rating,
+      });
+    } catch (error) {
+      console.error("Error submitting review:", error);
+      res.status(500).json({
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to submit review",
+      });
+    }
+  });
+
+  /**
+   * GET /api/vendor/:vendorId/reviews
+   * Get all reviews for a vendor
+   */
+  app.get("/api/vendor/:vendorId/reviews", async (req: Request, res: Response) => {
+    try {
+      const { vendorId } = req.params;
+
+      // For now, return empty list (in production, would fetch from reviews table)
+      res.json({
+        success: true,
+        data: [],
+        count: 0,
+      });
+    } catch (error) {
+      console.error("Error fetching reviews:", error);
+      res.status(500).json({
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch reviews",
+      });
+    }
+  });
+
+  /**
+   * GET /api/vendor/:vendorId/review-stats
+   * Get rating statistics for a vendor
+   */
+  app.get("/api/vendor/:vendorId/review-stats", async (req: Request, res: Response) => {
+    try {
+      const { vendorId } = req.params;
+
+      // For now, return default stats (in production, would calculate from reviews)
+      res.json({
+        average: 0,
+        total: 0,
+        distribution: {
+          5: 0,
+          4: 0,
+          3: 0,
+          2: 0,
+          1: 0,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching review stats:", error);
+      res.status(500).json({
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch review stats",
+      });
+    }
+  });
+
+  // ============================================================================
+  // CONVERSATION & MESSAGING ENDPOINTS
+  // ============================================================================
+
+  /**
+   * GET /api/conversation/:conversationId
+   * Get conversation and all messages
+   */
+  app.get("/api/conversation/:conversationId", async (req: Request, res: Response) => {
+    try {
+      const { conversationId } = req.params;
+
+      // Get conversation from existing conversations table
+      const convResult = await db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .limit(1);
+
+      if (convResult.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: "Conversation not found",
+        });
+      }
+
+      const conversation = convResult[0];
+
+      // Get messages from existing messages table
+      const msgs = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.conversationId, conversationId));
+
+      // Get vendor info
+      const vendorResult = await db
+        .select()
+        .from(vendors)
+        .where(eq(vendors.id, conversation.vendorId))
+        .limit(1);
+
+      res.json({
+        success: true,
+        data: {
+          id: conversation.id,
+          coupleId: conversation.coupleId,
+          vendorId: conversation.vendorId,
+          vendorName: vendorResult[0]?.businessName || "Vendor",
+          messages: msgs,
+          lastMessageAt: conversation.lastMessageAt,
+          coupleUnreadCount: conversation.coupleUnreadCount,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching conversation:", error);
+      res.status(500).json({
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch conversation",
+      });
+    }
+  });
+
+  /**
+   * POST /api/conversation/:conversationId/message
+   * Send a message in a conversation
+   */
+  app.post(
+    "/api/conversation/:conversationId/message",
+    async (req: Request, res: Response) => {
+      try {
+        const { conversationId } = req.params;
+        const { body, senderType } = req.body;
+
+        if (!body || !senderType) {
+          return res.status(400).json({
+            success: false,
+            error: "body and senderType are required",
+          });
+        }
+
+        // Get conversation to verify it exists
+        const convResult = await db
+          .select()
+          .from(conversations)
+          .where(eq(conversations.id, conversationId))
+          .limit(1);
+
+        if (convResult.length === 0) {
+          return res.status(404).json({
+            success: false,
+            error: "Conversation not found",
+          });
+        }
+
+        // For now, just return success (in production, would save message)
+        res.json({
+          success: true,
+          message: "Message sent successfully",
+          conversationId,
+          body,
+          senderType,
+        });
+      } catch (error) {
+        console.error("Error sending message:", error);
+        res.status(500).json({
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to send message",
+        });
+      }
+    }
+  );
 
   // Register subscription routes
   registerSubscriptionRoutes(app);

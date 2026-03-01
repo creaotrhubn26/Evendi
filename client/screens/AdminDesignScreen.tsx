@@ -759,7 +759,7 @@ export default function AdminDesignScreen() {
           <ThemedText style={{ color: theme.textSecondary, fontSize: 12, marginBottom: Spacing.md }}>
             Trykk for a velge egne ikoner for arrangementstyper.
           </ThemedText>
-          {EVENT_TYPE_CONFIGS.map((config) => {
+          {Object.values(EVENT_TYPE_CONFIGS).map((config) => {
             const hasCustom = !!customEventIcons[config.type];
             return (
               <View key={config.type} style={[styles.eventIconRow, { borderBottomColor: theme.border }]}>

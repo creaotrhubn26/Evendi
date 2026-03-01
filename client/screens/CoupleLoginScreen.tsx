@@ -272,7 +272,13 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
         contentContainerStyle={styles.content}
       >
         {showLogo ? (
-          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+          <Image
+            source={logoSource}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="Evendi logo"
+            testID="evendi-logo"
+          />
         ) : (
           <ThemedText style={styles.logoText}>
             {designSettings.appName || "Evendi"}
@@ -360,9 +366,9 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
             ]}
           >
             {loginMutation.isPending ? (
-              <ActivityIndicator color="#1A1A1A" />
+              <ActivityIndicator color={theme.buttonText} />
             ) : (
-              <ThemedText style={styles.loginBtnText}>
+              <ThemedText style={[styles.loginBtnText, { color: theme.buttonText }]}>
                 {isRegistering ? "Registrer deg" : "Logg inn"}
               </ThemedText>
             )}
@@ -370,7 +376,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
 
           <View style={styles.dividerContainer}>
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            <ThemedText style={[styles.dividerText, { color: theme.textMuted }]}>ELLER</ThemedText>
+            <ThemedText style={[styles.dividerText, { color: theme.text }]}>ELLER</ThemedText>
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
           </View>
 
@@ -412,7 +418,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
             setErrors({});
             setTouched({});
           }}>
-            <ThemedText style={[styles.toggleLink, { color: Colors.dark.accent }]}>
+            <ThemedText style={[styles.toggleLink, { color: theme.text }]}>
               {isRegistering ? "Logg inn" : "Registrer deg"}
             </ThemedText>
           </Pressable>
@@ -453,7 +459,7 @@ export default function CoupleLoginScreen({ navigation, onLoginSuccess }: Props)
           </Pressable>
         </View>
 
-        <ThemedText style={[styles.infoText, { color: theme.textMuted }]}>
+        <ThemedText style={[styles.infoText, { color: theme.text }]}>
           Med Evendi får du full kontroll over planleggingen – fra gjesteoversikt og tidslinje til budsjett og leverandørsamtaler.
         </ThemedText>
       </KeyboardAwareScrollViewCompat>
@@ -764,7 +770,6 @@ const styles = StyleSheet.create({
   loginBtnText: {
     fontSize: 17,
     fontWeight: "600",
-    color: "#1A1A1A",
   },
   dividerContainer: {
     flexDirection: "row",

@@ -78,9 +78,17 @@ export const EMPTY_STATE_CONFIGS: EmptyStateConfig[] = [
 
 // ─── Bundled images (only for screens that have PNGs) ───────────
 const BUNDLED_IMAGES: Partial<Record<EmptyStateKey, ImageSourcePropType>> = {
-  guests: require("@/assets/images/empty-guests.png"),
-  schedule: require("@/assets/images/empty-schedule.png"),
-  inspiration: require("@/assets/images/empty-inspiration.png"),
+  guests: require("@/assets/images/empty_gueste.png"),
+  schedule: require("@/assets/images/empty_schedule.png"),
+  inspiration: require("@/assets/images/empty_vendors.png"),
+  vendors: require("@/assets/images/empty_vendors.png"),
+  messages: require("@/assets/images/empty_messages.png"),
+  reminders: require("@/assets/images/empty_reminders.png"),
+  offers: require("@/assets/images/empty_offers.png"),
+  important_people: require("@/assets/images/empty_important people.png"),
+  contracts: require("@/assets/images/empty_contracts.png"),
+  planlegger_tasks: require("@/assets/images/empty_tasks.png"),
+  timeline: require("@/assets/images/empty_timeline.png"),
 };
 
 /**

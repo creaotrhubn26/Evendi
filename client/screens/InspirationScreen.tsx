@@ -5,6 +5,7 @@ import {
   View,
   Pressable,
   useWindowDimensions,
+  Dimensions,
   ActivityIndicator,
   RefreshControl,
   Modal,
@@ -32,6 +33,7 @@ import { showToast } from "@/lib/toast";
 import PersistentTextInput from "@/components/PersistentTextInput";
 
 const GRID_GAP = Spacing.sm;
+const DEFAULT_CARD_WIDTH = (Dimensions.get('window').width - Spacing.lg * 2 - GRID_GAP) / 2;
 
 interface InspirationCategory {
   id: string;
@@ -663,13 +665,13 @@ const styles = StyleSheet.create({
     marginBottom: Spacing["2xl"],
   },
   imageCard: {
-    width: CARD_WIDTH,
+    width: DEFAULT_CARD_WIDTH,
     borderRadius: BorderRadius.md,
     overflow: "hidden",
   },
   imagePlaceholder: {
     width: "100%",
-    height: CARD_WIDTH * 1.3,
+    height: DEFAULT_CARD_WIDTH * 1.3,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -678,7 +680,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: CARD_WIDTH * 1.3,
+    height: DEFAULT_CARD_WIDTH * 1.3,
     justifyContent: "space-between",
     padding: Spacing.sm,
   },

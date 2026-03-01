@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRoute } from "@react-navigation/native";
 
 const STORAGE_PREFIX = "evendi_draft";
+const DRAFT_WRITE_DEBOUNCE_MS = 250;
 
 function normalizeKey(value: string) {
   return value.trim().replace(/\s+/g, " ");
@@ -49,6 +50,9 @@ export const PersistentTextInput = React.forwardRef<TextInput, PersistentTextInp
     typeof value === "string" ? value : String(defaultValue ?? ""),
   );
   const isHydrated = useRef(false);
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onChangeTextRef = useRef(onChangeText);
+  const isControlledRef = useRef(typeof value === "string");
 
   useEffect(() => {
     if (typeof value === "string") {
@@ -57,14 +61,33 @@ export const PersistentTextInput = React.forwardRef<TextInput, PersistentTextInp
   }, [value]);
 
   useEffect(() => {
+    onChangeTextRef.current = onChangeText;
+  }, [onChangeText]);
+
+  useEffect(() => {
+    isControlledRef.current = typeof value === "string";
+  }, [value]);
+
+  useEffect(() => {
+    if (!isHydrated.current || typeof value !== "string") return;
+    if (value.trim().length > 0) return;
+
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    AsyncStorage.removeItem(storageKey).catch(() => undefined);
+  }, [storageKey, value]);
+
+  useEffect(() => {
     let isMounted = true;
     const hydrateDraft = async () => {
       try {
         const draft = await AsyncStorage.getItem(storageKey);
         if (!isMounted || draft == null) return;
 
-        if (typeof value === "string") {
-          onChangeText?.(draft);
+        if (isControlledRef.current) {
+          onChangeTextRef.current?.(draft);
         } else {
           setInternalValue(draft);
         }
@@ -81,7 +104,16 @@ export const PersistentTextInput = React.forwardRef<TextInput, PersistentTextInp
     return () => {
       isMounted = false;
     };
-  }, [storageKey, value, onChangeText]);
+  }, [storageKey]);
+
+  useEffect(() => {
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleChangeText = (text: string) => {
     if (!isHydrated.current) {
@@ -94,12 +126,17 @@ export const PersistentTextInput = React.forwardRef<TextInput, PersistentTextInp
 
     onChangeText?.(text);
 
-    if (text.trim().length === 0) {
-      AsyncStorage.removeItem(storageKey).catch(() => undefined);
-      return;
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
     }
-
-    AsyncStorage.setItem(storageKey, text).catch(() => undefined);
+    persistTimerRef.current = setTimeout(() => {
+      if (text.trim().length === 0) {
+        AsyncStorage.removeItem(storageKey).catch(() => undefined);
+      } else {
+        AsyncStorage.setItem(storageKey, text).catch(() => undefined);
+      }
+      persistTimerRef.current = null;
+    }, DRAFT_WRITE_DEBOUNCE_MS);
   };
 
     return (

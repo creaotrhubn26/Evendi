@@ -58,6 +58,7 @@ export default function CoupleContractsScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { getSetting } = useAppSettings();
   const queryClient = useQueryClient();
   const navigation = useNavigation();
 

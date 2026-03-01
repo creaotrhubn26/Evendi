@@ -1,0 +1,401 @@
+{
+  "config": {
+    "configFile": "/workspaces/wedflow/playwright.config.ts",
+    "rootDir": "/workspaces/wedflow/e2e",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/workspaces/wedflow/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "evendi-api",
+        "name": "evendi-api",
+        "testDir": "/workspaces/wedflow/e2e",
+        "testIgnore": [
+          "/creatorhub-/"
+        ],
+        "testMatch": [
+          "/evendi-.*\\.spec\\.ts$/"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/workspaces/wedflow/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "creatorhub-api",
+        "name": "creatorhub-api",
+        "testDir": "/workspaces/wedflow/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "/creatorhub-.*\\.spec\\.ts$/"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/workspaces/wedflow/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "bridge-api",
+        "name": "bridge-api",
+        "testDir": "/workspaces/wedflow/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "/bridge-.*\\.spec\\.ts$/"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "evendi-extreme-journey.spec.ts",
+      "file": "evendi-extreme-journey.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Extreme journey - desktop",
+          "file": "evendi-extreme-journey.spec.ts",
+          "line": 434,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Couple planning",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 180000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "evendi-api",
+                  "projectName": "evendi-api",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 78000,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[journey] stored couple session: {\"sessionToken\":\"b606b20be56f7c32ab5cce6496f9a1c27a0fca2b5f49e090c032636c978c96bb\",\"coupleId\":\"977b7ee9-0ebb-47fe-88ef-b6f554030868\",\"email\":\"seed.couple@evendi.local\",\"displayName\":\"seed.couple\"}\n"
+                        },
+                        {
+                          "text": "[journey] checklist ping status: 200\n"
+                        },
+                        {
+                          "text": "[journey] open: Sjekkliste\n"
+                        },
+                        {
+                          "text": "[journey] back: Sjekkliste\n"
+                        },
+                        {
+                          "text": "[journey] open: Påminnelser\n"
+                        },
+                        {
+                          "text": "[journey] back: Påminnelser\n"
+                        },
+                        {
+                          "text": "[journey] open: Vær\n"
+                        },
+                        {
+                          "text": "[journey] back: Vær\n"
+                        },
+                        {
+                          "text": "[journey] open: Pust\n"
+                        },
+                        {
+                          "text": "[journey] back: Pust\n"
+                        },
+                        {
+                          "text": "[journey] open: Tradisjoner\n"
+                        },
+                        {
+                          "text": "[journey] back: Tradisjoner\n"
+                        },
+                        {
+                          "text": "[journey] open: Kjøreplan\n"
+                        },
+                        {
+                          "text": "[journey] back: Kjøreplan\n"
+                        },
+                        {
+                          "text": "[journey] open: Tidslinje\n"
+                        },
+                        {
+                          "text": "[journey] back: Tidslinje\n"
+                        },
+                        {
+                          "text": "[journey] open: Foto & Video Tidsplan\n"
+                        },
+                        {
+                          "text": "[journey] back: Foto & Video Tidsplan\n"
+                        },
+                        {
+                          "text": "[journey] open: Budsjett\n"
+                        },
+                        {
+                          "text": "[journey] back: Budsjett\n"
+                        },
+                        {
+                          "text": "[journey] open: Leverandører\n"
+                        },
+                        {
+                          "text": "[journey] back: Leverandører\n"
+                        },
+                        {
+                          "text": "[journey] open: Finn leverandør\n"
+                        },
+                        {
+                          "text": "[journey] back: Finn leverandør\n"
+                        },
+                        {
+                          "text": "[journey] open: Viktige personer\n"
+                        },
+                        {
+                          "text": "[journey] back: Viktige personer\n"
+                        },
+                        {
+                          "text": "[journey] open: Meldinger\n"
+                        },
+                        {
+                          "text": "[journey] back: Meldinger\n"
+                        },
+                        {
+                          "text": "[journey] open: Tilbud\n"
+                        },
+                        {
+                          "text": "[journey] back: Tilbud\n"
+                        },
+                        {
+                          "text": "[journey] open: Hent leveranse\n"
+                        },
+                        {
+                          "text": "[journey] back: Hent leveranse\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "[page closed] Page was closed unexpectedly\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2026-02-17T18:06:35.744Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "4a189b125de45c6d9ffe-c790292e580f5aed0358",
+              "file": "evendi-extreme-journey.spec.ts",
+              "line": 437,
+              "column": 7
+            },
+            {
+              "title": "Couple guests",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 180000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "evendi-api",
+                  "projectName": "evendi-api",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 51846,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[journey] stored couple session: {\"sessionToken\":\"33886d9a0b83c18981dfd4abbe701578ce564e5b77f28a8a95eb0c73a351b84b\",\"coupleId\":\"977b7ee9-0ebb-47fe-88ef-b6f554030868\",\"email\":\"seed.couple@evendi.local\",\"displayName\":\"seed.couple\"}\n"
+                        },
+                        {
+                          "text": "[journey] checklist ping status: 200\n"
+                        },
+                        {
+                          "text": "[journey] open: Bordplassering\n"
+                        },
+                        {
+                          "text": "[journey] back: Bordplassering\n"
+                        },
+                        {
+                          "text": "[journey] open: Taleliste\n"
+                        },
+                        {
+                          "text": "[journey] back: Taleliste\n"
+                        },
+                        {
+                          "text": "[journey] open: Invitasjoner\n"
+                        },
+                        {
+                          "text": "[journey] back: Invitasjoner\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "[page closed] Page was closed unexpectedly\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2026-02-17T18:08:16.200Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "4a189b125de45c6d9ffe-35b884a86a017792c705",
+              "file": "evendi-extreme-journey.spec.ts",
+              "line": 444,
+              "column": 7
+            },
+            {
+              "title": "Couple profile",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 180000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "evendi-api",
+                  "projectName": "evendi-api",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 82870,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[journey] stored couple session: {\"sessionToken\":\"cb40822c8f7e81deae7b0e15f78de5d872ffe96c0b8168eaea7f2cb87ff619df\",\"coupleId\":\"977b7ee9-0ebb-47fe-88ef-b6f554030868\",\"email\":\"seed.couple@evendi.local\",\"displayName\":\"seed.couple\"}\n"
+                        },
+                        {
+                          "text": "[journey] checklist ping status: 200\n"
+                        },
+                        {
+                          "text": "[journey] open: Fotoplan\n"
+                        },
+                        {
+                          "text": "[journey] back: Fotoplan\n"
+                        },
+                        {
+                          "text": "[journey] open: Innstillinger\n"
+                        },
+                        {
+                          "text": "[journey] back: Innstillinger\n"
+                        },
+                        {
+                          "text": "[journey] open: Hjelp & FAQ\n"
+                        },
+                        {
+                          "text": "[journey] back: Hjelp & FAQ\n"
+                        },
+                        {
+                          "text": "[journey] open: Varsler og påminnelser\n"
+                        },
+                        {
+                          "text": "[journey] back: Varsler og påminnelser\n"
+                        },
+                        {
+                          "text": "[journey] open: Varsler og påminnelser\n"
+                        },
+                        {
+                          "text": "[journey] back: Varsler og påminnelser\n"
+                        },
+                        {
+                          "text": "[journey] open: Del med partner\n"
+                        },
+                        {
+                          "text": "[journey] back: Del med partner\n"
+                        },
+                        {
+                          "text": "[journey] open: Tilbakemelding til Evendi\n"
+                        },
+                        {
+                          "text": "[journey] back: Tilbakemelding til Evendi\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "[page closed] Page was closed unexpectedly\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2026-02-17T18:09:08.279Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "4a189b125de45c6d9ffe-437c3cde6f4d8c2d7fa7",
+              "file": "evendi-extreme-journey.spec.ts",
+              "line": 451,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-02-17T18:06:25.244Z",
+    "duration": 248113.623,
+    "expected": 3,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

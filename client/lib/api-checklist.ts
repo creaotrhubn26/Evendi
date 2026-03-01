@@ -1,11 +1,13 @@
 import type { ChecklistTask, CreateChecklistTask } from "@shared/schema";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000";
+import { getApiUrl } from "./query-client";
+
+const API_URL = getApiUrl();
 
 export async function getChecklistTasks(sessionToken: string): Promise<ChecklistTask[]> {
   const response = await fetch(`${API_URL}/api/checklist`, {
     headers: {
-      "x-session-token": sessionToken,
+      Authorization: `Bearer ${sessionToken}`,
     },
   });
 
@@ -24,7 +26,7 @@ export async function createChecklistTask(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-session-token": sessionToken,
+      Authorization: `Bearer ${sessionToken}`,
     },
     body: JSON.stringify(task),
   });
@@ -46,7 +48,7 @@ export async function updateChecklistTask(
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
-      "x-session-token": sessionToken,
+      Authorization: `Bearer ${sessionToken}`,
     },
     body: JSON.stringify(updates),
   });
@@ -66,7 +68,7 @@ export async function deleteChecklistTask(
   const response = await fetch(`${API_URL}/api/checklist/${id}`, {
     method: "DELETE",
     headers: {
-      "x-session-token": sessionToken,
+      Authorization: `Bearer ${sessionToken}`,
     },
   });
 
@@ -80,7 +82,7 @@ export async function seedDefaultChecklist(sessionToken: string): Promise<Checkl
   const response = await fetch(`${API_URL}/api/checklist/seed-defaults`, {
     method: "POST",
     headers: {
-      "x-session-token": sessionToken,
+      Authorization: `Bearer ${sessionToken}`,
     },
   });
 

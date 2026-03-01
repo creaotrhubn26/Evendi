@@ -1,6 +1,8 @@
 import type { ChecklistTask } from "@shared/schema";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000";
+import { getApiUrl } from "./query-client";
+
+const API_URL = getApiUrl();
 
 interface CoupleChecklistData {
   couple: {

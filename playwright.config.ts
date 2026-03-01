@@ -13,6 +13,9 @@ export default defineConfig({
     extraHTTPHeaders: {
       'Content-Type': 'application/json',
     },
+    launchOptions: {
+      args: ['--disable-dev-shm-usage', '--disable-gpu', '--no-sandbox'],
+    },
   },
   projects: [
     {

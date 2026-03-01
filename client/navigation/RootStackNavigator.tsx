@@ -40,6 +40,7 @@ import WhatsNewScreen from "@/screens/WhatsNewScreen";
 import DocumentationScreen from "@/screens/DocumentationScreen";
 import VideoGuidesScreen from "@/screens/VideoGuidesScreen";
 import AdminSmokeTestScreen from "@/screens/AdminSmokeTestScreen";
+import AdminPlaywrightScreen from "@/screens/AdminPlaywrightScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import {
   VenueDetailsScreen,
@@ -97,15 +98,16 @@ export type RootStackParamList = {
   AdminVendorMessages: { conversationId: string; vendorName: string; adminKey: string };
   Status: undefined;
   WhatsNew: { category?: "vendor" | "couple" };
-  Documentation: undefined;
+  Documentation: { adminKey?: string } | undefined;
   VideoGuides: undefined;
   AdminSmokeTest: { adminKey: string };
+  AdminPlaywright: { adminKey: string };
   Main: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const COUPLE_STORAGE_KEY = "wedflow_couple_session";
+const COUPLE_STORAGE_KEY = "evendi_couple_session";
 
 export default function RootStackNavigator({ skipSplash = false }: { skipSplash?: boolean }) {
   console.log("[RootStackNavigator] Mounting with skipSplash:", skipSplash);
@@ -589,6 +591,11 @@ export default function RootStackNavigator({ skipSplash = false }: { skipSplash?
           <Stack.Screen
             name="AdminSmokeTest"
             component={AdminSmokeTestScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="AdminPlaywright"
+            component={AdminPlaywrightScreen}
             options={{ headerShown: false }}
           />
         </>

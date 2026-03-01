@@ -9,7 +9,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { RouteProp } from "@react-navigation/native";
+import { useIsFocused, type RouteProp } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -43,6 +43,7 @@ type Props = {
 export default function AdminSmokeTestScreen({ route }: Props) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const isFocused = useIsFocused();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
   const adminKey = route.params?.adminKey || "";
@@ -58,8 +59,10 @@ export default function AdminSmokeTestScreen({ route }: Props) {
       if (!res.ok) throw new Error("Kunne ikke hente smoke test-status");
       return res.json();
     },
-    enabled: adminKey.length > 0,
-    refetchInterval: (query) => (query.state.data?.latest?.status === "running" ? 3000 : false),
+    enabled: adminKey.length > 0 && isFocused,
+    refetchInterval: (query) =>
+      isFocused && query.state.data?.latest?.status === "running" ? 3000 : false,
+    refetchIntervalInBackground: false,
   });
 
   const startMutation = useMutation({

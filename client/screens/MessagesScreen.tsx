@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useIsFocused } from "@react-navigation/native";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import { useQuery } from "@tanstack/react-query";
@@ -44,11 +45,13 @@ interface Props {
 export default function MessagesScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const isFocused = useIsFocused();
   const { theme } = useTheme();
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const conversationsRef = useRef<Conversation[]>([]);
   const [wsConversations, setWsConversations] = useState<Conversation[]>([]);
 
   useEffect(() => {
@@ -76,8 +79,12 @@ export default function MessagesScreen({ navigation }: Props) {
       if (!response.ok) throw new Error("Failed to fetch conversations");
       return response.json();
     },
-    enabled: !!sessionToken,
+    enabled: !!sessionToken && isFocused,
   });
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
 
   // Merge fetched conversations with WebSocket updates
   const displayConversations = React.useMemo(() => {
@@ -99,7 +106,7 @@ export default function MessagesScreen({ navigation }: Props) {
 
   // WebSocket subscription for list updates
   useEffect(() => {
-    if (!sessionToken) return;
+    if (!sessionToken || !isFocused) return;
     let closedByUs = false;
     let reconnectTimer: any = null;
     let retryCount = 0;
@@ -123,7 +130,7 @@ export default function MessagesScreen({ navigation }: Props) {
               const { conversationId, lastMessageAt, coupleUnreadCount } = data.payload as { conversationId: string; lastMessageAt?: string; coupleUnreadCount?: number };
               setWsConversations((prev) => {
                 const idx = prev.findIndex((c) => c.id === conversationId);
-                const baseConv = conversations.find((c) => c.id === conversationId);
+                const baseConv = conversationsRef.current.find((c) => c.id === conversationId);
                 if (!baseConv) return prev;
                 const updated = { ...baseConv, lastMessageAt: lastMessageAt || baseConv.lastMessageAt, coupleUnreadCount: typeof coupleUnreadCount === "number" ? coupleUnreadCount : baseConv.coupleUnreadCount };
                 if (idx >= 0) {
@@ -162,7 +169,7 @@ export default function MessagesScreen({ navigation }: Props) {
       try { wsRef.current?.close(); } catch {}
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
-  }, [sessionToken, conversations]);
+  }, [sessionToken, isFocused]);
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);

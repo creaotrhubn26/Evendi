@@ -1,0 +1,26 @@
+                                Table "public.vendor_match_scores"
+       Column       |            Type             | Collation | Nullable |         Default         
+--------------------+-----------------------------+-----------+----------+-------------------------
+ id                 | character varying(255)      |           | not null | gen_random_uuid()::text
+ vendor_id          | character varying(255)      |           | not null | 
+ couple_id          | character varying(255)      |           | not null | 
+ event_type_match   | integer                     |           |          | 
+ budget_match       | integer                     |           |          | 
+ capacity_match     | integer                     |           |          | 
+ location_match     | integer                     |           |          | 
+ vibe_match         | integer                     |           |          | 
+ review_score       | integer                     |           |          | 
+ overall_score      | integer                     |           |          | 
+ match_reasons      | text                        |           |          | 
+ warnings           | text                        |           |          | 
+ calculated_at      | timestamp without time zone |           |          | now()
+ last_calculated_at | timestamp without time zone |           |          | now()
+ expires_at         | timestamp without time zone |           |          | 
+Indexes:
+    "vendor_match_scores_pkey" PRIMARY KEY, btree (id)
+    "idx_vendor_match_couple" btree (vendor_id, couple_id)
+    "unique_vendor_couple_match" UNIQUE CONSTRAINT, btree (vendor_id, couple_id)
+Foreign-key constraints:
+    "vendor_match_scores_couple_id_fkey" FOREIGN KEY (couple_id) REFERENCES couple_profiles(id) ON DELETE CASCADE
+    "vendor_match_scores_vendor_id_fkey" FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+

@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight, HeaderButton } from "@react-navigation/elements";
+import { useIsFocused } from "@react-navigation/native";
 import { EvendiIcon } from "@/components/EvendiIcon";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
@@ -58,8 +59,10 @@ type Props = NativeStackScreenProps<any, "Chat">;
 
 export default function ChatScreen({ route, navigation }: Props) {
   const { conversationId } = route.params as { conversationId: string; vendorName: string };
+  const messageDraftKey = `ChatScreen-message-${conversationId}`;
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const isFocused = useIsFocused();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
   const flatListRef = useRef<FlatList>(null);
@@ -70,7 +73,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const [showVendorInfo, setShowVendorInfo] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTypingPingRef = useRef(0);
   const wsRef = useRef<WebSocket | null>(null);
   const wsTypingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [vendorTypingWs, setVendorTypingWs] = useState(false);
@@ -194,11 +197,10 @@ export default function ChatScreen({ route, navigation }: Props) {
         </View>
       ),
     });
-  }, [navigation, sessionToken, theme, showVendorInfo]);
+  }, [navigation, theme, showVendorInfo]);
 
   useEffect(() => {
     loadSession();
-    loadDraft();
   }, []);
 
   const loadSession = async () => {
@@ -207,36 +209,6 @@ export default function ChatScreen({ route, navigation }: Props) {
       const parsed = JSON.parse(session);
       setSessionToken(parsed.sessionToken);
     }
-  };
-
-  const loadDraft = async () => {
-    try {
-      const draftKey = `couple_draft_${conversationId}`;
-      const draft = await AsyncStorage.getItem(draftKey);
-      if (draft) {
-        setMessageText(draft);
-      }
-    } catch (error) {
-      console.error("Error loading draft:", error);
-    }
-  };
-
-  const saveDraft = async (text: string) => {
-    try {
-      const draftKey = `couple_draft_${conversationId}`;
-      if (text.trim()) {
-        await AsyncStorage.setItem(draftKey, text);
-      } else {
-        await AsyncStorage.removeItem(draftKey);
-      }
-    } catch (error) {
-      console.error("Error saving draft:", error);
-    }
-  };
-
-  const clearDraft = async () => {
-    const draftKey = `couple_draft_${conversationId}`;
-    await AsyncStorage.removeItem(draftKey);
   };
 
   const updateTypingStatus = async () => {
@@ -256,16 +228,12 @@ export default function ChatScreen({ route, navigation }: Props) {
 
   const handleTextChange = (text: string) => {
     setMessageText(text);
-    saveDraft(text);
-    
-    // Send typing indicator
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
+    if (!text.trim()) return;
+    const now = Date.now();
+    if (now - lastTypingPingRef.current >= 2000) {
+      lastTypingPingRef.current = now;
+      updateTypingStatus();
     }
-    updateTypingStatus();
-    typingTimeoutRef.current = setTimeout(() => {
-      // Stop typing after 3 seconds of inactivity
-    }, 3000) as unknown as NodeJS.Timeout;
   };
 
   const pickImage = async () => {
@@ -317,7 +285,7 @@ export default function ChatScreen({ route, navigation }: Props) {
       if (!response.ok) throw new Error("Failed to fetch messages");
       return response.json();
     },
-    enabled: !!sessionToken && !!conversationId,
+    enabled: !!sessionToken && !!conversationId && isFocused,
     refetchInterval: false,
   });
 
@@ -332,8 +300,9 @@ export default function ChatScreen({ route, navigation }: Props) {
       if (!response.ok) throw new Error("Failed to fetch conversation details");
       return response.json();
     },
-    enabled: !!sessionToken && !!conversationId,
-    refetchInterval: 30000,
+    enabled: !!sessionToken && !!conversationId && isFocused,
+    refetchInterval: isFocused ? 30000 : false,
+    refetchIntervalInBackground: false,
   });
 
   const sendMutation = useMutation({
@@ -354,7 +323,6 @@ export default function ChatScreen({ route, navigation }: Props) {
       queryClient.invalidateQueries({ queryKey: ["/api/couples/conversations"] });
       setMessageText("");
       setSelectedImage(null);
-      clearDraft();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
   });
@@ -493,16 +461,8 @@ export default function ChatScreen({ route, navigation }: Props) {
     );
   };
 
-  if (isLoading) {
-    return (
-      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.backgroundRoot }]}>
-        <ActivityIndicator size="large" color={Colors.dark.accent} />
-      </View>
-    );
-  }
-
   useEffect(() => {
-    if (!sessionToken || !conversationId) return;
+    if (!sessionToken || !conversationId || !isFocused) return;
     let closedByUs = false;
     let reconnectTimer: any = null;
     let retryCount = 0;
@@ -555,7 +515,15 @@ export default function ChatScreen({ route, navigation }: Props) {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (wsTypingTimerRef.current) clearTimeout(wsTypingTimerRef.current);
     };
-  }, [sessionToken, conversationId]);
+  }, [sessionToken, conversationId, isFocused]);
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.backgroundRoot }]}>
+        <ActivityIndicator size="large" color={Colors.dark.accent} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -651,7 +619,7 @@ export default function ChatScreen({ route, navigation }: Props) {
             <EvendiIcon name="image" size={20} color={selectedImage ? Colors.dark.accent : theme.textMuted} />
           </Pressable>
           <PersistentTextInput
-            draftKey="ChatScreen-input-1"
+            draftKey={messageDraftKey}
             style={[styles.textInput, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
             placeholder="Skriv en melding..."
             placeholderTextColor={theme.textMuted}

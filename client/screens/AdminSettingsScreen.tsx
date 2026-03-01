@@ -894,6 +894,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     fontSize: 16,
   },
+  multilineInput: {
+    height: 96,
+    paddingTop: Spacing.md,
+    textAlignVertical: "top",
+  },
   saveButton: {
     flexDirection: "row",
     height: 52,

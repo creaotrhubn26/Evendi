@@ -213,7 +213,8 @@ export default function TraditionsScreen() {
   const { config } = useEventType();
   const queryClient = useQueryClient();
 
-  const [selectedCulture, setSelectedCulture] = useState<string>("norway");
+  const defaultCulture = TRADITIONS.norsk ? "norsk" : Object.keys(TRADITIONS)[0] || "norsk";
+  const [selectedCulture, setSelectedCulture] = useState<string>(defaultCulture);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedTraditions, setSelectedTraditions] = useState<string[]>([]);
 
@@ -268,7 +269,7 @@ export default function TraditionsScreen() {
     updateTraditionsMutation.mutate(newSelection);
   };
 
-  const cultureData = TRADITIONS[selectedCulture];
+  const cultureData = TRADITIONS[selectedCulture] || TRADITIONS[defaultCulture];
 
   const handleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id);

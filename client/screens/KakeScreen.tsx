@@ -81,6 +81,7 @@ export function KakeScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { theme } = useTheme();
   const { isWedding } = useEventType();
+  const { getSetting } = useAppSettings();
   const queryClient = useQueryClient();
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);

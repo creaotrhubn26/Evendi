@@ -9,10 +9,11 @@ interface HeaderTitleProps {
 }
 
 export function HeaderTitle({ title }: HeaderTitleProps) {
-  const { designSettings } = useTheme();
+  const { designSettings, isDark } = useTheme();
   const logoSource = designSettings.logoUrl
     ? { uri: designSettings.logoUrl }
     : require("../../assets/images/Evendi_logo_norsk_tagline.png");
+  const isRemoteLogo = !!designSettings.logoUrl;
 
   if (!designSettings.logoUseHeader) {
     return (
@@ -26,7 +27,12 @@ export function HeaderTitle({ title }: HeaderTitleProps) {
 
   return (
     <View style={styles.container}>
-      <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+      {isDark && <View style={styles.logoGlow} />}
+      <Image 
+        source={logoSource} 
+        style={[styles.logo, isDark && styles.logoDark]} 
+        resizeMode="contain" 
+      />
     </View>
   );
 }
@@ -41,6 +47,17 @@ const styles = StyleSheet.create({
   logo: {
     width: 300,
     height: 80,
+  },
+  logoDark: {
+    opacity: 0.95,
+  },
+  logoGlow: {
+    position: "absolute",
+    width: 320,
+    height: 100,
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    borderRadius: 50,
+    zIndex: -1,
   },
   textTitle: {
     fontSize: 20,

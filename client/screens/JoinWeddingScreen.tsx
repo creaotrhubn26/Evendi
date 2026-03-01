@@ -21,8 +21,9 @@ import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { getApiUrl } from "@/lib/query-client";
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || "";
+const API_BASE = getApiUrl();
 
 const ROLE_OPTIONS = [
   { key: "partner", label: "Partner / Ektefelle", icon: "heart" as const, description: "Full tilgang til planlegging" },

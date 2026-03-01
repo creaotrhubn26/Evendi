@@ -467,8 +467,8 @@ export default function OfferCreateScreen() {
               <View style={styles.productList}>
                 {products.map((product) => {
                   // Show total available (server will check date-specific availability)
-                  const totalAvailable = product.trackInventory 
-                    ? (product.availableQuantity || 0) - (product.bookingBuffer || 0)
+                  const totalAvailable = (product as any).trackInventory 
+                    ? ((product as any).availableQuantity || 0) - ((product as any).bookingBuffer || 0)
                     : null;
                   
                   return (
@@ -480,7 +480,7 @@ export default function OfferCreateScreen() {
                       <View style={styles.productInfo}>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.xs }}>
                           <ThemedText style={styles.productTitle}>{product.title}</ThemedText>
-                          {product.trackInventory && totalAvailable !== null && (
+                          {(product as any).trackInventory && totalAvailable !== null && (
                             <View style={[styles.inventoryBadge, {
                               backgroundColor: totalAvailable > 10 ? "#4CAF50" + "20" : totalAvailable > 0 ? "#FF9800" + "20" : "#F44336" + "20"
                             }]}>

@@ -163,7 +163,6 @@ export function VideografScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate('VendorMatching', { 
       category: 'videographer',
-      selectedTraditions: coupleProfile?.selectedTraditions || [],
     });
   };
 

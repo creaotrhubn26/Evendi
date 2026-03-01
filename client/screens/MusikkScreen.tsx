@@ -273,7 +273,6 @@ export function MusikkScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate('VendorMatching', { 
       category: 'music',
-      selectedTraditions: coupleProfile?.selectedTraditions || [],
     });
   };
 

@@ -21,6 +21,7 @@ import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import * as Clipboard from "expo-clipboard";
+import { useIsFocused } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
@@ -176,6 +177,7 @@ interface Props {
 export default function VendorDashboardScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const isFocused = useIsFocused();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
 
@@ -186,6 +188,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
   const [conversationSort, setConversationSort] = useState<"recent" | "name" | "unread">("recent");
   const [favoriteConversations, setFavoriteConversations] = useState<Set<string>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
+  const conversationsDataRef = useRef<Conversation[]>([]);
   const [wsConversations, setWsConversations] = useState<Conversation[]>([]);
 
   useEffect(() => {
@@ -237,7 +240,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       if (!response.ok) throw new Error("Kunne ikke hente leveranser");
       return response.json();
     },
-    enabled: !!session?.sessionToken,
+    enabled: !!session?.sessionToken && isFocused,
   });
 
   const { data: inspirationsData = [], isLoading: inspirationsLoading, refetch: refetchInspirations } = useQuery<Inspiration[]>({
@@ -252,7 +255,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       if (!response.ok) throw new Error("Kunne ikke hente showcases");
       return response.json();
     },
-    enabled: !!session?.sessionToken,
+    enabled: !!session?.sessionToken && isFocused,
   });
 
   const { data: conversationsData = [], isLoading: conversationsLoading, refetch: refetchConversations } = useQuery<Conversation[]>({
@@ -267,8 +270,12 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       if (!response.ok) throw new Error("Kunne ikke hente samtaler");
       return response.json();
     },
-    enabled: !!session?.sessionToken,
+    enabled: !!session?.sessionToken && isFocused,
   });
+
+  useEffect(() => {
+    conversationsDataRef.current = conversationsData;
+  }, [conversationsData]);
 
   // Query subscription status
   const { data: subscriptionStatus } = useQuery({
@@ -283,8 +290,8 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       if (!response.ok) return null;
       return response.json();
     },
-    enabled: !!session?.sessionToken,
-    refetchInterval: 60000, // Refetch every minute
+    enabled: !!session?.sessionToken && isFocused,
+    refetchInterval: isFocused ? 60000 : false, // Refetch every minute
   });
 
   // Merge fetched conversations with WebSocket updates
@@ -334,7 +341,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       if (!response.ok) throw new Error("Kunne ikke hente produkter");
       return response.json();
     },
-    enabled: !!session?.sessionToken,
+    enabled: !!session?.sessionToken && isFocused,
   });
 
   const { data: offersData = [], isLoading: offersLoading, refetch: refetchOffers } = useQuery<VendorOffer[]>({
@@ -349,7 +356,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       if (!response.ok) throw new Error("Kunne ikke hente tilbud");
       return response.json();
     },
-    enabled: !!session?.sessionToken,
+    enabled: !!session?.sessionToken && isFocused,
   });
 
   const { data: vendorProfile } = useQuery<{ googleReviewUrl: string | null }>({
@@ -364,7 +371,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       if (!response.ok) return { googleReviewUrl: null };
       return response.json();
     },
-    enabled: !!session?.sessionToken,
+    enabled: !!session?.sessionToken && isFocused,
   });
 
   const { data: reviewsResponse, isLoading: reviewsLoading, refetch: refetchReviews } = useQuery<{ reviews: VendorReceivedReview[]; stats: { total: number; approved: number; average: number } }>({
@@ -379,7 +386,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       if (!response.ok) throw new Error("Kunne ikke hente anmeldelser");
       return response.json();
     },
-    enabled: !!session?.sessionToken,
+    enabled: !!session?.sessionToken && isFocused,
   });
 
   const reviewsData = reviewsResponse?.reviews || [];
@@ -396,7 +403,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       if (!response.ok) throw new Error("Kunne ikke hente kontrakter");
       return response.json();
     },
-    enabled: !!session?.sessionToken,
+    enabled: !!session?.sessionToken && isFocused,
   });
 
   // Query for couple contracts with schedule access
@@ -412,7 +419,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       if (!response.ok) throw new Error("Kunne ikke hente brudepar");
       return response.json();
     },
-    enabled: !!session?.sessionToken,
+    enabled: !!session?.sessionToken && isFocused,
   });
 
   const completedWithoutReview = contractsData.filter(c => c.status === "completed" && !c.hasReview);
@@ -449,7 +456,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
 
   // WebSocket subscription for vendor list updates
   useEffect(() => {
-    if (!session?.sessionToken) return;
+    if (!session?.sessionToken || !isFocused) return;
     let closedByUs = false;
     let reconnectTimer: any = null;
 
@@ -465,7 +472,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
               const { conversationId, lastMessageAt, vendorUnreadCount } = data.payload as { conversationId: string; lastMessageAt?: string; vendorUnreadCount?: number };
               setWsConversations((prev) => {
                 const idx = prev.findIndex((c) => c.id === conversationId);
-                const baseConv = conversationsData.find((c) => c.id === conversationId);
+                const baseConv = conversationsDataRef.current.find((c) => c.id === conversationId);
                 if (!baseConv) return prev; // unknown conversation
                 const updated = { ...baseConv, lastMessageAt: lastMessageAt || baseConv.lastMessageAt, vendorUnreadCount: typeof vendorUnreadCount === "number" ? vendorUnreadCount : baseConv.vendorUnreadCount };
                 if (idx >= 0) {
@@ -493,7 +500,7 @@ export default function VendorDashboardScreen({ navigation }: Props) {
       try { wsRef.current?.close(); } catch {}
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
-  }, [session?.sessionToken, conversationsData]);
+  }, [session?.sessionToken, isFocused]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);

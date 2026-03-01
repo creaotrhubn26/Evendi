@@ -134,7 +134,6 @@ export function VendorCategoryMarketplace({
   const handleSmartMatch = () => {
     navigation.navigate("VendorMatching", {
       category,
-      selectedTraditions: traditions,
     });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };

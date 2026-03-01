@@ -1,0 +1,149 @@
+
+Running 5 tests using 1 worker
+
+[journey] stored couple session: {"sessionToken":"832768dfacf2a2721af7a2cb188eecf489c7d4c0ca786c218ab349f66d5c413c","coupleId":"977b7ee9-0ebb-47fe-88ef-b6f554030868","email":"seed.couple@evendi.local","displayName":"seed.couple"}
+[journey] checklist ping status: 200
+[journey] open: Sjekkliste
+[journey] back: Sjekkliste
+[journey] open: Påminnelser
+[journey] back: Påminnelser
+[journey] open: Vær
+[journey] back: Vær
+[journey] open: Pust
+[journey] back: Pust
+[journey] open: Tradisjoner
+[journey] back: Tradisjoner
+[journey] open: Kjøreplan
+[journey] back: Kjøreplan
+[journey] open: Tidslinje
+[journey] back: Tidslinje
+[journey] open: Foto & Video Tidsplan
+[journey] back: Foto & Video Tidsplan
+[journey] open: Budsjett
+[journey] back: Budsjett
+[journey] open: Leverandører
+[journey] back: Leverandører
+[journey] open: Finn leverandør
+[journey] back: Finn leverandør
+[journey] open: Viktige personer
+[journey] back: Viktige personer
+[journey] open: Meldinger
+[journey] back: Meldinger
+[journey] open: Tilbud
+[journey] back: Tilbud
+[journey] open: Hent leveranse
+[journey] back: Hent leveranse
+[page closed] Page was closed unexpectedly
+  ✓  1 [evendi-api] › e2e/evendi-extreme-journey.spec.ts:529:7 › Extreme journey - desktop › Couple planning (1.1m)
+[journey] stored couple session: {"sessionToken":"82fe231e7a9117f5356d78be8c5bb49509bd47df693770aace078ba264aba883","coupleId":"977b7ee9-0ebb-47fe-88ef-b6f554030868","email":"seed.couple@evendi.local","displayName":"seed.couple"}
+[journey] checklist ping status: 200
+[journey] open: Bordplassering
+[journey] back: Bordplassering
+[journey] open: Taleliste
+[journey] back: Taleliste
+[journey] open: Invitasjoner
+[journey] back: Invitasjoner
+[page closed] Page was closed unexpectedly
+  ✓  2 [evendi-api] › e2e/evendi-extreme-journey.spec.ts:536:7 › Extreme journey - desktop › Couple guests (42.8s)
+[journey] stored couple session: {"sessionToken":"b858049f9d4caaa60248fcef6230ffc961955aa491bb8274ac1980e3e5402df3","coupleId":"977b7ee9-0ebb-47fe-88ef-b6f554030868","email":"seed.couple@evendi.local","displayName":"seed.couple"}
+[journey] checklist ping status: 200
+[journey] open: Fotoplan
+[journey] back: Fotoplan
+[journey] open: Innstillinger
+[journey] back: Innstillinger
+[journey] open: Hjelp & FAQ
+[journey] back: Hjelp & FAQ
+[journey] open: Varsler og påminnelser
+[journey] back: Varsler og påminnelser
+[journey] open: Varsler og påminnelser
+[journey] back: Varsler og påminnelser
+[journey] open: Del med partner
+[journey] back: Del med partner
+[journey] open: Tilbakemelding til Evendi
+[journey] back: Tilbakemelding til Evendi
+[page closed] Page was closed unexpectedly
+  ✓  3 [evendi-api] › e2e/evendi-extreme-journey.spec.ts:543:7 › Extreme journey - desktop › Couple profile (59.4s)
+[journey] vendor portal text visible
+[journey] form ready timeout, proceeding anyway
+[journey] vendor form ready for input
+[journey] keyboard input failed, trying fill()...
+[page closed] Page was closed unexpectedly
+  ✘  4 [evendi-api] › e2e/evendi-extreme-journey.spec.ts:551:7 › Extreme journey - desktop › Vendor journey (3.1m)
+[journey] admin form ready timeout, proceeding anyway
+[journey] admin form ready for input
+[page closed] Page was closed unexpectedly
+  ✘  5 [evendi-api] › e2e/evendi-extreme-journey.spec.ts:558:7 › Extreme journey - desktop › Admin journey (58.2s)
+
+
+  1) [evendi-api] › e2e/evendi-extreme-journey.spec.ts:551:7 › Extreme journey - desktop › Vendor journey 
+
+    [31mTest timeout of 180000ms exceeded.[39m
+
+    Error: locator.fill: Test timeout of 180000ms exceeded.
+    Call log:
+    [2m  - waiting for getByPlaceholder('E-postadresse')[22m
+    [2m    - locator resolved to <input rows="1" value="" dir="auto" type="email" autocorrect="on" autocomplete="on" spellcheck="true" autocapitalize="none" placeholder="E-postadresse" virtualkeyboardpolicy="auto" class="css-11aywtz r-6taxm2 r-13awgt0 r-ubezar"/>[22m
+    [2m    - fill("seed.vendor.photo@evendi.local")[22m
+    [2m  - attempting fill action[22m
+    [2m    2 × waiting for element to be visible, enabled and editable[22m
+    [2m      - element is not visible[22m
+    [2m    - retrying fill action[22m
+    [2m    - waiting 20ms[22m
+    [2m    2 × waiting for element to be visible, enabled and editable[22m
+    [2m      - element is not visible[22m
+    [2m    - retrying fill action[22m
+    [2m      - waiting 100ms[22m
+    [2m    319 × waiting for element to be visible, enabled and editable[22m
+    [2m        - element is not visible[22m
+    [2m      - retrying fill action[22m
+    [2m        - waiting 500ms[22m
+    [2m    - waiting for element to be visible, enabled and editable[22m
+
+
+      409 |     console.log('[journey] keyboard input failed, trying fill()...');
+      410 |     // Fallback to fill
+    > 411 |     await emailInput.fill(VENDOR.email);
+          |                      ^
+      412 |     await passwordInput.fill(VENDOR.password);
+      413 |   }
+      414 |   
+        at loginVendor (/workspaces/wedflow/e2e/evendi-extreme-journey.spec.ts:411:22)
+        at /workspaces/wedflow/e2e/evendi-extreme-journey.spec.ts:553:5
+
+    Error Context: test-results/evendi-extreme-journey-Ext-83585-ey---desktop-Vendor-journey-evendi-api/error-context.md
+
+  2) [evendi-api] › e2e/evendi-extreme-journey.spec.ts:558:7 › Extreme journey - desktop › Admin journey 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByRole('heading', { name: /Oversikt/ })
+    Expected: visible
+    Timeout: 20000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 20000ms[22m
+    [2m  - waiting for getByRole('heading', { name: /Oversikt/ })[22m
+
+
+      494 |   // Wait for dashboard content - look for main content area
+      495 |   const overviewHeading = page.getByRole('heading', { name: /Oversikt/ });
+    > 496 |   await expect(overviewHeading).toBeVisible({ timeout: 20000 });
+          |                                 ^
+      497 |   console.log(`[journey] admin logged in successfully`);
+      498 |
+      499 |   const sections = [
+        at auditAdmin (/workspaces/wedflow/e2e/evendi-extreme-journey.spec.ts:496:33)
+        at /workspaces/wedflow/e2e/evendi-extreme-journey.spec.ts:560:5
+
+    Error Context: test-results/evendi-extreme-journey-Ext-389ae-ney---desktop-Admin-journey-evendi-api/error-context.md
+
+  2 failed
+    [evendi-api] › e2e/evendi-extreme-journey.spec.ts:551:7 › Extreme journey - desktop › Vendor journey 
+    [evendi-api] › e2e/evendi-extreme-journey.spec.ts:558:7 › Extreme journey - desktop › Admin journey 
+  3 passed (7.6m)
+
+To open last HTML report run:
+[36m[39m
+[36m  npx playwright show-report[39m
+[36m[39m

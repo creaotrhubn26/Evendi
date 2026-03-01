@@ -64,6 +64,7 @@ export default function SplashScreen() {
   const logoSource = settings?.logoUrl
     ? { uri: settings.logoUrl }
     : FALLBACK_LOGO;
+  const isRemoteLogo = !!settings?.logoUrl;
   const showLogo = settings?.logoUseSplash ?? true;
   const gradientStops = getGradientStops(backgroundColor, isDark);
   
@@ -198,7 +199,14 @@ export default function SplashScreen() {
         {/* Logo */}
         <Animated.View style={logoAnimatedStyle}>
           {showLogo ? (
-            <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+            <View>
+              {isDark && <View style={styles.logoGlow} />}
+              <Image 
+                source={logoSource} 
+                style={[styles.logo, isDark && styles.logoDark]} 
+                resizeMode="contain" 
+              />
+            </View>
           ) : (
             <ThemedText style={[styles.appName, { color: primaryColor }]}>
               {appName}
@@ -241,8 +249,21 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   logo: {
-    width: 280,
-    height: 280,
+    width: 480,
+    height: 480,
+  },
+  logoDark: {
+    opacity: 0.95,
+  },
+  logoGlow: {
+    position: "absolute",
+    width: 520,
+    height: 520,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    borderRadius: 260,
+    top: -20,
+    left: -20,
+    zIndex: -1,
   },
   accentLine: {
     width: 60,

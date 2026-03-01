@@ -18,7 +18,7 @@ import {
   requestNotificationPermission,
   getScheduledNotifications,
   DEFAULT_NOTIFICATION_SETTINGS,
-  getNotificationCopy,
+  getNotificationCopyAsync,
 } from "@/lib/notifications";
 import { getWeddingDetails, getAppLanguage, type AppLanguage } from "@/lib/storage";
 import { showConfirm } from "@/lib/dialogs";
@@ -84,7 +84,8 @@ export default function NotificationSettingsScreen() {
         return;
       }
       setPermissionStatus("granted");
-      showToast(getNotificationCopy(appLanguage).toastPermissionGranted);
+      const copy = await getNotificationCopyAsync(appLanguage);
+      showToast(copy.toastPermissionGranted);
     }
 
     const newSettings = { ...settings, enabled: value };
@@ -94,7 +95,8 @@ export default function NotificationSettingsScreen() {
 
     const scheduled = await getScheduledNotifications();
     setScheduledCount(scheduled.length);
-    showToast(getNotificationCopy(appLanguage).toastUpdated);
+    const copy = await getNotificationCopyAsync(appLanguage);
+    showToast(copy.toastUpdated);
   };
 
   const handleToggleChecklistReminders = async (value: boolean) => {
@@ -102,7 +104,8 @@ export default function NotificationSettingsScreen() {
     setSettings(newSettings);
     await saveNotificationSettings(newSettings);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    showToast(getNotificationCopy(appLanguage).toastUpdated);
+    const copy = await getNotificationCopyAsync(appLanguage);
+    showToast(copy.toastUpdated);
   };
 
   const handleToggleCountdown = async (value: boolean) => {
@@ -113,7 +116,8 @@ export default function NotificationSettingsScreen() {
 
     const scheduled = await getScheduledNotifications();
     setScheduledCount(scheduled.length);
-    showToast(getNotificationCopy(appLanguage).toastUpdated);
+    const copy = await getNotificationCopyAsync(appLanguage);
+    showToast(copy.toastUpdated);
   };
 
   const handleToggleDay = async (day: number) => {
@@ -129,7 +133,8 @@ export default function NotificationSettingsScreen() {
 
     const scheduled = await getScheduledNotifications();
     setScheduledCount(scheduled.length);
-    showToast(getNotificationCopy(appLanguage).toastUpdated);
+    const copy = await getNotificationCopyAsync(appLanguage);
+    showToast(copy.toastUpdated);
   };
 
   if (loading) {

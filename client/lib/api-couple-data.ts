@@ -1,6 +1,7 @@
 import { getCoupleSession } from "./storage";
+import { getApiUrl } from "./query-client";
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || "";
+const API_BASE = getApiUrl();
 
 async function getAuthHeaders() {
   const session = await getCoupleSession();

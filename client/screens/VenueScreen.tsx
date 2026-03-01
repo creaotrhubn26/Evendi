@@ -451,7 +451,6 @@ export function VenueScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate('VendorMatching', { 
       category: 'venue',
-      selectedTraditions: coupleProfile?.selectedTraditions || [],
     });
   };
 

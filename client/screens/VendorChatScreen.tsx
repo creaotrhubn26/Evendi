@@ -20,6 +20,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeIn } from "react-native-reanimated";
+import { useIsFocused } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { optimizeImage, PHOTO_PRESET } from "@/lib/optimize-image";
 import { uploadChatImage, isSupabaseConfigured } from "@/lib/supabase-storage";
@@ -29,7 +30,7 @@ import { useEventType } from "@/hooks/useEventType";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import type { ProfileStackParamList } from "@/navigation/ProfileStackNavigator";
 import PersistentTextInput from "@/components/PersistentTextInput";
 const VENDOR_STORAGE_KEY = "evendi_vendor_session";
 interface Message {
@@ -54,11 +55,13 @@ interface ConversationDetails {
   };
   coupleTypingAt?: string | null;
 }
-type Props = NativeStackScreenProps<RootStackParamList, "VendorChat">;
+type Props = NativeStackScreenProps<ProfileStackParamList, "VendorChat">;
 export default function VendorChatScreen({ route, navigation }: Props) {
   const { conversationId } = route.params as { conversationId: string; coupleName: string };
+  const messageDraftKey = `VendorChatScreen-message-${conversationId}`;
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const isFocused = useIsFocused();
   const { theme } = useTheme();
   const { isWedding } = useEventType();
   const queryClient = useQueryClient();
@@ -78,10 +81,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
   const [showCoupleInfo, setShowCoupleInfo] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const wsTypingTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [coupleTypingWs, setCoupleTypingWs] = useState(false);
+  const lastTypingPingRef = useRef(0);
   const deleteMessageMutation = useMutation({
     mutationFn: async (messageId: string) => {
       const response = await fetch(new URL(`/api/vendor/messages/${messageId}`, getApiUrl()).toString(), {
@@ -206,10 +206,9 @@ export default function VendorChatScreen({ route, navigation }: Props) {
         </View>
       ),
     });
-  }, [navigation, sessionToken, theme, showSearch, showCoupleInfo]);
+  }, [navigation, theme, showSearch, showCoupleInfo]);
   useEffect(() => {
     loadSession();
-    loadDraft();
   }, []);
   const loadSession = async () => {
     const session = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
@@ -217,25 +216,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       const parsed = JSON.parse(session);
       setSessionToken(parsed.sessionToken);
     }
-  };
-  const loadDraft = async () => {
-    const draftKey = `vendor_draft_${conversationId}`;
-    const draft = await AsyncStorage.getItem(draftKey);
-    if (draft) {
-      setMessageText(draft);
-    }
-  };
-  const saveDraft = async (text: string) => {
-    const draftKey = `vendor_draft_${conversationId}`;
-    if (text.trim()) {
-      await AsyncStorage.setItem(draftKey, text);
-    } else {
-      await AsyncStorage.removeItem(draftKey);
-    }
-  };
-  const clearDraft = async () => {
-    const draftKey = `vendor_draft_${conversationId}`;
-    await AsyncStorage.removeItem(draftKey);
   };
   const updateTypingStatus = async () => {
     if (!sessionToken) return;
@@ -253,16 +233,12 @@ export default function VendorChatScreen({ route, navigation }: Props) {
   };
   const handleTextChange = (text: string) => {
     setMessageText(text);
-    saveDraft(text);
-    
-    // Send typing indicator
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
+    if (!text.trim()) return;
+    const now = Date.now();
+    if (now - lastTypingPingRef.current >= 2000) {
+      lastTypingPingRef.current = now;
+      updateTypingStatus();
     }
-    updateTypingStatus();
-    typingTimeoutRef.current = setTimeout(() => {
-      // Stop typing after 3 seconds of inactivity
-    }, 3000) as unknown as NodeJS.Timeout;
   };
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -309,8 +285,9 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       if (!response.ok) throw new Error("Failed to fetch conversation");
       return response.json();
     },
-    enabled: !!sessionToken && !!conversationId,
-    refetchInterval: 30000,
+    enabled: !!sessionToken && !!conversationId && isFocused,
+    refetchInterval: isFocused ? 30000 : false,
+    refetchIntervalInBackground: false,
   });
   const { data: messages = [], isLoading } = useQuery<Message[]>({
     queryKey: ["/api/vendor/conversations", conversationId, "messages"],
@@ -323,7 +300,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       if (!response.ok) throw new Error("Failed to fetch messages");
       return response.json();
     },
-    enabled: !!sessionToken && !!conversationId,
+    enabled: !!sessionToken && !!conversationId && isFocused,
     refetchInterval: false,
   });
   const formatLastActive = (dateStr: string | null): string => {
@@ -456,7 +433,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
       queryClient.invalidateQueries({ queryKey: ["/api/vendor/conversations"] });
       setMessageText("");
       setSelectedImage(null);
-      clearDraft();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
   });
@@ -494,7 +470,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
   const handleQuickReply = (reply: string) => {
     setMessageText(reply);
     setShowQuickReplies(false);
-    saveDraft(reply);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
   const renderAttachment = (item: Message) => {
@@ -513,7 +488,6 @@ export default function VendorChatScreen({ route, navigation }: Props) {
     return null;
   };
   const isCoupleTyping = () => {
-    if (coupleTypingWs) return true;
     if (!conversationDetails?.coupleTypingAt) return false;
     const typingTime = new Date(conversationDetails.coupleTypingAt).getTime();
     const now = new Date().getTime();
@@ -893,7 +867,7 @@ export default function VendorChatScreen({ route, navigation }: Props) {
             <EvendiIcon name="image" size={20} color={selectedImage ? theme.accent : theme.textMuted} />
           </Pressable>
           <PersistentTextInput
-            draftKey="VendorChatScreen-input-4"
+            draftKey={messageDraftKey}
             style={[
               styles.textInput,
               { backgroundColor: theme.backgroundRoot, color: theme.text },

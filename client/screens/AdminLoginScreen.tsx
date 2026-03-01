@@ -36,11 +36,15 @@ export default function AdminLoginScreen({ navigation, onLoginSuccess, initialAd
   const [adminKey, setAdminKey] = useState(initialAdminKey || "");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [formReady, setFormReady] = useState(false);
 
   useEffect(() => {
     if (initialAdminKey && adminKey.length === 0) {
       setAdminKey(initialAdminKey);
     }
+    // Signal that form is ready after animation
+    const timer = setTimeout(() => setFormReady(true), 300);
+    return () => clearTimeout(timer);
   }, [initialAdminKey, adminKey]);
 
   const handleLogin = async () => {
@@ -88,12 +92,22 @@ export default function AdminLoginScreen({ navigation, onLoginSuccess, initialAd
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundRoot }]} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+      testID="admin-login-screen"
+      edges={['top', 'bottom']}
+    >
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={styles.content}
       >
         {showLogo ? (
-          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+          <Image
+            source={logoSource}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="Evendi logo"
+            testID="evendi-logo"
+          />
         ) : (
           <ThemedText style={styles.logoText}>
             {designSettings.appName || "Evendi"}
@@ -146,9 +160,9 @@ export default function AdminLoginScreen({ navigation, onLoginSuccess, initialAd
               ]}
             >
               {isLoading ? (
-                <ActivityIndicator color="#1A1A1A" />
+                <ActivityIndicator color={theme.buttonText} />
               ) : (
-                <ThemedText style={styles.loginBtnText}>Logg inn som admin</ThemedText>
+                <ThemedText style={[styles.loginBtnText, { color: theme.buttonText }]}>Logg inn som admin</ThemedText>
               )}
             </Pressable>
           </View>
@@ -157,8 +171,8 @@ export default function AdminLoginScreen({ navigation, onLoginSuccess, initialAd
             onPress={() => navigation.goBack()}
             style={styles.backButton}
           >
-            <EvendiIcon name="arrow-left" size={18} color={Colors.dark.accent} />
-            <ThemedText style={[styles.backText, { color: Colors.dark.accent }]}>
+            <EvendiIcon name="arrow-left" size={18} color={theme.text} />
+            <ThemedText style={[styles.backText, { color: theme.text }]}>
               Tilbake til bruker-innlogging
             </ThemedText>
           </Pressable>

@@ -78,6 +78,7 @@ export default function AdminVendorsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme, designSettings } = useTheme();
+  const { getSetting } = useAppSettings();
   const queryClient = useQueryClient();
   const route = useRoute<RouteProp<RootStackParamList, "AdminVendors">>();
   const passedAdminKey = route.params?.adminKey || "";
@@ -647,10 +648,10 @@ export default function AdminVendorsScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.dark.accent} />
         </View>
-      ) : (
+      ) : viewMode === "vendors" ? (
         <FlatList
-          data={viewMode === "vendors" ? vendors : inviteRequests}
-          renderItem={viewMode === "vendors" ? renderVendorItem : renderInviteItem}
+          data={vendors}
+          renderItem={renderVendorItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{
             paddingHorizontal: Spacing.lg,
@@ -661,7 +662,36 @@ export default function AdminVendorsScreen() {
             <View style={styles.emptyContainer}>
               <EvendiIcon name="inbox" size={48} color={theme.textMuted} />
               <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
-                Ingen {selectedTab === "pending" ? "ventende" : selectedTab === "approved" ? "godkjente" : "avviste"} {viewMode === "vendors" ? "leverandører" : "invitasjoner"}
+                Ingen {selectedTab === "pending" ? "ventende" : selectedTab === "approved" ? "godkjente" : "avviste"} leverandører
+              </ThemedText>
+            </View>
+          )}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                activeRefetch().finally(() => setRefreshing(false));
+              }}
+              tintColor={theme.accent}
+            />
+          }
+        />
+      ) : (
+        <FlatList
+          data={inviteRequests}
+          renderItem={renderInviteItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{
+            paddingHorizontal: Spacing.lg,
+            paddingBottom: insets.bottom + Spacing.xl,
+          }}
+          ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyContainer}>
+              <EvendiIcon name="inbox" size={48} color={theme.textMuted} />
+              <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
+                Ingen {selectedTab === "pending" ? "ventende" : selectedTab === "approved" ? "godkjente" : "avviste"} invitasjoner
               </ThemedText>
             </View>
           )}

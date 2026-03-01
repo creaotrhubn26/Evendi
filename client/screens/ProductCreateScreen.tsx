@@ -23,7 +23,7 @@ import { Spacing, BorderRadius, Colors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
-import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import type { ProfileStackParamList } from "@/navigation/ProfileStackNavigator";
 
 const VENDOR_STORAGE_KEY = "wedflow_vendor_session";
 
@@ -36,8 +36,8 @@ const UNIT_TYPES = [
 ];
 
 interface Props {
-  navigation: NativeStackNavigationProp<RootStackParamList, "ProductCreate">;
-  route: RouteProp<RootStackParamList, "ProductCreate">;
+  navigation: NativeStackNavigationProp<ProfileStackParamList, "ProductCreate">;
+  route: RouteProp<ProfileStackParamList, "ProductCreate">;
 }
 
 export default function ProductCreateScreen({ navigation, route }: Props) {

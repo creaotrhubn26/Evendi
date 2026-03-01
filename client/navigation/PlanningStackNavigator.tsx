@@ -28,6 +28,17 @@ import SpeechListScreen from "@/screens/SpeechListScreen";
 import VendorReviewsScreen from "@/screens/VendorReviewsScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
 import VendorDetailScreen from "@/screens/VendorDetailScreen";
+import VendorSearchResultsScreen from "@/screens/VendorSearchResultsScreen";
+import MatchDetailsScreen from "@/screens/MatchDetailsScreen";
+import UserEventPreferencesScreen from "@/screens/UserEventPreferencesScreen";
+import VendorExpertiseOnboardingScreen from "@/screens/VendorExpertiseOnboardingScreen";
+import ReviewSubmissionScreen from "@/screens/ReviewSubmissionScreen";
+import ReviewsListScreen from "@/screens/ReviewsListScreen";
+import ConversationScreen from "@/screens/ConversationScreen";
+import VendorAvailabilitySettingsScreen from "@/screens/VendorAvailabilitySettingsScreen";
+import VendorAvailabilityCalendarScreen from "@/screens/VendorAvailabilityCalendarScreen";
+import VendorShortlistScreen from "@/screens/VendorShortlistScreen";
+import VendorComparisonScreen from "@/screens/VendorComparisonScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -66,6 +77,29 @@ export type PlanningStackParamList = {
     vendorPriceRange?: string;
     vendorCategory: string;
   };
+  UserEventPreferences: undefined;
+  VendorSearchResults: undefined;
+  VendorMatchDetails: {
+    vendorId: string;
+    match?: any;
+  };
+  VendorExpertiseOnboarding: undefined;
+  ReviewSubmission: {
+    vendorId: string;
+    vendorName: string;
+  };
+  ReviewsList: {
+    vendorId: string;
+    vendorName: string;
+  };
+  Conversation: {
+    conversationId: string;
+    vendorName: string;
+  };
+  VendorAvailabilitySettings: undefined;
+  VendorAvailabilityCalendar: undefined;
+  VendorShortlist: undefined;
+  VendorComparison: { vendors: any[] };
 };
 
 const Stack = createNativeStackNavigator<PlanningStackParamList>();
@@ -214,6 +248,61 @@ export default function PlanningStackNavigator() {
         name="VendorDetail"
         component={VendorDetailScreen}
         options={({ route }) => ({ title: route.params.vendorName })}
+      />
+      <Stack.Screen
+        name="UserEventPreferences"
+        component={UserEventPreferencesScreen}
+        options={{ title: "Mine Arrangementspreferanser" }}
+      />
+      <Stack.Screen
+        name="VendorSearchResults"
+        component={VendorSearchResultsScreen}
+        options={{ title: "Matchende Leverandører" }}
+      />
+      <Stack.Screen
+        name="VendorMatchDetails"
+        component={MatchDetailsScreen}
+        options={({ route }) => ({ title: "Detaljer om Match" })}
+      />
+      <Stack.Screen
+        name="VendorExpertiseOnboarding"
+        component={VendorExpertiseOnboardingScreen}
+        options={{ title: "Min Ekspertise" }}
+      />
+      <Stack.Screen
+        name="ReviewSubmission"
+        component={ReviewSubmissionScreen}
+        options={{ title: "Skriv anmeldelse" }}
+      />
+      <Stack.Screen
+        name="ReviewsList"
+        component={ReviewsListScreen}
+        options={{ title: "Anmeldelser" }}
+      />
+      <Stack.Screen
+        name="Conversation"
+        component={ConversationScreen}
+        options={({ route }) => ({ title: route.params?.vendorName || "Samtale" })}
+      />
+      <Stack.Screen
+        name="VendorAvailabilitySettings"
+        component={VendorAvailabilitySettingsScreen}
+        options={{ title: "Tilgjengelighetssystem" }}
+      />
+      <Stack.Screen
+        name="VendorAvailabilityCalendar"
+        component={VendorAvailabilityCalendarScreen}
+        options={{ title: "Kalender" }}
+      />
+      <Stack.Screen
+        name="VendorShortlist"
+        component={VendorShortlistScreen}
+        options={{ title: "Favoritter" }}
+      />
+      <Stack.Screen
+        name="VendorComparison"
+        component={VendorComparisonScreen}
+        options={{ title: "Sammenligning" }}
       />
     </Stack.Navigator>
   );

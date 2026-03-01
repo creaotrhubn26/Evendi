@@ -101,7 +101,8 @@ export interface EventTypeConfig {
   corporateSubCategory?: CorporateSubCategory;
   labelNo: string;       // Norwegian label
   labelEn: string;       // English label
-  icon: string;          // Emoji icon for picker
+  icon: string;          // Ionicon icon name for picker
+  imagePath?: string;    // Path to event type image
   descriptionNo: string; // Norwegian description
   descriptionEn: string; // English description
   /** Typical content / key activities (for B2B info display) */
@@ -234,7 +235,8 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     category: "personal",
     labelNo: "Bryllup",
     labelEn: "Wedding",
-    icon: "💒",
+    icon: "heart",
+    imagePath: require("../client/assets/images/event_types/Evendi_event_type_wedding.png"),
     descriptionNo: "Planlegg bryllupet med alle verktøy",
     descriptionEn: "Plan your wedding with all the tools",
     features: {
@@ -279,7 +281,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
         labelEn: "The Shoe Game",
         descriptionNo: "Den klassiske bryllupsleken med sko!",
         descriptionEn: "The classic wedding shoe game!",
-        icon: "👟",
+        icon: "walk",
         instructionsNo: [
           "Brud og brudgom sitter på stoler med ryggen mot hverandre",
           "Begge tar av seg skoene og bytter én sko med hverandre",
@@ -325,7 +327,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     category: "personal",
     labelNo: "Konfirmasjon",
     labelEn: "Confirmation",
-    icon: "⛪",
+    icon: "school",
     descriptionNo: "Planlegg konfirmasjonen steg for steg",
     descriptionEn: "Plan the confirmation step by step",
     features: {
@@ -370,7 +372,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     category: "personal",
     labelNo: "Bursdag",
     labelEn: "Birthday",
-    icon: "🎂",
+    icon: "cake",
     descriptionNo: "Planlegg bursdagsfeiringen",
     descriptionEn: "Plan the birthday celebration",
     features: {
@@ -415,7 +417,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
         labelEn: "Two Truths and a Lie",
         descriptionNo: "Gjett hva som er sant og usant!",
         descriptionEn: "Guess what's true and false!",
-        icon: "🤥",
+        icon: "smiley",
         instructionsNo: [
           "Jubilanten forteller tre ting om seg selv",
           "To av dem er sanne, en er løgn",
@@ -457,7 +459,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     category: "personal",
     labelNo: "Jubileum",
     labelEn: "Anniversary",
-    icon: "💍",
+    icon: "heart",
     descriptionNo: "Feir jubileet med stil",
     descriptionEn: "Celebrate the anniversary in style",
     features: {
@@ -502,7 +504,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     category: "personal",
     labelNo: "Forlovelse",
     labelEn: "Engagement Party",
-    icon: "💎",
+    icon: "diamond",
     descriptionNo: "Planlegg forlovelsesfesten",
     descriptionEn: "Plan the engagement party",
     features: {
@@ -547,7 +549,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     category: "personal",
     labelNo: "Babyshower / Dåp",
     labelEn: "Baby Shower / Baptism",
-    icon: "👶",
+    icon: "person",
     descriptionNo: "Planlegg babyshower eller dåp",
     descriptionEn: "Plan the baby shower or baptism",
     features: {
@@ -677,7 +679,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     corporateSubCategory: "professional_strategic",
     labelNo: "Seminar / Workshop",
     labelEn: "Seminar / Workshop",
-    icon: "📋",
+    icon: "clipboard",
     descriptionNo: "Kunnskapsdeling og kompetansebygging",
     descriptionEn: "Knowledge sharing and competence building",
     typicalContentNo: ["Presentasjoner", "Gruppearbeid", "Diskusjoner", "Nettverking"],
@@ -758,7 +760,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     corporateSubCategory: "professional_strategic",
     labelNo: "Strategisamling / Kickoff",
     labelEn: "Strategy Gathering / Kickoff",
-    icon: "🎯",
+    icon: "analytics",
     descriptionNo: "Sette retning, mål og motivasjon — ofte 1–2 dager",
     descriptionEn: "Set direction, goals and motivation — often 1–2 days",
     typicalContentNo: ["Presentasjon av budsjett og mål", "Teambuilding", "Sosiale aktiviteter på kvelden"],
@@ -817,7 +819,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
         labelEn: "Company Quiz",
         descriptionNo: "Test kunnskapen om bedriften og kollegaene!",
         descriptionEn: "Test your knowledge about the company and colleagues!",
-        icon: "🧠",
+        icon: "bulb",
         instructionsNo: [
           "Arrangøren legger inn spørsmål om bedriften",
           "Deltakerne svarer i sanntid",
@@ -880,7 +882,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
         labelEn: "Summer Party Quiz",
         descriptionNo: "Morsom quiz for hele gjengen!",
         descriptionEn: "Fun quiz for the whole crew!",
-        icon: "☀️",
+        icon: "sunny",
         instructionsNo: [
           "Spill individuelt eller i lag",
           "Spørsmål om alt og ingenting",
@@ -961,7 +963,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
         labelEn: "Christmas Quiz",
         descriptionNo: "Test julekunnskapen til kollegaene!",
         descriptionEn: "Test your colleagues' Christmas knowledge!",
-        icon: "🎅",
+        icon: "person",
         instructionsNo: [
           "Spill lagvis eller individuelt",
           "Spørsmål om jul, bedriften og kollegaene",
@@ -980,7 +982,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
         labelEn: "Christmas Icebreaker",
         descriptionNo: "Morsomme julerelaterte spørsmål!",
         descriptionEn: "Fun Christmas-related questions!",
-        icon: "🎄",
+        icon: "snow",
         instructionsNo: [
           "Svar på julerelaterte oppvarmingsspørsmål",
           "Del favorittjuletradisjoner og minner",
@@ -1002,7 +1004,7 @@ export const EVENT_TYPE_CONFIGS: Record<EventType, EventTypeConfig> = {
     corporateSubCategory: "social_relational",
     labelNo: "Teambuilding",
     labelEn: "Team Building",
-    icon: "🤝",
+    icon: "people",
     descriptionNo: "Samarbeid og samhold — escape room, matlaging, tur",
     descriptionEn: "Collaboration and cohesion — escape room, cooking, outdoors",
     typicalContentNo: ["Escape room", "Matlagingskurs", "Rafting / fjelltur", "Vinteraktiviteter"],

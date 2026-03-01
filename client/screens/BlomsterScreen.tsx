@@ -732,7 +732,6 @@ export default function BlomsterScreen() {
         onPress={() => {
           navigation.navigate("VendorMatching", { 
             category: "florist",
-            selectedTraditions: coupleProfile?.selectedTraditions || [],
           });
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }}

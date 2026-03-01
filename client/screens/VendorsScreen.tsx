@@ -16,6 +16,7 @@ import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import { EvendiIcon, EvendiIconGlyphMap } from "@/components/EvendiIcon";
 import { EmptyStateIllustration } from "@/components/EmptyStateIllustration";
 import * as Haptics from "expo-haptics";
@@ -83,17 +84,17 @@ interface ApiVendor {
 }
 
 // ─── Event-type-aware labels ───────────────────────────────────
-const EVENT_TYPE_OPTIONS: { value: EventType; label: string; icon: string }[] = [
-  { value: "wedding", label: "Bryllup", icon: "💍" },
-  { value: "confirmation", label: "Konfirmasjon", icon: "🎓" },
-  { value: "birthday", label: "Bursdag", icon: "🎂" },
-  { value: "anniversary", label: "Jubileum", icon: "🥂" },
-  { value: "conference", label: "Konferanse", icon: "🎤" },
-  { value: "christmas_party", label: "Julebord", icon: "🎄" },
-  { value: "summer_party", label: "Sommerfest", icon: "☀️" },
-  { value: "team_building", label: "Teambuilding", icon: "🤝" },
-  { value: "kickoff", label: "Kickoff", icon: "🚀" },
-  { value: "awards_night", label: "Galla", icon: "🏆" },
+const EVENT_TYPE_OPTIONS: { value: EventType; label: string; icon: any }[] = [
+  { value: "wedding", label: "Bryllup", icon: require("@/assets/images/event_types/Evendi_event_type_wedding.png") },
+  { value: "confirmation", label: "Konfirmasjon", icon: require("@/assets/images/event_types/Evendi_event_type_conformation.png") },
+  { value: "birthday", label: "Bursdag", icon: require("@/assets/images/event_types/Evendi_event_type_birthday.png") },
+  { value: "anniversary", label: "Jubileum", icon: require("@/assets/images/event_types/Evendi_event_type_anniversary.png") },
+  { value: "conference", label: "Konferanse", icon: require("@/assets/images/event_types/Evendi_event_type_conference.png") },
+  { value: "christmas_party", label: "Julebord", icon: require("@/assets/images/event_types/Evendi_event_type_julebord.png") },
+  { value: "summer_party", label: "Sommerfest", icon: require("@/assets/images/event_types/Evendi_event_type_sommer.png") },
+  { value: "team_building", label: "Teambuilding", icon: require("@/assets/images/event_types/Evendi_event_type_team_building.png") },
+  { value: "kickoff", label: "Kickoff", icon: require("@/assets/images/event_types/Evendi_event_type_kickoff.png") },
+  { value: "awards_night", label: "Galla", icon: require("@/assets/images/event_types/Evendi_event_type_award_night.png") },
 ];
 
 // ────────────────────────────────────────────────────────────────
@@ -109,13 +110,33 @@ function Dropdown({
 }: {
   label: string;
   value: string;
-  options: { id: string; name: string; icon?: string }[];
+  options: { id: string; name: string; icon?: any }[];
   onSelect: (id: string) => void;
   icon?: keyof typeof EvendiIconGlyphMap;
   theme: any;
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.id === value);
+
+  const renderIcon = (iconProp: any) => {
+    if (!iconProp) return null;
+    
+    // Check if it's an image (require'd asset)
+    if (typeof iconProp === 'object' && (iconProp.uri || iconProp)) {
+      return (
+        <Image
+          source={iconProp}
+          style={{ width: 18, height: 18, marginRight: Spacing.sm }}
+          resizeMode="contain"
+        />
+      );
+    }
+    
+    // Otherwise treat as Ionicon name
+    return (
+      <Ionicons name={iconProp as any} size={18} color={theme.text} style={{ marginRight: Spacing.sm }} />
+    );
+  };
 
   return (
     <>
@@ -154,9 +175,7 @@ function Dropdown({
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   }}
                 >
-                  {opt.icon && (
-                    <ThemedText style={{ fontSize: 18, marginRight: Spacing.sm }}>{opt.icon}</ThemedText>
-                  )}
+                  {renderIcon(opt.icon)}
                   <ThemedText
                     style={[
                       styles.modalOptionText,
@@ -431,7 +450,7 @@ export default function VendorsScreen() {
   // ── List header ──
   const ListHeader = () => {
     const eventTypeDropdownOptions = [
-      { id: "all", name: "Alle arrangementer", icon: "🎉" },
+      { id: "all", name: "Alle arrangementer", icon: "sparkles" },
       ...EVENT_TYPE_OPTIONS.map((o) => ({ id: o.value, name: o.label, icon: o.icon })),
     ];
 

@@ -26,55 +26,11 @@ declare module "http" {
 function setupCors(app: express.Application) {
   app.use((req, res, next) => {
     const origin = req.header("origin");
+    const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === "development";
 
-    // Allowlist production origins (including current domains and render host)
-    const allowedProdOrigins = [
-      "https://evendi.no",
-      "https://www.evendi.no",
-      "https://app.evendi.no",
-      "https://api.evendi.no",
-      "https://evendi-api.onrender.com",
-      "https://evendi-evendi.vercel.app",
-    ];
-
-    // Allow custom list via env (comma-separated)
-    const envAllowedOrigins = (process.env.ALLOWED_ORIGINS || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    // In development, allow all origins for easier testing
-    const isDev = process.env.NODE_ENV === "development";
-
-    // Allow localhost origins for Expo web development (any port)
-    const isLocalhost =
-      origin?.startsWith("http://localhost:") ||
-      origin?.startsWith("http://127.0.0.1:");
-
-    // Allow GitHub Codespaces preview URLs
-    const isGitHubCodespaces = origin?.includes(".app.github.dev") || origin?.includes(".github.dev");
-
-    // Allow Cloudflare tunnel
-    const isCloudflare = origin?.includes(".trycloudflare.com");
-
-    // Allow Replit domains
-    const isReplit = origin?.includes(".replit.dev") || origin?.includes(".repl.co");
-
-    const allAllowedOrigins = new Set([
-      ...allowedProdOrigins,
-      ...envAllowedOrigins,
-    ]);
-
-    // Allow production domains (explicit allowlist)
-    const isProductionDomain = origin ? allAllowedOrigins.has(origin) : false;
-
-    // Allow origin if it matches any known development domain, production domain, or in dev mode allow all
-    const allowAnyOrigin = false;
-
-    const shouldAllowOrigin = allowAnyOrigin || isDev || isLocalhost || isGitHubCodespaces || isCloudflare || isReplit || isProductionDomain;
-
-    if (origin && shouldAllowOrigin) {
-      res.header("Access-Control-Allow-Origin", origin);
+    // In development, allow all origins
+    if (isDev || !origin) {
+      res.header("Access-Control-Allow-Origin", origin || "*");
       res.header(
         "Access-Control-Allow-Methods",
         "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD",
@@ -85,6 +41,49 @@ function setupCors(app: express.Application) {
       );
       res.header("Access-Control-Allow-Credentials", "true");
       res.header("Access-Control-Max-Age", "86400");
+    } else {
+      // Production: check allowlist
+      const allowedProdOrigins = [
+        "https://evendi.no",
+        "https://www.evendi.no",
+        "https://app.evendi.no",
+        "https://api.evendi.no",
+        "https://evendi-api.onrender.com",
+        "https://evendi-evendi.vercel.app",
+      ];
+
+      const envAllowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const allAllowedOrigins = new Set([
+        ...allowedProdOrigins,
+        ...envAllowedOrigins,
+      ]);
+
+      const isLocalhost =
+        origin?.startsWith("http://localhost:") ||
+        origin?.startsWith("http://127.0.0.1:");
+
+      const isGitHubCodespaces = origin?.includes(".app.github.dev") || origin?.includes(".github.dev");
+      const isCloudflare = origin?.includes(".trycloudflare.com");
+      const isReplit = origin?.includes(".replit.dev") || origin?.includes(".repl.co");
+      const isProductionDomain = origin ? allAllowedOrigins.has(origin) : false;
+
+      if (isLocalhost || isGitHubCodespaces || isCloudflare || isReplit || isProductionDomain) {
+        res.header("Access-Control-Allow-Origin", origin);
+        res.header(
+          "Access-Control-Allow-Methods",
+          "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD",
+        );
+        res.header(
+          "Access-Control-Allow-Headers",
+          "Content-Type, x-session-token, x-admin-secret, authorization, Authorization, Accept, Origin, X-Requested-With",
+        );
+        res.header("Access-Control-Allow-Credentials", "true");
+        res.header("Access-Control-Max-Age", "86400");
+      }
     }
 
     // Handle preflight OPTIONS requests immediately
@@ -231,6 +230,12 @@ function configureExpoAndLanding(app: express.Application) {
       return serveExpoManifest(platform, res);
     }
 
+    // If static-build/index.html exists, serve the SPA for browser requests at /
+    const spaIndex = path.resolve(process.cwd(), "static-build", "index.html");
+    if (req.path === "/" && fs.existsSync(spaIndex)) {
+      return res.sendFile(spaIndex);
+    }
+
     if (req.path === "/") {
       return serveLandingPage({
         req,
@@ -245,6 +250,18 @@ function configureExpoAndLanding(app: express.Application) {
 
   app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
   app.use(express.static(path.resolve(process.cwd(), "static-build")));
+
+  // SPA fallback: serve static-build/index.html for non-API routes
+  const spaIndexPath = path.resolve(process.cwd(), "static-build", "index.html");
+  if (fs.existsSync(spaIndexPath)) {
+    app.get("*", (req: Request, res: Response, next: NextFunction) => {
+      if (req.path.startsWith("/api") || req.path.startsWith("/ws")) {
+        return next();
+      }
+      res.sendFile(spaIndexPath);
+    });
+    log("SPA fallback enabled — serving static-build/index.html for client routes");
+  }
 
   log("Expo routing: Checking expo-platform header on / and /manifest");
 }

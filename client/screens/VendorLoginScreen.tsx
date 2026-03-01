@@ -4,8 +4,8 @@ import {
   View,
   TextInput,
   Pressable,
-  ActivityIndicator,
   Image,
+  ActivityIndicator,
 } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { EvendiIcon } from "@/components/EvendiIcon";
@@ -44,6 +44,7 @@ export default function VendorLoginScreen({ navigation }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formReady, setFormReady] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const validateField = useCallback((field: string, value: string): string => {
     switch (field) {
@@ -71,6 +72,9 @@ export default function VendorLoginScreen({ navigation }: Props) {
   }, [touched, errors, theme.error]);
   useEffect(() => {
     checkExistingSession();
+    // Signal that form is ready after brief animation delay
+    const timer = setTimeout(() => setFormReady(true), 300);
+    return () => clearTimeout(timer);
   }, []);
   const checkExistingSession = async () => {
     const sessionData = await AsyncStorage.getItem(VENDOR_STORAGE_KEY);
@@ -188,7 +192,11 @@ export default function VendorLoginScreen({ navigation }: Props) {
     }
   };
   return (
-    <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+    <View
+      style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+      testID="vendor-login-screen"
+      nativeID="vendor-login-form"
+    >
       <View style={[styles.headerBar, { paddingTop: headerHeight }]}>
         <Pressable
           onPress={() => navigation.goBack()}
@@ -204,7 +212,13 @@ export default function VendorLoginScreen({ navigation }: Props) {
         ]}
       >
         {showLogo ? (
-          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+          <Image
+            source={logoSource}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="Evendi logo"
+            testID="evendi-logo"
+          />
         ) : (
           <ThemedText style={styles.logoText}>
             {designSettings.appName || "Evendi"}
@@ -281,7 +295,7 @@ export default function VendorLoginScreen({ navigation }: Props) {
           </Pressable>
           <View style={styles.dividerContainer}>
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            <ThemedText style={[styles.dividerText, { color: theme.textMuted }]}>ELLER</ThemedText>
+            <ThemedText style={[styles.dividerText, { color: theme.text }]}>ELLER</ThemedText>
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
           </View>
           <Pressable
@@ -322,7 +336,7 @@ export default function VendorLoginScreen({ navigation }: Props) {
           accessibilityLabel="Registrer ny leverandør"
           style={styles.registerLink}
         >
-          <ThemedText style={[styles.registerLinkText, { color: theme.accent }]}> 
+          <ThemedText style={[styles.registerLinkText, { color: theme.text }]}> 
             Registrer deg som leverandør
           </ThemedText>
         </Pressable>

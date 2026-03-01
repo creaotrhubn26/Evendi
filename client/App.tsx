@@ -17,6 +17,10 @@ import { DesignProvider } from "@/lib/DesignProvider";
 import { ToastProvider } from "@/components/ToastProvider";
 import { DialogProvider } from "@/components/DialogProvider";
 
+const RootView = GestureHandlerRootView as unknown as React.ComponentType<
+  React.PropsWithChildren<{ style: unknown }>
+>;
+
 export default function App() {
   console.log("[App] Component mounting");
   const [isReady, setIsReady] = useState(false);
@@ -69,14 +73,14 @@ export default function App() {
           <SafeAreaProvider>
             <ToastProvider>
               <DialogProvider>
-                <GestureHandlerRootView style={styles.root}>
+                <RootView style={styles.root}>
                   <KeyboardProviderCompat>
                     <NavigationContainer initialState={initialState} onStateChange={handleStateChange}>
                       <RootStackNavigator skipSplash={Boolean(initialState)} />
                     </NavigationContainer>
                     <StatusBar style="auto" />
                   </KeyboardProviderCompat>
-                </GestureHandlerRootView>
+                </RootView>
               </DialogProvider>
             </ToastProvider>
           </SafeAreaProvider>
