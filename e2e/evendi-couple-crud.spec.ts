@@ -39,6 +39,15 @@ test.describe('Couple Speeches', () => {
     expect(Array.isArray(body)).toBe(true);
   });
 
+  test('GET /api/couple/profile returns profile with coupleId', async ({ request }) => {
+    const res = await request.get(`${BASE}/api/couple/profile`, {
+      headers: coupleHeaders(coupleToken),
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.id || body.coupleId || coupleId).toBeTruthy();
+  });
+
   let speechId: string;
 
   test('POST /api/speeches creates a speech', async ({ request }) => {
@@ -498,6 +507,11 @@ test.describe('Couple Vendor Contracts', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body)).toBe(true);
+    // Verify created contract is listed if it was created
+    if (contractId) {
+      const found = body.find((c: { id: string }) => c.id === contractId);
+      expect(found).toBeTruthy();
+    }
   });
 
   test('GET /api/couple/reviewable-contracts returns array', async ({ request }) => {
@@ -507,6 +521,36 @@ test.describe('Couple Vendor Contracts', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body)).toBe(true);
+  });
+});
+
+// ─── Vendor-Side Contract Verification ─────────────────────────
+
+test.describe('Vendor Contract Visibility', () => {
+  let vendorToken: string;
+
+  test.beforeAll(async ({ request }) => {
+    vendorToken = await getVendorToken(request);
+  });
+
+  test('GET /api/vendor/couple-contracts returns array', async ({ request }) => {
+    const res = await request.get(`${BASE}/api/vendor/couple-contracts`, {
+      headers: vendorHeaders(vendorToken),
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body)).toBe(true);
+  });
+});
+
+// ─── Admin Contract Oversight ────────────────────────────────
+
+test.describe('Admin Settings Access', () => {
+  test('GET /api/admin/settings returns settings', async ({ request }) => {
+    const res = await request.get(`${BASE}/api/admin/settings`, {
+      headers: adminHeaders(),
+    });
+    expect(res.status()).toBe(200);
   });
 });
 

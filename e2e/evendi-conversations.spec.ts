@@ -238,6 +238,21 @@ test.describe('Vendor Message Reminders', () => {
   });
 });
 
+test.describe('Vendor Conversations by Vendor ID', () => {
+  let vendorToken: string;
+
+  test.beforeAll(async ({ request }) => {
+    vendorToken = await getVendorToken(request);
+  });
+
+  test('GET /api/vendor/conversations filters by TEST_VENDOR_ID', async ({ request }) => {
+    const res = await request.get(`${BASE}/api/vendor/conversations?vendorId=${TEST_VENDOR_ID}`, {
+      headers: vendorHeaders(vendorToken),
+    });
+    expect([200, 404]).toContain(res.status());
+  });
+});
+
 test.describe('Inquiry to Conversation', () => {
   let coupleToken: string;
 

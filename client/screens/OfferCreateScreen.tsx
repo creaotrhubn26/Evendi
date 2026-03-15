@@ -267,6 +267,10 @@ export default function OfferCreateScreen() {
   };
 
   const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (event.type === 'dismissed') {
+      setShowDatePicker(false);
+      return;
+    }
     setShowDatePicker(Platform.OS === "ios");
     if (selectedDate) {
       setValidUntil(selectedDate);

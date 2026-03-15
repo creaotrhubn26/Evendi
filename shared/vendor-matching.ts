@@ -132,7 +132,14 @@ export function calculateBudgetMatch(
   const overlapRange = overlapEnd - overlapStart;
   const coupleRange = coupleMaxBudget - coupleMinBudget;
   
-  return Math.min(100, Math.round((overlapRange / coupleRange) * 100));
+  const overlapScore = Math.min(100, Math.round((overlapRange / coupleRange) * 100));
+
+  // Add proximity bonus: closer midpoints = better fit
+  const midpointDiff = Math.abs(coupleBudgetMid - vendorAvgPrice);
+  const maxRange = Math.max(coupleRange, 1);
+  const proximityBonus = Math.round(Math.max(0, 10 - (midpointDiff / maxRange) * 10));
+
+  return Math.min(100, overlapScore + proximityBonus);
 }
 
 /**

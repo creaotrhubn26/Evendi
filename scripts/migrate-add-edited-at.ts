@@ -3,6 +3,7 @@ import { config } from "dotenv";
 config({ path: ".env.local", override: true });
 
 import { drizzle } from "drizzle-orm/node-postgres";
+import { sql } from "drizzle-orm";
 import pg from "pg";
 
 if (!process.env.DATABASE_URL) {
@@ -36,7 +37,9 @@ async function migrate() {
     // Add the column
     await pool.query(`ALTER TABLE "messages" ADD COLUMN "edited_at" timestamp;`);
     
-    console.log("Successfully added edited_at column!");
+    // Verify migration using drizzle db instance
+    const verification = await db.execute(sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'edited_at'`);
+    console.log(`Successfully added edited_at column! Verified: ${verification.rowCount} row(s)`);
     await pool.end();
   } catch (error) {
     console.error("Migration failed:", error);

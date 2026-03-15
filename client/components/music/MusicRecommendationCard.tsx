@@ -29,49 +29,57 @@ export function MusicRecommendationCard({
   subTextColor,
   accentColor,
 }: Props) {
+  const safeEnergy = Math.max(0, Math.min(100, recommendation.energyScore || 0));
+  const safeMatch = Math.max(0, Math.min(100, recommendation.matchScore || 0));
+
   return (
-    <View style={[styles.card, { borderColor, backgroundColor }]}> 
+    <View style={[styles.card, { borderColor, backgroundColor }]}>
       <View style={styles.headerRow}>
         <View style={styles.mainCol}>
           <ThemedText style={[styles.title, { color: textColor }]} numberOfLines={1}>{recommendation.title}</ThemedText>
           <ThemedText style={[styles.artist, { color: subTextColor }]} numberOfLines={1}>{recommendation.artist || "Unknown artist"}</ThemedText>
+          <View style={[styles.energyTrack, { backgroundColor: `${accentColor}1A` }]}>
+            <View style={[styles.energyFill, { width: `${safeEnergy}%`, backgroundColor: accentColor }]} />
+          </View>
+          <ThemedText style={[styles.energyText, { color: subTextColor }]}>Energy {safeEnergy}</ThemedText>
         </View>
-        <View style={styles.scoreBadge}>
-          <ThemedText style={[styles.scoreText, { color: accentColor }]}>{recommendation.matchScore}</ThemedText>
+        <View style={[styles.scoreBadge, { borderColor: accentColor, backgroundColor: `${accentColor}14` }]}>
+          <ThemedText style={[styles.scoreLabel, { color: subTextColor }]}>Match</ThemedText>
+          <ThemedText style={[styles.scoreText, { color: accentColor }]}>{safeMatch}</ThemedText>
         </View>
       </View>
 
       <View style={styles.tagsRow}>
         {(recommendation.tags || []).slice(0, 4).map((tag) => (
-          <View key={tag} style={[styles.tag, { borderColor }]}> 
+          <View key={tag} style={[styles.tag, { borderColor, backgroundColor: `${accentColor}12` }]}>
             <ThemedText style={[styles.tagText, { color: subTextColor }]}>{tag}</ThemedText>
           </View>
         ))}
       </View>
 
       <View style={styles.actionRow}>
-        <Pressable onPress={() => onOpenYouTube(recommendation.youtubeVideoId)} style={[styles.actionBtn, { borderColor }]}> 
+        <Pressable onPress={() => onOpenYouTube(recommendation.youtubeVideoId)} style={[styles.actionBtn, { borderColor }]}>
           <EvendiIcon name="play" size={14} color={subTextColor} />
-          <ThemedText style={[styles.actionText, { color: subTextColor }]}>Play</ThemedText>
+          <ThemedText style={[styles.actionText, { color: subTextColor }]}>Preview</ThemedText>
         </Pressable>
-        <Pressable onPress={() => onAdd(recommendation)} style={[styles.actionBtn, { borderColor, backgroundColor: accentColor + "20" }]}> 
+        <Pressable onPress={() => onAdd(recommendation)} style={[styles.actionBtn, { borderColor, backgroundColor: `${accentColor}20` }]}>
           <EvendiIcon name="plus" size={14} color={accentColor} />
-          <ThemedText style={[styles.actionText, { color: accentColor }]}>Add</ThemedText>
+          <ThemedText style={[styles.actionText, { color: accentColor }]}>Add to set</ThemedText>
         </Pressable>
       </View>
 
       <View style={styles.feedbackRow}>
-        <Pressable onPress={() => onFeedback("more_like_this", recommendation)} style={styles.feedbackBtn}>
-          <ThemedText style={[styles.feedbackText, { color: subTextColor }]}>More like this</ThemedText>
+        <Pressable onPress={() => onFeedback("more_like_this", recommendation)} style={[styles.feedbackBtn, { borderColor }]}>
+          <ThemedText style={[styles.feedbackText, { color: subTextColor }]}>+ Similar</ThemedText>
         </Pressable>
-        <Pressable onPress={() => onFeedback("too_slow", recommendation)} style={styles.feedbackBtn}>
-          <ThemedText style={[styles.feedbackText, { color: subTextColor }]}>Too slow</ThemedText>
+        <Pressable onPress={() => onFeedback("too_slow", recommendation)} style={[styles.feedbackBtn, { borderColor }]}>
+          <ThemedText style={[styles.feedbackText, { color: subTextColor }]}>- Slow</ThemedText>
         </Pressable>
-        <Pressable onPress={() => onFeedback("too_romantic", recommendation)} style={styles.feedbackBtn}>
-          <ThemedText style={[styles.feedbackText, { color: subTextColor }]}>Too romantic</ThemedText>
+        <Pressable onPress={() => onFeedback("too_romantic", recommendation)} style={[styles.feedbackBtn, { borderColor }]}>
+          <ThemedText style={[styles.feedbackText, { color: subTextColor }]}>- Romantic</ThemedText>
         </Pressable>
-        <Pressable onPress={() => onFeedback("more_dhol", recommendation)} style={styles.feedbackBtn}>
-          <ThemedText style={[styles.feedbackText, { color: subTextColor }]}>More dhol</ThemedText>
+        <Pressable onPress={() => onFeedback("more_dhol", recommendation)} style={[styles.feedbackBtn, { borderColor }]}>
+          <ThemedText style={[styles.feedbackText, { color: subTextColor }]}>+ Dhol</ThemedText>
         </Pressable>
       </View>
     </View>
@@ -103,17 +111,40 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
+  energyTrack: {
+    marginTop: 6,
+    height: 6,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  energyFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  energyText: {
+    fontSize: 10,
+    marginTop: 3,
+    fontWeight: "600",
+  },
   scoreBadge: {
-    minWidth: 36,
-    height: 30,
-    borderRadius: 16,
+    minWidth: 58,
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0f172a14",
+    paddingHorizontal: 6,
+  },
+  scoreLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    lineHeight: 10,
   },
   scoreText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
+    lineHeight: 16,
   },
   tagsRow: {
     flexDirection: "row",
@@ -157,7 +188,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: BorderRadius.sm,
-    backgroundColor: "#0f172a10",
+    borderWidth: 1,
   },
   feedbackText: {
     fontSize: 10,

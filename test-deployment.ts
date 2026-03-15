@@ -13,7 +13,7 @@ async function testDeployment() {
       .select()
       .from(vendorSessions)
       .limit(1);
-    console.log("   ✅ vendor_sessions table accessible\n");
+    console.log(`   ✅ vendor_sessions table accessible (${sessionCount.length} sample rows)\n`);
 
     // Test 2: Test bcryptjs password hashing
     console.log("2️⃣  Testing bcryptjs password hashing...");
@@ -34,7 +34,7 @@ async function testDeployment() {
       .select()
       .from(vendors)
       .limit(1);
-    console.log("   ✅ vendors table accessible\n");
+    console.log(`   ✅ vendors table accessible (${vendorCount.length} sample rows)\n`);
 
     // Test 4: Database connection info
     console.log("4️⃣  Database Connection Status:");

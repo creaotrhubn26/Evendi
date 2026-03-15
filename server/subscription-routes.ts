@@ -95,11 +95,13 @@ export function registerSubscriptionRoutes(app: Express) {
 
   // Vendor: Get available subscription tiers
   app.get("/api/vendor/subscription/tiers", async (req: Request, res: Response) => {
+    const { active } = req.query;
     try {
+      const showAll = active === 'all';
       const tiers = await db
         .select()
         .from(subscriptionTiers)
-        .where(eq(subscriptionTiers.isActive, true))
+        .where(showAll ? undefined : eq(subscriptionTiers.isActive, true))
         .orderBy(subscriptionTiers.sortOrder);
       
       res.json(tiers);
@@ -477,7 +479,7 @@ export function registerSubscriptionRoutes(app: Express) {
         .limit(1);
 
       // Generate order ID
-      const orderId = `WF-${vendorId.substring(0, 8)}-${Date.now()}`;
+      const orderId = `WF-${vendorId.substring(0, 8)}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
       const now = new Date();
       const nextBillingDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 

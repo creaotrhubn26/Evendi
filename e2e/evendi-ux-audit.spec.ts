@@ -318,3 +318,12 @@ test.describe('UX audit - mobile', () => {
     );
   });
 });
+
+// ─── Vendor Flow Smoke Test ──────────────────────────────────────
+
+test.describe('Vendor login smoke test', () => {
+  test('auditVendorFlow logs in successfully', async ({ page }) => {
+    await auditVendorFlow(page);
+    await expect(page.getByText('Leveranser')).toBeVisible();
+  });
+});

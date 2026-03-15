@@ -52,6 +52,7 @@ import {
   coupleMusicPreferences,
   musicMoments,
   musicSongs,
+  musicMomentProfiles,
   musicMomentSongRankings,
   musicSets,
   musicSetItems,
@@ -80,6 +81,8 @@ import {
   DEFAULT_MOMENT_KEYS,
   normalizeMatcherProfile,
   scoreRecommendation,
+  generateYouTubeRecommendations,
+  getYouTubeRecommendationApiKey,
   createSignedOAuthState,
   verifySignedOAuthState,
   getYouTubeOAuthConfig,
@@ -247,7 +250,52 @@ async function getSetWithItems(db: DbClient, coupleId: string, setId: string) {
   return { set: setRow, items };
 }
 
-async function exportSetToYouTubePlaylist(params: {
+function isDuplicateKeyError(error: unknown): boolean {
+  return error instanceof Error && /duplicate key|unique constraint/i.test(error.message);
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim().length > 0) return error.message;
+  return fallback;
+}
+
+async function reorderSetItemsSafely(db: DbClient, setId: string, orderedItemIds: string[]) {
+  // Validate all items belong to this set before reordering
+  const existingItems = await db.select({ id: musicSetItems.id })
+    .from(musicSetItems)
+    .where(eq(musicSetItems.setId, setId));
+  const existingIds = new Set(existingItems.map(item => item.id));
+  for (const itemId of orderedItemIds) {
+    if (!existingIds.has(itemId)) {
+      throw new Error(`Item ${itemId} does not belong to set ${setId}`);
+    }
+  }
+  await db.transaction(async (tx) => {
+    const offset = 10000;
+    for (let i = 0; i < orderedItemIds.length; i += 1) {
+      await tx
+        .update(musicSetItems)
+        .set({ position: offset + i, updatedAt: new Date() })
+        .where(eq(musicSetItems.id, orderedItemIds[i]));
+    }
+    for (let i = 0; i < orderedItemIds.length; i += 1) {
+      await tx
+        .update(musicSetItems)
+        .set({ position: i, updatedAt: new Date() })
+        .where(eq(musicSetItems.id, orderedItemIds[i]));
+    }
+  });
+}
+
+async function getNextSetItemPosition(items: { position: number | null }[]) {
+  const maxPosition = items.reduce((max, item) => {
+    const next = Number.isFinite(item.position) ? Number(item.position) : -1;
+    return Math.max(max, next);
+  }, -1);
+  return maxPosition + 1;
+}
+
+export async function exportSetToYouTubePlaylist(params: {
   db: DbClient;
   coupleId: string;
   requestedByRole: "couple" | "vendor";
@@ -260,16 +308,30 @@ async function exportSetToYouTubePlaylist(params: {
   idempotencyKey?: string;
   redirectUri: string;
   offerId?: string | null;
+  playlistId?: string | null;
 }) {
-  const { db, coupleId, requestedByRole, requestedByVendorId, requestedByCoupleId, setId, title, description, privacyStatus, redirectUri, offerId } = params;
+  const {
+    db,
+    coupleId,
+    requestedByRole,
+    requestedByVendorId,
+    requestedByCoupleId,
+    setId,
+    title,
+    description,
+    privacyStatus,
+    redirectUri,
+    offerId,
+    playlistId,
+  } = params;
   const idempotencyKey = params.idempotencyKey || crypto.randomUUID();
 
-  const existingJobs = await db
+  const [existingJob] = await db
     .select()
     .from(musicExportJobs)
     .where(eq(musicExportJobs.idempotencyKey, idempotencyKey));
-  if (existingJobs.length > 0) {
-    return existingJobs[0];
+  if (existingJob) {
+    return existingJob;
   }
 
   const withItems = await getSetWithItems(db, coupleId, setId);
@@ -282,41 +344,87 @@ async function exportSetToYouTubePlaylist(params: {
   if (videoIds.length === 0) {
     throw new Error("Set has no YouTube tracks");
   }
-
-  const accessToken = await getYouTubeAccessTokenForCouple(db, coupleId, redirectUri);
-  const playlist = await createYouTubePlaylist({
-    accessToken,
-    title,
-    description,
-    privacyStatus: privacyStatus || "unlisted",
-  });
-
-  for (const videoId of videoIds) {
-    await insertYouTubePlaylistItem({
-      accessToken,
-      playlistId: playlist.id,
-      videoId,
-    });
+  let pendingJob:
+    | typeof musicExportJobs.$inferSelect
+    | null = null;
+  try {
+    [pendingJob] = await db
+      .insert(musicExportJobs)
+      .values({
+        coupleId,
+        offerId: offerId || null,
+        setId,
+        idempotencyKey,
+        status: "pending",
+        requestedByRole,
+        requestedByVendorId: requestedByVendorId || null,
+        requestedByCoupleId: requestedByCoupleId || null,
+        exportedTrackCount: 0,
+      })
+      .returning();
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      const [duplicate] = await db
+        .select()
+        .from(musicExportJobs)
+        .where(eq(musicExportJobs.idempotencyKey, idempotencyKey));
+      if (duplicate) return duplicate;
+    }
+    throw error;
   }
 
-  const [job] = await db
-    .insert(musicExportJobs)
-    .values({
-      coupleId,
-      offerId: offerId || null,
-      setId,
-      youtubePlaylistId: playlist.id,
-      youtubePlaylistUrl: playlist.url,
-      idempotencyKey,
-      status: "success",
-      requestedByRole,
-      requestedByVendorId: requestedByVendorId || null,
-      requestedByCoupleId: requestedByCoupleId || null,
-      exportedTrackCount: videoIds.length,
-    })
-    .returning();
+  if (!pendingJob) {
+    throw new Error("Failed to create export job");
+  }
 
-  return job;
+  try {
+    const accessToken = await getYouTubeAccessTokenForCouple(db, coupleId, redirectUri);
+    const playlist = playlistId
+      ? { id: playlistId, url: `https://www.youtube.com/playlist?list=${playlistId}` }
+      : await createYouTubePlaylist({
+          accessToken,
+          title,
+          description,
+          privacyStatus: privacyStatus || "unlisted",
+        });
+
+    for (const videoId of videoIds) {
+      await insertYouTubePlaylistItem({
+        accessToken,
+        playlistId: playlist.id,
+        videoId,
+      });
+    }
+
+    const [job] = await db
+      .update(musicExportJobs)
+      .set({
+        youtubePlaylistId: playlist.id,
+        youtubePlaylistUrl: playlist.url,
+        status: "success",
+        exportedTrackCount: videoIds.length,
+        errorMessage: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(musicExportJobs.id, pendingJob.id))
+      .returning();
+
+    return job;
+  } catch (error) {
+    const message = getErrorMessage(error, "YouTube export failed");
+    const normalized = /invalid_grant/i.test(message)
+      ? "YouTube authorization expired. Please reconnect YouTube in Evendi."
+      : message;
+    await db
+      .update(musicExportJobs)
+      .set({
+        status: "failed",
+        errorMessage: normalized,
+        updatedAt: new Date(),
+      })
+      .where(eq(musicExportJobs.id, pendingJob.id));
+    throw new Error(normalized);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -903,33 +1011,101 @@ export function registerCoupleFeatureRoutes(
         .select()
         .from(musicMoments)
         .where(inArray(musicMoments.key, inputMoments));
-      const momentIds = momentRows.map((m) => m.id);
 
-      if (momentIds.length === 0) {
+      if (momentRows.length === 0) {
         return res.json({ profile, recommendations: {} });
       }
+
+      const feedbackByMoment = req.body?.feedbackByMoment || {};
+      const recommendationApiKey = getYouTubeRecommendationApiKey();
+      let youtubeAccessToken: string | null = null;
+      if (!recommendationApiKey) {
+        try {
+          youtubeAccessToken = await getYouTubeAccessTokenForCouple(db, coupleId, getOAuthRedirectUri(req));
+        } catch {
+          youtubeAccessToken = null;
+        }
+      }
+
+      const youtubeRecommendations = await generateYouTubeRecommendations({
+        profile,
+        moments: momentRows.map((moment) => ({
+          key: moment.key,
+          title: moment.title,
+          description: moment.description || null,
+        })),
+        limitPerMoment,
+        feedbackByMoment,
+        accessToken: youtubeAccessToken,
+      });
+      const youtubeConfigured = Boolean(recommendationApiKey || youtubeAccessToken);
+      const youtubeTrackCount = Object.values(youtubeRecommendations).reduce((sum, list) => sum + list.length, 0);
+
+      const momentIds = momentRows.map((m) => m.id);
 
       const rankingRows = await db
         .select()
         .from(musicMomentSongRankings)
         .where(inArray(musicMomentSongRankings.momentId, momentIds));
+      const momentProfileRows = await db
+        .select()
+        .from(musicMomentProfiles)
+        .where(inArray(musicMomentProfiles.momentId, momentIds));
       const songIds = [...new Set(rankingRows.map((r) => r.songId))];
       const songs = songIds.length > 0
         ? await db.select().from(musicSongs).where(inArray(musicSongs.id, songIds))
         : [];
       const songsById = new Map(songs.map((song) => [song.id, song]));
-      const feedbackByMoment = req.body?.feedbackByMoment || {};
+      const momentProfileMap = new Map<string, Map<string, number>>();
+      for (const row of momentProfileRows) {
+        const byCulture = momentProfileMap.get(row.momentId) || new Map<string, number>();
+        byCulture.set(row.cultureKey, row.defaultWeight ?? 50);
+        momentProfileMap.set(row.momentId, byCulture);
+      }
 
-      const recommendations: Record<string, any[]> = {};
+      type RecommendationCandidate = {
+        songId: string;
+        youtubeVideoId: string;
+        title: string;
+        artist: string | null;
+        energyScore: number;
+        tags: string[];
+        matchScore: number;
+        momentKey: string;
+      };
+
+      const catalogRecommendations: Record<string, RecommendationCandidate[]> = {};
       for (const moment of momentRows) {
-        const ranked = rankingRows
+        const rankedCandidates = rankingRows
           .filter((row) => row.momentId === moment.id)
-          .map((row) => {
+          .map<RecommendationCandidate | null>((row) => {
             const song = songsById.get(row.songId);
             if (!song) return null;
             if (profile.cleanLyricsOnly && song.explicitFlag) return null;
+            const preferredCultures = profile.preferredCultures || [];
+            const momentCultureWeights = momentProfileMap.get(moment.id) || new Map<string, number>();
+            let momentProfileWeight = 50;
+            if (preferredCultures.length > 0) {
+              const weights = preferredCultures
+                .map((culture) => momentCultureWeights.get(culture))
+                .filter((value): value is number => Number.isFinite(value));
+              if (weights.length > 0) {
+                momentProfileWeight = Math.max(...weights);
+              }
+            }
+            const cultureRowPenalty =
+              row.cultureKey && preferredCultures.length > 0 && !preferredCultures.includes(row.cultureKey)
+                ? -12
+                : 0;
+            const effectiveRankScore = Math.max(
+              0,
+              Math.min(
+                100,
+                Math.round((row.rankScore || 50) * 0.75 + momentProfileWeight * 0.25 + cultureRowPenalty),
+              ),
+            );
             const matchScore = scoreRecommendation({
-              rankScore: row.rankScore || 50,
+              rankScore: effectiveRankScore,
               songEnergy: song.energyScore || 50,
               songDhol: song.dholScore || 0,
               songDanceability: song.danceability || 50,
@@ -956,14 +1132,49 @@ export function registerCoupleFeatureRoutes(
               momentKey: moment.key,
             };
           })
-          .filter(Boolean) as any[];
+          .filter((candidate): candidate is RecommendationCandidate => candidate !== null);
 
-        recommendations[moment.key] = ranked
+        const dedupedBySongId = new Map<string, RecommendationCandidate>();
+        for (const candidate of rankedCandidates) {
+          const current = dedupedBySongId.get(candidate.songId);
+          if (!current || candidate.matchScore > current.matchScore) {
+            dedupedBySongId.set(candidate.songId, candidate);
+          }
+        }
+
+        catalogRecommendations[moment.key] = Array.from(dedupedBySongId.values())
           .sort((a, b) => b.matchScore - a.matchScore)
           .slice(0, limitPerMoment);
       }
 
-      res.json({ profile, recommendations });
+      const mergedRecommendations: Record<string, RecommendationCandidate[]> = {};
+      for (const moment of momentRows) {
+        const youtubeCandidates = youtubeRecommendations[moment.key] || [];
+        const catalogCandidates = catalogRecommendations[moment.key] || [];
+        const mergedByVideoId = new Map<string, RecommendationCandidate>();
+
+        for (const candidate of youtubeCandidates) {
+          mergedByVideoId.set(candidate.youtubeVideoId, candidate);
+        }
+
+        for (const candidate of catalogCandidates) {
+          if (mergedByVideoId.size >= limitPerMoment) break;
+          if (!mergedByVideoId.has(candidate.youtubeVideoId)) {
+            mergedByVideoId.set(candidate.youtubeVideoId, candidate);
+          }
+        }
+
+        mergedRecommendations[moment.key] = Array.from(mergedByVideoId.values())
+          .sort((a, b) => b.matchScore - a.matchScore)
+          .slice(0, limitPerMoment);
+      }
+
+      const mergedTrackCount = Object.values(mergedRecommendations).reduce((sum, list) => sum + list.length, 0);
+      const source = youtubeTrackCount > 0
+        ? (mergedTrackCount > youtubeTrackCount ? "hybrid" : "youtube")
+        : "catalog";
+
+      res.json({ profile, recommendations: mergedRecommendations, source, youtubeConfigured });
     } catch (error) {
       console.error("Error generating music recommendations:", error?.message || String(error));
       res.status(500).json({ error: "Kunne ikke hente anbefalinger" });
@@ -1043,6 +1254,19 @@ export function registerCoupleFeatureRoutes(
       if (req.body?.title !== undefined) updates.title = req.body.title;
       if (req.body?.description !== undefined) updates.description = req.body.description;
       if (req.body?.visibility !== undefined) updates.visibility = req.body.visibility;
+      if (req.body?.offerId !== undefined) {
+        const nextOfferId = req.body.offerId ? String(req.body.offerId) : null;
+        if (nextOfferId) {
+          const [offer] = await db
+            .select()
+            .from(vendorOffers)
+            .where(and(eq(vendorOffers.id, nextOfferId), eq(vendorOffers.coupleId, coupleId)));
+          if (!offer) {
+            return res.status(400).json({ error: "Ugyldig offerId for dette paret" });
+          }
+        }
+        updates.offerId = nextOfferId;
+      }
 
       const [updated] = await db
         .update(musicSets)
@@ -1074,13 +1298,11 @@ export function registerCoupleFeatureRoutes(
       if (orderedItemIds.some((id: string) => !allowed.has(id))) {
         return res.status(400).json({ error: "orderedItemIds inneholder ugyldige elementer" });
       }
-
-      for (let i = 0; i < orderedItemIds.length; i += 1) {
-        await db
-          .update(musicSetItems)
-          .set({ position: i, updatedAt: new Date() })
-          .where(eq(musicSetItems.id, orderedItemIds[i]));
+      if (orderedItemIds.length !== withItems.items.length) {
+        return res.status(400).json({ error: "orderedItemIds må inneholde alle set-items" });
       }
+
+      await reorderSetItemsSafely(db, setId, orderedItemIds);
       await db
         .update(musicSets)
         .set({ updatedAt: new Date(), updatedByRole: "couple" })
@@ -1102,8 +1324,12 @@ export function registerCoupleFeatureRoutes(
       const { setId } = req.params;
       const withItems = await getSetWithItems(db, coupleId, setId);
       if (!withItems) return res.status(404).json({ error: "Set-liste ikke funnet" });
+      const nextPosition = await getNextSetItemPosition(withItems.items);
+      const desiredPosition = Number.isFinite(req.body?.position)
+        ? Math.max(0, Math.min(Number(req.body.position), withItems.items.length))
+        : null;
 
-      let songSnapshot: any = null;
+      let songSnapshot: typeof musicSongs.$inferSelect | null = null;
       if (req.body?.songId) {
         const [song] = await db.select().from(musicSongs).where(eq(musicSongs.id, String(req.body.songId)));
         if (song) songSnapshot = song;
@@ -1116,11 +1342,23 @@ export function registerCoupleFeatureRoutes(
         title: songSnapshot?.title || req.body?.title || "Untitled song",
         artist: songSnapshot?.artist || req.body?.artist || null,
         momentKey: req.body?.momentKey || null,
-        position: Number.isFinite(req.body?.position) ? Number(req.body.position) : withItems.items.length,
+        position: nextPosition,
         dropMarkerSeconds: Number.isFinite(req.body?.dropMarkerSeconds) ? Number(req.body.dropMarkerSeconds) : null,
         notes: req.body?.notes || null,
         addedByRole: "couple",
       }).returning();
+
+      if (desiredPosition !== null && desiredPosition !== nextPosition) {
+        const ordered = [...withItems.items, created]
+          .sort((a, b) => (Number.isFinite(a.position) ? Number(a.position) : 0) - (Number.isFinite(b.position) ? Number(b.position) : 0))
+          .map((item) => item.id);
+        const fromIndex = ordered.indexOf(created.id);
+        if (fromIndex >= 0) {
+          ordered.splice(fromIndex, 1);
+          ordered.splice(desiredPosition, 0, created.id);
+          await reorderSetItemsSafely(db, setId, ordered);
+        }
+      }
 
       await db
         .update(musicSets)
@@ -1365,12 +1603,29 @@ export function registerCoupleFeatureRoutes(
         idempotencyKey: req.body?.idempotencyKey ? String(req.body.idempotencyKey) : undefined,
         redirectUri: getOAuthRedirectUri(req),
         offerId: withItems.set.offerId || null,
+        playlistId: req.body?.playlistId ? String(req.body.playlistId) : null,
       });
 
       res.json(job);
     } catch (error) {
       console.error("Error exporting YouTube playlist:", error?.message || String(error));
       res.status(500).json({ error: error instanceof Error ? error.message : "Kunne ikke eksportere YouTube-playlist" });
+    }
+  });
+
+  app.get("/api/couple/music/vendor-permissions", async (req: Request, res: Response) => {
+    if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
+    const coupleId = await checkCoupleAuth(req, res);
+    if (!coupleId) return;
+    try {
+      const permissions = await db
+        .select()
+        .from(coupleMusicVendorPermissions)
+        .where(eq(coupleMusicVendorPermissions.coupleId, coupleId));
+      res.json(permissions);
+    } catch (error) {
+      console.error("Error fetching music vendor permissions:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke hente leverandør-samtykker" });
     }
   });
 

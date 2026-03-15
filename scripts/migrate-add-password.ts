@@ -3,6 +3,7 @@ import { config } from "dotenv";
 config({ path: ".env.local", override: true });
 
 import { drizzle } from "drizzle-orm/node-postgres";
+import { sql } from "drizzle-orm";
 import pg from "pg";
 
 if (!process.env.DATABASE_URL) {
@@ -40,7 +41,10 @@ async function migrate() {
     // Make NOT NULL
     await pool.query(`ALTER TABLE "couple_profiles" ALTER COLUMN "password" SET NOT NULL;`);
     
-    console.log("Successfully added password column!");
+    // Verify migration using drizzle
+    const db = drizzle(pool);
+    const verification = await db.execute(sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'couple_profiles' AND column_name = 'password'`);
+    console.log(`Successfully added password column! Verified: ${verification.rowCount} row(s)`);
     await pool.end();
   } catch (error) {
     console.error("Migration failed:", error);

@@ -310,6 +310,20 @@ export function registerExpertiseRoutes(app: Express) {
     try {
       const validatedData = createCoupleEventPreferencesSchema.parse(req.body);
 
+      // Verify couple exists before saving preferences
+      const [coupleExists] = await db
+        .select({ id: coupleProfiles.id })
+        .from(coupleProfiles)
+        .where(eq(coupleProfiles.id, validatedData.coupleId))
+        .limit(1);
+
+      if (!coupleExists) {
+        return res.status(404).json({
+          success: false,
+          error: "Couple profile not found",
+        });
+      }
+
       // Check if preferences exist
       const existing = await db
         .select()

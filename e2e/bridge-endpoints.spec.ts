@@ -47,7 +47,7 @@ test.describe('Bridge Admin Endpoints', () => {
 
   test('GET /api/creatorhub/projects → 200 (admin auth)', async ({ request }) => {
     const res = await request.get('/api/creatorhub/projects', {
-      headers: { 'X-Admin-Secret': 'evendi-admin-2024-secure' },
+      headers: adminHeaders(),
     });
     expect(res.status()).toBe(200);
   });

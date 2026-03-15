@@ -198,7 +198,9 @@ export default function VendorSearchResultsScreen() {
       return response.json();
     },
     onSuccess: (data, vendorId) => {
-      setFavorites((prev) => new Set([...prev, vendorId]));
+      if (data?.success !== false) {
+        setFavorites((prev) => new Set([...prev, vendorId]));
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast("Lagt til favoritter");
     },
@@ -232,11 +234,13 @@ export default function VendorSearchResultsScreen() {
       return response.json();
     },
     onSuccess: (data, vendorId) => {
-      setFavorites((prev) => {
-        const updated = new Set(prev);
-        updated.delete(vendorId);
-        return updated;
-      });
+      if (data?.success !== false) {
+        setFavorites((prev) => {
+          const updated = new Set(prev);
+          updated.delete(vendorId);
+          return updated;
+        });
+      }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       showToast("Fjernet fra favoritter");
     },

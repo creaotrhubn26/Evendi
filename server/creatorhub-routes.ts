@@ -1203,6 +1203,8 @@ export function registerCreatorhubRoutes(app: Express) {
    */
   app.get("/api/creatorhub/evendi/couples", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
+      const limitParam = parseInt(req.query.limit as string) || 100;
+      const limit = Math.min(Math.max(1, limitParam), 500);
       const allCouples = await db.select({
         id: coupleProfiles.id,
         email: coupleProfiles.email,
@@ -1211,7 +1213,7 @@ export function registerCreatorhubRoutes(app: Express) {
         weddingDate: coupleProfiles.weddingDate,
         lastActiveAt: coupleProfiles.lastActiveAt,
         createdAt: coupleProfiles.createdAt,
-      }).from(coupleProfiles).orderBy(desc(coupleProfiles.createdAt));
+      }).from(coupleProfiles).orderBy(desc(coupleProfiles.createdAt)).limit(limit);
       return res.json(allCouples);
     } catch (error) {
       console.error("[CreatorHub] List couples error:", error);
@@ -1450,6 +1452,7 @@ export function registerCreatorhubRoutes(app: Express) {
    */
   app.get("/api/creatorhub/evendi/statistics", authenticateApiKey, async (req: CreatorhubRequest, res: Response) => {
     try {
+      const includeDetails = req.query.details === 'true';
       const [coupleCount] = await db.select({ count: sql<number>`count(*)` }).from(coupleProfiles);
       const [vendorCount] = await db.select({ count: sql<number>`count(*)` }).from(vendors);
       const [activeVendors] = await db.select({ count: sql<number>`count(*)` }).from(vendors).where(eq(vendors.status, "active"));
@@ -1466,6 +1469,7 @@ export function registerCreatorhubRoutes(app: Express) {
         },
         conversations: Number(convoCount.count),
         messages: Number(msgCount.count),
+        ...(includeDetails ? { fetchedAt: new Date().toISOString() } : {}),
       });
     } catch (error) {
       return creatorhubInternalError(res, "Failed to get statistics", error);
@@ -1822,10 +1826,10 @@ export function registerCreatorhubRoutes(app: Express) {
   // ===============================================
   // SHORT ALIASES (no /creatorhub prefix)
   // ===============================================
-  app.use("/api/projects", (req, res, next) => { req.url = req.url; res.redirect(307, `/api/creatorhub/projects${req.url === "/" ? "" : req.url}`); });
-  app.use("/api/users", (req, res, next) => { res.redirect(307, `/api/creatorhub/users${req.url === "/" ? "" : req.url}`); });
-  app.use("/api/bookings", (req, res, next) => { res.redirect(307, `/api/creatorhub/bookings${req.url === "/" ? "" : req.url}`); });
-  app.use("/api/invitations", (req, res, next) => { res.redirect(307, `/api/creatorhub/invitations${req.url === "/" ? "" : req.url}`); });
+  app.use("/api/projects", (req, res, next) => { if (res.headersSent) { next(); return; } res.redirect(307, `/api/creatorhub/projects${req.url === "/" ? "" : req.url}`); });
+  app.use("/api/users", (req, res, next) => { if (res.headersSent) { next(); return; } res.redirect(307, `/api/creatorhub/users${req.url === "/" ? "" : req.url}`); });
+  app.use("/api/bookings", (req, res, next) => { if (res.headersSent) { next(); return; } res.redirect(307, `/api/creatorhub/bookings${req.url === "/" ? "" : req.url}`); });
+  app.use("/api/invitations", (req, res, next) => { if (res.headersSent) { next(); return; } res.redirect(307, `/api/creatorhub/invitations${req.url === "/" ? "" : req.url}`); });
 
   console.log("[CreatorHub] API routes registered at /api/creatorhub/* (also /api/projects, /api/users, /api/bookings, /api/invitations)");
 }

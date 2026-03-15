@@ -1065,6 +1065,10 @@ export default function RemindersScreen() {
                         display="default"
                         minimumDate={new Date()}
                         onChange={(event: DateTimePickerEvent, date?: Date) => {
+                          if (event.type === 'dismissed') {
+                            setShowDatePicker(false);
+                            return;
+                          }
                           setShowDatePicker(false);
                           if (date) setSelectedDate(date);
                         }}

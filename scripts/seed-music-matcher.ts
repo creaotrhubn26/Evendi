@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import {
   musicMoments,
+  musicMomentProfiles,
   musicSongs,
   musicMomentSongRankings,
 } from "../shared/schema";
@@ -107,6 +108,108 @@ const RANKINGS: SeedRanking[] = [
   { momentKey: "vidaai_farewell", youtubeVideoId: "hLQl3WQQoQ0", rankScore: 78 },
 ];
 
+const MOMENT_PROFILE_CULTURES = [
+  "norsk",
+  "sikh",
+  "indisk",
+  "pakistansk",
+  "tyrkisk",
+  "arabisk",
+  "somalisk",
+  "etiopisk",
+  "nigeriansk",
+  "muslimsk",
+  "libanesisk",
+  "filipino",
+  "kinesisk",
+  "koreansk",
+  "thai",
+  "iransk",
+  "mixed",
+  "annet",
+];
+
+const MOMENT_BASE_WEIGHTS: Record<string, number> = {
+  groom_entry_mehndi: 88,
+  bride_entry: 58,
+  couple_entry: 74,
+  first_dance: 46,
+  family_dance_set: 78,
+  dinner_vibe: 35,
+  afterparty_peak: 92,
+  vidaai_farewell: 38,
+};
+
+const CULTURE_WEIGHT_ADJUSTMENTS: Record<string, number> = {
+  sikh: 8,
+  pakistansk: 7,
+  indisk: 6,
+  muslimsk: 5,
+  arabisk: 4,
+  libanesisk: 4,
+  norsk: -4,
+  mixed: 2,
+  annet: 0,
+};
+
+const MOMENT_CULTURE_OVERRIDES: Record<string, Record<string, number>> = {
+  groom_entry_mehndi: {
+    sikh: 98,
+    pakistansk: 96,
+    indisk: 94,
+    arabisk: 84,
+    norsk: 42,
+  },
+  bride_entry: {
+    indisk: 72,
+    pakistansk: 70,
+    iransk: 72,
+    filipino: 68,
+    norsk: 64,
+  },
+  first_dance: {
+    norsk: 72,
+    filipino: 70,
+    indisk: 66,
+    pakistansk: 66,
+    mixed: 74,
+  },
+  dinner_vibe: {
+    norsk: 58,
+    kinesisk: 56,
+    koreansk: 54,
+    iransk: 55,
+    mixed: 60,
+  },
+  afterparty_peak: {
+    nigeriansk: 96,
+    sikh: 94,
+    pakistansk: 92,
+    tyrkisk: 90,
+    somalisk: 88,
+    mixed: 92,
+  },
+  vidaai_farewell: {
+    indisk: 78,
+    pakistansk: 76,
+    sikh: 74,
+    iransk: 72,
+    mixed: 68,
+  },
+};
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getMomentProfileWeight(momentKey: string, cultureKey: string) {
+  const override = MOMENT_CULTURE_OVERRIDES[momentKey]?.[cultureKey];
+  if (typeof override === "number") return clamp(override, 0, 100);
+  const base = MOMENT_BASE_WEIGHTS[momentKey] ?? 50;
+  const adjustment = CULTURE_WEIGHT_ADJUSTMENTS[cultureKey] ?? 0;
+  return clamp(base + adjustment, 0, 100);
+}
+
 async function seedMoments() {
   const map = new Map<string, string>();
   for (const moment of MOMENTS) {
@@ -162,6 +265,39 @@ async function seedSongs() {
     }
   }
   return map;
+}
+
+async function seedMomentProfiles(momentMap: Map<string, string>) {
+  for (const [momentKey, momentId] of momentMap.entries()) {
+    for (const cultureKey of MOMENT_PROFILE_CULTURES) {
+      const defaultWeight = getMomentProfileWeight(momentKey, cultureKey);
+      const [existing] = await db
+        .select()
+        .from(musicMomentProfiles)
+        .where(and(
+          eq(musicMomentProfiles.momentId, momentId),
+          eq(musicMomentProfiles.cultureKey, cultureKey),
+        ));
+
+      if (existing) {
+        await db
+          .update(musicMomentProfiles)
+          .set({
+            defaultWeight,
+            notes: "Seeded default profile",
+            updatedAt: new Date(),
+          })
+          .where(eq(musicMomentProfiles.id, existing.id));
+      } else {
+        await db.insert(musicMomentProfiles).values({
+          momentId,
+          cultureKey,
+          defaultWeight,
+          notes: "Seeded default profile",
+        });
+      }
+    }
+  }
 }
 
 async function seedRankings(momentMap: Map<string, string>, songMap: Map<string, string>) {
@@ -243,9 +379,12 @@ async function seedRankings(momentMap: Map<string, string>, songMap: Map<string,
 async function run() {
   const momentMap = await seedMoments();
   const songMap = await seedSongs();
+  await seedMomentProfiles(momentMap);
   await seedRankings(momentMap, songMap);
 
-  console.log(`Seeded ${momentMap.size} moments, ${songMap.size} songs and ${RANKINGS.length} rankings.`);
+  console.log(
+    `Seeded ${momentMap.size} moments, ${songMap.size} songs, ${MOMENT_PROFILE_CULTURES.length * momentMap.size} moment profiles and ${RANKINGS.length} rankings.`,
+  );
 }
 
 run().catch((error) => {

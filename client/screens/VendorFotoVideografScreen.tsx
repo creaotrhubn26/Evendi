@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl } from "react-native";
 import { showConfirm } from "@/lib/dialogs";
+import { showToast } from "@/lib/toast";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { EvendiIcon } from "@/components/EvendiIcon";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -41,6 +42,7 @@ export default function VendorFotoVideografScreen() {
   const { theme } = useTheme();
   const { getSetting } = useAppSettings();
   const navigation = useNavigation<Navigation>();
+  const queryClient = useQueryClient();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'prosjekt'>('dashboard');
@@ -119,17 +121,55 @@ export default function VendorFotoVideografScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate("OfferCreate");
   };
-  const handleDelete = (id: string, type: 'product' | 'offer') => {
-    showConfirm({
+  const deleteProductMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      if (!sessionToken) throw new Error('No session');
+      const res = await fetch(new URL(`/api/vendor/products/${productId}`, getApiUrl()).toString(), {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      if (!res.ok) throw new Error('Failed to delete product');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/vendor/products'] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+  });
+  const deleteOfferMutation = useMutation({
+    mutationFn: async (offerId: string) => {
+      if (!sessionToken) throw new Error('No session');
+      const res = await fetch(new URL(`/api/vendor/offers/${offerId}`, getApiUrl()).toString(), {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      if (!res.ok) throw new Error('Failed to delete offer');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/vendor/offers'] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+  });
+  const handleDelete = async (id: string, type: 'product' | 'offer') => {
+    const confirmed = await showConfirm({
       title: `Slett ${type === 'product' ? 'produkt' : 'tilbud'}`,
       message: "Er du sikker?",
       confirmLabel: "Slett",
       cancelLabel: "Avbryt",
       destructive: true,
-    }).then((confirmed) => {
-      if (!confirmed) return;
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     });
+    if (!confirmed) return;
+    try {
+      if (type === 'product') {
+        await deleteProductMutation.mutateAsync(id);
+      } else {
+        await deleteOfferMutation.mutateAsync(id);
+      }
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : 'Kunne ikke slette';
+      showToast(message);
+    }
   };
   if (!sessionToken) return null;
   return (

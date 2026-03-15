@@ -27,6 +27,7 @@ import {
   getMusicRecommendations,
   getMusicSets,
   createMusicSet,
+  updateMusicSet,
   addMusicSetItem,
   updateMusicSetItem,
   deleteMusicSetItem,
@@ -35,6 +36,7 @@ import {
   getMusicYouTubeConnectUrl,
   disconnectMusicYouTube,
   exportMusicYouTubePlaylist,
+  getMusicVendorPermissions,
   updateMusicVendorPermission,
   getCoupleOffers,
 } from '@/lib/api-couple-data';
@@ -42,7 +44,7 @@ import { ThemedText } from '../components/ThemedText';
 import { Button } from '../components/Button';
 import { VendorCategoryMarketplace } from '@/components/VendorCategoryMarketplace';
 import { useTheme } from '../hooks/useTheme';
-import { Colors, Spacing, BorderRadius } from '../constants/theme';
+import { Spacing, BorderRadius } from '../constants/theme';
 import { PlanningStackParamList } from '../navigation/PlanningStackNavigator';
 import { getSpeeches } from '@/lib/storage';
 import { Speech } from '@/lib/types';
@@ -122,6 +124,12 @@ const videoIdFromInput = (value: string): string | null => {
 };
 
 const prettifyLabel = (value: string) => value.replace(/[_-]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+const formatLastUpdated = (iso: string | null) => {
+  if (!iso) return '';
+  const asDate = new Date(iso);
+  if (Number.isNaN(asDate.getTime())) return '';
+  return asDate.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' });
+};
 
 export function MusikkScreen() {
   const navigation = useNavigation<NavigationProp>();
@@ -150,6 +158,7 @@ export function MusikkScreen() {
   const [sessionFeedback, setSessionFeedback] = useState<SessionFeedback>({});
 
   const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
+  const [setTargetOfferId, setSetTargetOfferId] = useState<string | null>(null);
   const [newSetTitle, setNewSetTitle] = useState('');
   const [manualSongTitle, setManualSongTitle] = useState('');
   const [manualSongArtist, setManualSongArtist] = useState('');
@@ -178,6 +187,7 @@ export function MusikkScreen() {
   const [offerPermissionDraft, setOfferPermissionDraft] = useState<Record<string, boolean>>({});
 
   const [previewVideo, setPreviewVideo] = useState<{ videoId: string; title: string } | null>(null);
+  const [lastRecommendationAt, setLastRecommendationAt] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -234,6 +244,11 @@ export function MusikkScreen() {
     queryFn: getCoupleOffers,
   });
 
+  const vendorPermissionsQuery = useQuery({
+    queryKey: ['music-vendor-permissions'],
+    queryFn: getMusicVendorPermissions,
+  });
+
   const timeline: MusicTimeline = musicData?.timeline ?? {
     musicianSelected: false,
     setlistDiscussed: false,
@@ -247,6 +262,19 @@ export function MusikkScreen() {
     () => musicSets.find((set) => set.id === selectedSetId) || null,
     [musicSets, selectedSetId]
   );
+
+  const recommendationStats = useMemo(() => {
+    const entries = Object.entries(recommendationsByMoment || {});
+    const totalTracks = entries.reduce((sum, [, tracks]) => sum + tracks.length, 0);
+    const momentsWithTracks = entries.filter(([, tracks]) => tracks.length > 0).length;
+    const selectedMomentTracks = selectedMomentKey ? (recommendationsByMoment[selectedMomentKey] || []).length : 0;
+    return {
+      totalTracks,
+      momentsWithTracks,
+      selectedMomentTracks,
+      selectedMomentCount: matcherDraft?.selectedMoments?.length || 0,
+    };
+  }, [recommendationsByMoment, selectedMomentKey, matcherDraft]);
 
   const acceptedOffers = useMemo(
     () => (offersQuery.data || []).filter((offer: CoupleOfferSummary) => offer.status === 'accepted'),
@@ -287,14 +315,36 @@ export function MusikkScreen() {
       setSelectedSetId(null);
       return;
     }
-    setSelectedSetId((current) => current || musicSets[0].id);
-  }, [musicSets]);
+    setSelectedSetId((current) => {
+      if (current && musicSets.some((set) => set.id === current)) return current;
+      const matchingOfferSet = musicSets.find((set) => (set.offerId || null) === setTargetOfferId);
+      return matchingOfferSet?.id || musicSets[0].id;
+    });
+  }, [musicSets, setTargetOfferId]);
+
+  useEffect(() => {
+    const base: Record<string, boolean> = {};
+    for (const offer of acceptedOffers) {
+      base[offer.id] = false;
+    }
+    for (const permission of vendorPermissionsQuery.data || []) {
+      if (base[permission.offerId] !== undefined) {
+        base[permission.offerId] = !!permission.canExportYoutube;
+      }
+    }
+    setOfferPermissionDraft(base);
+  }, [acceptedOffers, vendorPermissionsQuery.data]);
 
   useEffect(() => {
     if (!matcherDraft) return;
     if (selectedMomentKey && matcherDraft.selectedMoments.includes(selectedMomentKey)) return;
     setSelectedMomentKey(matcherDraft.selectedMoments[0] || null);
   }, [matcherDraft, selectedMomentKey]);
+
+  useEffect(() => {
+    if (!selectedSet) return;
+    setSetTargetOfferId(selectedSet.offerId || null);
+  }, [selectedSet]);
 
   const updatePreferencesMutation = useMutation({
     mutationFn: updateMusicPreferences,
@@ -320,7 +370,23 @@ export function MusikkScreen() {
   const recommendationsMutation = useMutation({
     mutationFn: getMusicRecommendations,
     onSuccess: (data) => {
-      setRecommendationsByMoment(data.recommendations || {});
+      const next = data.recommendations || {};
+      setRecommendationsByMoment(next);
+      setLastRecommendationAt(new Date().toISOString());
+
+      const totalTracks = Object.values(next).reduce((sum, list) => sum + list.length, 0);
+      const totalMoments = Object.values(next).filter((list) => list.length > 0).length;
+      const sourceText =
+        data.source === 'youtube'
+          ? 'YouTube'
+          : data.source === 'hybrid'
+            ? 'YouTube + katalog'
+            : 'katalog';
+      const notConfiguredNote =
+        data.source === 'catalog' && data.youtubeConfigured === false
+          ? ' Legg inn YOUTUBE_DATA_API_KEY eller koble YouTube-konto for full YouTube-søk.'
+          : '';
+      showToast(`Fant ${totalTracks} anbefalinger fordelt på ${totalMoments} moments (${sourceText}).${notConfiguredNote}`);
     },
   });
 
@@ -330,6 +396,13 @@ export function MusikkScreen() {
       queryClient.invalidateQueries({ queryKey: ['music-sets'] });
       setSelectedSetId(created.id);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+  });
+
+  const updateSetMutation = useMutation({
+    mutationFn: ({ setId, data }: { setId: string; data: Partial<MusicSet> }) => updateMusicSet(setId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['music-sets'] });
     },
   });
 
@@ -382,6 +455,7 @@ export function MusikkScreen() {
     mutationFn: ({ offerId, value }: { offerId: string; value: boolean }) => updateMusicVendorPermission(offerId, value),
     onSuccess: (_, variables) => {
       setOfferPermissionDraft((prev) => ({ ...prev, [variables.offerId]: variables.value }));
+      queryClient.invalidateQueries({ queryKey: ['music-vendor-permissions'] });
     },
   });
 
@@ -462,6 +536,7 @@ export function MusikkScreen() {
       queryClient.invalidateQueries({ queryKey: ['music-moments'] }),
       queryClient.invalidateQueries({ queryKey: ['music-sets'] }),
       queryClient.invalidateQueries({ queryKey: ['couple-offers'] }),
+      queryClient.invalidateQueries({ queryKey: ['music-vendor-permissions'] }),
     ]);
     setRefreshing(false);
   };
@@ -534,15 +609,23 @@ export function MusikkScreen() {
   };
 
   const ensureTargetSetId = async () => {
-    if (selectedSetId) return selectedSetId;
-    if (musicSets.length > 0) {
-      setSelectedSetId(musicSets[0].id);
-      return musicSets[0].id;
+    const desiredOfferId = setTargetOfferId;
+    const selected = selectedSetId ? musicSets.find((set) => set.id === selectedSetId) : null;
+    if (selected && (selected.offerId || null) === desiredOfferId) {
+      return selected.id;
     }
+
+    const matchingSet = musicSets.find((set) => (set.offerId || null) === desiredOfferId);
+    if (matchingSet) {
+      setSelectedSetId(matchingSet.id);
+      return matchingSet.id;
+    }
+
     const created = await createSetMutation.mutateAsync({
-      title: 'Main Wedding Set',
+      title: desiredOfferId ? 'Shared Wedding Set' : 'Main Wedding Set',
       description: 'Generated from Music Matcher',
       visibility: 'private',
+      offerId: desiredOfferId,
     });
     return created.id;
   };
@@ -573,10 +656,31 @@ export function MusikkScreen() {
       return;
     }
     try {
-      await createSetMutation.mutateAsync({ title, visibility: 'private' });
+      await createSetMutation.mutateAsync({ title, visibility: 'private', offerId: setTargetOfferId });
       setNewSetTitle('');
     } catch {
       showToast('Kunne ikke opprette set');
+    }
+  };
+
+  const bindSelectedSetToOffer = async (offerId: string | null) => {
+    if (!selectedSet) {
+      setSetTargetOfferId(offerId);
+      return;
+    }
+    if ((selectedSet.offerId || null) === offerId) {
+      setSetTargetOfferId(offerId);
+      return;
+    }
+    try {
+      await updateSetMutation.mutateAsync({
+        setId: selectedSet.id,
+        data: { offerId },
+      });
+      setSetTargetOfferId(offerId);
+      showToast(offerId ? 'Set koblet til tilbud.' : 'Set satt til privat.');
+    } catch {
+      showToast('Kunne ikke oppdatere set-tilknytning.');
     }
   };
 
@@ -738,16 +842,21 @@ export function MusikkScreen() {
   const tabButton = (tab: TabType, label: string) => (
     <Pressable
       key={tab}
-      style={[styles.tab, activeTab === tab && styles.activeTab]}
+      style={[
+        styles.tab,
+        {
+          borderColor: activeTab === tab ? theme.accent : theme.border,
+          backgroundColor: activeTab === tab ? `${theme.accent}18` : theme.backgroundSecondary,
+        },
+      ]}
       onPress={() => {
         setActiveTab(tab);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }}
     >
-      <ThemedText style={[styles.tabText, activeTab === tab && { color: Colors.dark.accent }]}>
+      <ThemedText style={[styles.tabText, activeTab === tab && { color: theme.accent }]}>
         {label}
       </ThemedText>
-      {activeTab === tab && <View style={[styles.tabIndicator, { backgroundColor: Colors.dark.accent }]} />}
     </Pressable>
   );
 
@@ -773,12 +882,14 @@ export function MusikkScreen() {
           />
         )}
 
-        <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}> 
-          {tabButton('matcher', 'Matcher')}
-          {tabButton('set_builder', 'Set Builder')}
-          {tabButton('export', 'Eksport')}
-          {tabButton('bookings', 'Bookinger')}
-          {tabButton('timeline', 'Tidslinje')}
+        <View style={styles.tabBarWrap}>
+          <View style={[styles.tabBar, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+            {tabButton('matcher', 'Matcher')}
+            {tabButton('set_builder', 'Set Builder')}
+            {tabButton('export', 'Eksport')}
+            {tabButton('bookings', 'Bookinger')}
+            {tabButton('timeline', 'Tidslinje')}
+          </View>
         </View>
 
         {activeTab === 'matcher' && (
@@ -793,6 +904,21 @@ export function MusikkScreen() {
                 <ThemedText style={[styles.helperText, { color: theme.textMuted }]}>Laster matcher-profil...</ThemedText>
               ) : (
                 <>
+                  <View style={styles.statsRow}>
+                    <View style={[styles.statPill, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+                      <ThemedText style={[styles.statValue, { color: theme.text }]}>{matcherDraft.selectedMoments.length}</ThemedText>
+                      <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Moments</ThemedText>
+                    </View>
+                    <View style={[styles.statPill, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+                      <ThemedText style={[styles.statValue, { color: theme.text }]}>{matcherDraft.preferredCultures.length}</ThemedText>
+                      <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Kulturer</ThemedText>
+                    </View>
+                    <View style={[styles.statPill, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+                      <ThemedText style={[styles.statValue, { color: theme.text }]}>{matcherDraft.preferredLanguages.length}</ThemedText>
+                      <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Språk</ThemedText>
+                    </View>
+                  </View>
+
                   <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary }]}>Kulturpakker</ThemedText>
                   <View style={styles.chipWrap}>
                     {CULTURE_OPTIONS.map((culture) => {
@@ -990,28 +1116,63 @@ export function MusikkScreen() {
                 {recommendationsMutation.isPending && <ActivityIndicator size="small" color={theme.accent} />}
               </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalChips}>
-                {(matcherDraft?.selectedMoments || []).map((momentKey) => {
-                  const active = selectedMomentKey === momentKey;
-                  return (
-                    <Pressable
-                      key={momentKey}
-                      onPress={() => setSelectedMomentKey(momentKey)}
-                      style={[
-                        styles.offerChip,
-                        {
-                          borderColor: active ? theme.accent : theme.border,
-                          backgroundColor: active ? theme.accent : theme.backgroundSecondary,
-                        },
-                      ]}
-                    >
-                      <ThemedText style={{ color: active ? theme.buttonText : theme.textSecondary, fontSize: 12, fontWeight: '600' }}>
-                        {prettifyLabel(momentKey)}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+              <View style={[styles.recommendationSummary, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+                <View style={styles.recommendationSummaryRow}>
+                  <ThemedText style={[styles.recommendationSummaryTitle, { color: theme.text }]}>
+                    {recommendationStats.totalTracks} låter
+                  </ThemedText>
+                  <ThemedText style={[styles.recommendationSummarySub, { color: theme.textSecondary }]}>
+                    {recommendationStats.momentsWithTracks}/{recommendationStats.selectedMomentCount} moments med treff
+                    {selectedMomentKey ? ` • ${recommendationStats.selectedMomentTracks} i valgt moment` : ''}
+                  </ThemedText>
+                </View>
+                <ThemedText style={[styles.recommendationSummarySub, { color: theme.textMuted }]}>
+                  {lastRecommendationAt ? `Oppdatert kl. ${formatLastUpdated(lastRecommendationAt)}` : 'Ingen anbefalinger hentet enda'}
+                </ThemedText>
+              </View>
+
+              {(matcherDraft?.selectedMoments || []).length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalChips}>
+                  {(matcherDraft?.selectedMoments || []).map((momentKey) => {
+                    const active = selectedMomentKey === momentKey;
+                    const count = (recommendationsByMoment[momentKey] || []).length;
+                    return (
+                      <Pressable
+                        key={momentKey}
+                        onPress={() => setSelectedMomentKey(momentKey)}
+                        style={[
+                          styles.offerChip,
+                          {
+                            borderColor: active ? theme.accent : theme.border,
+                            backgroundColor: active ? theme.accent : theme.backgroundSecondary,
+                          },
+                        ]}
+                      >
+                        <ThemedText style={{ color: active ? theme.buttonText : theme.textSecondary, fontSize: 12, fontWeight: '600' }}>
+                          {prettifyLabel(momentKey)} {count > 0 ? `(${count})` : ''}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              ) : (
+                <ThemedText style={[styles.helperText, { color: theme.textMuted }]}>Velg moments i profilen for å hente anbefalinger.</ThemedText>
+              )}
+
+              <View style={styles.actionRow}>
+                <Button onPress={runRecommendations} style={styles.inlineButton}>
+                  {recommendationsMutation.isPending ? 'Oppdaterer...' : 'Oppdater anbefalinger'}
+                </Button>
+                <Button
+                  onPress={() => {
+                    setSessionFeedback({});
+                    showToast('Session-feedback er nullstilt.');
+                  }}
+                  style={styles.inlineButton}
+                >
+                  Nullstill feedback
+                </Button>
+              </View>
 
               {selectedMomentKey && (recommendationsByMoment[selectedMomentKey] || []).length > 0 ? (
                 <View style={styles.recommendationsList}>
@@ -1033,7 +1194,15 @@ export function MusikkScreen() {
               ) : (
                 <View style={styles.emptyState}>
                   <EvendiIcon name="music" size={18} color={theme.textMuted} />
-                  <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>Hent anbefalinger for å se 10-20 låter per moment.</ThemedText>
+                  {recommendationStats.totalTracks > 0 && selectedMomentKey ? (
+                    <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
+                      Ingen treff for {prettifyLabel(selectedMomentKey)} med nåværende filter. Prøv andre kulturer/språk/energi.
+                    </ThemedText>
+                  ) : (
+                    <ThemedText style={[styles.emptyText, { color: theme.textMuted }]}>
+                      Hent anbefalinger for å se 10-20 låter per moment.
+                    </ThemedText>
+                  )}
                 </View>
               )}
             </View>
@@ -1045,6 +1214,45 @@ export function MusikkScreen() {
             <View style={[styles.card, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}> 
               <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>Set Builder</ThemedText>
               <ThemedText style={[styles.helperText, { color: theme.textMuted }]}>Bygg rekkefølge, marker DROP HERE og rediger låter.</ThemedText>
+
+              <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary }]}>Nye sett kobles til</ThemedText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalChips}>
+                <Pressable
+                  key="private-target"
+                  onPress={() => setSetTargetOfferId(null)}
+                  style={[
+                    styles.offerChip,
+                    {
+                      borderColor: setTargetOfferId === null ? theme.accent : theme.border,
+                      backgroundColor: setTargetOfferId === null ? theme.accent : theme.backgroundSecondary,
+                    },
+                  ]}
+                >
+                  <ThemedText style={{ color: setTargetOfferId === null ? theme.buttonText : theme.textSecondary, fontSize: 12, fontWeight: '600' }}>
+                    Privat
+                  </ThemedText>
+                </Pressable>
+                {acceptedOffers.map((offer) => {
+                  const active = setTargetOfferId === offer.id;
+                  return (
+                    <Pressable
+                      key={`target-${offer.id}`}
+                      onPress={() => setSetTargetOfferId(offer.id)}
+                      style={[
+                        styles.offerChip,
+                        {
+                          borderColor: active ? theme.accent : theme.border,
+                          backgroundColor: active ? theme.accent : theme.backgroundSecondary,
+                        },
+                      ]}
+                    >
+                      <ThemedText style={{ color: active ? theme.buttonText : theme.textSecondary, fontSize: 12, fontWeight: '600' }}>
+                        {offer.vendor?.businessName || offer.title}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
 
               <View style={styles.createSetRow}>
                 <TextInput
@@ -1076,11 +1284,65 @@ export function MusikkScreen() {
                     >
                       <ThemedText style={{ color: active ? theme.buttonText : theme.textSecondary, fontSize: 12, fontWeight: '600' }}>
                         {set.title}
+                        {set.offerId ? ' • delt' : ''}
                       </ThemedText>
                     </Pressable>
                   );
                 })}
               </ScrollView>
+
+              {selectedSet ? (
+                <View style={styles.manualAddCard}>
+                  <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary }]}>Deling for valgt set</ThemedText>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalChips}>
+                    <Pressable
+                      key={`bind-private-${selectedSet.id}`}
+                      onPress={() => bindSelectedSetToOffer(null)}
+                      disabled={updateSetMutation.isPending}
+                      style={[
+                        styles.offerChip,
+                        {
+                          borderColor: (selectedSet.offerId || null) === null ? theme.accent : theme.border,
+                          backgroundColor: (selectedSet.offerId || null) === null ? theme.accent : theme.backgroundSecondary,
+                          opacity: updateSetMutation.isPending ? 0.6 : 1,
+                        },
+                      ]}
+                    >
+                      <ThemedText
+                        style={{
+                          color: (selectedSet.offerId || null) === null ? theme.buttonText : theme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: '600',
+                        }}
+                      >
+                        Privat
+                      </ThemedText>
+                    </Pressable>
+                    {acceptedOffers.map((offer) => {
+                      const active = selectedSet.offerId === offer.id;
+                      return (
+                        <Pressable
+                          key={`bind-${selectedSet.id}-${offer.id}`}
+                          onPress={() => bindSelectedSetToOffer(offer.id)}
+                          disabled={updateSetMutation.isPending}
+                          style={[
+                            styles.offerChip,
+                            {
+                              borderColor: active ? theme.accent : theme.border,
+                              backgroundColor: active ? theme.accent : theme.backgroundSecondary,
+                              opacity: updateSetMutation.isPending ? 0.6 : 1,
+                            },
+                          ]}
+                        >
+                          <ThemedText style={{ color: active ? theme.buttonText : theme.textSecondary, fontSize: 12, fontWeight: '600' }}>
+                            {offer.vendor?.businessName || offer.title}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              ) : null}
 
               <View style={styles.manualAddCard}>
                 <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary }]}>Legg til manuell låt</ThemedText>
@@ -1531,16 +1793,27 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingBottom: Spacing.xl },
+  tabBarWrap: {
+    width: '100%',
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+  },
   tabBar: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
     flexWrap: 'wrap',
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: 4,
+    gap: Spacing.xs,
   },
   tab: {
-    minWidth: '20%',
-    paddingVertical: Spacing.md,
+    minWidth: '18%',
+    paddingVertical: 10,
+    paddingHorizontal: Spacing.sm,
     alignItems: 'center',
-    position: 'relative',
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    flexGrow: 1,
   },
   activeTab: {},
   tabText: { fontSize: 14, fontWeight: '600' },
@@ -1552,6 +1825,9 @@ const styles = StyleSheet.create({
     height: 2,
   },
   tabContent: {
+    width: '100%',
+    maxWidth: 1100,
+    alignSelf: 'center',
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     gap: Spacing.md,
@@ -1574,6 +1850,30 @@ const styles = StyleSheet.create({
   },
   helperText: {
     fontSize: 12,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  statPill: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    alignItems: 'center',
+    gap: 2,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   fieldLabel: {
     fontSize: 12,
@@ -1670,6 +1970,27 @@ const styles = StyleSheet.create({
   },
   recommendationsList: {
     gap: Spacing.sm,
+  },
+  recommendationSummary: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    gap: 2,
+  },
+  recommendationSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  recommendationSummaryTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  recommendationSummarySub: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   emptyState: {
     alignItems: 'center',

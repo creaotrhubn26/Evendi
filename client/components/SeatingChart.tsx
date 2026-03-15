@@ -262,6 +262,9 @@ export function SeatingChart({
         const { tableId, x: startX, y: startY } = dragStartPos.current;
         const table = tables.find(t => t.id === tableId);
         if (!table || table.locked) return;
+
+        // Use touch count from native event to ignore multi-touch gestures
+        if (evt.nativeEvent.changedTouches.length > 1) return;
         
         // Calculate new position from start position + gesture delta
         const rawX = startX + gestureState.dx;

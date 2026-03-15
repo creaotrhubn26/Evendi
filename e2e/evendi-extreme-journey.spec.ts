@@ -561,23 +561,29 @@ test.describe('Extreme journey - desktop', () => {
 
   test('Couple planning', async ({ page }) => {
     const issues = startIssueCapture(page);
+    await prepareForAuth(page);
     await loginCouple(page);
     await auditCouplePlanning(page);
+    await logoutCouple(page);
     await assertNoCriticalIssues(issues, 'couple');
   });
 
   test('Couple guests', async ({ page }) => {
     const issues = startIssueCapture(page);
+    await prepareForAuth(page);
     await loginCouple(page);
     await auditCoupleGuests(page);
+    await logoutCouple(page);
     await assertNoCriticalIssues(issues, 'couple');
   });
 
   test('Couple profile', async ({ page }) => {
     const issues = startIssueCapture(page);
+    await prepareForAuth(page);
     await loginCouple(page);
     await auditCoupleShowcase(page);
     await auditCoupleProfile(page);
+    await logoutCouple(page);
     await assertNoCriticalIssues(issues, 'couple');
   });
 

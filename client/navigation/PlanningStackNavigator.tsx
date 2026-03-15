@@ -39,6 +39,7 @@ import VendorAvailabilitySettingsScreen from "@/screens/VendorAvailabilitySettin
 import VendorAvailabilityCalendarScreen from "@/screens/VendorAvailabilityCalendarScreen";
 import VendorShortlistScreen from "@/screens/VendorShortlistScreen";
 import VendorComparisonScreen from "@/screens/VendorComparisonScreen";
+import { MusikkScreen } from "@/screens/MusikkScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -100,6 +101,7 @@ export type PlanningStackParamList = {
   VendorAvailabilityCalendar: undefined;
   VendorShortlist: undefined;
   VendorComparison: { vendors: any[] };
+  Musikk: undefined;
 };
 
 const Stack = createNativeStackNavigator<PlanningStackParamList>();
@@ -303,6 +305,11 @@ export default function PlanningStackNavigator() {
         name="VendorComparison"
         component={VendorComparisonScreen}
         options={{ title: "Sammenligning" }}
+      />
+      <Stack.Screen
+        name="Musikk"
+        component={MusikkScreen}
+        options={{ title: "Musikk" }}
       />
     </Stack.Navigator>
   );

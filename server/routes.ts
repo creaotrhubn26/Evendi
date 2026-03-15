@@ -8,16 +8,9 @@ import bcrypt from "bcryptjs";
 import expressRateLimit from "express-rate-limit";
 import { z } from "zod";
 import { registerSubscriptionRoutes } from "./subscription-routes";
-import { registerCoupleFeatureRoutes } from "./couple-feature-routes";
+import { registerCoupleFeatureRoutes, exportSetToYouTubePlaylist } from "./couple-feature-routes";
 import { registerExpertiseRoutes } from "./routes/expertiseRoutes";
-import {
-  createYouTubePlaylist,
-  decryptSecret,
-  encryptSecret,
-  insertYouTubePlaylistItem,
-  refreshYouTubeAccessToken,
-} from "./music-matcher";
-import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetSettings, coupleBudgetItems, createBudgetItemSchema, coupleVendorFavorites, insertCoupleVendorFavoriteSchema, coupleVendorSearches, vendorMatchScores, coupleMusicPreferences, coupleMusicPerformances, coupleMusicSetlists, musicMoments, musicSongs, musicSets, musicSetItems, coupleMusicVendorPermissions, coupleYoutubeConnections, musicExportJobs } from "@shared/schema";
+import { vendors, vendorCategories, vendorRegistrationSchema, vendorSessions, deliveries, deliveryItems, createDeliverySchema, inspirationCategories, inspirations, inspirationMedia, createInspirationSchema, vendorFeatures, vendorInspirationCategories, inspirationInquiries, createInquirySchema, coupleProfiles, coupleSessions, conversations, messages, coupleLoginSchema, sendMessageSchema, reminders, createReminderSchema, vendorProducts, createVendorProductSchema, vendorOffers, vendorOfferItems, createOfferSchema, appSettings, speeches, createSpeechSchema, messageReminders, scheduleEvents, coordinatorInvitations, guestInvitations, createGuestInvitationSchema, coupleVendorContracts, notifications, activityLogs, weddingTables, weddingGuests, insertWeddingGuestSchema, updateWeddingGuestSchema, tableGuestAssignments, appFeedback, vendorReviews, vendorReviewResponses, checklistTasks, createChecklistTaskSchema, adminConversations, adminMessages, sendAdminMessageSchema, faqItems, insertFaqItemSchema, updateFaqItemSchema, insertAppSettingSchema, updateAppSettingSchema, whatsNewItems, insertWhatsNewSchema, updateWhatsNewSchema, videoGuides, insertVideoGuideSchema, updateVideoGuideSchema, vendorSubscriptions, subscriptionTiers, vendorCategoryDetails, vendorAvailability, createVendorAvailabilitySchema, coupleBudgetSettings, coupleBudgetItems, createBudgetItemSchema, coupleVendorFavorites, insertCoupleVendorFavoriteSchema, coupleVendorSearches, vendorMatchScores, coupleMusicPreferences, coupleMusicPerformances, coupleMusicSetlists, musicMoments, musicSongs, musicSets, musicSetItems, coupleMusicVendorPermissions } from "@shared/schema";
 import { eq, and, desc, sql, inArray, or, asc, gte, lte } from "drizzle-orm";
 
 function generateAccessCode(): string {
@@ -3423,7 +3416,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reminders endpoints
   app.get("/api/reminders", async (req: Request, res: Response) => {
     try {
-      const allReminders = await db.select().from(reminders).orderBy(reminders.reminderDate);
+      const { category } = req.query;
+      const query = db.select().from(reminders);
+      const allReminders = category && typeof category === 'string'
+        ? await query.where(eq(reminders.category, category)).orderBy(reminders.reminderDate)
+        : await query.orderBy(reminders.reminderDate);
       res.json(allReminders);
     } catch (error) {
       console.error("Error fetching reminders:", error?.message || String(error));
@@ -4072,12 +4069,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return `${proto}://${host}/api/couple/music/youtube/callback`;
   }
 
-  const getYouTubeConfig = (req: Request) => ({
-    clientId: process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || "",
-    clientSecret: process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || "",
-    redirectUri: getOAuthRedirectUri(req),
-  });
-
   async function getVendorMusicAccess(vendorId: string, offerId: string) {
     const [offer] = await db
       .select()
@@ -4109,6 +4100,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return { set: setRow, offer, items };
   }
 
+  async function reorderSetItemsSafely(setId: string, orderedItemIds: string[]) {
+    // Validate all items belong to this set before reordering
+    const existingItems = await db.select({ id: musicSetItems.id })
+      .from(musicSetItems)
+      .where(eq(musicSetItems.setId, setId));
+    const existingIds = new Set(existingItems.map(item => item.id));
+    for (const itemId of orderedItemIds) {
+      if (!existingIds.has(itemId)) {
+        throw new Error(`Item ${itemId} does not belong to set ${setId}`);
+      }
+    }
+    await db.transaction(async (tx) => {
+      const offset = 10000;
+      for (let i = 0; i < orderedItemIds.length; i += 1) {
+        await tx
+          .update(musicSetItems)
+          .set({ position: offset + i, updatedAt: new Date() })
+          .where(eq(musicSetItems.id, orderedItemIds[i]));
+      }
+      for (let i = 0; i < orderedItemIds.length; i += 1) {
+        await tx
+          .update(musicSetItems)
+          .set({ position: i, updatedAt: new Date() })
+          .where(eq(musicSetItems.id, orderedItemIds[i]));
+      }
+    });
+  }
+
+  function getNextSetItemPosition(items: { position: number | null }[]) {
+    const maxPosition = items.reduce((max, item) => {
+      const next = Number.isFinite(item.position) ? Number(item.position) : -1;
+      return Math.max(max, next);
+    }, -1);
+    return maxPosition + 1;
+  }
+
   app.get("/api/vendor/music/preferences/:offerId", async (req: Request, res: Response) => {
     if (!isMusicMatcherEnabled()) return res.status(404).json({ error: "Music matcher is disabled" });
     const vendorId = await checkVendorAuth(req, res);
@@ -4134,7 +4161,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [preferences] = await db.select().from(coupleMusicPreferences).where(eq(coupleMusicPreferences.coupleId, coupleId));
       const performances = await db.select().from(coupleMusicPerformances).where(eq(coupleMusicPerformances.coupleId, coupleId)).orderBy(coupleMusicPerformances.date);
       const setlists = await db.select().from(coupleMusicSetlists).where(eq(coupleMusicSetlists.coupleId, coupleId));
-      const sets = await db.select().from(musicSets).where(eq(musicSets.coupleId, coupleId)).orderBy(desc(musicSets.updatedAt));
+      const sets = await db
+        .select()
+        .from(musicSets)
+        .where(and(eq(musicSets.coupleId, coupleId), eq(musicSets.offerId, offer.id)))
+        .orderBy(desc(musicSets.updatedAt));
       const moments = await db.select().from(musicMoments).orderBy(asc(musicMoments.sortOrder));
       const [permission] = await db.select().from(coupleMusicVendorPermissions).where(eq(coupleMusicVendorPermissions.offerId, offer.id));
 
@@ -4223,10 +4254,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (orderedItemIds.length === 0) return res.status(400).json({ error: "orderedItemIds er påkrevd" });
       const allowed = new Set(access.items.map((item) => item.id));
       if (orderedItemIds.some((id: string) => !allowed.has(id))) return res.status(400).json({ error: "Ugyldig item i orderedItemIds" });
-
-      for (let i = 0; i < orderedItemIds.length; i += 1) {
-        await db.update(musicSetItems).set({ position: i, updatedAt: new Date() }).where(eq(musicSetItems.id, orderedItemIds[i]));
+      if (orderedItemIds.length !== access.items.length) {
+        return res.status(400).json({ error: "orderedItemIds må inneholde alle set-items" });
       }
+
+      await reorderSetItemsSafely(setId, orderedItemIds);
       await db.update(musicSets).set({ updatedAt: new Date(), updatedByRole: "vendor" }).where(eq(musicSets.id, setId));
 
       const refreshed = await getVendorSetAccess(vendorId, setId);
@@ -4247,7 +4279,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!access) return res.status(404).json({ error: "Set-liste ikke funnet" });
       if (access.offer.status !== "accepted") return res.status(403).json({ error: "Kun aksepterte tilbud kan redigeres" });
 
-      let songSnapshot: any = null;
+      const nextPosition = getNextSetItemPosition(access.items);
+      const desiredPosition = Number.isFinite(req.body?.position)
+        ? Math.max(0, Math.min(Number(req.body.position), access.items.length))
+        : null;
+
+      let songSnapshot: typeof musicSongs.$inferSelect | null = null;
       if (req.body?.songId) {
         const [song] = await db.select().from(musicSongs).where(eq(musicSongs.id, String(req.body.songId)));
         if (song) songSnapshot = song;
@@ -4260,11 +4297,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         title: songSnapshot?.title || req.body?.title || "Untitled song",
         artist: songSnapshot?.artist || req.body?.artist || null,
         momentKey: req.body?.momentKey || null,
-        position: Number.isFinite(req.body?.position) ? Number(req.body.position) : access.items.length,
+        position: nextPosition,
         dropMarkerSeconds: Number.isFinite(req.body?.dropMarkerSeconds) ? Number(req.body.dropMarkerSeconds) : null,
         notes: req.body?.notes || null,
         addedByRole: "vendor",
       }).returning();
+
+      if (desiredPosition !== null && desiredPosition !== nextPosition) {
+        const ordered = [...access.items, created]
+          .sort((a, b) => (Number.isFinite(a.position) ? Number(a.position) : 0) - (Number.isFinite(b.position) ? Number(b.position) : 0))
+          .map((item) => item.id);
+        const fromIndex = ordered.indexOf(created.id);
+        if (fromIndex >= 0) {
+          ordered.splice(fromIndex, 1);
+          ordered.splice(desiredPosition, 0, created.id);
+          await reorderSetItemsSafely(setId, ordered);
+        }
+      }
 
       await db.update(musicSets).set({ updatedAt: new Date(), updatedByRole: "vendor" }).where(eq(musicSets.id, setId));
 
@@ -4347,68 +4396,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const setId = String(req.body?.setId || "");
       if (!setId) return res.status(400).json({ error: "setId er påkrevd" });
       const access = await getVendorSetAccess(vendorId, setId);
-      if (!access || access.set.coupleId !== offer.coupleId) {
+      if (!access || access.set.coupleId !== offer.coupleId || access.offer.id !== offer.id) {
         return res.status(404).json({ error: "Set-liste ikke funnet for dette tilbudet" });
       }
-
-      const [connection] = await db
-        .select()
-        .from(coupleYoutubeConnections)
-        .where(eq(coupleYoutubeConnections.coupleId, offer.coupleId));
-      if (!connection?.refreshTokenEnc) {
-        return res.status(400).json({ error: "Paret har ikke koblet YouTube-konto" });
-      }
-
-      const config = getYouTubeConfig(req);
-      if (!config.clientId || !config.clientSecret || !config.redirectUri) {
-        return res.status(500).json({ error: "YouTube OAuth er ikke konfigurert" });
-      }
-
-      const refreshed = await refreshYouTubeAccessToken({
-        refreshToken: decryptSecret(connection.refreshTokenEnc),
-        clientId: config.clientId,
-        clientSecret: config.clientSecret,
-      });
-      const accessToken = String(refreshed.access_token);
-      await db
-        .update(coupleYoutubeConnections)
-        .set({
-          accessTokenEnc: encryptSecret(accessToken),
-          tokenExpiresAt: new Date(Date.now() + Number(refreshed.expires_in || 3600) * 1000),
-          lastUsedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(coupleYoutubeConnections.coupleId, offer.coupleId));
-
-      const playlist = await createYouTubePlaylist({
-        accessToken,
-        title: String(req.body?.title || access.set.title || "Evendi Music Set"),
-        description: req.body?.description ? String(req.body.description) : `Exported from Evendi set: ${access.set.title}`,
-        privacyStatus: req.body?.privacyStatus || "unlisted",
-      });
-
-      const items = access.items.filter((item) => !!item.youtubeVideoId);
-      for (const item of items) {
-        await insertYouTubePlaylistItem({
-          accessToken,
-          playlistId: playlist.id,
-          videoId: String(item.youtubeVideoId),
-        });
-      }
-
-      const [job] = await db.insert(musicExportJobs).values({
+      const job = await exportSetToYouTubePlaylist({
+        db,
         coupleId: offer.coupleId,
-        offerId: offer.id,
-        setId: access.set.id,
-        youtubePlaylistId: playlist.id,
-        youtubePlaylistUrl: playlist.url,
-        idempotencyKey: String(req.body?.idempotencyKey || crypto.randomUUID()),
-        status: "success",
         requestedByRole: "vendor",
         requestedByVendorId: vendorId,
         requestedByCoupleId: offer.coupleId,
-        exportedTrackCount: items.length,
-      }).returning();
+        setId: access.set.id,
+        title: String(req.body?.title || access.set.title || "Evendi Music Set"),
+        description: req.body?.description ? String(req.body.description) : `Exported from Evendi set: ${access.set.title}`,
+        privacyStatus: req.body?.privacyStatus || "unlisted",
+        idempotencyKey: req.body?.idempotencyKey ? String(req.body.idempotencyKey) : undefined,
+        redirectUri: getOAuthRedirectUri(req),
+        offerId: offer.id,
+        playlistId: req.body?.playlistId ? String(req.body.playlistId) : null,
+      });
 
       res.json(job);
     } catch (error) {
@@ -5167,7 +5172,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin Settings Routes - Public read for design settings (anyone can see the design)
   app.get("/api/admin/settings", async (req: Request, res: Response) => {
     try {
-      const settings = await db.select().from(appSettings);
+      const { key } = req.query;
+      const settings = key && typeof key === 'string'
+        ? await db.select().from(appSettings).where(eq(appSettings.key, key))
+        : await db.select().from(appSettings);
       res.json(settings);
     } catch (error) {
       console.error("Error fetching settings:", error?.message || String(error));
@@ -8874,7 +8882,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get app settings (public)
   app.get("/api/app-settings", async (req: Request, res: Response) => {
     try {
-      const settings = await db.select().from(appSettings);
+      const { category } = req.query;
+      const settings = category && typeof category === 'string'
+        ? await db.select().from(appSettings).where(eq(appSettings.category, category as string))
+        : await db.select().from(appSettings);
       res.json(settings);
     } catch (error) {
       console.error("Error fetching app settings:", error?.message || String(error));
@@ -9062,11 +9073,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get active video guides by category (public)
   app.get("/api/video-guides", async (req: Request, res: Response) => {
     try {
-      const guides = await db
+      const { category } = req.query;
+      const baseQuery = db
         .select()
         .from(videoGuides)
-        .where(eq(videoGuides.isActive, true))
-        .orderBy(videoGuides.sortOrder);
+        .where(eq(videoGuides.isActive, true));
+      const guides = category && typeof category === 'string'
+        ? await db.select().from(videoGuides).where(and(eq(videoGuides.isActive, true), eq(videoGuides.category, category))).orderBy(videoGuides.sortOrder)
+        : await baseQuery.orderBy(videoGuides.sortOrder);
 
       res.json(guides);
     } catch (error) {

@@ -86,6 +86,14 @@ export function scoreRecommendation(params: {
   const cultureMatch = profile.preferredCultures.length === 0 ? 60 : clamp((cultureMatches / profile.preferredCultures.length) * 100, 0, 100);
   const languageMatches = songLanguages.filter((l) => profile.preferredLanguages.includes(l)).length;
   const languageMatch = profile.preferredLanguages.length === 0 ? 60 : clamp((languageMatches / profile.preferredLanguages.length) * 100, 0, 100);
+  const hasModernToken = songTagTokens.some((token) =>
+    ["drop", "afterparty", "party", "edm", "modern", "bhangra"].includes(token),
+  );
+  const hasTraditionalToken = songTagTokens.some((token) =>
+    ["traditional", "sufi", "ceremony", "classy", "lounge", "vidaai", "farewell"].includes(token),
+  );
+  const songVibeLevel = hasModernToken ? 80 : hasTraditionalToken ? 30 : 50;
+  const vibeMatch = 100 - Math.abs(songVibeLevel - profile.vibeLevel);
 
   let score =
     0.35 * clamp(rankScore, 0, 100) +
@@ -95,6 +103,9 @@ export function scoreRecommendation(params: {
     0.1 * clamp(songDhol, 0, 100) +
     0.05 * clamp(songDanceability, 0, 100) +
     0.05 * clamp(songPopularity, 0, 100);
+
+  // Ensure the vibe slider directly influences ranking in MVP rules mode.
+  score += (vibeMatch - 50) * 0.12;
 
   // Session-only feedback nudges
   if (feedback?.moreDhol) score += songDhol * 0.08;
@@ -286,32 +297,44 @@ export async function createYouTubePlaylist(params: {
   description?: string;
   privacyStatus?: "private" | "public" | "unlisted";
 }) {
-  const res = await fetch("https://www.googleapis.com/youtube/v3/playlists?part=snippet,status", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      snippet: {
-        title: params.title,
-        description: params.description || "Created from Evendi Music Matcher",
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const res = await fetch("https://www.googleapis.com/youtube/v3/playlists?part=snippet,status", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${params.accessToken}`,
+        "Content-Type": "application/json",
       },
-      status: {
-        privacyStatus: params.privacyStatus || "unlisted",
-      },
-    }),
-  });
+      body: JSON.stringify({
+        snippet: {
+          title: params.title,
+          description: params.description || "Created from Evendi Music Matcher",
+        },
+        status: {
+          privacyStatus: params.privacyStatus || "unlisted",
+        },
+      }),
+    });
 
-  const json = await res.json();
-  if (!res.ok) {
-    throw new Error(json?.error?.message || "Failed to create YouTube playlist");
+    const json = await res.json();
+    if (res.ok) {
+      return {
+        id: String(json.id),
+        url: `https://www.youtube.com/playlist?list=${json.id}`,
+      };
+    }
+
+    const message = json?.error?.message || "Failed to create YouTube playlist";
+    const retryable = res.status === 429 || res.status >= 500;
+    lastError = new Error(message);
+    if (!retryable || attempt === 3) {
+      throw lastError;
+    }
+    const waitMs = 350 * 2 ** (attempt - 1) + Math.floor(Math.random() * 120);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
 
-  return {
-    id: String(json.id),
-    url: `https://www.youtube.com/playlist?list=${json.id}`,
-  };
+  throw lastError || new Error("Failed to create YouTube playlist");
 }
 
 export async function insertYouTubePlaylistItem(params: {
@@ -319,27 +342,503 @@ export async function insertYouTubePlaylistItem(params: {
   playlistId: string;
   videoId: string;
 }) {
-  const res = await fetch("https://www.googleapis.com/youtube/v3/playlistItems?part=snippet", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      snippet: {
-        playlistId: params.playlistId,
-        resourceId: {
-          kind: "youtube#video",
-          videoId: params.videoId,
-        },
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const res = await fetch("https://www.googleapis.com/youtube/v3/playlistItems?part=snippet", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${params.accessToken}`,
+        "Content-Type": "application/json",
       },
-    }),
-  });
+      body: JSON.stringify({
+        snippet: {
+          playlistId: params.playlistId,
+          resourceId: {
+            kind: "youtube#video",
+            videoId: params.videoId,
+          },
+        },
+      }),
+    });
 
-  const json = await res.json();
-  if (!res.ok) {
-    throw new Error(json?.error?.message || "Failed to insert YouTube playlist item");
+    const json = await res.json();
+    if (res.ok) {
+      return json;
+    }
+
+    const reason = json?.error?.errors?.[0]?.reason || "";
+    const message = json?.error?.message || "Failed to insert YouTube playlist item";
+    const retryable = res.status === 429 || res.status >= 500 || reason === "backendError";
+    lastError = new Error(message);
+    if (!retryable || attempt === 4) {
+      throw lastError;
+    }
+    const waitMs = 350 * 2 ** (attempt - 1) + Math.floor(Math.random() * 120);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
 
-  return json;
+  throw lastError || new Error("Failed to insert YouTube playlist item");
+}
+
+type RecommendationFeedback = {
+  moreLikeThis?: string[];
+  tooSlow?: string[];
+  tooRomantic?: string[];
+  moreDhol?: boolean;
+};
+
+type RecommendationMoment = {
+  key: string;
+  title: string;
+  description?: string | null;
+};
+
+type YouTubeVideoSearchItem = {
+  id?: { videoId?: string };
+  snippet?: {
+    title?: string;
+    description?: string;
+    channelTitle?: string;
+    defaultAudioLanguage?: string;
+    defaultLanguage?: string;
+  };
+};
+
+type YouTubeVideoDetail = {
+  id?: string;
+  snippet?: {
+    title?: string;
+    description?: string;
+    channelTitle?: string;
+    tags?: string[];
+    defaultAudioLanguage?: string;
+    defaultLanguage?: string;
+  };
+  statistics?: {
+    viewCount?: string;
+  };
+  contentDetails?: {
+    duration?: string;
+  };
+};
+
+const MOMENT_QUERY_HINTS: Record<string, string> = {
+  groom_entry_mehndi: "groom entry mehndi baraat dhol",
+  bride_entry: "bride entry wedding",
+  couple_entry: "couple entry wedding",
+  first_dance: "first dance wedding romantic",
+  family_dance_set: "family dance wedding songs",
+  dinner_vibe: "wedding dinner sufi lounge",
+  afterparty_peak: "wedding afterparty bollywood bhangra dj",
+  vidaai_farewell: "vidaai farewell wedding emotional",
+};
+
+const CULTURE_KEYWORDS: Record<string, string> = {
+  sikh: "sikh punjabi",
+  pakistansk: "pakistani urdu",
+  indisk: "indian bollywood",
+  norsk: "norwegian",
+  muslimsk: "muslim nikah",
+  mixed: "fusion",
+  somalisk: "somali",
+  arabisk: "arabic",
+  tyrkisk: "turkish",
+  iransk: "iranian persian",
+  kinesisk: "chinese",
+  thai: "thai",
+  filipino: "filipino",
+};
+
+const LANGUAGE_KEYWORDS: Record<string, string> = {
+  hindi: "hindi",
+  punjabi: "punjabi",
+  urdu: "urdu",
+  english: "english",
+  norwegian: "norwegian",
+  arabic: "arabic",
+  somali: "somali",
+  farsi: "farsi persian",
+  turkish: "turkish",
+  instrumental: "instrumental",
+};
+
+const LANGUAGE_ISO_TO_KEY: Record<string, string> = {
+  hi: "hindi",
+  pa: "punjabi",
+  ur: "urdu",
+  en: "english",
+  no: "norwegian",
+  nb: "norwegian",
+  nn: "norwegian",
+  ar: "arabic",
+  so: "somali",
+  fa: "farsi",
+  tr: "turkish",
+  zh: "chinese",
+  th: "thai",
+};
+
+function normalizeText(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9æøå\s-]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenize(input: string): string[] {
+  const normalized = normalizeText(input);
+  if (!normalized) return [];
+  return normalized.split(" ").filter((token) => token.length > 2);
+}
+
+function parseIsoDurationToSeconds(duration?: string): number {
+  if (!duration || !duration.startsWith("P")) return 0;
+  const hoursMatch = duration.match(/(\d+)H/);
+  const minutesMatch = duration.match(/(\d+)M/);
+  const secondsMatch = duration.match(/(\d+)S/);
+  const hours = Number(hoursMatch?.[1] || 0);
+  const minutes = Number(minutesMatch?.[1] || 0);
+  const seconds = Number(secondsMatch?.[1] || 0);
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+function getPopularityScore(viewCountRaw?: string): number {
+  const viewCount = Number(viewCountRaw || 0);
+  if (!Number.isFinite(viewCount) || viewCount <= 0) return 0;
+  const logScale = Math.log10(viewCount + 10);
+  return clamp(Math.round((logScale / 8) * 100), 0, 100);
+}
+
+function detectLanguageTags(textBlob: string, defaultLanguage?: string): string[] {
+  const tags = new Set<string>();
+  for (const [key, keyword] of Object.entries(LANGUAGE_KEYWORDS)) {
+    const tokens = keyword.split(" ");
+    if (tokens.some((token) => textBlob.includes(token))) {
+      tags.add(key);
+    }
+  }
+
+  const normalizedLang = (defaultLanguage || "").toLowerCase().split("-")[0];
+  const mapped = LANGUAGE_ISO_TO_KEY[normalizedLang];
+  if (mapped) tags.add(mapped);
+
+  return Array.from(tags);
+}
+
+function detectCultureTags(textBlob: string): string[] {
+  const tags = new Set<string>();
+  for (const [culture, keywordText] of Object.entries(CULTURE_KEYWORDS)) {
+    const tokens = keywordText.split(" ");
+    if (tokens.some((token) => textBlob.includes(token))) {
+      tags.add(culture);
+    }
+  }
+  return Array.from(tags);
+}
+
+function deriveMusicTraits(params: {
+  textBlob: string;
+  viewCount?: string;
+  durationSeconds: number;
+  momentKey: string;
+}) {
+  const { textBlob, viewCount, durationSeconds, momentKey } = params;
+  const tags = new Set<string>();
+
+  let energy = 52;
+  let danceability = 52;
+  let dhol = 10;
+
+  const addEnergy = (value: number) => {
+    energy = clamp(energy + value, 0, 100);
+  };
+
+  const addDance = (value: number) => {
+    danceability = clamp(danceability + value, 0, 100);
+  };
+
+  const addDhol = (value: number) => {
+    dhol = clamp(dhol + value, 0, 100);
+  };
+
+  if (/(dhol|bhangra|baraat|nagada|dhamaal)/.test(textBlob)) {
+    tags.add("dhol");
+    addDhol(70);
+    addEnergy(20);
+    addDance(15);
+  }
+  if (/(drop|edm|remix|afterparty|party|club|dj)/.test(textBlob)) {
+    tags.add("drop");
+    addEnergy(18);
+    addDance(16);
+  }
+  if (/(singalong|anthem|karaoke|chorus)/.test(textBlob)) {
+    tags.add("singalong");
+    addDance(8);
+  }
+  if (/(romantic|love|couple|first dance|slow)/.test(textBlob)) {
+    tags.add("romantic");
+    addEnergy(-16);
+    addDance(-6);
+  }
+  if (/(sufi|lounge|classy|acoustic|instrumental)/.test(textBlob)) {
+    tags.add("lounge");
+    addEnergy(-10);
+    addDance(-5);
+  }
+
+  if (momentKey === "afterparty_peak") {
+    addEnergy(10);
+    addDance(9);
+    tags.add("afterparty");
+  }
+  if (momentKey === "vidaai_farewell" || momentKey === "first_dance") {
+    addEnergy(-8);
+  }
+
+  if (durationSeconds > 420) {
+    addEnergy(-5);
+  } else if (durationSeconds > 0 && durationSeconds < 170) {
+    addEnergy(4);
+    addDance(3);
+  }
+
+  const explicitFlag = /(explicit|uncensored|dirty version|parental advisory)/.test(textBlob);
+  if (!explicitFlag) {
+    tags.add("couple-friendly");
+  }
+
+  return {
+    energyScore: clamp(Math.round(energy), 0, 100),
+    danceability: clamp(Math.round(danceability), 0, 100),
+    dholScore: clamp(Math.round(dhol), 0, 100),
+    popularityScore: getPopularityScore(viewCount),
+    explicitFlag,
+    tagTokens: Array.from(tags),
+  };
+}
+
+function buildYouTubeRecommendationQuery(moment: RecommendationMoment, profile: MusicMatcherProfile): string {
+  const momentHint = MOMENT_QUERY_HINTS[moment.key] || moment.title || moment.key;
+  const cultureHint = profile.preferredCultures
+    .slice(0, 2)
+    .map((culture) => CULTURE_KEYWORDS[culture] || culture)
+    .join(" ");
+  const languageHint = profile.preferredLanguages
+    .slice(0, 2)
+    .map((language) => LANGUAGE_KEYWORDS[language] || language)
+    .join(" ");
+  const vibeHint = profile.vibeLevel > 65 ? "modern remix" : profile.vibeLevel < 35 ? "traditional classic" : "";
+  const energyHint = profile.energyLevel > 70 ? "high energy dance" : profile.energyLevel < 35 ? "slow melodic" : "";
+
+  return [momentHint, "wedding", cultureHint, languageHint, vibeHint, energyHint]
+    .filter((part) => part && part.trim().length > 0)
+    .join(" ")
+    .trim();
+}
+
+function momentRankScore(moment: RecommendationMoment, searchTextBlob: string): number {
+  const momentTokens = tokenize(`${moment.title} ${MOMENT_QUERY_HINTS[moment.key] || ""}`);
+  if (momentTokens.length === 0) return 55;
+  const overlap = momentTokens.filter((token) => searchTextBlob.includes(token)).length;
+  const ratio = overlap / momentTokens.length;
+  return clamp(Math.round(45 + ratio * 55), 0, 100);
+}
+
+async function searchYouTubeVideos(params: {
+  apiKey?: string;
+  accessToken?: string;
+  query: string;
+  maxResults: number;
+  cleanLyricsOnly: boolean;
+}): Promise<YouTubeVideoSearchItem[]> {
+  if (!params.apiKey && !params.accessToken) {
+    return [];
+  }
+  const url = new URL("https://www.googleapis.com/youtube/v3/search");
+  url.searchParams.set("part", "snippet");
+  url.searchParams.set("type", "video");
+  url.searchParams.set("videoEmbeddable", "true");
+  url.searchParams.set("videoSyndicated", "true");
+  url.searchParams.set("maxResults", String(params.maxResults));
+  url.searchParams.set("safeSearch", params.cleanLyricsOnly ? "strict" : "moderate");
+  url.searchParams.set("q", params.query);
+  if (params.apiKey) {
+    url.searchParams.set("key", params.apiKey);
+  }
+
+  const res = await fetch(url.toString(), {
+    headers: params.accessToken ? { Authorization: `Bearer ${params.accessToken}` } : undefined,
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json?.error?.message || "YouTube search failed");
+  }
+  return Array.isArray(json?.items) ? json.items : [];
+}
+
+async function fetchYouTubeVideoDetails(params: {
+  apiKey?: string;
+  accessToken?: string;
+  videoIds: string[];
+}): Promise<Map<string, YouTubeVideoDetail>> {
+  if (!params.apiKey && !params.accessToken) {
+    return new Map<string, YouTubeVideoDetail>();
+  }
+  const uniqueIds = Array.from(new Set(params.videoIds.filter(Boolean)));
+  const byId = new Map<string, YouTubeVideoDetail>();
+  if (uniqueIds.length === 0) return byId;
+
+  for (let i = 0; i < uniqueIds.length; i += 50) {
+    const chunk = uniqueIds.slice(i, i + 50);
+    const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+    url.searchParams.set("part", "snippet,contentDetails,statistics");
+    url.searchParams.set("id", chunk.join(","));
+    if (params.apiKey) {
+      url.searchParams.set("key", params.apiKey);
+    }
+
+    const res = await fetch(url.toString(), {
+      headers: params.accessToken ? { Authorization: `Bearer ${params.accessToken}` } : undefined,
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json?.error?.message || "YouTube videos lookup failed");
+    }
+
+    const items = Array.isArray(json?.items) ? json.items : [];
+    for (const item of items) {
+      if (item?.id) {
+        byId.set(String(item.id), item);
+      }
+    }
+  }
+
+  return byId;
+}
+
+export function getYouTubeRecommendationApiKey(): string {
+  return (
+    process.env.YOUTUBE_DATA_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.YOUTUBE_API_KEY ||
+    ""
+  ).trim();
+}
+
+export async function generateYouTubeRecommendations(params: {
+  profile: MusicMatcherProfile;
+  moments: RecommendationMoment[];
+  limitPerMoment: number;
+  feedbackByMoment?: Record<string, RecommendationFeedback>;
+  accessToken?: string | null;
+}): Promise<Record<string, RecommendationSong[]>> {
+  const apiKey = getYouTubeRecommendationApiKey();
+  const accessToken = params.accessToken || undefined;
+  if (!apiKey && !accessToken) return {};
+
+  const result: Record<string, RecommendationSong[]> = {};
+  const maxResults = Math.max(15, Math.min(30, params.limitPerMoment * 2));
+
+  for (const moment of params.moments) {
+    const primaryQuery = buildYouTubeRecommendationQuery(moment, params.profile);
+    const fallbackQuery = `${moment.title || moment.key} wedding songs`;
+
+    let searchItems: YouTubeVideoSearchItem[] = [];
+    try {
+      searchItems = await searchYouTubeVideos({
+        apiKey,
+        accessToken,
+        query: primaryQuery,
+        maxResults,
+        cleanLyricsOnly: params.profile.cleanLyricsOnly,
+      });
+      if (searchItems.length < params.limitPerMoment) {
+        const fallbackItems = await searchYouTubeVideos({
+          apiKey,
+          accessToken,
+          query: fallbackQuery,
+          maxResults: Math.max(10, params.limitPerMoment),
+          cleanLyricsOnly: params.profile.cleanLyricsOnly,
+        });
+        searchItems = [...searchItems, ...fallbackItems];
+      }
+    } catch {
+      searchItems = [];
+    }
+
+    const videoIds = searchItems
+      .map((item) => item?.id?.videoId || "")
+      .filter((videoId): videoId is string => videoId.length > 0);
+    const detailsById = await fetchYouTubeVideoDetails({ apiKey, accessToken, videoIds }).catch(() => new Map<string, YouTubeVideoDetail>());
+
+    const byVideoId = new Map<string, RecommendationSong>();
+    for (const item of searchItems) {
+      const videoId = String(item?.id?.videoId || "");
+      if (!videoId) continue;
+
+      const detail = detailsById.get(videoId);
+      const title = String(item?.snippet?.title || detail?.snippet?.title || "").trim();
+      if (!title) continue;
+      const description = String(item?.snippet?.description || detail?.snippet?.description || "");
+      const channelTitle = String(item?.snippet?.channelTitle || detail?.snippet?.channelTitle || "");
+      const defaultLang = String(
+        detail?.snippet?.defaultAudioLanguage ||
+        detail?.snippet?.defaultLanguage ||
+        item?.snippet?.defaultAudioLanguage ||
+        item?.snippet?.defaultLanguage ||
+        "",
+      );
+      const keywordTags = Array.isArray(detail?.snippet?.tags) ? detail!.snippet!.tags!.join(" ") : "";
+      const textBlob = normalizeText(`${title} ${description} ${channelTitle} ${keywordTags}`);
+      const durationSeconds = parseIsoDurationToSeconds(detail?.contentDetails?.duration);
+      const traits = deriveMusicTraits({
+        textBlob,
+        viewCount: detail?.statistics?.viewCount,
+        durationSeconds,
+        momentKey: moment.key,
+      });
+      if (params.profile.cleanLyricsOnly && traits.explicitFlag) continue;
+
+      const songCultures = detectCultureTags(textBlob);
+      const songLanguages = detectLanguageTags(textBlob, defaultLang);
+      const rankScore = momentRankScore(moment, textBlob);
+      const matchScore = scoreRecommendation({
+        rankScore,
+        songEnergy: traits.energyScore,
+        songDhol: traits.dholScore,
+        songDanceability: traits.danceability,
+        songPopularity: traits.popularityScore,
+        songCultures,
+        songLanguages,
+        profile: params.profile,
+        feedback: params.feedbackByMoment?.[moment.key],
+        songTagTokens: traits.tagTokens,
+        songYoutubeVideoId: videoId,
+      });
+
+      const candidate: RecommendationSong = {
+        songId: `yt:${videoId}`,
+        youtubeVideoId: videoId,
+        title,
+        artist: channelTitle || null,
+        energyScore: traits.energyScore,
+        tags: Array.from(new Set([...traits.tagTokens, "youtube"])),
+        matchScore,
+        momentKey: moment.key,
+      };
+
+      const existing = byVideoId.get(videoId);
+      if (!existing || candidate.matchScore > existing.matchScore) {
+        byVideoId.set(videoId, candidate);
+      }
+    }
+
+    result[moment.key] = Array.from(byVideoId.values())
+      .sort((a, b) => b.matchScore - a.matchScore)
+      .slice(0, params.limitPerMoment);
+  }
+
+  return result;
 }

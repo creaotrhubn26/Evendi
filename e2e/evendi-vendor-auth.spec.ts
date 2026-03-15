@@ -119,3 +119,19 @@ test.describe('Vendor Auth & Session', () => {
     expect(res.status()).toBe(200);
   });
 });
+
+// ─── Direct Login with Credentials ──────────────────────────────
+
+test.describe('Vendor Direct Login', () => {
+  test('POST /api/vendor/login with credentials returns token', async ({ request }) => {
+    const res = await request.post(`${EVENDI_URL}/api/vendor/login`, {
+      data: {
+        email: TEST_VENDOR_EMAIL,
+        password: TEST_VENDOR_PASSWORD,
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.token || body.sessionToken).toBeTruthy();
+  });
+});

@@ -26,6 +26,14 @@ async function createDemoVendor() {
   const password = 'norwed2024'; // Demo password
   const hashedPassword = hashPassword(password);
 
+  // Check if vendor already exists
+  const existing = await db.select().from(vendors).where(eq(vendors.email, 'contact@norwedfilm.no'));
+  if (existing.length > 0) {
+    console.log('Norwedfilm vendor already exists:', existing[0].businessName);
+    await client.end();
+    return;
+  }
+
   const [vendor] = await db.insert(vendors).values({
     email: 'contact@norwedfilm.no',
     password: hashedPassword,

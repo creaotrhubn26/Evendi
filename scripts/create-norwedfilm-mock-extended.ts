@@ -32,6 +32,15 @@ async function createExtendedMockData() {
 
   console.log('Creating extended mock data for Norwedfilm...\n');
 
+  // Verify vendor exists before creating related data
+  const vendorRows = await db.select().from(vendors).where(eq(vendors.id, VENDOR_ID));
+  if (vendorRows.length === 0) {
+    console.error(`Vendor ${VENDOR_ID} not found. Create the vendor first.`);
+    await client.end();
+    return;
+  }
+  console.log(`Verified vendor: ${vendorRows[0].businessName}\n`);
+
   // 1. Create more products
   console.log('🎬 Creating additional products...');
   

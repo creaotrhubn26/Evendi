@@ -44,6 +44,11 @@ test.describe('Evendi Bridge — Vendor Categories', () => {
     // The endpoint itself is defined before the proxy for the specific routes.
     // vendor-categories is NOT defined as a specific route, so it goes to proxy.
     // We skip this test if it times out.
+    const res = await request.get(`${BASE}/api/health`).catch(() => null);
+    if (!res || !res.ok()) {
+      test.skip();
+      return;
+    }
     test.skip(); // Proxy goes to external URL in dev
   });
 });

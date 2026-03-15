@@ -244,6 +244,8 @@ export default function PlanningScreen() {
           <ActionItem icon="briefcase" label="Leverandører" subtitle="Skandinaviske leverandører" theme={theme} onPress={() => navigation.navigate("Vendors")} />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <ActionItem icon="search" label="Finn leverandør" subtitle="Basert på dine preferanser" theme={theme} onPress={() => navigation.navigate("VendorMatching", {})} />
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <ActionItem icon="music" label="Musikk" subtitle="Bygg moment-baserte set-lister" theme={theme} onPress={() => navigation.navigate("Musikk")} />
         </View>
       </Animated.View>
 

@@ -318,3 +318,23 @@ test.describe('Vendor Availability Bookings', () => {
     expect([200, 201]).toContain(res.status());
   });
 });
+
+// ─── Admin Offer & Vendor Management ─────────────────────────────
+
+test.describe('Admin Offer & Vendor Management', () => {
+  test('GET /api/admin/vendors returns vendor list', async ({ request }) => {
+    const res = await request.get(`${BASE}/api/admin/vendors`, {
+      headers: adminHeaders(),
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body)).toBe(true);
+  });
+
+  test('GET /api/admin/vendors/:id returns specific vendor', async ({ request }) => {
+    const res = await request.get(`${BASE}/api/admin/vendors/${TEST_VENDOR_ID}`, {
+      headers: adminHeaders(),
+    });
+    expect([200, 404]).toContain(res.status());
+  });
+});

@@ -1571,6 +1571,13 @@ export interface MusicRecommendation {
   momentKey: string;
 }
 
+export interface MusicRecommendationResponse {
+  profile: MusicMatcherProfile;
+  recommendations: Record<string, MusicRecommendation[]>;
+  source?: "youtube" | "hybrid" | "catalog";
+  youtubeConfigured?: boolean;
+}
+
 export interface MusicSetItem {
   id: string;
   setId: string;
@@ -1605,7 +1612,7 @@ export interface ShareLinkExportResult {
   setId: string;
   setTitle: string;
   totalLinks: number;
-  links: Array<{
+  links: {
     itemId: string;
     title: string;
     artist?: string | null;
@@ -1613,7 +1620,7 @@ export interface ShareLinkExportResult {
     youtubeVideoId: string;
     url: string;
     dropMarkerSeconds?: number | null;
-  }>;
+  }[];
 }
 
 export interface MusicExportJob {
@@ -1672,7 +1679,7 @@ export async function getMusicRecommendations(input: {
   moments?: string[];
   limitPerMoment?: number;
   feedbackByMoment?: Record<string, { moreLikeThis?: string[]; tooSlow?: string[]; tooRomantic?: string[]; moreDhol?: boolean }>;
-}): Promise<{ profile: MusicMatcherProfile; recommendations: Record<string, MusicRecommendation[]> }> {
+}): Promise<MusicRecommendationResponse> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/api/couple/music/matcher/recommendations`, {
     method: "POST",
@@ -1788,6 +1795,7 @@ export async function exportMusicYouTubePlaylist(data: {
   description?: string;
   privacyStatus?: "private" | "public" | "unlisted";
   idempotencyKey?: string;
+  playlistId?: string | null;
 }): Promise<MusicExportJob> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/api/couple/music/export/youtube-playlist`, {
@@ -1796,6 +1804,13 @@ export async function exportMusicYouTubePlaylist(data: {
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error("Failed to export YouTube playlist");
+  return res.json();
+}
+
+export async function getMusicVendorPermissions(): Promise<VendorMusicPermission[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/couple/music/vendor-permissions`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch vendor permissions");
   return res.json();
 }
 
