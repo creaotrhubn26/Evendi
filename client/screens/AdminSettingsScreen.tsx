@@ -13,6 +13,7 @@ import { EvendiIcon } from "@/components/EvendiIcon";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { Alert } from "react-native";
 import { useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 
@@ -92,6 +93,126 @@ interface AppSetting {
   key: string;
   value: string;
   category: string;
+}
+
+interface TestUserInfo {
+  testVendorCount: number;
+  testCoupleCount: number;
+  hideTestUsers: boolean;
+}
+
+function TestUserSection({ adminKey, theme }: { adminKey: string; theme: any }) {
+  const queryClient = useQueryClient();
+
+  const { data: testInfo, isLoading } = useQuery<TestUserInfo>({
+    queryKey: ["/api/admin/test-users", adminKey],
+    queryFn: async () => {
+      const url = new URL("/api/admin/test-users", getApiUrl());
+      const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${adminKey}` },
+      });
+      if (!response.ok) throw new Error("Kunne ikke hente testbruker-info");
+      return response.json();
+    },
+    enabled: adminKey.length > 0,
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: async (hide: boolean) => {
+      const url = new URL("/api/admin/test-users/toggle", getApiUrl());
+      const response = await fetch(url.toString(), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${adminKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ hide }),
+      });
+      if (!response.ok) throw new Error("Kunne ikke oppdatere");
+      return response.json();
+    },
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/test-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/statistics"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vendors"] });
+      showToast("Testbruker-visning oppdatert");
+    },
+  });
+
+  const autoFlagMutation = useMutation({
+    mutationFn: async () => {
+      const url = new URL("/api/admin/test-users/auto-flag", getApiUrl());
+      const response = await fetch(url.toString(), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminKey}` },
+      });
+      if (!response.ok) throw new Error("Kunne ikke flagge");
+      return response.json();
+    },
+    onSuccess: (data: { flaggedVendors: number; flaggedCouples: number }) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/test-users"] });
+      showToast(`Flagget ${data.flaggedVendors} leverandører og ${data.flaggedCouples} brudepar`);
+    },
+  });
+
+  if (isLoading) {
+    return <ActivityIndicator size="small" color={Colors.dark.accent} />;
+  }
+
+  const hideTest = testInfo?.hideTestUsers ?? false;
+
+  return (
+    <>
+      <View style={styles.settingRow}>
+        <View style={styles.settingInfo}>
+          <ThemedText style={styles.settingLabel}>Skjul testbrukere</ThemedText>
+          <ThemedText style={[styles.settingDesc, { color: theme.textSecondary }]}>
+            Skjul test- og mock-brukere fra statistikk og lister
+          </ThemedText>
+        </View>
+        <Switch
+          value={hideTest}
+          onValueChange={(val) => toggleMutation.mutate(val)}
+          trackColor={{ false: theme.border, true: Colors.dark.accent }}
+          thumbColor="#FFF"
+          disabled={toggleMutation.isPending}
+        />
+      </View>
+
+      <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
+      <View style={{ paddingVertical: Spacing.sm }}>
+        <ThemedText style={[styles.settingDesc, { color: theme.textSecondary, marginBottom: Spacing.sm }]}>
+          Flagget: {testInfo?.testVendorCount ?? 0} leverandører, {testInfo?.testCoupleCount ?? 0} brudepar
+        </ThemedText>
+
+        <Pressable
+          style={[styles.saveButton, { backgroundColor: "#FF6B35", height: 44 }]}
+          onPress={() => {
+            Alert.alert(
+              "Auto-flagg testbrukere",
+              "Dette vil flagge brukere med test-e-poster (@evendi.no, @evendi.local, e2e-test-*, etc.) som testbrukere.",
+              [
+                { text: "Avbryt", style: "cancel" },
+                { text: "Flagg", onPress: () => autoFlagMutation.mutate() },
+              ]
+            );
+          }}
+          disabled={autoFlagMutation.isPending}
+        >
+          {autoFlagMutation.isPending ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <ThemedText style={[styles.saveButtonText, { color: "#FFF" }]}>
+              Auto-flagg testbrukere
+            </ThemedText>
+          )}
+        </Pressable>
+      </View>
+    </>
+  );
 }
 
 export default function AdminSettingsScreen() {
@@ -809,7 +930,15 @@ export default function AdminSettingsScreen() {
         </View>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(465).duration(400)}>
+      <Animated.View entering={FadeInDown.delay(470).duration(400)}>
+        <View style={[styles.section, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <ThemedText style={styles.sectionTitle}>Testbrukere</ThemedText>
+
+          <TestUserSection adminKey={adminKey} theme={theme} />
+        </View>
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(480).duration(400)}>
         <Pressable
           style={[styles.saveButton, { backgroundColor: Colors.dark.accent }]}
           onPress={() => {

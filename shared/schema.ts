@@ -46,6 +46,7 @@ export const vendors = pgTable("vendors", {
   googleReviewUrl: text("google_review_url"),
   status: text("status").notNull().default("pending"),
   rejectionReason: text("rejection_reason"),
+  isTest: boolean("is_test").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -369,6 +370,7 @@ export const coupleProfiles = pgTable("couple_profiles", {
   eventType: text("event_type").default("wedding"),
   eventCategory: text("event_category").default("personal"),
   selectedTraditions: text("selected_traditions").array(),
+  isTest: boolean("is_test").notNull().default(false),
   lastActiveAt: timestamp("last_active_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

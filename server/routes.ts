@@ -1149,6 +1149,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const status = req.query.status as string || "pending";
       
+      // Check if test users should be hidden
+      const hideSetting = await db.select().from(appSettings)
+        .where(eq(appSettings.key, "hide_test_users"));
+      const hideTest = hideSetting.length > 0 && hideSetting[0].value === "true";
+      const whereCondition = hideTest
+        ? and(eq(vendors.status, status), eq(vendors.isTest, false))
+        : eq(vendors.status, status);
+      
       const vendorList = await db.select({
         id: vendors.id,
         email: vendors.email,
@@ -1160,8 +1168,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         website: vendors.website,
         priceRange: vendors.priceRange,
         status: vendors.status,
+        isTest: vendors.isTest,
         createdAt: vendors.createdAt,
-      }).from(vendors).where(eq(vendors.status, status));
+      }).from(vendors).where(whereCondition);
 
       res.json(vendorList);
     } catch (error) {
@@ -5213,15 +5222,152 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin Test User Management Routes
+  
+  // Get test user counts and hide_test_users setting
+  app.get("/api/admin/test-users", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    
+    try {
+      const [testVendorCount] = await db.select({ count: sql<number>`count(*)` })
+        .from(vendors).where(eq(vendors.isTest, true));
+      const [testCoupleCount] = await db.select({ count: sql<number>`count(*)` })
+        .from(coupleProfiles).where(eq(coupleProfiles.isTest, true));
+      
+      const hideSetting = await db.select().from(appSettings)
+        .where(eq(appSettings.key, "hide_test_users"));
+      
+      res.json({
+        testVendors: Number(testVendorCount?.count || 0),
+        testCouples: Number(testCoupleCount?.count || 0),
+        hideTestUsers: hideSetting.length > 0 ? hideSetting[0].value === "true" : false,
+      });
+    } catch (error) {
+      console.error("Error fetching test user info:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke hente testbruker-info" });
+    }
+  });
+
+  // Toggle hide_test_users setting
+  app.post("/api/admin/test-users/toggle", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    
+    try {
+      const { hide } = req.body;
+      const value = hide ? "true" : "false";
+      
+      const existing = await db.select().from(appSettings)
+        .where(eq(appSettings.key, "hide_test_users"));
+      
+      if (existing.length > 0) {
+        await db.update(appSettings)
+          .set({ value, updatedAt: new Date() })
+          .where(eq(appSettings.key, "hide_test_users"));
+      } else {
+        await db.insert(appSettings).values({
+          key: "hide_test_users",
+          value,
+          category: "admin",
+        });
+      }
+      
+      res.json({ hideTestUsers: hide });
+    } catch (error) {
+      console.error("Error toggling test users:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke oppdatere innstilling" });
+    }
+  });
+
+  // Auto-detect and flag test users by email patterns
+  app.post("/api/admin/test-users/auto-flag", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    
+    try {
+      // Flag vendors with test email patterns
+      const flaggedVendors = await db.execute(sql`
+        UPDATE vendors SET is_test = true
+        WHERE is_test = false AND (
+          email LIKE '%@evendi.no'
+          OR email LIKE '%@evendi.local'
+          OR email LIKE 'e2e-test-%'
+          OR email LIKE 'test-%'
+          OR email LIKE '%test@%'
+          OR business_name LIKE 'E2E Test%'
+          OR business_name LIKE 'Test %'
+        )
+      `);
+      
+      // Flag couples with test email patterns
+      const flaggedCouples = await db.execute(sql`
+        UPDATE couple_profiles SET is_test = true
+        WHERE is_test = false AND (
+          email LIKE '%@evendi.no'
+          OR email LIKE '%@evendi.local'
+          OR email LIKE 'e2e-test-%'
+          OR email LIKE 'test-%'
+          OR email LIKE '%@example.com'
+          OR email LIKE '%test@%'
+        )
+      `);
+      
+      // Get new counts
+      const [testVendorCount] = await db.select({ count: sql<number>`count(*)` })
+        .from(vendors).where(eq(vendors.isTest, true));
+      const [testCoupleCount] = await db.select({ count: sql<number>`count(*)` })
+        .from(coupleProfiles).where(eq(coupleProfiles.isTest, true));
+      
+      res.json({
+        testVendors: Number(testVendorCount?.count || 0),
+        testCouples: Number(testCoupleCount?.count || 0),
+      });
+    } catch (error) {
+      console.error("Error auto-flagging test users:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke flagge testbrukere" });
+    }
+  });
+
+  // Manually flag/unflag a specific user as test
+  app.post("/api/admin/test-users/flag", async (req: Request, res: Response) => {
+    if (!checkAdminAuth(req, res)) return;
+    
+    try {
+      const { type, id, isTest } = req.body;
+      
+      if (type === "vendor") {
+        await db.update(vendors)
+          .set({ isTest, updatedAt: new Date() })
+          .where(eq(vendors.id, id));
+      } else if (type === "couple") {
+        await db.update(coupleProfiles)
+          .set({ isTest, updatedAt: new Date() })
+          .where(eq(coupleProfiles.id, id));
+      } else {
+        return res.status(400).json({ error: "Ugyldig type, bruk 'vendor' eller 'couple'" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error flagging test user:", error?.message || String(error));
+      res.status(500).json({ error: "Kunne ikke flagge bruker" });
+    }
+  });
+
   // Admin Statistics Routes
   app.get("/api/admin/statistics", async (req: Request, res: Response) => {
     if (!checkAdminAuth(req, res)) return;
     
     try {
-      const [vendorCount] = await db.select({ count: sql<number>`count(*)` }).from(vendors);
-      const [approvedVendors] = await db.select({ count: sql<number>`count(*)` }).from(vendors).where(eq(vendors.status, "approved"));
-      const [pendingVendors] = await db.select({ count: sql<number>`count(*)` }).from(vendors).where(eq(vendors.status, "pending"));
-      const [coupleCount] = await db.select({ count: sql<number>`count(*)` }).from(coupleProfiles);
+      // Check if test users should be hidden
+      const hideSetting = await db.select().from(appSettings)
+        .where(eq(appSettings.key, "hide_test_users"));
+      const hideTest = hideSetting.length > 0 && hideSetting[0].value === "true";
+      const notTest = eq(vendors.isTest, false);
+      const coupleNotTest = eq(coupleProfiles.isTest, false);
+
+      const [vendorCount] = await db.select({ count: sql<number>`count(*)` }).from(vendors).where(hideTest ? notTest : undefined);
+      const [approvedVendors] = await db.select({ count: sql<number>`count(*)` }).from(vendors).where(hideTest ? and(eq(vendors.status, "approved"), notTest) : eq(vendors.status, "approved"));
+      const [pendingVendors] = await db.select({ count: sql<number>`count(*)` }).from(vendors).where(hideTest ? and(eq(vendors.status, "pending"), notTest) : eq(vendors.status, "pending"));
+      const [coupleCount] = await db.select({ count: sql<number>`count(*)` }).from(coupleProfiles).where(hideTest ? coupleNotTest : undefined);
       const [inspirationCount] = await db.select({ count: sql<number>`count(*)` }).from(inspirations);
       const [pendingInspirations] = await db.select({ count: sql<number>`count(*)` }).from(inspirations).where(eq(inspirations.status, "pending"));
       const [conversationCount] = await db.select({ count: sql<number>`count(*)` }).from(conversations);
@@ -5256,11 +5402,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!checkAdminAuth(req, res)) return;
     
     try {
+      const hideTestSetting = await db.select({ value: appSettings.value })
+        .from(appSettings)
+        .where(eq(appSettings.key, "hide_test_users"))
+        .limit(1);
+      const hideTest = hideTestSetting.length > 0 && hideTestSetting[0].value === "true";
+
+      const conditions = hideTest ? [eq(coupleProfiles.isTest, false)] : [];
       const coupleData = await db.select({
         id: coupleProfiles.id,
         name: coupleProfiles.displayName,
         email: coupleProfiles.email,
-      }).from(coupleProfiles).limit(50);
+        isTest: coupleProfiles.isTest,
+      }).from(coupleProfiles)
+        .where(conditions.length > 0 ? conditions[0] : undefined)
+        .limit(50);
       
       res.json({
         role: "couple",
@@ -5276,14 +5432,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!checkAdminAuth(req, res)) return;
     
     try {
+      const hideTestSetting = await db.select({ value: appSettings.value })
+        .from(appSettings)
+        .where(eq(appSettings.key, "hide_test_users"))
+        .limit(1);
+      const hideTest = hideTestSetting.length > 0 && hideTestSetting[0].value === "true";
+
+      const conditions = [eq(vendors.status, "approved")];
+      if (hideTest) conditions.push(eq(vendors.isTest, false));
+
       const vendorData = await db.select({
         id: vendors.id,
         name: vendors.businessName,
         email: vendors.email,
         category: vendors.categoryId,
+        isTest: vendors.isTest,
       })
         .from(vendors)
-        .where(eq(vendors.status, "approved"))
+        .where(and(...conditions))
         .limit(50);
       
       res.json({
